@@ -37,6 +37,8 @@ At most five questions, highest consequence first, each with a recommended answe
 
 ## Step 3 — Write
 
+**Scaffold the mandatory set; offer the rest.** Six documents and three templates are required — `PRD`, design doc, backlog, Issue templates, spec, work log — and `northstar`, `epics`, `contract`, and `archive` are opt-in. Setting up thirteen documents in a project that needed six is how a harness gets abandoned in week two, so name the optional ones and let the user choose rather than creating them by default.
+
 - **`.steering/product.md`** — what this project is, who uses it, what it deliberately is not, and a `- Owns: <quality property>` line the reviewer and the digest both read.
 - **`.steering/tech.md`** — the stack, and the exact commands, with these machine-read lines:
   ```

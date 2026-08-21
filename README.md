@@ -66,6 +66,22 @@ Each inception skill has to terminate in something the harness mechanically uses
 
 One issue = one spec = one branch = one PR. `clarify` is the phase most setups lack: the dominant failure of spec-driven development is not too little structure, it is a confident spec built on a misread requirement — and review cannot catch that, because the document reads the same either way.
 
+## The minimum set
+
+Thirteen skills is not thirteen required documents, and reading it that way is the fastest route to dismissing this as over-engineering. Six documents and three templates are mandatory; the rest earn their place when a project is large enough to need them.
+
+```text
+PRD → design doc → backlog → Issue → spec → worklog
+                               ↑
+                    issue templates: feature / bug / chore
+```
+
+The templates sit **inside** that chain rather than beside it: the Issue step is where the type is decided, and the type is what shapes the spec. Without them the chain still runs — it just produces feature-shaped specs for bugs, with a user story that does not exist and acceptance criteria that are fiction.
+
+Optional, and worth adding when the project justifies them: `northstar`, `epics`, `contract`, and `archive`.
+
+The middle of that chain is not this plugin's invention — it is **GitHub's**. Issues, branches, pull requests, closed by their PR. They work from pair-programming scale upward; a team of thirty is not the threshold.
+
 ## The skills
 
 | Skill | Does | Ends in |
