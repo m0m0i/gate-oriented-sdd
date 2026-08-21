@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "note": "Grounding for ts-reviewer. Two kinds, deliberately not conflated. 'vendored' files are upstream text reproduced byte-for-byte: their hash must equal upstream's, and a mismatch means drift. 'derived' files are rules written for this harness that cite first-party sources: their hash pins OUR text, and the sources are pinned by version or checked-on date. Upstream moving does not make a derived rule wrong \u2014 it makes it unverified. Hashing live documentation HTML was considered and rejected: it changes for navigation and analytics edits, and an alarm that fires for non-reasons gets switched off.",
+  "vendored": {},
+  "derived": {
+    "types-and-style": {
+      "rulePrefix": [
+        "PY"
+      ],
+      "path": "rules/types-and-style.md",
+      "computedHash": "5b6aed56d1b6668c0257db2167185e50d88b2ecbbff75a4dcc53aae14f7a6006",
+      "sources": [
+        {
+          "id": "python-docs",
+          "kind": "first-party",
+          "url": "https://docs.python.org/3/",
+          "checkedOn": "2026-08-21"
+        }
+      ]
+    },
+    "correctness-and-tests": {
+      "rulePrefix": [
+        "COR",
+        "TST"
+      ],
+      "path": "rules/correctness-and-tests.md",
+      "computedHash": "6aa16f611641352fd66af7bf63ece2a182d1f922c28cede2c1af71fa178e6ca9",
+      "sources": [
+        {
+          "id": "python-docs",
+          "kind": "first-party",
+          "url": "https://docs.python.org/3/",
+          "checkedOn": "2026-08-21"
+        }
+      ]
+    }
+  },
+  "policy": {
+    "firstPartyOnly": true,
+    "refreshCadenceDays": 90,
+    "onVendoredDrift": "re-vendor from upstream and re-pin in the same change; until then the reviewer says the file is unverified and stops relying on it",
+    "onDerivedSourceDrift": "open an issue, re-derive the affected rules, bump computedHash in the same change"
+  },
+  "generatedAt": "2026-08-21T04:13:45Z"
+}

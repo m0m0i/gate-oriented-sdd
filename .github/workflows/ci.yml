@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  guard:
+    name: Guards, locks, and gate behaviour
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # First, and on every PR. This harness was extracted from a private
+      # polyrepo, and the cheapest moment to catch private context is before it
+      # is merged — not after it is public and in the history.
+      - name: Leakage guard
+        run: ./scripts/check-leakage.sh
+
+      - name: Both plugin manifests agree
+        run: ./scripts/check-manifests.py
+
+      # A rulebook that has drifted from its lock is worse than an unpinned one:
+      # the reviewer keeps citing rule ids as though they were the agreed text.
+      - name: Rulebooks match their locks
+        run: ./scripts/check-locks.py
+
+      # The repo's central claim is that the review gate is enforced rather than
+      # advisory. That is testable without a model, so it is tested.
+      - name: Review gate behaves
+        run: ./scripts/test-gates.sh
+
+  validate:
+    name: Claude Code plugin validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+      - name: Validate marketplace and plugin
+        run: |
+          claude plugin validate .claude-plugin/marketplace.json --strict
+          claude plugin validate . --strict

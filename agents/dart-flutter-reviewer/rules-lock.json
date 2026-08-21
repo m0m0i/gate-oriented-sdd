@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "note": "Grounding for ts-reviewer. Two kinds, deliberately not conflated. 'vendored' files are upstream text reproduced byte-for-byte: their hash must equal upstream's, and a mismatch means drift. 'derived' files are rules written for this harness that cite first-party sources: their hash pins OUR text, and the sources are pinned by version or checked-on date. Upstream moving does not make a derived rule wrong \u2014 it makes it unverified. Hashing live documentation HTML was considered and rejected: it changes for navigation and analytics edits, and an alarm that fires for non-reasons gets switched off.",
+  "vendored": {},
+  "derived": {
+    "dart-and-style": {
+      "rulePrefix": [
+        "DART"
+      ],
+      "path": "rules/dart-and-style.md",
+      "computedHash": "f4173af4814d7bd0f216b0b0a0072f337eba665d7928f08ce6ed24ec6661dbff",
+      "sources": [
+        {
+          "id": "dart-language",
+          "kind": "first-party",
+          "url": "https://dart.dev/language",
+          "checkedOn": "2026-08-21"
+        }
+      ]
+    },
+    "correctness-and-tests": {
+      "rulePrefix": [
+        "COR",
+        "TST"
+      ],
+      "path": "rules/correctness-and-tests.md",
+      "computedHash": "cee76965029b00140a776852ea27ce9b34bd8798037b59ed37d433f2b5d871a5",
+      "sources": [
+        {
+          "id": "flutter-docs",
+          "kind": "first-party",
+          "url": "https://docs.flutter.dev/",
+          "checkedOn": "2026-08-21"
+        }
+      ]
+    }
+  },
+  "policy": {
+    "firstPartyOnly": true,
+    "refreshCadenceDays": 90,
+    "onVendoredDrift": "re-vendor from upstream and re-pin in the same change; until then the reviewer says the file is unverified and stops relying on it",
+    "onDerivedSourceDrift": "open an issue, re-derive the affected rules, bump computedHash in the same change"
+  },
+  "generatedAt": "2026-08-21T04:13:45Z"
+}

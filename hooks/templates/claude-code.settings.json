@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "{{FAST_CHECK}}", "timeout": 60 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "{{QUALITY_GATE}}", "timeout": 180 }
+        ]
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "[ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh", "timeout": 30 }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "[ -f {{HOOKS_DIR}}/steering-digest.sh ] || exit 0; sh {{HOOKS_DIR}}/steering-digest.sh", "timeout": 15 }
+        ]
+      }
+    ]
+  }
+}

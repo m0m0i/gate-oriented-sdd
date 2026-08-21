@@ -1,0 +1,29 @@
+{
+  "gate-sdd": {
+    "enabled": true,
+    "PostToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "{{FAST_CHECK}}",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "{{QUALITY_GATE}}",
+        "timeout": 180
+      },
+      {
+        "type": "command",
+        "command": "[ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh",
+        "timeout": 30
+      }
+    ]
+  }
+}

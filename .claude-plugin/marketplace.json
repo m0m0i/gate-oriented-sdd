@@ -1,0 +1,14 @@
+{
+  "name": "gate-oriented-sdd",
+  "description": "A spec-driven development harness whose review gate is enforced by a hook, not requested by prose. Installs into Claude Code and Google Antigravity from one plugin directory.",
+  "owner": {
+    "name": "Hiroyuki"
+  },
+  "plugins": [
+    {
+      "name": "gate-sdd",
+      "source": "./",
+      "description": "Gate-oriented spec-driven development: a spec flow whose rules sit at the layer matching how much they can be talked out of."
+    }
+  ]
+}
