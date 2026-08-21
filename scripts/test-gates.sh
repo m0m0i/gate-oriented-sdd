@@ -107,5 +107,12 @@ out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "non-spec branch stays silent" ok ;;
                         *) report "non-spec branch stays silent" no "$out" ;; esac
 
+# 10. Spec on a branch with no issue number -> blocks ("no issue, no spec")
+r=$(make_repo noissue 0)
+( cd "$r" && git checkout -q -b add-retries && mv .specs/9-feature .specs/add-retries ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out$err" in *"exit=2"*"No issue, no spec"*) report "spec without an issue number blocks" ok ;;
+                 *) report "spec without an issue number blocks" no "$out" ;; esac
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

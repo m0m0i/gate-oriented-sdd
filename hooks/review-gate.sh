@@ -18,6 +18,15 @@ branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || gate_pass
 spec=".specs/$branch/spec.md"
 [ -f "$spec" ] || gate_pass          # not a spec branch — nothing to gate
 
+# No issue, no spec. The slug is <issue-number>-<kebab-title>, so a spec directory
+# without a numeric prefix is work that never had an issue — unplanned work that
+# entered through the side door and bypassed whatever decided the sprint. This is
+# checkable without touching the network, so it is checked.
+case "$branch" in
+  [0-9]*) : ;;
+  *) gate_block "No issue, no spec: the branch '$branch' has a spec at $spec but its slug does not start with an issue number. The slug is <issue>-<kebab-title>, and the issue is what recorded that this work was chosen. Create the issue and rename the branch and spec directory to match, or say explicitly that this is acknowledged unplanned work." ;;
+esac
+
 # Already-merged work has nothing left to review. Without this, every historical
 # feature branch trips the gate the moment the harness is installed.
 base=$(git rev-parse --verify -q origin/HEAD 2>/dev/null \

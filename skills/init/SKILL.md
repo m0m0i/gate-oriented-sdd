@@ -19,6 +19,7 @@ Read before asking anything:
 | scripts/tasks in those files, CI workflow files | the real validator commands — the ones that already pass |
 | existing test directories and naming | the test runner and where tests live |
 | `git log --format=%s -50` | the commit convention actually in use, not the one in CONTRIBUTING |
+| `.github/ISSUE_TEMPLATE/`, existing labels | the issue taxonomy already in use — adopt it rather than imposing one |
 | `git remote -v`, existing PR templates | the tracker and default branch |
 | existing `.claude/`, `.agents/`, `CLAUDE.md`, `AGENTS.md`, `.specs/` | what is already installed, and what you must not overwrite |
 
@@ -42,10 +43,14 @@ At most five questions, highest consequence first, each with a recommended answe
   - Validators: <the gating commands, comma-separated>
   - Reviewer: <reviewer name>
   - Source globs: <globs that count as reviewable source, e.g. '*.ts' '*.py'>
+  - Docs: <where inception documents live — `docs/` by default, or the path/URL of a shared documentation repo in a multi-repo product>
   ```
   The gates parse these, so a project changes its enforcement by editing steering rather than by editing hooks.
 - **`.steering/structure.md`** — where code belongs, and where tests mirror it.
 - **`.specs/README.md`**, **`.specs/_archive/README.md`**, **`.work_logs/README.md`** — each stating its contract.
+- **`.github/ISSUE_TEMPLATE/`** — copy `feature.md`, `bug.md`, `chore.md`, and `config.yml` from the plugin's `assets/issue-templates/`, adapting labels to the ones this project already uses. The issue is the entry point to the whole flow: `backlog` creates typed issues, `spec` reads the type to choose its shape, and one issue becomes one spec, one branch, one PR. Leaving the entry point undefined leaves a hole in the middle of the process.
+  `config.yml` sets `blank_issues_enabled: false` on purpose — an untyped issue makes `spec` guess, and it guesses feature, which is the wrong shape for a bug and for a chore. If the project has a reason to allow blank issues, say so and change it deliberately.
+  If templates already exist, **merge rather than replace**: keep their wording and their labels, and add only the missing types. An existing template encodes decisions the team already made.
 - **The reviewer** — from the closest reference implementation (`ts-reviewer`, `python-reviewer`, `dart-flutter-reviewer`), or from `agents/_template/` for an unrecognised stack. Copy `_shared/reviewer-contract.md` next to it. Re-pin with `check-locks.py --update` after any edit.
 - **The hooks** — render `hooks/templates/` for whichever harnesses the project uses, and copy `gate-lib.sh`, `review-gate.sh`, and `steering-digest.sh` into the project's hooks directory.
 - **`AGENTS.md`**, with `CLAUDE.md` pointing at it, so one file is canonical.

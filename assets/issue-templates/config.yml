@@ -1,0 +1,6 @@
+# Blank issues are disabled on purpose. Every issue in this flow becomes exactly
+# one spec, one branch, and one PR, so an untyped issue is a unit of work whose
+# shape nobody has decided yet — and the spec skill picks its template from the
+# type. An issue with no type gets a feature-shaped spec by default, which is
+# wrong for a bug and wrong for a chore.
+blank_issues_enabled: false

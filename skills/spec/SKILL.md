@@ -9,11 +9,13 @@ Produce ONE document a teammate can review *before* any code is written. That do
 
 ## Steps
 
-1. **Anchor the work to a tracker issue.** `.steering/tech.md` names this project's tracker and the command to read and create issues. If invoked with an existing issue number, read it. Otherwise draft a title and body — the problem, the outcome, acceptance criteria — create the issue, and capture its number `<n>`.
+1. **Require a tracker issue. No issue, no spec.** `.steering/tech.md` names this project's tracker and the command to read issues. Read the issue you were given.
+   If there is no issue, **stop and say so.** Do not create one to proceed. An issue created here is unplanned work entering through the side door, bypassing the sprint that was supposed to decide what gets built — and the sprint stops meaning anything the first time it is bypassed silently. Offer to run `sprint`, or to create the issue explicitly as acknowledged unplanned work; either way it is the user's call, made out loud.
    The slug is `<n>-<kebab-title>`. It names **both** the branch and the spec directory, so an issue, a branch, a spec, and a PR are always the same unit of work.
+   **The issue's type decides the spec's shape** — take it from the template used or the label applied: `feature`, `bug`, or `chore`. If it is genuinely unclear, ask. Do not default to feature; feature is the shape that fits a bug worst.
 2. **Read the context you are about to design against**, and do not skip it: `.steering/product.md`, `.steering/tech.md`, `.steering/structure.md`, the issue body, and any design docs those point to.
 3. **Draft section 1 (Requirements) only. Then stop and run `clarify`.** Design decided on top of a misread requirement is the most expensive rework there is, and it is invisible in review — a spec reads as confident either way.
-4. After `clarify` resolves, write the rest of `.specs/<n>-<slug>/spec.md` from the template below, with `Status: draft`. Keep it tight; this is a working document, not a document to be admired.
+4. After `clarify` resolves, write the rest of `.specs/<n>-<slug>/spec.md` with `Status: draft`, using the shape for this issue's type from **[`templates.md`](./templates.md)** — read only the one you need. Keep it tight; this is a working document, not a document to be admired.
 5. State remaining open questions in the spec rather than resolving them silently. Ask the user about anything that changes scope.
 6. Close by proposing the branch `<n>-<slug>` and the next command: `implement <n>-<slug>`.
 
@@ -28,40 +30,24 @@ Produce ONE document a teammate can review *before* any code is written. That do
 | `done` | Every task ticked, reviewer gate CLEAN, PR open. | `implement` |
 | `archived` | Shipped, moved to `.specs/_archive/<slug>/`. | `archive` |
 
-## Spec template
+## Spec shapes
 
-```markdown
-# Spec: <Feature title>
-- Slug: <slug>   Issue: <n>   Status: draft
-- Author: <you>   Date: <YYYY-MM-DD>
+Three of them, in [`templates.md`](./templates.md). They share front matter and the TDD-ordered Tasks section; section 1 is where the type matters.
 
-## 1. Requirements (WHAT / WHY)
-- User story: As a <role>, I want <goal>, so that <benefit>.
-- Why now / what it serves: <the goal, metric, or quality property this moves>
-- Acceptance criteria, EARS-style and individually numbered:
-  - [ ] **AC1:** WHEN <event> THE SYSTEM SHALL <observable behavior>.
-  - [ ] **AC2:** ...
-- Out of scope: <what this deliberately does not do, and where that work lives instead>
+| Type | Section 1 is built around | The first task is always |
+| :-- | :-- | :-- |
+| `feature` | a user story and numbered acceptance criteria | a failing test for the new behavior |
+| `bug` | reproduction, expected vs actual, and the **root cause** | a regression test that fails for the right reason |
+| `chore` | **what must not change** — the invariant | tests covering preserved behavior that is currently untested |
 
-### Clarifications
-<Filled by `clarify`: question, answer, date. "None needed" if the requirements were unambiguous.>
-
-## 2. Design (HOW)
-- Approach and key decisions:
-- Affected modules and files, per .steering/structure.md:
-- Contract changes (schemas, APIs, storage shapes) — and who else consumes them:
-- Risks and trade-offs:
-
-## 3. Tasks (TDD-ordered)
-- [ ] T1: write the failing test for ...
-- [ ] T2: implement ... to make it pass
-- [ ] T3: refactor ...
-```
+A bug written to the feature template produces a user story that does not exist and acceptance criteria that are fiction. A chore with no stated invariant is indistinguishable from a rewrite, and the reviewer has no way to tell them apart.
 
 ## Rules
 
 - One issue = one spec = one feature = one branch = one PR. If a spec needs two branches, it is two specs.
 - Tasks are TDD-ordered: a failing test precedes the implementation it describes.
+- **No issue, no spec.** The issue is the commitment; the spec is how it gets built. Writing the second without the first means something is being built that nobody chose.
+- **The type is not cosmetic.** It selects the shape, and the shape decides what the first task is. Getting it wrong produces a spec that looks complete and tests the wrong thing.
 - **Number the acceptance criteria.** The reviewer reports coverage by id, and criteria it cannot address by id read as covered when they are not.
 - Write acceptance criteria an observer could check. "The code is clean" is not a criterion; "WHEN the token is expired THE SYSTEM SHALL reject the request with 401" is.
 - Do not implement here. Hand off to `implement`.

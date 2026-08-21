@@ -28,7 +28,9 @@ The bottom row is the only one that is a guarantee. The design work is deciding 
 
 **The rulebook lives inside the agent's directory.** A reviewer's rules sit in `agents/<reviewer>/rules/`, not in `CLAUDE.md` and not in session context. A normal session never loads them; only the reviewer does, and only the files the diff calls for.
 
-That is measurable rather than asserted. `claude plugin details gate-sdd` reports **~778 tokens always-on** for the entire harness — six skills and three reviewers. The rulebooks and the reviewer contract are another **~5865 tokens**, and they contribute **zero** to that always-on figure, because they are not registered components at all. Reference material you pay for on every turn is reference material you will eventually delete.
+That is measurable rather than asserted. `claude plugin details gate-sdd` reports **~1,300 tokens always-on** for the entire harness — thirteen skills and three reviewers. The rulebooks and the reviewer contract are another **~5,900 tokens**, and they contribute **zero** to that always-on figure, because they are not registered components at all.
+
+The six inception skills account for ~450 of that always-on total while firing perhaps once per project — a real cost against the same principle this section argues. It is small enough to accept today; if the inception set grows, it should split into a second plugin rather than quietly inflate every session. Reference material you pay for on every turn is reference material you will eventually delete.
 
 **The rulebook is pinned, and pinned honestly.** `rules-lock.json` distinguishes **vendored** files — upstream text reproduced byte-for-byte, whose hash must match upstream — from **derived** files, which are rules written here that cite first-party sources. Upstream moving does not make a derived rule wrong; it makes it *unverified*, which is a different problem with a different fix. Hashing live documentation HTML was tried and rejected: it changes for navigation edits, and an alarm that fires for non-reasons gets switched off.
 
@@ -38,12 +40,35 @@ A gate that fires on ordinary turns gets disabled, and a disabled gate protects 
 
 ## The flow
 
+**Inception — once per project:**
+
+```
+northstar ──▶ prd ──▶ design-doc ──▶ epics ──▶ backlog ──▶ sprint
+   metric      capabilities  architecture   demos    ordered,    1 item :
+                                                     coarse      N issues
+        └───────────────▶ contract ◀───────────────┘
+                    coding rules, compiled
+                    into the reviewer's rulebook
+```
+
+`backlog` puts everything known into **one ordered list — ordered, not prioritized**, so a position weighs value, risk, cost, and dependency together rather than flattening them into a label — and creates nothing. `sprint` decomposes the top of it into tracker issues — **one backlog item usually becomes several**, since the change, the test coverage it turns out to need, and the migration it forces are different issues with differently shaped specs. Ordering is cheap and reversible; an issue is a commitment, and that is why the two are separate steps.
+
+**Delivery — once per issue:**
+
 ```
 spec ──▶ clarify ──▶ (review PR) ──▶ implement ──▶ reviewer ──▶ worklog ──▶ archive
          ≤5 questions               Red/Green/Refactor   receipt
 ```
 
+The issue, the branch, the spec directory, and the PR all share one slug, and the PR closes the issue. The rule is **no issue, no spec**. `sprint` creates typed issues from templates; `spec` refuses to start without one rather than quietly creating it, because a spec written without an issue is something being built that nobody chose. The gate checks it mechanically: the slug is `<issue>-<title>`, so a spec directory without a numeric prefix blocks the turn. `spec` reads the type — `feature`, `bug`, or `chore` — and writes a differently shaped spec for each. A bug pushed through feature scaffolding produces a user story that does not exist and acceptance criteria that are fiction, so the type is not decoration: it decides what the first task is.
+
+Each inception skill has to terminate in something the harness mechanically uses, or it does not ship: `northstar` produces the quality anchor the reviewer reads for severity, `contract` compiles its enforceable rules into the rulebook, `backlog` creates the tracker issues `spec` consumes, `design-doc` writes `.steering/structure.md` and the ADRs the reviewer escalates to. A document that ends in prose alone is one this repo has no business generating.
+
 One issue = one spec = one branch = one PR. `clarify` is the phase most setups lack: the dominant failure of spec-driven development is not too little structure, it is a confident spec built on a misread requirement — and review cannot catch that, because the document reads the same either way.
+
+## Layout
+
+What the harness writes into a project, and where: [`docs/layout.md`](./docs/layout.md). `.specs/`, `.steering/`, and `.work_logs/` are fixed names; `docs/` is the one location that moves, so a multi-repo product can keep product-level truth in one shared place.
 
 ## Install
 
