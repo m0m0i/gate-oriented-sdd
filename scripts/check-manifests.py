@@ -41,6 +41,11 @@ if cc and agy:
         errors.append(f"name {agy.get('name')!r} is not valid for Antigravity (^[a-zA-Z0-9-_]+$)")
     if cc.get("description") != agy.get("description"):
         errors.append("description differs between the two manifests")
+    # A version that does not move is a release consumers never receive: the
+    # updater reports "already at the latest version" and silently keeps the old
+    # content. Both manifests carry it so they cannot drift apart.
+    if agy.get("version") and cc.get("version") != agy.get("version"):
+        errors.append(f"version mismatch: Claude Code {cc.get('version')!r} vs Antigravity {agy.get('version')!r}")
 
 for field in ("name", "description", "version", "author", "license"):
     if cc and field not in cc:

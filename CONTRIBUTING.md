@@ -20,6 +20,14 @@ The gates are the reason this repo exists. A change to `hooks/` must:
 2. Keep the gate narrow. It stays silent on merged branches, mid-implementation turns, and post-review documentation commits. A gate that fires on ordinary turns gets switched off, and a switched-off gate protects nothing.
 3. Come with a case in `scripts/test-gates.sh`. Nine paths are covered; a tenth behaviour needs a tenth test.
 
+## Releasing
+
+**Bump `version` in both manifests, or the release does not exist.** A consumer running `claude plugin update` against an unchanged version is told "already at the latest version" and silently keeps the old content — the update appears to succeed and nothing changes. `scripts/check-manifests.py` fails when the two manifests disagree on it, but nothing can tell you that you forgot to bump at all, so it is a habit rather than a check.
+
+```bash
+claude plugin tag        # creates {name}--v{version}, validating manifest against marketplace entry
+```
+
 ## Before you open a PR
 
 ```bash

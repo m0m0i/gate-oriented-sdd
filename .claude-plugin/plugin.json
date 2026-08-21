@@ -1,8 +1,16 @@
 {
   "name": "gate-sdd",
   "description": "Gate-oriented spec-driven development: spec -> clarify -> implement -> review -> worklog -> archive, with the review gate enforced by a hook rather than requested by prose.",
-  "version": "0.1.0",
-  "author": { "name": "Hiroyuki" },
+  "version": "0.2.0",
+  "author": {
+    "name": "Hiroyuki"
+  },
   "license": "Apache-2.0",
-  "keywords": ["spec-driven-development", "sdd", "code-review", "hooks", "tdd"]
+  "keywords": [
+    "spec-driven-development",
+    "sdd",
+    "code-review",
+    "hooks",
+    "tdd"
+  ]
 }
