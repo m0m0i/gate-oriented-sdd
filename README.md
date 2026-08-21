@@ -66,6 +66,26 @@ Each inception skill has to terminate in something the harness mechanically uses
 
 One issue = one spec = one branch = one PR. `clarify` is the phase most setups lack: the dominant failure of spec-driven development is not too little structure, it is a confident spec built on a misread requirement — and review cannot catch that, because the document reads the same either way.
 
+## The skills
+
+| Skill | Does | Ends in |
+| :-- | :-- | :-- |
+| `init` | sets the harness up in a project — detects the toolchain, asks only what it cannot infer | everything below, wired |
+| `northstar` | the metric, its levers, the quality laws in order | the `Owns:` anchor the reviewer reads for severity |
+| `prd` | users, capabilities with stable ids, the boundary | ids that specs cite |
+| `design-doc` | architecture, its seams, the decisions worth recording | `.steering/structure.md` + ADRs |
+| `epics` | capability-sized chunks that each end in a demo | grouped work |
+| `backlog` | one ordered list — ordered, not prioritized | the order `sprint` takes from |
+| `sprint` | decomposes the top into issues, 1 item : N issues | typed tracker issues |
+| `contract` | coding rules, tiered by how they can be checked | the reviewer's rulebook |
+| `spec` | one reviewable spec, shaped by the issue's type | the contract `implement` executes |
+| `clarify` | ≤5 questions ranked by blast radius, before any design | ambiguity recorded in the spec |
+| `implement` | TDD loop, then the mandatory reviewer pass | a receipt the gate checks |
+| `worklog` | append-only session record | decisions with their reasons |
+| `archive` | shipped specs out of `.specs/` | `.specs/` means live work |
+
+Plus three read-only reviewers — TypeScript, Python, Dart/Flutter — and a template for a stack none of them fit.
+
 ## Layout
 
 What the harness writes into a project, and where: [`docs/layout.md`](./docs/layout.md). `.specs/`, `.steering/`, and `.work_logs/` are fixed names; `docs/` is the one location that moves, so a multi-repo product can keep product-level truth in one shared place.
@@ -104,9 +124,13 @@ The last row is a real gap, not a rounding error. `PreInvocation` is the candida
 
 ## Status
 
-**Pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is authored but has never been run — `claude plugin eval` is in early access and was not enabled on the account this was built on, and claiming a green suite that never ran is exactly the unverified assertion this harness exists to prevent.
+**v0.2.0 — pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is authored but has never been run — `claude plugin eval` is in early access and was not enabled on the account this was built on, and claiming a green suite that never ran is exactly the unverified assertion this harness exists to prevent.
 
 Tested against: Claude Code 2.1.238 · Antigravity CLI 1.1.17 · Antigravity IDE 2.3.1 · macOS.
+
+What *is* verified: the review gate's nine behaviours, tested deterministically with no model in the loop ([`scripts/test-gates.sh`](./scripts/test-gates.sh)); Antigravity's `Stop` hook genuinely blocking, run rather than read from documentation ([`docs/verified.md`](./docs/verified.md)); both plugin manifests, the rulebook hashes, and the leakage guard, all in CI.
+
+What is not: the skills themselves have never been executed end to end, and no reviewer has yet reviewed a real diff.
 
 ## License
 
