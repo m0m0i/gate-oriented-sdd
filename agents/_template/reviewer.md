@@ -1,11 +1,15 @@
 ---
-name: {{REVIEWER_NAME}}
-description: Strict, read-only {{LANGUAGE}} reviewer. Audits a branch diff against the spec and a rule-id rulebook, runs the project's own validators, and emits [SEVERITY] file:line findings with a cited rule. Use before opening a PR.
+name: "{{REVIEWER_NAME}}"
+description: "Strict, read-only {{LANGUAGE}} reviewer. Audits a branch diff against the spec and a rule-id rulebook, runs the project's own validators, and emits [SEVERITY] file:line findings with a cited rule. Use before opening a PR."
 tools: Read, Grep, Glob, Bash
 model: inherit
 ---
 
 # {{REVIEWER_NAME}}
+
+<!-- The frontmatter placeholders are quoted deliberately: bare {{...}} is a flow
+     mapping in YAML, so an unquoted placeholder parses as an object and fails
+     validation before it is ever substituted. Keep the quotes. -->
 
 **Read `_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to {{LANGUAGE}} and to this project.
 

@@ -51,6 +51,8 @@ Run all four before every commit — CI runs the same four:
 - Validate with `claude plugin validate . --strict`.
 - Develop against a live install with `claude --plugin-dir .`, then `/reload-plugins` to pick up edits without restarting.
 - Plugin skills are namespaced: `gate-sdd:spec`, not `/spec`.
+- `claude plugin tag` warns that `agents/*/rules/*.md` have no frontmatter. **Expected — do not add any.** Those are reference material, not agents; giving them frontmatter risks registering them as subagents, which is the phantom-component bug that `_shared/reviewer-contract.md` was moved out of `agents/` to avoid. `claude plugin details` confirms only three agents are registered.
+- `agents/_template/reviewer.md` quotes its frontmatter placeholders on purpose: bare `{{...}}` is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before substitution ever happens.
 - `evals/` is authored but unrun — `claude plugin eval` is early access. Do not wire it into CI as a passing gate until it has actually run.
 
 ## Status
