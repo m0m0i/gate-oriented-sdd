@@ -10,7 +10,11 @@ jobs:
     name: Guards, locks, and gate behaviour
     runs-on: ubuntu-latest
     steps:
+      # Full history: the version-bump guard diffs this branch against the PR base, and
+      # a depth-1 checkout has no base to diff against.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       # First, and on every PR. This harness was extracted from a private
       # polyrepo, and the cheapest moment to catch private context is before it
@@ -30,6 +34,14 @@ jobs:
       # advisory. That is testable without a model, so it is tested.
       - name: Review gate behaves
         run: ./scripts/test-gates.sh
+
+      # A shipped file that changed without a version bump is a fix consumers never
+      # receive: `claude plugin update` compares version strings, not commit shas, so it
+      # reports success and keeps serving the old content. PR-only, because on a push to
+      # main the release decision has already been made.
+      - name: Shipped changes carry a version bump
+        if: github.event_name == 'pull_request'
+        run: ./scripts/check-version-bump.py "${{ github.event.pull_request.base.sha }}"
 
   validate:
     name: Claude Code plugin validation

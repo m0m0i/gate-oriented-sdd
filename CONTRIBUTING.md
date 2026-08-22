@@ -22,7 +22,13 @@ The gates are the reason this repo exists. A change to `hooks/` must:
 
 ## Releasing
 
-**Bump `version` in both manifests, or the release does not exist.** A consumer running `claude plugin update` against an unchanged version is told "already at the latest version" and silently keeps the old content — the update appears to succeed and nothing changes. `scripts/check-manifests.py` fails when the two manifests disagree on it, but nothing can tell you that you forgot to bump at all, so it is a habit rather than a check.
+**Bump `version` in both manifests, or the release does not exist.** A consumer running `claude plugin update` against an unchanged version is told "already at the latest version" and silently keeps the old content — the update appears to succeed and nothing changes.
+
+This used to be a habit. It is now a check: `scripts/check-version-bump.py` fails a pull request that touches `skills/`, `agents/`, `hooks/`, `assets/`, or a manifest without moving the version, and `scripts/check-manifests.py` still fails when the two manifests disagree about what that version is. Six commits shipped before the guard existed and none of them reached anyone, including a fix to `agents/_template/reviewer.md` that every non-TS/Python/Dart project needed.
+
+**A `#non-breaking` change still needs a bump.** Semver describes compatibility; the updater cares about reachability. An unreachable fix is not a fix, and the marker is about the first thing while the problem is the second.
+
+Editing `docs/`, `evals/`, `scripts/`, CI, or the READMEs does not require a release, and the guard stays quiet for those. That exemption is what keeps it from firing on most PRs — a guard that cries wolf gets deleted, which is the same argument `rules-lock.json` makes about hashing live documentation.
 
 ```bash
 claude plugin tag        # creates {name}--v{version}, validating manifest against marketplace entry
@@ -35,6 +41,7 @@ claude plugin tag        # creates {name}--v{version}, validating manifest again
 ./scripts/check-manifests.py    # both manifests agree, hook shapes correct
 ./scripts/check-locks.py        # rulebooks match their locks
 ./scripts/test-gates.sh         # the gate still behaves
+./scripts/check-version-bump.py # shipped changes carry a version bump
 claude plugin validate . --strict
 ```
 
