@@ -63,7 +63,21 @@ head=$(git rev-parse HEAD 2>/dev/null || echo '')
 # exists. Source globs come from .steering/tech.md so this stays language-neutral.
 globs=$(sed -n 's/^ *- *Source globs: *//p' .steering/tech.md 2>/dev/null | head -1)
 [ -n "$globs" ] || globs='*'
+
+# Two ways this used to fail OPEN, both the shell's doing rather than git's, and both
+# silent — which is the worst direction for a gate to fail in.
+#
+#   '*.py'   quotes inside a variable are not removed on expansion, so git received the
+#            literal pathspec '*.py' and matched nothing
+#   *.py     the shell expanded it against the repository root before git saw it, so a
+#            src/-layout project matched nothing and a flat one matched only top level
+#
+# Strip the quotes, then disable globbing across the word split so the pattern reaches
+# git intact. Word splitting is still wanted here: several globs are separated by spaces.
+globs=$(printf '%s' "$globs" | tr -d "\"'")
+set -f
 changed=$(git diff --name-only "$sha"..HEAD -- $globs 2>/dev/null)
+set +f
 
 [ -z "$changed" ] && gate_pass
 
