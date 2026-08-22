@@ -39,13 +39,15 @@ claude plugin tag        # creates {name}--v{version}, validating manifest again
 ```bash
 ./scripts/check-leakage.sh      # no private context
 ./scripts/check-manifests.py    # both manifests agree, hook shapes correct
-./scripts/check-locks.py        # rulebooks match their locks
+./assets/check-locks.py         # rulebooks match their locks
 ./scripts/test-gates.sh         # the gate still behaves
 ./scripts/check-version-bump.py # shipped changes carry a version bump
 claude plugin validate . --strict
 ```
 
-If you edited a rulebook on purpose, re-pin it: `./scripts/check-locks.py --update`.
+If you edited a rulebook on purpose, re-pin it: `./assets/check-locks.py --update`.
+
+It sits in `assets/` rather than `scripts/` because projects need a copy of it, not a reference to it — `init` installs it so a project can re-pin its own rulebook. That also puts it on a shipped path, so a fix to it is covered by the version guard.
 
 ## What this repo is not
 

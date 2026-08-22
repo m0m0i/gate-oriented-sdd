@@ -42,7 +42,7 @@ Run all five before every commit — CI runs the same five:
 ```bash
 ./scripts/check-leakage.sh      # no private context
 ./scripts/check-manifests.py    # both manifests agree; hook shapes correct
-./scripts/check-locks.py        # rulebooks match their locks (--update to re-pin)
+./assets/check-locks.py         # rulebooks match their locks (--update to re-pin)
 ./scripts/test-gates.sh         # the gates still behave
 ./scripts/check-version-bump.py # shipped changes carry a version bump (PR-only in CI)
 ```

@@ -28,7 +28,7 @@ jobs:
       # A rulebook that has drifted from its lock is worse than an unpinned one:
       # the reviewer keeps citing rule ids as though they were the agreed text.
       - name: Rulebooks match their locks
-        run: ./scripts/check-locks.py
+        run: ./assets/check-locks.py
 
       # The repo's central claim is that the review gate is enforced rather than
       # advisory. That is testable without a model, so it is tested.
