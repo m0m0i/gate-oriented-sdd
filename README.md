@@ -144,11 +144,11 @@ The last row is a real gap, not a rounding error. `PreInvocation` is the candida
 
 ## Status
 
-**v0.2.0 — pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is authored but has never been run — `claude plugin eval` is in early access and was not enabled on the account this was built on, and claiming a green suite that never ran is exactly the unverified assertion this harness exists to prevent.
+**v0.2.3 — pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is authored but has never been run — `claude plugin eval` is in early access and was not enabled on the account this was built on, and claiming a green suite that never ran is exactly the unverified assertion this harness exists to prevent.
 
 Tested against: Claude Code 2.1.238 · Antigravity CLI 1.1.17 · Antigravity IDE 2.3.1 · macOS.
 
-What *is* verified: the review gate's ten behaviours, tested deterministically with no model in the loop ([`scripts/test-gates.sh`](./scripts/test-gates.sh)); Antigravity's `Stop` hook genuinely blocking, run rather than read from documentation ([`docs/verified.md`](./docs/verified.md)); both plugin manifests, the rulebook hashes, and the leakage guard, all in CI.
+What *is* verified: the two gates' eighteen behaviours, tested deterministically with no model in the loop ([`scripts/test-gates.sh`](./scripts/test-gates.sh)); Antigravity's `Stop` hook genuinely blocking, run rather than read from documentation ([`docs/verified.md`](./docs/verified.md)); both plugin manifests, the rulebook hashes, and the leakage guard, all in CI.
 
 What is not: the skills themselves have never been executed end to end, and no reviewer has yet reviewed a real diff.
 
