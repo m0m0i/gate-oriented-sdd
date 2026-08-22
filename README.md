@@ -53,7 +53,9 @@ northstar ──▶ prd ──▶ design-doc ──▶ epics ──▶ backlog �
                     into the reviewer's rulebook
 ```
 
-`backlog` puts everything known into **one ordered list — ordered, not prioritized**, so a position weighs value, risk, cost, and dependency together rather than flattening them into a label — and creates nothing. `sprint` decomposes the top of it into tracker issues — **one backlog item usually becomes several**, since the change, the test coverage it turns out to need, and the migration it forces are different issues with differently shaped specs. Ordering is cheap and reversible; an issue is a commitment, and that is why the two are separate steps.
+`backlog` produces the **product backlog**: not a pile of known tasks, but the whole of what the product has to achieve, in one ordered list. **Ordered, not prioritized** — a position weighs value, risk, cost, and dependency together rather than flattening them into a label. The ordering is the entire value; a list of everything that must be built is an inventory, not a backlog.
+
+It creates nothing. `sprint` decomposes the top of it into tracker issues — **one backlog item usually becomes several**, since the change, the test coverage it turns out to need, and the migration it forces are different issues with differently shaped specs. Ordering is cheap and reversible; an issue is a commitment, and that is why the two are separate steps.
 
 **Delivery — once per issue:**
 
