@@ -4,13 +4,14 @@
 
 On Claude Code a plugin hook already runs with the project as cwd, so a plugin-level hook would work. On Antigravity the working directory is set to *the directory containing `hooks.json`* — for a plugin-shipped hook that is the plugin directory, where `.specs/` and `.steering/` do not exist. Installing project-local copies makes both harnesses behave identically, and it is what the gate needs anyway, since validators differ per project.
 
-`init` copies `gate-lib.sh`, `review-gate.sh`, and `steering-digest.sh` into the project's hooks directory and substitutes:
+`init` copies `gate-lib.sh`, `quality-gate.sh`, `review-gate.sh`, and `steering-digest.sh` into the project's hooks directory and substitutes:
 
 | Placeholder | Becomes |
 | :-- | :-- |
 | `{{HOOKS_DIR}}` | where the scripts were installed (`.claude/hooks` or `.agents/hooks`) |
 | `{{FAST_CHECK}}` | the per-edit check for this project's language |
-| `{{QUALITY_GATE}}` | the blocking format/lint/type gate for this project |
+
+The blocking quality gate is **not** a placeholder. It ships as `quality-gate.sh` and reads its commands from the `- Validators:` line in `.steering/tech.md`, so the project configures enforcement by editing steering rather than by having `init` bake a command into a settings file. It used to be `{{QUALITY_GATE}}`, which meant every `init` invented the most important hook in the harness — and an invented one usually loses the dual-channel blocking that `gate-lib.sh` exists to provide.
 
 ## Schema warning
 

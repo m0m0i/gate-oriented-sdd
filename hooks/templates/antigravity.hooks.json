@@ -16,7 +16,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "{{QUALITY_GATE}}",
+        "command": "[ -f {{HOOKS_DIR}}/quality-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/quality-gate.sh",
         "timeout": 180
       },
       {

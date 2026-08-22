@@ -57,7 +57,7 @@ At most five questions, highest consequence first, each with a recommended answe
   `config.yml` sets `blank_issues_enabled: false` on purpose — an untyped issue makes `spec` guess, and it guesses feature, which is the wrong shape for a bug and for a chore. If the project has a reason to allow blank issues, say so and change it deliberately.
   If templates already exist, **merge rather than replace**: keep their wording and their labels, and add only the missing types. An existing template encodes decisions the team already made.
 - **The reviewer** — from the closest reference implementation (`ts-reviewer`, `python-reviewer`, `dart-flutter-reviewer`), or from `agents/_template/` for an unrecognised stack. Copy `_shared/reviewer-contract.md` next to it, and copy the plugin's `assets/check-locks.py` into the project's own scripts directory — the project has to be able to re-pin its rulebook, and telling it to run a script it was never given is how the lock quietly stops being checked. Then re-pin with `check-locks.py --update` after any edit, and add it to the project's CI beside its other validators.
-- **The hooks** — render `hooks/templates/` for whichever harnesses the project uses, and copy `gate-lib.sh`, `review-gate.sh`, and `steering-digest.sh` into the project's hooks directory.
+- **The hooks** — render `hooks/templates/` for whichever harnesses the project uses, and copy `gate-lib.sh`, `quality-gate.sh`, `review-gate.sh`, and `steering-digest.sh` into the project's hooks directory. Only `{{FAST_CHECK}}` and `{{HOOKS_DIR}}` are substituted; the blocking quality gate ships as a script and reads the `- Validators:` line, so do not inline the validator commands into the settings file.
 - **`AGENTS.md`**, with `CLAUDE.md` pointing at it, so one file is canonical.
 
 **Populate every file. Never leave a `TODO` in a steering file.** An unpopulated steering file is worse than none: it teaches the agent that steering files are noise, and that lesson generalises to the ones you did fill in.
@@ -66,9 +66,9 @@ At most five questions, highest consequence first, each with a recommended answe
 
 Do not report completion on files written. Verify:
 
-1. Every gating validator runs clean on the current tree.
+1. Every gating validator runs clean on the current tree, and `quality-gate.sh` exits 0. Arm the gate on a green tree — otherwise the user's first turn is blocked by a failure that predates them, and their first act is to disable it.
 2. `review-gate.sh` exits silently on the current branch — if it fires immediately, the scoping is wrong and the user's first experience of the harness is a false block.
-3. The quality gate actually blocks when it should: make a trivial violation, confirm it fires, revert it.
+3. Both gates actually block when they should: introduce a trivial lint violation, confirm `quality-gate.sh` fires, revert it.
 4. Report what you verified, and anything you could not.
 
 ## Rules
