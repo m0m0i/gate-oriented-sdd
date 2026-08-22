@@ -38,7 +38,7 @@ your-project/
 │
 ├── .claude/                       ← init         Claude Code wiring
 │   ├── settings.json              ←   the three hook layers
-│   ├── hooks/                     ←   gate-lib.sh, review-gate.sh, steering-digest.sh
+│   ├── hooks/                     ←   gate-lib.sh, quality-gate.sh, review-gate.sh, steering-digest.sh
 │   └── agents/
 │       ├── reviewer-contract.md   ←   severity, output format, the receipt
 │       ├── <name>-reviewer.md     ←   the project's reviewer
@@ -87,6 +87,7 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
 │   └── <lang>-reviewer.md + rules/
 ├── hooks/
 │   ├── gate-lib.sh                ← emits both harnesses' blocking signals
+│   ├── quality-gate.sh            ← runs the validators named in .steering/tech.md
 │   ├── review-gate.sh
 │   ├── steering-digest.sh
 │   └── templates/                 ← rendered into the project by init

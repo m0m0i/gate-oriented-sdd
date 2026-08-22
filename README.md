@@ -38,7 +38,7 @@ The six inception skills account for ~450 of that always-on total while firing p
 
 ### Why the gate is narrow
 
-A gate that fires on ordinary turns gets disabled, and a disabled gate protects nothing. So `review-gate.sh` is silent unless a spec branch has every task ticked and no fresh clean review. It skips merged branches, mid-implementation turns, and the documentation commits that legitimately land *after* a review. Ten paths, [tested deterministically](./scripts/test-gates.sh) with no model in the loop.
+A gate that fires on ordinary turns gets disabled, and a disabled gate protects nothing. So `review-gate.sh` is silent unless a spec branch has every task ticked and no fresh clean review. It skips merged branches, mid-implementation turns, and the documentation commits that legitimately land *after* a review. `quality-gate.sh` is the other half, and it carries no commands of its own — it runs the `- Validators:` line from `.steering/tech.md`, so enforcement is a property of the project rather than of the hook. Eighteen paths across the two, [tested deterministically](./scripts/test-gates.sh) with no model in the loop.
 
 ## The flow
 

@@ -1,12 +1,12 @@
 #!/bin/sh
-# test-gates.sh — deterministic tests for the review gate.
+# test-gates.sh — deterministic tests for the gates.
 #
 # The claim this repo makes is that its review gate is enforced rather than
 # advisory. That claim is testable without a model and without cost, so it is
 # tested here rather than asserted in a README.
 #
-# Builds throwaway git repositories, drives review-gate.sh through every path,
-# and asserts on exit code and on BOTH blocking channels.
+# Builds throwaway git repositories, drives review-gate.sh and quality-gate.sh
+# through every path, and asserts on exit code and on BOTH blocking channels.
 set -u
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -146,6 +146,49 @@ printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(cd "$r" && git rev-parse HEAD)" > "
 out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "quoted globs do not cause a false block" ok ;;
                         *) report "quoted globs do not cause a false block" no "$out" ;; esac
+
+# --- quality-gate.sh -------------------------------------------------------------
+#
+# It reads its commands from the `- Validators:` line rather than carrying them, so the
+# thing worth testing is that the line is honoured: a failing command must block, a
+# passing one must not, and a project with no such line must not be gated on nothing.
+
+qg_repo() { # qg_repo <name> <validators line, or empty to omit it>
+  r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+  if [ -n "$2" ]; then printf -- '- Validators: %s\n' "$2" > "$r/.steering/tech.md"
+  else printf -- '- Reviewer: test-reviewer\n' > "$r/.steering/tech.md"; fi
+  echo "$r"
+}
+run_qg() { ( cd "$1" && sh hooks/quality-gate.sh 2>"$TMP/err" ; echo "exit=$?" ) }
+
+# 15. A passing validator -> silent
+r=$(qg_repo qgpass "true"); out=$(run_qg "$r")
+case "$out" in *"exit=0"*) report "passing validator stays silent" ok ;;
+                        *) report "passing validator stays silent" no "$out" ;; esac
+
+# 16. A failing validator -> blocks, on BOTH channels, naming the command
+r=$(qg_repo qgfail "true, sh -c 'echo boom >&2; exit 1'"); out=$(run_qg "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *boom*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "failing validator blocks on both channels" ok \
+  || report "failing validator blocks on both channels" no "exit=$c1 json=$c2 stderr=$c3"
+
+# 17. Every validator runs. Stopping at the first failure would report one problem per
+#     turn and make a broken tree take as many turns to fix as it has broken validators.
+r=$(qg_repo qgboth "sh -c 'echo alpha >&2; exit 1', sh -c 'echo omega >&2; exit 1'")
+out=$(run_qg "$r"); err=$(cat "$TMP/err")
+case "$err" in *alpha*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *omega*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a failure does not stop later validators running" ok \
+  || report "a failure does not stop later validators running" no "first=$c1 second=$c2"
+
+# 18. No Validators line -> silent. A project that has not declared its validators is not
+#     one whose turns should be blocked by a gate with nothing to run.
+r=$(qg_repo qgnone ""); out=$(run_qg "$r")
+case "$out" in *"exit=0"*) report "absent Validators line stays silent" ok ;;
+                        *) report "absent Validators line stays silent" no "$out" ;; esac
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
