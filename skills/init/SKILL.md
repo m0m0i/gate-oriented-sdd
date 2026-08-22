@@ -44,10 +44,13 @@ At most five questions, highest consequence first, each with a recommended answe
   ```
   - Validators: <the gating commands, comma-separated>
   - Reviewer: <reviewer name>
-  - Source globs: <globs that count as reviewable source, e.g. '*.ts' '*.py'>
+  - Source globs: <git pathspecs for reviewable source, space separated, e.g. :(glob)**/*.ts :(glob)**/*.py>
   - Docs: <where inception documents live — `docs/` by default, or the path/URL of a shared documentation repo in a multi-repo product>
   ```
-  The gates parse these, so a project changes its enforcement by editing steering rather than by editing hooks.
+  The gates parse these, so a project changes its enforcement by editing steering rather than by editing hooks. Two consequences worth stating, because both fail silently:
+
+  - **Each value must stay on one physical line.** The gates read them with `sed ... | head -1`, so a wrapped value is truncated at the first newline and the rest is lost without complaint.
+  - **`Source globs` is a git pathspec, and `:(glob)` earns its place.** The value is interpolated unquoted, so a bare `*.py` is expanded by the shell against the repository root before git ever sees it — which in a `src/` layout matches nothing. `:(glob)` matches no file on disk, so the shell leaves the word alone and git receives the pattern intact.
 - **`.steering/structure.md`** — where code belongs, and where tests mirror it.
 - **`.specs/README.md`**, **`.specs/_archive/README.md`**, **`.work_logs/README.md`** — each stating its contract.
 - **`.github/ISSUE_TEMPLATE/`** — copy `feature.md`, `bug.md`, `chore.md`, and `config.yml` from the plugin's `assets/issue-templates/`, adapting labels to the ones this project already uses. The issue is the entry point to the whole flow: `backlog` creates typed issues, `spec` reads the type to choose its shape, and one issue becomes one spec, one branch, one PR. Leaving the entry point undefined leaves a hole in the middle of the process.

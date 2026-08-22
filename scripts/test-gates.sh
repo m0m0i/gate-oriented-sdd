@@ -20,11 +20,20 @@ report() { # report <name> <ok|no> <detail>
 }
 
 # A repo with the harness installed and one spec branch.
-# $1 = repo name, $2 = open tasks (0 or 1)
+#
+# Source lives one directory down, in src/, and the glob defaults to the quoted form the
+# init skill documents. Both are deliberate. An earlier fixture put its only source file
+# at the repository root and wrote the glob bare, which meant the staleness case passed
+# because the shell expanded `*.txt` into exactly the changed file — the gate could have
+# been doing nothing and the test would not have known.
+#
+# $1 = repo name, $2 = open tasks (0 or 1), $3 = the Source globs value (optional)
 make_repo() {
-  r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering" "$r/.specs/9-feature"
+  r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering" "$r/.specs/9-feature" "$r/src"
   cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/review-gate.sh" "$r/hooks/"
-  printf -- '- Reviewer: test-reviewer\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+  globs=${3:-}
+  [ -n "$globs" ] || globs="'*.txt'"
+  printf -- '- Reviewer: test-reviewer\n- Source globs: %s\n' "$globs" > "$r/.steering/tech.md"
   if [ "$2" = 0 ]; then box='- [x]'; else box='- [ ]'; fi
   cat > "$r/.specs/9-feature/spec.md" <<EOF
 # Spec: feature
@@ -37,8 +46,8 @@ make_repo() {
 $box T1: do the thing
 EOF
   ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
-    && echo one > src.txt && git add -A && git commit -qm init \
-    && git checkout -q -b 9-feature && echo two >> src.txt && git commit -qam work ) >/dev/null 2>&1
+    && echo one > src/main.txt && git add -A && git commit -qm init \
+    && git checkout -q -b 9-feature && echo two >> src/main.txt && git commit -qam work ) >/dev/null 2>&1
   echo "$r"
 }
 
@@ -88,7 +97,7 @@ case "$out" in *"exit=0"*) report "docs-only commit after review passes" ok ;;
 # 7. Source commit after review -> blocks as stale
 r=$(make_repo stale 0)
 printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(cd "$r" && git rev-parse HEAD)" > "$r/.specs/9-feature/.review-receipt"
-( cd "$r" && echo three >> src.txt && git commit -qam more ) >/dev/null 2>&1
+( cd "$r" && echo three >> src/main.txt && git commit -qam more ) >/dev/null 2>&1
 out=$(run_gate "$r")
 case "$out" in *"exit=2"*) report "source commit after review blocks as stale" ok ;;
                         *) report "source commit after review blocks as stale" no "$out" ;; esac
@@ -113,6 +122,30 @@ r=$(make_repo noissue 0)
 out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out$err" in *"exit=2"*"No issue, no spec"*) report "spec without an issue number blocks" ok ;;
                  *) report "spec without an issue number blocks" no "$out" ;; esac
+
+# 11-13. The same staleness check must hold however the glob line is spelled. Each of
+#    these used to fail OPEN: a quoted value reached git with its quotes and matched
+#    nothing, and a bare value was expanded by the shell against the repo root, which in
+#    a src/ layout also matches nothing. A gate that silently stops checking is worse
+#    than one that was never installed, so all three spellings are pinned.
+for spelling in "'*.txt'" '*.txt' ':(glob)**/*.txt'; do
+  name=$(printf '%s' "$spelling" | tr -d ' ')
+  r=$(make_repo "globs$(echo "$name" | tr -cd 'a-z')" 0 "$spelling")
+  printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(cd "$r" && git rev-parse HEAD)" > "$r/.specs/9-feature/.review-receipt"
+  ( cd "$r" && echo four >> src/main.txt && git commit -qam more ) >/dev/null 2>&1
+  out=$(run_gate "$r")
+  case "$out" in *"exit=2"*) report "stale source blocks with globs written as $spelling" ok ;;
+                          *) report "stale source blocks with globs written as $spelling" no "$out — gate failed open" ;; esac
+done
+
+# 14. And it must still stay silent when nothing reviewable moved, or the fix above has
+#     simply turned the gate into one that always fires.
+r=$(make_repo globsquiet 0)
+printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(cd "$r" && git rev-parse HEAD)" > "$r/.specs/9-feature/.review-receipt"
+( cd "$r" && echo note > NOTES.md && git add -A && git commit -qm docs ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "quoted globs do not cause a false block" ok ;;
+                        *) report "quoted globs do not cause a false block" no "$out" ;; esac
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
