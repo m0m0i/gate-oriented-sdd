@@ -5,8 +5,17 @@ A rulebook that has drifted from its lock is worse than an unpinned one: the
 reviewer keeps citing rule ids as though they were the reviewed, agreed text
 while the text underneath has changed. This makes that state a build failure.
 
-  ./scripts/check-locks.py            verify   (CI)
-  ./scripts/check-locks.py --update   re-pin   (after deliberately editing a rulebook)
+  ./assets/check-locks.py            verify   (CI)
+  ./assets/check-locks.py --update   re-pin   (after deliberately editing a rulebook)
+
+It lives in assets/ because it is one of the few files a project needs a COPY of rather
+than a reference to: `init` copies it in so the project can re-pin its own rulebook. That
+also puts it on a shipped path, so a fix to it cannot go out unreachable.
+
+The reviewer directory differs between the harness repo (`agents/`) and a project using it
+(`.claude/agents/`), so it is discovered rather than hardcoded — otherwise every install
+has to hand-edit the copy, which is exactly the kind of divergence that never gets
+re-applied on the next re-vendor.
 """
 import datetime
 import hashlib
@@ -15,7 +24,22 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-AGENTS = ROOT / "agents"
+
+
+def _reviewers_dir(root: pathlib.Path) -> pathlib.Path:
+    """Where this repository keeps its reviewers.
+
+    `agents/` in the harness repo, `.claude/agents/` in a project `init` has run in. Pick
+    whichever actually holds a pinned rulebook so the same copy of this script works in
+    both without editing.
+    """
+    for candidate in (root / ".claude" / "agents", root / ".agents" / "agents", root / "agents"):
+        if candidate.is_dir() and any(candidate.glob("*/rules-lock.json")):
+            return candidate
+    return root / "agents"
+
+
+AGENTS = _reviewers_dir(ROOT)
 update = "--update" in sys.argv
 errors: list[str] = []
 checked = 0
