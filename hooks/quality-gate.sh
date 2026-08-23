@@ -27,6 +27,27 @@ DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 validators=$(sed -n 's/^ *- *Validators: *//p' .steering/tech.md | head -1)
 [ -n "$validators" ] || gate_pass
 
+# Skip when nothing this gate is about has changed.
+#
+# Without this the gate pays full price on every turn end, including the many that touch
+# only docs, specs, or the work log. That is how a gate earns the reputation that gets it
+# switched off — and the comment above about keeping it fast is worth nothing if the script
+# itself ignores it.
+#
+# `Source globs` is the same line the review gate reads to decide what counts as reviewable
+# source, so a project states "what is code here" once and both gates obey it. When the line
+# is absent the gate runs: for a guarantee, failing toward MORE checking is the right
+# direction.
+globs=$(sed -n 's/^ *- *Source globs: *//p' .steering/tech.md | head -1)
+if [ -n "$globs" ] && git rev-parse --git-dir >/dev/null 2>&1; then
+  # Unquoted on purpose: the line holds several space-separated globs and each has to reach
+  # git as its own pathspec. Quotes inside a variable are NOT removed on expansion, so a
+  # line written '*.py' would hand git a literal quote and match nothing — the same
+  # fail-open this script's sibling was fixed for, which is why they are stripped first.
+  set -- $(printf '%s' "$globs" | tr -d '\042\047')   # \042 = " and \047 = ', stripped so git sees bare globs
+  git status --porcelain -- "$@" 2>/dev/null | grep -q . || gate_pass
+fi
+
 failed=""
 # Comma-separated, because a validator is a whole command and commands contain spaces.
 old_ifs=$IFS

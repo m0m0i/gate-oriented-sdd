@@ -190,5 +190,36 @@ r=$(qg_repo qgnone ""); out=$(run_qg "$r")
 case "$out" in *"exit=0"*) report "absent Validators line stays silent" ok ;;
                         *) report "absent Validators line stays silent" no "$out" ;; esac
 
+# --- quality gate: only pays when something matching Source globs changed ---------------
+qg_repo() { # $1 = name
+  r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+  printf -- '- Validators: sh -c "echo RAN >&2; exit 1"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && echo one > src.txt && echo doc > NOTES.md && git add -A && git commit -qm init ) >/dev/null 2>&1
+  echo "$r"
+}
+run_qg() { ( cd "$1" && sh hooks/quality-gate.sh 2>"$TMP/qerr"; echo "exit=$?" ) }
+
+r=$(qg_repo qg-clean); out=$(run_qg "$r")
+case "$out" in *"exit=0"*) report "quality gate silent when nothing changed" ok ;;
+                        *) report "quality gate silent when nothing changed" no "$out" ;; esac
+
+r=$(qg_repo qg-docs); echo more >> "$r/NOTES.md"; out=$(run_qg "$r")
+case "$out" in *"exit=0"*) report "quality gate silent on a docs-only change" ok ;;
+                        *) report "quality gate silent on a docs-only change" no "$out" ;; esac
+
+r=$(qg_repo qg-src); echo more >> "$r/src.txt"; out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"Quality gate"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "quality gate fires on a source change" ok \
+  || report "quality gate fires on a source change" no "exit=$c1 msg=$c2"
+
+r=$(qg_repo qg-quoted)
+printf -- '- Validators: sh -c "exit 1"\n- Source globs: %s\n' "'*.txt'" > "$r/.steering/tech.md"
+echo more >> "$r/src.txt"; out=$(run_qg "$r")
+case "$out" in *"exit=2"*) report "quoted globs still match (no fail-open)" ok ;;
+                        *) report "quoted globs still match (no fail-open)" no "$out" ;; esac
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
