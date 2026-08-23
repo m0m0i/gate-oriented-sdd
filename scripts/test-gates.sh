@@ -123,6 +123,27 @@ out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out$err" in *"exit=2"*"No issue, no spec"*) report "spec without an issue number blocks" ok ;;
                  *) report "spec without an issue number blocks" no "$out" ;; esac
 
+# 11. Tasks section authored but empty -> silent.
+#
+# This is the exact state `spec` step 3 prescribes: draft Requirements, stop, run clarify.
+# Zero UNTICKED boxes used to read as "implementation finished", so a spec nobody had started
+# blocked the turn — and said every task was ticked when the spec had none. See #8.
+r=$(make_repo drafting 0)
+cat > "$r/.specs/9-feature/spec.md" <<'SPEC'
+# Spec: feature
+- Slug: 9-feature   Status: draft
+
+## 1. Requirements
+- [ ] **AC1:** an acceptance criterion, deliberately left unticked.
+
+## 3. Tasks (TDD-ordered)
+<not written yet>
+SPEC
+( cd "$r" && git add -A && git commit -qm "spec: draft requirements only" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "spec with no tasks authored stays silent" ok ;;
+                        *) report "spec with no tasks authored stays silent" no "$out" ;; esac
+
 # 11-13. The same staleness check must hold however the glob line is spelled. Each of
 #    these used to fail OPEN: a quoted value reached git with its quotes and matched
 #    nothing, and a bare value was expanded by the shell against the repo root, which in

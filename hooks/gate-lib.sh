@@ -43,3 +43,13 @@ gate_pass() {
 gate_open_tasks() {
   awk '/^#+ *3\./ {f=1; next} /^#+ /{f=0} f' "$1" 2>/dev/null | grep -c '^ *- \[ \]'
 }
+
+# Count ALL checkboxes in a spec's Tasks section, ticked or not.
+#
+# gate_open_tasks returning 0 is ambiguous, and the two meanings are opposites: "every task
+# is done" and "no task was ever written". Reading the second as the first blocks a spec that
+# is still being drafted, which is the state `spec` step 3 tells the author to create. A
+# caller needs both counts to tell them apart.
+gate_total_tasks() {
+  awk '/^#+ *3\./ {f=1; next} /^#+ /{f=0} f' "$1" 2>/dev/null | grep -c '^ *- \[[ xX]\]'
+}

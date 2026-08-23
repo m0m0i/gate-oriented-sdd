@@ -71,7 +71,7 @@ None needed. The root cause determines the fix; no scope question was open.
 > Tasks are folded red-and-green per the decision recorded in #10: one task is one complete
 > Red-Green-Refactor cycle, and therefore one green commit.
 
-- [ ] T1: failing case in `test-gates.sh` — a spec whose section 3 has no checkboxes stays silent —
+- [x] T1: failing case in `test-gates.sh` — a spec whose section 3 has no checkboxes stays silent —
       then `gate_total_tasks` and the `review-gate.sh` guard that makes it pass
 - [ ] T2: boundary cases — section 3 absent entirely stays silent; at least one ticked and none
       unticked still blocks; at least one unticked still stays silent

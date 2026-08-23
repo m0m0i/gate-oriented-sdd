@@ -36,8 +36,15 @@ if [ -n "$base" ] && git merge-base --is-ancestor HEAD "$base" 2>/dev/null; then
   gate_pass
 fi
 
-# Tasks still open means implementation is in progress, which is not the moment
-# to demand a review.
+# Two ways there is nothing to review, indistinguishable in a count of unticked boxes alone
+# — which is why that count used to block a spec still being drafted while telling its author
+# that every task was ticked:
+#
+#   no checkboxes at all   the Tasks section is a placeholder; nothing has been written yet
+#   some still unticked    implementation is in progress
+#
+# Neither is the moment to demand a review.
+[ "$(gate_total_tasks "$spec")" -eq 0 ] 2>/dev/null && gate_pass
 [ "$(gate_open_tasks "$spec")" -gt 0 ] 2>/dev/null && gate_pass
 
 receipt=".specs/$branch/.review-receipt"
