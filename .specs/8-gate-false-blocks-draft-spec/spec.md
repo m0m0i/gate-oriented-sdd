@@ -73,7 +73,7 @@ None needed. The root cause determines the fix; no scope question was open.
 
 - [x] T1: failing case in `test-gates.sh` — a spec whose section 3 has no checkboxes stays silent —
       then `gate_total_tasks` and the `review-gate.sh` guard that makes it pass
-- [ ] T2: boundary cases — section 3 absent entirely stays silent; at least one ticked and none
+- [x] T2: boundary cases — section 3 absent entirely stays silent; at least one ticked and none
       unticked still blocks; at least one unticked still stays silent
 - [ ] T3: confirm no pre-existing case changed verdict, by running the suite against the unmodified
       fixtures and diffing the case list
