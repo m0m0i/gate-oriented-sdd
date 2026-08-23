@@ -1,5 +1,5 @@
 # Spec: review-gate.sh false-blocks a spec that is still being drafted
-- Slug: 8-gate-false-blocks-draft-spec   Issue: 8   Type: bug   Status: draft
+- Slug: 8-gate-false-blocks-draft-spec   Issue: 8   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-08-23
 
 ## 1. Requirements (WHAT / WHY)
@@ -75,6 +75,6 @@ None needed. The root cause determines the fix; no scope question was open.
       then `gate_total_tasks` and the `review-gate.sh` guard that makes it pass
 - [x] T2: boundary cases — section 3 absent entirely stays silent; at least one ticked and none
       unticked still blocks; at least one unticked still stays silent
-- [ ] T3: confirm no pre-existing case changed verdict, by running the suite against the unmodified
+- [x] T3: confirm no pre-existing case changed verdict, by running the suite against the unmodified
       fixtures and diffing the case list
-- [ ] T4: refactor — the two guards read as one decision, and the comment says why zero is ambiguous
+- [x] T4: refactor — the two guards read as one decision, and the comment says why zero is ambiguous
