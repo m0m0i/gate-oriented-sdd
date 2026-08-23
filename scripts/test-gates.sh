@@ -169,6 +169,19 @@ out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out$err" in *"exit=2"*"no reviewer receipt exists"*) report "all tasks ticked still blocks" ok ;;
                  *) report "all tasks ticked still blocks" no "$out" ;; esac
 
+# 14. A spec that exists but cannot be READ must block, not pass.
+#
+# Both task counters return 0 for a file they cannot open, and since #8 a zero total means
+# "nothing authored, stay silent". That is the right reading for an empty section and the
+# wrong one for an unreadable file: the gate would exit 0 exactly when it could not do its
+# job. Fail closed instead.
+r=$(make_repo unreadable 0)
+chmod 000 "$r/.specs/9-feature/spec.md"
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+chmod 644 "$r/.specs/9-feature/spec.md"
+case "$out$err" in *"exit=2"*"cannot be read"*) report "unreadable spec blocks rather than failing open" ok ;;
+                 *) report "unreadable spec blocks rather than failing open" no "$out" ;; esac
+
 # 11-13. The same staleness check must hold however the glob line is spelled. Each of
 #    these used to fail OPEN: a quoted value reached git with its quotes and matched
 #    nothing, and a bare value was expanded by the shell against the repo root, which in
