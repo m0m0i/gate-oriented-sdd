@@ -31,7 +31,13 @@
         exit 0 and emit nothing — existing behaviour, unchanged.
   - [ ] **AC5:** no block message SHALL state that tasks are ticked unless at least one ticked
         checkbox exists in the spec.
-  - [ ] **AC6:** the regression test fails before the fix and passes after.
+  - [x] **AC6:** the regression test fails before the fix and passes after.
+  - [x] **AC7:** WHEN a spec file exists but cannot be read THE SYSTEM SHALL block, not pass.
+        *Added during the reviewer pass, not at authoring time.* The Design section claimed the
+        only behaviour change was "specs with zero checkboxes go from blocking to silent"; that
+        was incomplete. A file the gate cannot open also counts zero, so the same edit silently
+        turned an unreadable spec from fail-closed into fail-open — the project's own anchor,
+        missed by the spec that was written to protect it.
 - Out of scope: the message wording for the genuinely-all-ticked case; #9 and #10.
 
 ### Clarifications
