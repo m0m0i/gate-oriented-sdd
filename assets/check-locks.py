@@ -26,25 +26,31 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
-def _reviewers_dir(root: pathlib.Path) -> pathlib.Path:
-    """Where this repository keeps its reviewers.
+#: Every place a repository may keep reviewers. `agents/` is the harness repo's own; the
+#: other two are where `init` puts a project's. They are not alternatives — a repository
+#: that dogfoods the harness has both at once.
+CANDIDATE_DIRS = (".claude/agents", ".agents/agents", "agents")
 
-    `agents/` in the harness repo, `.claude/agents/` in a project `init` has run in. Pick
-    whichever actually holds a pinned rulebook so the same copy of this script works in
-    both without editing.
+
+def _reviewer_dirs(root: pathlib.Path) -> list[pathlib.Path]:
+    """Every reviewer directory that exists, not the first one that does.
+
+    This used to return a single directory — whichever held a lock first — which quietly
+    assumed the candidates could never coexist. They must: installing this harness into its
+    own repository creates `.claude/agents/` beside the shipped `agents/`, and the old rule
+    then took all six shipped rulebooks out of scope while still exiting 0.
     """
-    for candidate in (root / ".claude" / "agents", root / ".agents" / "agents", root / "agents"):
-        if candidate.is_dir() and any(candidate.glob("*/rules-lock.json")):
-            return candidate
-    return root / "agents"
+    return [d for c in CANDIDATE_DIRS if (d := root / c).is_dir()]
 
 
-AGENTS = _reviewers_dir(ROOT)
+AGENT_DIRS = _reviewer_dirs(ROOT)
 update = "--update" in sys.argv
 errors: list[str] = []
 checked = 0
 
-for lock_path in sorted(AGENTS.glob("*/rules-lock.json")):
+lock_paths = sorted(p for d in AGENT_DIRS for p in d.glob("*/rules-lock.json"))
+
+for lock_path in lock_paths:
     reviewer = lock_path.parent
     lock = json.loads(lock_path.read_text())
     dirty = False

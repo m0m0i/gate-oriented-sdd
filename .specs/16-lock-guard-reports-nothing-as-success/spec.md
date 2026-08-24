@@ -1,5 +1,5 @@
 # Spec: check-locks.py reports success when it verified nothing
-- Slug: 16-lock-guard-reports-nothing-as-success   Issue: 16   Type: bug   Status: draft
+- Slug: 16-lock-guard-reports-nothing-as-success   Issue: 16   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-08-24
 
 ## 1. Requirements (WHAT / WHY)
@@ -134,7 +134,7 @@ was also rejected: it churns CI, `AGENTS.md`, `CONTRIBUTING.md`, and `README.md`
 ## 3. Tasks (TDD-ordered)
 > Folded red-and-green per #10: one task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: failing case — a lock under `.claude/agents/` must not stop `agents/` being verified, and
+- [x] T1: failing case — a lock under `.claude/agents/` must not stop `agents/` being verified, and
       a drifted shipped rulebook must still fail with both present — then `_reviewer_dirs` and the
       union loop that make it pass
 - [ ] T2: failing case — locks exist but zero pinned files verified exits 1 — then the third report
