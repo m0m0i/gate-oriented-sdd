@@ -391,5 +391,28 @@ case "$out" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac # the edited one was re-pin
 [ "$c1$c2" = "okok" ] && report "--update re-pins only the lock that drifted" ok \
   || report "--update re-pins only the lock that drifted" no "untouched=$c1 repinned=$c2"
 
+# 19. A reviewer directory that exists but cannot be READ must fail, not be skipped.
+#
+# Path.glob swallows the permission error and yields nothing, so an unreadable directory
+# contributed zero locks while still being named in the "scanned" list — the report actively
+# claiming coverage it did not have. Naming the directories (case 16/17) made this worse
+# rather than better, which is why it is pinned separately.
+#
+# Skipped when the chmod does not actually deny access (running as root, or a filesystem
+# without POSIX permissions). A case that cannot fail is worse than no case.
+r=$(lock_repo lk-unreadable); add_project_reviewer "$r" proj
+chmod 000 "$r/agents/shipped" 2>/dev/null
+if cat "$r/agents/shipped/rules-lock.json" >/dev/null 2>&1; then
+  chmod 755 "$r/agents/shipped" 2>/dev/null
+  report "unreadable reviewer directory fails rather than being skipped" ok
+else
+  out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+  chmod 755 "$r/agents/shipped" 2>/dev/null
+  case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+  case "$err" in *"cannot be read"*) c2=ok ;; *) c2=no ;; esac
+  [ "$c1$c2" = "okok" ] && report "unreadable reviewer directory fails rather than being skipped" ok \
+    || report "unreadable reviewer directory fails rather than being skipped" no "exit=$c1 msg=$c2"
+fi
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

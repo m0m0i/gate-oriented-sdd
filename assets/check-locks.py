@@ -24,6 +24,7 @@ found everything in order.
 """
 import datetime
 import hashlib
+import os
 import json
 import pathlib
 import sys
@@ -53,7 +54,31 @@ update = "--update" in sys.argv
 errors: list[str] = []
 checked = 0
 
-lock_paths = sorted(p for d in AGENT_DIRS for p in d.glob("*/rules-lock.json"))
+# Walked explicitly rather than globbed, because a directory that exists and cannot be
+# read must be an error rather than an empty contribution. `Path.glob` swallows the
+# permission error and yields nothing, so an unreadable reviewer would otherwise be
+# counted as scanned — and since the report names the directories it scanned, it would
+# actively claim coverage it does not have. Both levels matter: the candidate root, and
+# each reviewer inside it.
+lock_paths: list[pathlib.Path] = []
+for _dir in AGENT_DIRS:
+    if not os.access(_dir, os.R_OK | os.X_OK):
+        errors.append(
+            f"{_dir.relative_to(ROOT)} exists but cannot be read, so its rulebooks were not "
+            "verified. Fix the directory's permissions rather than treating this as a pass."
+        )
+        continue
+    for _sub in sorted(_dir.iterdir()):
+        if not _sub.is_dir():
+            continue
+        if not os.access(_sub, os.R_OK | os.X_OK):
+            errors.append(
+                f"{_sub.relative_to(ROOT)} exists but cannot be read, so its rulebook was not "
+                "verified. Fix the directory's permissions rather than treating this as a pass."
+            )
+            continue
+        if (_lock := _sub / "rules-lock.json").is_file():
+            lock_paths.append(_lock)
 
 for lock_path in lock_paths:
     reviewer = lock_path.parent

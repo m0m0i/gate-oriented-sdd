@@ -44,18 +44,24 @@
   invisible one.
 
 - Acceptance criteria:
-  - [ ] **AC1:** every candidate reviewer directory SHALL be scanned, not the first one that matches.
-  - [ ] **AC2:** WHEN lock files exist but zero pinned files were verified THE SYSTEM SHALL fail.
-  - [ ] **AC3:** the output SHALL name which directories were scanned and how many locks were found,
+  - [x] **AC1:** every candidate reviewer directory SHALL be scanned, not the first one that matches.
+  - [x] **AC2:** WHEN lock files exist but zero pinned files were verified THE SYSTEM SHALL fail.
+  - [x] **AC3:** the output SHALL name which directories were scanned and how many locks were found,
         so a count of zero is never ambiguous to a reader.
-  - [ ] **AC4:** WHEN a shipped rulebook has drifted THE SYSTEM SHALL fail regardless of what other
+  - [x] **AC4:** WHEN a shipped rulebook has drifted THE SYSTEM SHALL fail regardless of what other
         reviewer directories exist.
-  - [ ] **AC5:** `--update` SHALL re-pin only the lock whose file drifted, and SHALL NOT rewrite a
+  - [x] **AC5:** `--update` SHALL re-pin only the lock whose file drifted, and SHALL NOT rewrite a
         lock in a different reviewer directory.
-  - [ ] **AC6:** the regression test fails before the fix and passes after.
-  - [ ] **AC7:** WHEN no lock files exist in any candidate directory THE SYSTEM SHALL exit 0 with
+  - [x] **AC6:** the regression test fails before the fix and passes after.
+  - [x] **AC9:** WHEN a reviewer directory exists but cannot be read THE SYSTEM SHALL fail.
+        *Added during the reviewer pass.* AC3 asked the report to name the directories it
+        scanned, and implementing it created this: `Path.glob` swallows a permission error and
+        yields nothing, so an unreadable reviewer contributed no locks while still being named
+        as scanned. The report asserted coverage it did not have — AC3 made the failure worse
+        rather than better, which the spec did not anticipate.
+  - [x] **AC7:** WHEN no lock files exist in any candidate directory THE SYSTEM SHALL exit 0 with
         wording that cannot be read as a successful verification.
-  - [ ] **AC8:** every AC above SHALL be pinned by a case in the deterministic suite.
+  - [x] **AC8:** every AC above SHALL be pinned by a case in the deterministic suite.
 
 - Out of scope: **teaching `--update` to create a lock that does not exist** — filed as #19. It is
   what stops this repo's own reviewer being pinned, but it is a new capability with its own design
