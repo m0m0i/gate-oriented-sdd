@@ -1,5 +1,5 @@
 # Spec: check-locks.py reports success when it verified nothing
-- Slug: 16-lock-guard-reports-nothing-as-success   Issue: 16   Type: bug   Status: approved
+- Slug: 16-lock-guard-reports-nothing-as-success   Issue: 16   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-08-24
 
 ## 1. Requirements (WHAT / WHY)
