@@ -1,0 +1,32 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "./scripts/check-manifests.py", "timeout": 60 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "[ -f hooks/quality-gate.sh ] || exit 0; sh hooks/quality-gate.sh", "timeout": 180 }
+        ]
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "[ -f hooks/review-gate.sh ] || exit 0; sh hooks/review-gate.sh", "timeout": 30 }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "[ -f hooks/steering-digest.sh ] || exit 0; sh hooks/steering-digest.sh", "timeout": 15 }
+        ]
+      }
+    ]
+  }
+}
