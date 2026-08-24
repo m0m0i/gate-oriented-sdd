@@ -15,7 +15,12 @@ also puts it on a shipped path, so a fix to it cannot go out unreachable.
 The reviewer directory differs between the harness repo (`agents/`) and a project using it
 (`.claude/agents/`), so it is discovered rather than hardcoded — otherwise every install
 has to hand-edit the copy, which is exactly the kind of divergence that never gets
-re-applied on the next re-vendor.
+re-applied on the next re-vendor. Every candidate is scanned rather than the first that
+matches: a repository that installs this harness into itself has both at once.
+
+Verifying nothing is not success. A run that hashed no files exits non-zero when locks
+exist, because a guard that did not run must not be indistinguishable from one that ran and
+found everything in order.
 """
 import datetime
 import hashlib
