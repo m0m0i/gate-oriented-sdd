@@ -1,5 +1,5 @@
 # Spec: a receipt cannot distinguish an independent review from a self-review
-- Slug: 9-receipt-review-provenance   Issue: 9   Type: bug   Status: draft
+- Slug: 9-receipt-review-provenance   Issue: 9   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-08-23
 
 ## 1. Requirements (WHAT / WHY)
@@ -78,7 +78,7 @@
 ## 3. Tasks (TDD-ordered)
 > Folded red-and-green per #10.
 
-- [ ] T1: failing schema check — the Receipt block in `reviewer-contract.md` and the copy in
+- [x] T1: failing schema check — the Receipt block in `reviewer-contract.md` and the copy in
       `implement/SKILL.md` must agree field-for-field — then add `reviewed_by` to both so it passes
 - [ ] T2: failing `test-gates.sh` case — a legacy receipt with no `reviewed_by` and `verdict=CLEAN`
       still clears the gate (AC2) — then confirm the gate genuinely ignores the field today
