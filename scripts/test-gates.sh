@@ -348,5 +348,31 @@ case "$out2" in *"exit=1"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "a project reviewer does not hide the shipped rulebooks" ok \
   || report "a project reviewer does not hide the shipped rulebooks" no "clean=$c1 drift-caught=$c2"
 
+# 16. Locks exist but pinned zero verifiable files -> FAIL.
+#
+# The state that made #16 invisible. A lock with empty vendored/derived hashes nothing, so
+# `checked` stayed 0 and 0 was reported through the success path — identical output to a
+# run that verified everything and found no drift.
+r=$(lock_repo lk-empty)
+printf '{"version":1,"vendored":{},"derived":{}}\n' > "$r/agents/shipped/rules-lock.json"
+out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"verified no files"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "locks that pin nothing fail rather than pass" ok \
+  || report "locks that pin nothing fail rather than pass" no "exit=$c1 msg=$c2 [$err]"
+
+# 17. No locks anywhere -> pass, but not with the wording of a real verification.
+#
+# Legitimate: a project may install the guard before its first reviewer exists. Failing here
+# would hand it a red build it could only fix by deleting the guard, which is how a guard
+# gets deleted. The requirement is that its message cannot be mistaken for having checked.
+r=$(lock_repo lk-none); rm -f "$r/agents/shipped/rules-lock.json"
+out=$(run_locks "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *"no rulebooks are pinned"*) c2=ok ;; *) c2=no ;; esac
+case "$out" in *"match their locks"*) c3=no ;; *) c3=ok ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "no locks anywhere passes with distinct wording" ok \
+  || report "no locks anywhere passes with distinct wording" no "exit=$c1 distinct=$c2 not-success-wording=$c3"
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

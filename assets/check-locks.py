@@ -99,4 +99,28 @@ if errors:
     for e in errors:
         print(f"  {e}", file=sys.stderr)
     sys.exit(1)
-print(f"check-locks: {checked} pinned file(s) match their locks")
+
+# Three outcomes, not two. "Verified nothing" and "found no drift" used to share this line
+# and this exit code, which is what let a wrong reviewer directory go unnoticed: the guard
+# kept reporting success while hashing nothing at all. Naming the directories scanned in
+# every branch is what makes a count of zero legible without reading this file.
+scanned = ", ".join(str(d.relative_to(ROOT)) for d in AGENT_DIRS) or "no reviewer directory"
+
+if not lock_paths:
+    # Legitimate: a project may install this guard before its first reviewer exists. Failing
+    # would hand it a red build it could only fix by deleting the guard.
+    print(f"check-locks: no rulebooks are pinned in {scanned} — nothing to verify")
+    sys.exit(0)
+
+if checked == 0:
+    print("lock check FAILED", file=sys.stderr)
+    print(
+        f"  {len(lock_paths)} lock file(s) found in {scanned}, but they verified no files.\n"
+        "      A lock that pins nothing is not a lock that passed — it is a guard that did\n"
+        "      not run. Check that each lock's 'vendored'/'derived' entries name paths that\n"
+        "      exist.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+print(f"check-locks: {checked} pinned file(s) match their locks in {scanned}")

@@ -137,9 +137,9 @@ was also rejected: it churns CI, `AGENTS.md`, `CONTRIBUTING.md`, and `README.md`
 - [x] T1: failing case — a lock under `.claude/agents/` must not stop `agents/` being verified, and
       a drifted shipped rulebook must still fail with both present — then `_reviewer_dirs` and the
       union loop that make it pass
-- [ ] T2: failing case — locks exist but zero pinned files verified exits 1 — then the third report
+- [x] T2: failing case — locks exist but zero pinned files verified exits 1 — then the third report
       branch
-- [ ] T3: failing case — no locks in any candidate directory exits 0 with wording distinct from a
+- [x] T3: failing case — no locks in any candidate directory exits 0 with wording distinct from a
       real verification — then that branch
 - [ ] T4: blast radius — `--update` re-pins only the drifted lock and leaves locks in other reviewer
       directories byte-identical
