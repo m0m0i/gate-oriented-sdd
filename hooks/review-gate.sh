@@ -18,6 +18,13 @@ branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || gate_pass
 spec=".specs/$branch/spec.md"
 [ -f "$spec" ] || gate_pass          # not a spec branch — nothing to gate
 
+# A spec that exists but cannot be read is NOT the same as a spec with nothing in it, and
+# the difference is invisible downstream: both task counters come back 0 for a file they
+# cannot open, and a zero total is read below as "nothing authored, stay silent". Without
+# this line the gate exits 0 in precisely the case where it could not do its job. Fail
+# closed — an unreadable spec is a broken working tree, not an empty one.
+[ -r "$spec" ] || gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass."
+
 # No issue, no spec. The slug is <issue-number>-<kebab-title>, so a spec directory
 # without a numeric prefix is work that never had an issue — unplanned work that
 # entered through the side door and bypassed whatever decided the sprint. This is
@@ -36,8 +43,15 @@ if [ -n "$base" ] && git merge-base --is-ancestor HEAD "$base" 2>/dev/null; then
   gate_pass
 fi
 
-# Tasks still open means implementation is in progress, which is not the moment
-# to demand a review.
+# Two ways there is nothing to review, indistinguishable in a count of unticked boxes alone
+# — which is why that count used to block a spec still being drafted while telling its author
+# that every task was ticked:
+#
+#   no checkboxes at all   the Tasks section is a placeholder; nothing has been written yet
+#   some still unticked    implementation is in progress
+#
+# Neither is the moment to demand a review.
+[ "$(gate_total_tasks "$spec")" -eq 0 ] 2>/dev/null && gate_pass
 [ "$(gate_open_tasks "$spec")" -gt 0 ] 2>/dev/null && gate_pass
 
 receipt=".specs/$branch/.review-receipt"

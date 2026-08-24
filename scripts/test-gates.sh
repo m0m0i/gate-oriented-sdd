@@ -123,6 +123,65 @@ out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out$err" in *"exit=2"*"No issue, no spec"*) report "spec without an issue number blocks" ok ;;
                  *) report "spec without an issue number blocks" no "$out" ;; esac
 
+# 11. Tasks section authored but empty -> silent.
+#
+# This is the exact state `spec` step 3 prescribes: draft Requirements, stop, run clarify.
+# Zero UNTICKED boxes used to read as "implementation finished", so a spec nobody had started
+# blocked the turn — and said every task was ticked when the spec had none. See #8.
+r=$(make_repo drafting 0)
+cat > "$r/.specs/9-feature/spec.md" <<'SPEC'
+# Spec: feature
+- Slug: 9-feature   Status: draft
+
+## 1. Requirements
+- [ ] **AC1:** an acceptance criterion, deliberately left unticked.
+
+## 3. Tasks (TDD-ordered)
+<not written yet>
+SPEC
+( cd "$r" && git add -A && git commit -qm "spec: draft requirements only" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "spec with no tasks authored stays silent" ok ;;
+                        *) report "spec with no tasks authored stays silent" no "$out" ;; esac
+
+# 12. No Tasks section at all -> silent. Same reasoning as 11, different shape: a spec can be
+# mid-authoring with the heading not yet written, and the awk extractor yields nothing at all
+# rather than a section with no boxes. Both must reach the same verdict.
+r=$(make_repo nosection 0)
+cat > "$r/.specs/9-feature/spec.md" <<'SPEC'
+# Spec: feature
+- Slug: 9-feature   Status: draft
+
+## 1. Requirements
+- [ ] **AC1:** an acceptance criterion.
+SPEC
+( cd "$r" && git add -A && git commit -qm "spec: requirements only" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "spec with no Tasks section stays silent" ok ;;
+                        *) report "spec with no Tasks section stays silent" no "$out" ;; esac
+
+# 13. A spec with at least one TICKED box and none unticked must still block. This is the
+# boundary the fix must not have moved: "all done" and "none written" now differ, and only
+# the second is silent. Without this case, gate_total_tasks could return 0 unconditionally
+# and every case above would still pass.
+r=$(make_repo allticked 0)
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out$err" in *"exit=2"*"no reviewer receipt exists"*) report "all tasks ticked still blocks" ok ;;
+                 *) report "all tasks ticked still blocks" no "$out" ;; esac
+
+# 14. A spec that exists but cannot be READ must block, not pass.
+#
+# Both task counters return 0 for a file they cannot open, and since #8 a zero total means
+# "nothing authored, stay silent". That is the right reading for an empty section and the
+# wrong one for an unreadable file: the gate would exit 0 exactly when it could not do its
+# job. Fail closed instead.
+r=$(make_repo unreadable 0)
+chmod 000 "$r/.specs/9-feature/spec.md"
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+chmod 644 "$r/.specs/9-feature/spec.md"
+case "$out$err" in *"exit=2"*"cannot be read"*) report "unreadable spec blocks rather than failing open" ok ;;
+                 *) report "unreadable spec blocks rather than failing open" no "$out" ;; esac
+
 # 11-13. The same staleness check must hold however the glob line is spelled. Each of
 #    these used to fail OPEN: a quoted value reached git with its quotes and matched
 #    nothing, and a bare value was expanded by the shell against the repo root, which in

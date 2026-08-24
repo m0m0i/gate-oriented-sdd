@@ -35,11 +35,27 @@ gate_pass() {
   exit 0
 }
 
-# Count unticked checkboxes in a spec's Tasks section ONLY.
+# Emit a spec's Tasks section ONLY — section 3, up to the next heading.
 #
-# Acceptance criteria are checkboxes too, and on a shipped spec they are commonly
-# left unticked — reading those as open work would make the gate fire forever on
-# every finished spec, which is precisely how a gate earns being switched off.
+# The scoping is the load-bearing part. Acceptance criteria are checkboxes too, and on a
+# shipped spec they are commonly left unticked; counting those as open work would make the
+# gate fire forever on every finished spec, which is how a gate earns being switched off.
+# Both counters below scope through here so they can never disagree about what a task is.
+_gate_tasks_section() {
+  awk '/^#+ *3\./ {f=1; next} /^#+ /{f=0} f' "$1" 2>/dev/null
+}
+
+# Count UNTICKED checkboxes: how much work is left.
 gate_open_tasks() {
-  awk '/^#+ *3\./ {f=1; next} /^#+ /{f=0} f' "$1" 2>/dev/null | grep -c '^ *- \[ \]'
+  _gate_tasks_section "$1" | grep -c '^ *- \[ \]'
+}
+
+# Count ALL checkboxes in a spec's Tasks section, ticked or not.
+#
+# gate_open_tasks returning 0 is ambiguous, and the two meanings are opposites: "every task
+# is done" and "no task was ever written". Reading the second as the first blocks a spec that
+# is still being drafted, which is the state `spec` step 3 tells the author to create. A
+# caller needs both counts to tell them apart.
+gate_total_tasks() {
+  _gate_tasks_section "$1" | grep -c '^ *- \[[ xX]\]'
 }
