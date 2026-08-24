@@ -1,5 +1,5 @@
 #!/bin/sh
-# test-gates.sh — deterministic tests for the gates.
+# test-gates.sh — deterministic tests for the gates and guards.
 #
 # The claim this repo makes is that its review gate is enforced rather than
 # advisory. That claim is testable without a model and without cost, so it is
@@ -7,6 +7,11 @@
 #
 # Builds throwaway git repositories, drives review-gate.sh and quality-gate.sh
 # through every path, and asserts on exit code and on BOTH blocking channels.
+#
+# It also covers assets/check-locks.py. That is a guard rather than a gate — it fails a
+# build instead of ending a turn — but it shares the property the gates are tested for:
+# it can exit 0 having verified nothing, which is indistinguishable from working. A
+# second suite was considered and rejected; one file, one CI step, one place to look.
 set -u
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -279,6 +284,135 @@ printf -- '- Validators: sh -c "exit 1"\n- Source globs: %s\n' "'*.txt'" > "$r/.
 echo more >> "$r/src.txt"; out=$(run_qg "$r")
 case "$out" in *"exit=2"*) report "quoted globs still match (no fail-open)" ok ;;
                         *) report "quoted globs still match (no fail-open)" no "$out" ;; esac
+
+
+# --- guards: assets/check-locks.py -------------------------------------------------
+#
+# The lock guard answers "has a rulebook drifted from what was agreed". It can also answer
+# nothing at all — no reviewer directory scanned, no file hashed — and until #16 it reported
+# that through the same success path. These fixtures build real reviewer directories so the
+# difference between "checked and clean" and "checked nothing" is observable.
+
+_sha() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | cut -d' ' -f1
+  else sha256sum "$1" | cut -d' ' -f1; fi
+}
+
+# $1 = reviewer directory, $2 = rule path relative to it. Pins $2 at its current contents.
+write_lock() {
+  cat > "$1/rules-lock.json" <<EOF
+{
+  "version": 1,
+  "vendored": {},
+  "derived": {
+    "r": {
+      "path": "$2",
+      "computedHash": "$(_sha "$1/$2")",
+      "sources": [ { "id": "s", "kind": "first-party", "checkedOn": "2026-01-01" } ]
+    }
+  }
+}
+EOF
+}
+
+# $1 = repo name. A repo holding one SHIPPED reviewer under agents/, correctly pinned.
+lock_repo() {
+  r="$TMP/$1"; mkdir -p "$r/assets" "$r/agents/shipped/rules"
+  cp "$ROOT/assets/check-locks.py" "$r/assets/"
+  printf '# rules\n- **S-1** a shipped rule.\n' > "$r/agents/shipped/rules/s.md"
+  write_lock "$r/agents/shipped" rules/s.md
+  echo "$r"
+}
+
+# $1 = repo, $2 = reviewer name. Adds a correctly pinned reviewer under .claude/agents/.
+add_project_reviewer() {
+  d="$1/.claude/agents/$2"; mkdir -p "$d/rules"
+  printf '# rules\n- **P-1** a project rule.\n' > "$d/rules/p.md"
+  write_lock "$d" rules/p.md
+}
+
+run_locks() { ( cd "$1" && python3 assets/check-locks.py 2>"$TMP/lerr"; echo "exit=$?" ) }
+
+# 15. A project-local reviewer must not stop the shipped rulebooks being verified.
+#
+# _reviewers_dir returned the FIRST candidate holding a lock and stopped, so creating
+# .claude/agents/<r>/rules-lock.json took agents/ out of scope entirely — silently. The
+# second half of this case is the one that matters: a clean exit proves nothing unless a
+# real drift in the directory that was dropped still fails.
+r=$(lock_repo lk-union); add_project_reviewer "$r" proj
+out=$(run_locks "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+printf '\n- **FAKE-1** an unpinned rule nobody agreed to.\n' >> "$r/agents/shipped/rules/s.md"
+out2=$(run_locks "$r")
+case "$out2" in *"exit=1"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a project reviewer does not hide the shipped rulebooks" ok \
+  || report "a project reviewer does not hide the shipped rulebooks" no "clean=$c1 drift-caught=$c2"
+
+# 16. Locks exist but pinned zero verifiable files -> FAIL.
+#
+# The state that made #16 invisible. A lock with empty vendored/derived hashes nothing, so
+# `checked` stayed 0 and 0 was reported through the success path — identical output to a
+# run that verified everything and found no drift.
+r=$(lock_repo lk-empty)
+printf '{"version":1,"vendored":{},"derived":{}}\n' > "$r/agents/shipped/rules-lock.json"
+out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"verified no files"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "locks that pin nothing fail rather than pass" ok \
+  || report "locks that pin nothing fail rather than pass" no "exit=$c1 msg=$c2 [$err]"
+
+# 17. No locks anywhere -> pass, but not with the wording of a real verification.
+#
+# Legitimate: a project may install the guard before its first reviewer exists. Failing here
+# would hand it a red build it could only fix by deleting the guard, which is how a guard
+# gets deleted. The requirement is that its message cannot be mistaken for having checked.
+r=$(lock_repo lk-none); rm -f "$r/agents/shipped/rules-lock.json"
+out=$(run_locks "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *"no rulebooks are pinned"*) c2=ok ;; *) c2=no ;; esac
+case "$out" in *"match their locks"*) c3=no ;; *) c3=ok ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "no locks anywhere passes with distinct wording" ok \
+  || report "no locks anywhere passes with distinct wording" no "exit=$c1 distinct=$c2 not-success-wording=$c3"
+
+# 18. --update must re-pin ONLY the lock whose file drifted.
+#
+# The blast radius of scanning several directories instead of one. --update rewrites lock
+# files in place, so a union that re-pinned every lock it walked past would silently accept
+# drift in reviewers nobody touched — turning "re-pin after a deliberate edit" into "accept
+# whatever is on disk", which is the guard agreeing with anything it is shown.
+r=$(lock_repo lk-update); add_project_reviewer "$r" proj
+before=$(_sha "$r/.claude/agents/proj/rules-lock.json")
+printf '\n- **S-2** a deliberate new rule.\n' >> "$r/agents/shipped/rules/s.md"
+( cd "$r" && python3 assets/check-locks.py --update >/dev/null 2>&1 )
+after=$(_sha "$r/.claude/agents/proj/rules-lock.json")
+out=$(run_locks "$r")
+[ "$before" = "$after" ] && c1=ok || c1=no          # untouched reviewer's lock is byte-identical
+case "$out" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac # the edited one was re-pinned
+[ "$c1$c2" = "okok" ] && report "--update re-pins only the lock that drifted" ok \
+  || report "--update re-pins only the lock that drifted" no "untouched=$c1 repinned=$c2"
+
+# 19. A reviewer directory that exists but cannot be READ must fail, not be skipped.
+#
+# Path.glob swallows the permission error and yields nothing, so an unreadable directory
+# contributed zero locks while still being named in the "scanned" list — the report actively
+# claiming coverage it did not have. Naming the directories (case 16/17) made this worse
+# rather than better, which is why it is pinned separately.
+#
+# Skipped when the chmod does not actually deny access (running as root, or a filesystem
+# without POSIX permissions). A case that cannot fail is worse than no case.
+r=$(lock_repo lk-unreadable); add_project_reviewer "$r" proj
+chmod 000 "$r/agents/shipped" 2>/dev/null
+if cat "$r/agents/shipped/rules-lock.json" >/dev/null 2>&1; then
+  chmod 755 "$r/agents/shipped" 2>/dev/null
+  report "unreadable reviewer directory fails rather than being skipped" ok
+else
+  out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+  chmod 755 "$r/agents/shipped" 2>/dev/null
+  case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+  case "$err" in *"cannot be read"*) c2=ok ;; *) c2=no ;; esac
+  [ "$c1$c2" = "okok" ] && report "unreadable reviewer directory fails rather than being skipped" ok \
+    || report "unreadable reviewer directory fails rather than being skipped" no "exit=$c1 msg=$c2"
+fi
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
