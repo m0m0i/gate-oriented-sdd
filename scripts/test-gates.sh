@@ -374,5 +374,22 @@ case "$out" in *"match their locks"*) c3=no ;; *) c3=ok ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "no locks anywhere passes with distinct wording" ok \
   || report "no locks anywhere passes with distinct wording" no "exit=$c1 distinct=$c2 not-success-wording=$c3"
 
+# 18. --update must re-pin ONLY the lock whose file drifted.
+#
+# The blast radius of scanning several directories instead of one. --update rewrites lock
+# files in place, so a union that re-pinned every lock it walked past would silently accept
+# drift in reviewers nobody touched — turning "re-pin after a deliberate edit" into "accept
+# whatever is on disk", which is the guard agreeing with anything it is shown.
+r=$(lock_repo lk-update); add_project_reviewer "$r" proj
+before=$(_sha "$r/.claude/agents/proj/rules-lock.json")
+printf '\n- **S-2** a deliberate new rule.\n' >> "$r/agents/shipped/rules/s.md"
+( cd "$r" && python3 assets/check-locks.py --update >/dev/null 2>&1 )
+after=$(_sha "$r/.claude/agents/proj/rules-lock.json")
+out=$(run_locks "$r")
+[ "$before" = "$after" ] && c1=ok || c1=no          # untouched reviewer's lock is byte-identical
+case "$out" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac # the edited one was re-pinned
+[ "$c1$c2" = "okok" ] && report "--update re-pins only the lock that drifted" ok \
+  || report "--update re-pins only the lock that drifted" no "untouched=$c1 repinned=$c2"
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
