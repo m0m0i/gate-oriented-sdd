@@ -11,12 +11,17 @@
 # context, so this describes the repo rather than telling anyone what to do.
 set -u
 
-steer() { sed -n "s/^ *- *$1: *//p" .steering/tech.md 2>/dev/null | head -1; }
+DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$DIR/gate-lib.sh"
+
+# Thin wrapper: every steering read in this repo goes through one expression, in gate-lib.sh.
+# This used to carry its own copy of that sed, which made it the sixth.
+steer() { gate_steering_value .steering/tech.md "$1"; }
 
 echo "## Repo facts"
 [ -f .steering/product.md ] && echo "- Persistent context is in .steering/product.md, .steering/tech.md, .steering/structure.md."
 
-owns=$(sed -n 's/^ *- *Owns: *//p' .steering/product.md 2>/dev/null | head -1)
+owns=$(gate_steering_value .steering/product.md Owns)
 [ -n "$owns" ] && echo "- This project owns $owns."
 
 v=$(steer Validators);  [ -n "$v" ] && echo "- Validators: $v"

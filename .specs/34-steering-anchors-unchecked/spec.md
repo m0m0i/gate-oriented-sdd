@@ -155,9 +155,9 @@
       a correctly written one — then whatever narrowing makes them pass
 - [x] T3: failing case — the check cannot locate `gate-lib.sh` and **fails rather than skipping**
       (AC7) — then the discovery that searches `hooks/` and `.claude/hooks/`
-- [ ] T4: migrate all five hook call sites to `gate_steering_value`, and diff the full case list
+- [x] T4: migrate all five hook call sites to `gate_steering_value`, and diff the full case list
       against `origin/main` to confirm no pre-existing case changed verdict
-- [ ] T5: fix this repo's own `- Owns:` line, and confirm the digest now emits the quality property
+- [x] T5: fix this repo's own `- Owns:` line, and confirm the digest now emits the quality property
       it has been silently omitting since #17
 - [ ] T6: `init` copies the check and adds it to the project's `- Validators:` line, pinned by
       `check-skill-contracts.py`. **Presence assertion, not adherence** — the same limit as #9's AC3

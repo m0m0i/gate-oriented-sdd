@@ -55,7 +55,7 @@ fi
 [ "$(gate_open_tasks "$spec")" -gt 0 ] 2>/dev/null && gate_pass
 
 receipt=".specs/$branch/.review-receipt"
-reviewer=$(sed -n 's/^ *- *Reviewer: *//p' .steering/tech.md 2>/dev/null | head -1)
+reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 [ -n "$reviewer" ] || reviewer="the reviewer named in .steering/tech.md"
 
 if [ ! -f "$receipt" ]; then
@@ -75,7 +75,7 @@ head=$(git rev-parse HEAD 2>/dev/null || echo '')
 # commits are the work log and the spec's own Status flip. It is not fine when
 # reviewable source moved, because then the receipt describes code that no longer
 # exists. Source globs come from .steering/tech.md so this stays language-neutral.
-globs=$(sed -n 's/^ *- *Source globs: *//p' .steering/tech.md 2>/dev/null | head -1)
+globs=$(gate_steering_value .steering/tech.md 'Source globs')
 [ -n "$globs" ] || globs='*'
 
 # Two ways this used to fail OPEN, both the shell's doing rather than git's, and both

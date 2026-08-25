@@ -517,5 +517,20 @@ case "$err" in *"cannot find gate-lib.sh"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "missing gate-lib.sh fails rather than skipping" ok \
   || report "missing gate-lib.sh fails rather than skipping" no "exit=$c1 msg=$c2"
 
+# 26. The digest emits the quality anchor, and emits nothing on stderr.
+#
+# There was no case for steering-digest.sh at all, which is why migrating its reader to
+# gate_steering_value broke it invisibly: the file did not source gate-lib.sh, so the call
+# was to an undefined function and the anchor silently vanished — the exact failure #34 is
+# about, reintroduced by #34's own fix. The case-list diff could not catch it because the
+# suite had nothing to say about this hook.
+r=$(anchor_repo dg-anchor '- Owns: gates never fail open')
+cp "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"owns gates never fail open"*) c1=ok ;; *) c1=no ;; esac
+[ -s "$TMP/dgerr" ] && c2=no || c2=ok
+[ "$c1$c2" = "okok" ] && report "the digest emits the quality anchor, with clean stderr" ok \
+  || report "the digest emits the quality anchor, with clean stderr" no "anchor=$c1 clean-stderr=$c2"
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

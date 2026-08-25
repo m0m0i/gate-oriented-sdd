@@ -24,7 +24,7 @@ DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 [ -f .steering/tech.md ] || gate_pass
 
-validators=$(sed -n 's/^ *- *Validators: *//p' .steering/tech.md | head -1)
+validators=$(gate_steering_value .steering/tech.md Validators)
 [ -n "$validators" ] || gate_pass
 
 # Skip when nothing this gate is about has changed.
@@ -38,7 +38,7 @@ validators=$(sed -n 's/^ *- *Validators: *//p' .steering/tech.md | head -1)
 # source, so a project states "what is code here" once and both gates obey it. When the line
 # is absent the gate runs: for a guarantee, failing toward MORE checking is the right
 # direction.
-globs=$(sed -n 's/^ *- *Source globs: *//p' .steering/tech.md | head -1)
+globs=$(gate_steering_value .steering/tech.md 'Source globs')
 if [ -n "$globs" ] && git rev-parse --git-dir >/dev/null 2>&1; then
   # Unquoted on purpose: the line holds several space-separated globs and each has to reach
   # git as its own pathspec. Quotes inside a variable are NOT removed on expansion, so a
