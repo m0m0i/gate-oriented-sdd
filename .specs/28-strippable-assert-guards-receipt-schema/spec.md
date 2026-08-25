@@ -1,5 +1,5 @@
 # Spec: a strippable assert guards the path that keeps check-receipt-schema from checking nothing
-- Slug: 28-strippable-assert-guards-receipt-schema   Issue: 28   Type: bug   Status: approved
+- Slug: 28-strippable-assert-guards-receipt-schema   Issue: 28   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-08-25
 
 ## 1. Requirements (WHAT / WHY)
@@ -51,19 +51,19 @@
   deviation from a pattern established well past the point where convention decides.
 
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN a `MIRRORS` destination is not listed in `SOURCES` THE SYSTEM SHALL print a
+  - [x] **AC1:** WHEN a `MIRRORS` destination is not listed in `SOURCES` THE SYSTEM SHALL print a
         diagnostic naming that path to stderr and exit 1, rather than proceeding.
-  - [ ] **AC2:** AC1 SHALL hold when the script is run as `python3 -O`, and when `PYTHONOPTIMIZE`
+  - [x] **AC2:** AC1 SHALL hold when the script is run as `python3 -O`, and when `PYTHONOPTIMIZE`
         is set in the environment with no flag passed.
-  - [ ] **AC3:** the invariant SHALL be expressed in the idiom the other five guards use —
+  - [x] **AC3:** the invariant SHALL be expressed in the idiom the other five guards use —
         `print(..., file=sys.stderr)` then `sys.exit(1)` — leaving zero `assert` statements in
         `scripts/`, `assets/`, and `hooks/`.
-  - [ ] **AC4:** the comment above the check SHALL survive verbatim. It says the thing the code
+  - [x] **AC4:** the comment above the check SHALL survive verbatim. It says the thing the code
         cannot: why the skip below is unreachable, and that this repo has twice shipped a guard
         whose safety rested on something no comment named.
-  - [ ] **AC5:** on a clean checkout the guard SHALL keep its current success output and exit 0,
+  - [x] **AC5:** on a clean checkout the guard SHALL keep its current success output and exit 0,
         identically under `python3` and under `python3 -O`.
-  - [ ] **AC6:** the regression test SHALL be a case in `scripts/test-gates.sh` that fails before
+  - [x] **AC6:** the regression test SHALL be a case in `scripts/test-gates.sh` that fails before
         the fix and passes after, and it SHALL drive the script under `-O` — a case that only runs
         the default interpreter cannot fail on this bug.
 
@@ -177,5 +177,5 @@ _2026-08-25._
       *Both cases were in fact written red together and the one edit turned both green; T2 is
       still its own commit, and its redness at `9344b79` was confirmed by running its grep
       against that revision rather than inferred.*
-- [ ] T3: run all eight validators, and diff the case list against `main` to confirm no
+- [x] T3: run all eight validators, and diff the case list against `main` to confirm no
       pre-existing case changed verdict.
