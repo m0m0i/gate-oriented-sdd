@@ -552,14 +552,14 @@ out=$(run_anchors "$r")
 # 28. No steering at all -> pass, but NOT in the wording of a run that checked something.
 #
 # #16's exact shape, in the guard whose own AC7 exists because of #16. Exit 0 is right — the
-# guard may be installed before init writes steering — but "0 anchor(s) checked, all readable"
+# guard may be installed before init writes steering — but a success-shaped sentence
 # is a sentence that cannot be told apart from a real verification.
 r=$(anchor_repo anc-nosteering ''); rm -rf "$r/.steering"
 out=$(run_anchors "$r")
 o=$( cd "$r" && sh assets/check-steering-anchors.sh 2>/dev/null )
 [ "$out" = "0" ] && c1=ok || c1=no
 case "$o" in *"nothing was checked"*) c2=ok ;; *) c2=no ;; esac
-case "$o" in *"all readable"*) c3=no ;; *) c3=ok ;; esac
+case "$o" in *"anchor(s) resolved"*) c3=no ;; *) c3=ok ;; esac   # the wording the success path uses TODAY
 [ "$c1$c2$c3" = "okokok" ] && report "no steering passes with wording distinct from a real check" ok \
   || report "no steering passes with wording distinct from a real check" no "exit=$c1 distinct=$c2 not-success-wording=$c3"
 
@@ -584,7 +584,7 @@ case "$err" in *"predates the shared reader"*) c2=ok ;; *) c2=no ;; esac
 
 # 30. ANCHORS must not fall behind the hooks it mirrors.
 #
-# G-8: a guard's list is part of the guard, and "5 anchor(s) checked, all readable" reads the
+# G-8: a guard's list is part of the guard, and "N of M anchor(s) resolved" reads the
 # same whether the hooks have five anchors or six. Deriving the table would be worse; detecting
 # drift is not. Every call site passes literal arguments, so they can be compared.
 declared=$(sed -n 's/^\.steering\/[a-z]*\.md|//p' "$ROOT/assets/check-steering-anchors.sh" | sort -u)
@@ -596,7 +596,7 @@ used=$(grep -ho "gate_steering_value [^ ]* '\?[A-Za-z ]*'\?" "$ROOT"/hooks/*.sh 
 # The relation is containment, not equality. ANCHORS may legitimately hold more than the hooks
 # read — `Docs` is consumed by skills and no hook touches it — and that is not drift. Drift is
 # a hook reading an anchor the table does not cover, which is the direction that makes
-# "all readable" certify something unchecked. Asserting equality here failed on `Docs` and
+# the success line certify something unchecked. Asserting equality here failed on `Docs` and
 # would have taught the next person to delete it.
 # `|| true` only, and no fallback. The first version had `|| comm -23 <(...) <(...)` as a
 # defensive alternative; process substitution is not POSIX, and under `sh` it made the whole
@@ -633,6 +633,50 @@ case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
 case "$err" in *"predates the shared steering reader"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "a stale gate-lib blocks the quality gate rather than passing it" ok \
   || report "a stale gate-lib blocks the quality gate rather than passing it" no "exit=$c1 msg=$c2"
+
+# 32. A steering file that exists but cannot be READ must fail, not read as "anchor absent".
+#
+# `[ -f ]` tests existence. For a mode-000 file gate_steering_value returns empty (its own
+# 2>/dev/null eats the sed error) and the loose grep exits 2 — an ERROR, which `&&` cannot
+# distinguish from a non-match — so the anchor was classified absent and the run went on to
+# claim "none unreadable" about a file it could not read. Third state, same exit code, same
+# sentence, in the guard that exists to keep those apart.
+#
+# Skipped where chmod does not actually deny access (root, or a filesystem without POSIX
+# permissions). A case that cannot fail is worse than no case.
+r=$(anchor_repo anc-unreadable '- Owns: x')
+chmod 000 "$r/.steering/product.md" 2>/dev/null
+if cat "$r/.steering/product.md" >/dev/null 2>&1; then
+  chmod 644 "$r/.steering/product.md" 2>/dev/null
+  report "an unreadable steering file fails rather than reading as absent" ok
+else
+  out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+  chmod 644 "$r/.steering/product.md" 2>/dev/null
+  [ "$out" = "1" ] && c1=ok || c1=no
+  case "$err" in *"cannot be read"*) c2=ok ;; *) c2=no ;; esac
+  [ "$c1$c2" = "okok" ] && report "an unreadable steering file fails rather than reading as absent" ok \
+    || report "an unreadable steering file fails rather than reading as absent" no "exit=$c1 msg=$c2"
+fi
+
+# 33. A stale gate-lib.sh must degrade the digest visibly, not silently.
+#
+# The digest has no blocking channel, so it cannot be made loud — but omitting Owns,
+# Validators and Reviewer while printing "not found" to stderr is #34's symptom reintroduced
+# by #34's fix. A visible line in the digest is the right register for a hook that cannot block.
+r=$(anchor_repo dg-stalelib '- Owns: x')
+cp "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+src = pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh").read_text()
+i = src.index("# Read one machine-read value out of a steering file.")
+j = src.index("\n}\n", src.index("gate_steering_value()")) + 3
+pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh").write_text(src[:i] + src[j:])
+PYEOF
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"degraded"*) c1=ok ;; *) c1=no ;; esac
+[ -s "$TMP/dgerr" ] && c2=no || c2=ok
+[ "$c1$c2" = "okok" ] && report "a stale gate-lib degrades the digest visibly, not silently" ok \
+  || report "a stale gate-lib degrades the digest visibly, not silently" no "visible=$c1 clean-stderr=$c2"
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

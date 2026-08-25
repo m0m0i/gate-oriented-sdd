@@ -14,6 +14,14 @@ set -u
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$DIR/gate-lib.sh"
 
+# No blocking channel here, so a skewed hooks/ cannot be made loud — but it must not be
+# silent either. Without this, a stale library omits Owns, Validators and Reviewer and prints
+# "not found" to stderr, which is #34's exact symptom reintroduced by #34's fix.
+command -v gate_steering_value >/dev/null 2>&1 || {
+  echo "## Repo facts"
+  echo "- (steering digest degraded: hooks/gate-lib.sh predates the shared reader — re-copy the plugin's hooks/)"
+  exit 0
+}
 
 
 echo "## Repo facts"

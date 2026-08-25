@@ -65,6 +65,17 @@ for row in $ANCHORS; do
   file=${row%%|*}
   key=${row#*|}
   [ -f "$file" ] || continue
+  # Existence is not readability. A mode-000 steering file made gate_steering_value return
+  # empty (its own 2>/dev/null eats the sed error) and made the loose grep exit 2 — an ERROR,
+  # which `&&` cannot tell from a non-match — so the anchor was classified absent and the run
+  # went on to claim "none unreadable" about a file it could not read. Third state, same exit
+  # code, same sentence: exactly what this guard exists to prevent.
+  if [ ! -r "$file" ]; then
+    failed="${failed}
+  $file: exists but cannot be read, so its anchors were not checked.
+      Fix the file's permissions rather than treating this as a pass."
+    continue
+  fi
   value=$(gate_steering_value "$file" "$key")
   # Anchored to the start of a line, modulo leading punctuation. Deliberately looser than the
   # reader — it must still see `- **Owns:` and `  * Owns :` — but not so loose that ordinary
@@ -79,7 +90,7 @@ for row in $ANCHORS; do
       with no emphasis markers or other characters before the key."
   fi
   # Count what RESOLVED, not what had a file. Counting files meant a tech.md holding only
-  # `- Validators:` still printed "5 anchor(s) checked, all readable" having read one — the
+  # `- Validators:` used to print "5 anchor(s) checked, all readable" having read one — the
   # same room case 28 locks the other door to, and the likelier state in a real project.
   [ -n "$value" ] && resolved=$((resolved + 1))
   present=$((present + 1))

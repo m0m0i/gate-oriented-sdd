@@ -18,7 +18,7 @@ The gates are the reason this repo exists. A change to `hooks/` must:
 
 1. Keep both blocking channels. One script emits JSON for Antigravity **and** exits 2 for Claude Code. A change that serves one harness only is a change that makes the other silently advisory.
 2. Keep the gate narrow. It stays silent on merged branches, mid-implementation turns, and post-review documentation commits. A gate that fires on ordinary turns gets switched off, and a switched-off gate protects nothing.
-3. Come with a case in `scripts/test-gates.sh`. 43 paths are covered; a 44th behaviour needs a 44th test.
+3. Come with a case in `scripts/test-gates.sh`. 45 paths are covered; a 46th behaviour needs a 46th test.
 
 ## Releasing
 
