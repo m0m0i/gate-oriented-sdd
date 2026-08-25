@@ -85,7 +85,12 @@
 - **Q: which anchors are mandatory?**
   A: none. Fail only on **present-but-unparseable** — a line that loosely contains the key and a
   colon, where the consumer's own expression returns nothing. That is exactly the bolded-`Owns`
-  case and it cannot fire on a project that simply has no `Docs` line. Accepted weakness, recorded
+  case.
+
+  **Corrected after review.** This first claimed it "cannot fire on a project that simply has no
+  `Docs` line". It could: the loose match was unanchored, so `Docs *:` matched the word `docs:`
+  inside this repo's own commit-convention paragraph. The match is now anchored to the start of a
+  line modulo punctuation, and case 27 pins it — an absent anchor plus prose containing its key. Accepted weakness, recorded
   rather than hidden: a project that never wrote `- Owns:` at all still gets a reviewer working
   from taste, and this check will not say so. Making absence a failure is #22's unresolved
   question — what the opt-out is — arriving early and undecided.
@@ -123,7 +128,9 @@
 
 - Affected files: `hooks/gate-lib.sh`, `hooks/review-gate.sh`, `hooks/quality-gate.sh`,
   `hooks/steering-digest.sh`, `assets/check-steering-anchors.sh` (new), `skills/init/SKILL.md`,
-  `scripts/test-gates.sh`, `.steering/product.md`, and both manifests.
+  `scripts/check-skill-contracts.py`, `scripts/test-gates.sh`, `.steering/product.md`,
+  **`.steering/tech.md`** (Validators, the `Source globs` fix below, and a stale heading), and
+  both manifests. `.steering/tech.md` was omitted from the first draft of this list.
 
 - **Blast radius: this is the risky part and it is bigger than the fix.** Migrating five call sites
   touches **every gate at once** — the review gate, the quality gate, and the digest. All 34 gate

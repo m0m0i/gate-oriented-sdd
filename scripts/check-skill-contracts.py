@@ -25,7 +25,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONTRACTS = (
     (
         "skills/init/SKILL.md",
-        "copy `assets/check-steering-anchors.sh` and add it to the `- Validators:` line",
+        "copy `assets/check-steering-anchors.sh` to the project's `scripts/` directory and add it to the `- Validators:` line",
         "Without it a project's steering anchors are unchecked, and an anchor written in a "
         "form its reader cannot parse fails silently — the file looks right and the value "
         "never arrives. That is #34, and it cost this repo its quality anchor for a week.",

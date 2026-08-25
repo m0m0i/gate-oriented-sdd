@@ -467,7 +467,7 @@ case "$err" in *"no reviewer receipt exists"*) c3=ok ;; *) c3=no ;; esac
 anchor_repo() {
   r="$TMP/$1"; mkdir -p "$r/.steering" "$r/hooks" "$r/assets"
   cp "$ROOT/hooks/gate-lib.sh" "$r/hooks/"
-  cp "$ROOT/assets/check-steering-anchors.sh" "$r/assets/" 2>/dev/null || true
+  cp "$ROOT/assets/check-steering-anchors.sh" "$r/assets/"
   printf -- '- Validators: true\n- Reviewer: r\n- Source globs: :(glob)**/*.txt\n- Docs: docs/\n' > "$r/.steering/tech.md"
   printf '# Product\n\n' > "$r/.steering/product.md"
   [ -n "$2" ] && printf '%s\n' "$2" >> "$r/.steering/product.md"
@@ -475,8 +475,13 @@ anchor_repo() {
 }
 # Prints the bare exit code, NOT "exit=$?". A case glob of *"exit=1"* also matches
 # "exit=127" — what sh returns for a missing script — so the first draft of case 23 reported
-# ok while the script did not exist. The two older uses of that glob above are safe only
-# because their subject always exists; this one could not rely on that.
+# ok while the script did not exist.
+#
+# THREE older uses of that glob remain, at :347, :359 and :411. They are safe, but not for the
+# reason first written here: "the subject always exists" does not hold, since a python3 that
+# is missing (127) or that dies on a traceback (1) both satisfy the glob. What saves them is
+# that each is corroborated by an assertion a crash cannot satisfy — a stderr substring, or a
+# paired *"exit=0"* test. Copy the glob into a case with no corroborator and it breaks again.
 # stdout is discarded as well as captured stderr: the success line would otherwise be
 # concatenated with the exit code, so `out` read "…all readable0" and every equality test
 # failed. Case 23 hid it, because a failing run prints nothing to stdout.
@@ -531,6 +536,72 @@ case "$(cat "$TMP/dgout")" in *"owns gates never fail open"*) c1=ok ;; *) c1=no 
 [ -s "$TMP/dgerr" ] && c2=no || c2=ok
 [ "$c1$c2" = "okok" ] && report "the digest emits the quality anchor, with clean stderr" ok \
   || report "the digest emits the quality anchor, with clean stderr" no "anchor=$c1 clean-stderr=$c2"
+
+# 27. An absent optional anchor must stay silent even when the file mentions the key in prose.
+#
+# The loose match has to be sloppier than the reader — it must still see `- **Owns:` — but not
+# so sloppy that ordinary prose trips it. Unanchored, `Docs *:` matched "docs:" inside this
+# repo's own commit-convention paragraph, so deleting a legitimately optional `- Docs:` line
+# would have failed the guard while pointing at prose. There was no case for that.
+r=$(anchor_repo anc-prose '- Owns: gates never fail open')
+printf -- '- Validators: true\n- Reviewer: r\n\nConventional commits — `feat:`, `docs:`, `chore:` — imperative.\n' > "$r/.steering/tech.md"
+out=$(run_anchors "$r")
+[ "$out" = "0" ] && report "prose containing an anchor key does not false-block" ok \
+  || report "prose containing an anchor key does not false-block" no "exit=$out"
+
+# 28. No steering at all -> pass, but NOT in the wording of a run that checked something.
+#
+# #16's exact shape, in the guard whose own AC7 exists because of #16. Exit 0 is right — the
+# guard may be installed before init writes steering — but "0 anchor(s) checked, all readable"
+# is a sentence that cannot be told apart from a real verification.
+r=$(anchor_repo anc-nosteering ''); rm -rf "$r/.steering"
+out=$(run_anchors "$r")
+o=$( cd "$r" && sh assets/check-steering-anchors.sh 2>/dev/null )
+[ "$out" = "0" ] && c1=ok || c1=no
+case "$o" in *"nothing was checked"*) c2=ok ;; *) c2=no ;; esac
+case "$o" in *"all readable"*) c3=no ;; *) c3=ok ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "no steering passes with wording distinct from a real check" ok \
+  || report "no steering passes with wording distinct from a real check" no "exit=$c1 distinct=$c2 not-success-wording=$c3"
+
+# 29. A gate-lib.sh that predates the shared reader must fail with the RIGHT diagnosis.
+#
+# init copies this asset into projects whose gate-lib.sh may be older. Without this the script
+# fails closed — correct — while reporting every correctly written anchor as unparseable, which
+# sends the author to edit steering that is fine. A guard with a wrong diagnosis gets removed.
+r=$(anchor_repo anc-stalelib '- Owns: x')
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+src = pathlib.Path("hooks/gate-lib.sh").read_text()
+i = src.index("# Read one machine-read value out of a steering file.")
+j = src.index("\n}\n", src.index("gate_steering_value()")) + 3
+pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh").write_text(src[:i] + src[j:])
+PYEOF
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"predates the shared reader"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a stale gate-lib.sh fails with the right diagnosis" ok \
+  || report "a stale gate-lib.sh fails with the right diagnosis" no "exit=$c1 msg=$c2"
+
+# 30. ANCHORS must not fall behind the hooks it mirrors.
+#
+# G-8: a guard's list is part of the guard, and "5 anchor(s) checked, all readable" reads the
+# same whether the hooks have five anchors or six. Deriving the table would be worse; detecting
+# drift is not. Every call site passes literal arguments, so they can be compared.
+declared=$(sed -n 's/^\.steering\/[a-z]*\.md|//p' "$ROOT/assets/check-steering-anchors.sh" | sort -u)
+used=$(grep -ho "gate_steering_value [^ ]* '\?[A-Za-z ]*'\?" "$ROOT"/hooks/*.sh \
+       | sed "s/.*gate_steering_value [^ ]* //; s/'//g; s/\"\$1\"//" | grep -v '^$' | sort -u)
+# The relation is containment, not equality. ANCHORS may legitimately hold more than the hooks
+# read — `Docs` is consumed by skills and no hook touches it — and that is not drift. Drift is
+# a hook reading an anchor the table does not cover, which is the direction that makes
+# "all readable" certify something unchecked. Asserting equality here failed on `Docs` and
+# would have taught the next person to delete it.
+# `|| true` only, and no fallback. The first version had `|| comm -23 <(...) <(...)` as a
+# defensive alternative; process substitution is not POSIX, and under `sh` it made the whole
+# substitution yield nothing — so the case could not fail, and a mutation adding an uncovered
+# anchor still reported ok. An untested fallback disabled the test it was guarding.
+missing=$(echo "$used" | grep -vxF "$declared" || true)
+if [ -z "$missing" ]; then report "every anchor a hook reads is covered by the ANCHORS table" ok
+else report "every anchor a hook reads is covered by the ANCHORS table" no "uncovered: $(echo "$missing" | tr '\n' ',')"; fi
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

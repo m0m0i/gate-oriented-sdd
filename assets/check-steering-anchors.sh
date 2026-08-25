@@ -44,6 +44,16 @@ fi
 # shellcheck source=/dev/null
 . "$lib"
 
+# Finding the file is not the same as finding the reader. `init` copies this asset into
+# projects whose gate-lib.sh may predate the shared reader, and then every anchor comes back
+# empty and every correctly written line is reported unparseable — failing closed, which is
+# right, with a diagnosis that is wrong, which sends the author to edit steering that is fine.
+if ! command -v gate_steering_value >/dev/null 2>&1; then
+  echo "check-steering-anchors: $lib has no gate_steering_value — it predates the shared reader." >&2
+  echo "  Re-copy the plugin's hooks/gate-lib.sh over it and run this again." >&2
+  exit 1
+fi
+
 failed=""
 checked=0
 old_ifs=$IFS
@@ -57,10 +67,15 @@ for row in $ANCHORS; do
   [ -f "$file" ] || { IFS='
 '; continue; }
   value=$(gate_steering_value "$file" "$key")
-  if [ -z "$value" ] && grep -qi -- "$key *:" "$file" 2>/dev/null; then
+  # Anchored to the start of a line, modulo leading punctuation. Deliberately looser than the
+  # reader — it must still see `- **Owns:` and `  * Owns :` — but not so loose that ordinary
+  # prose trips it. Unanchored, `Docs *:` matched the word "docs:" inside this repo's own
+  # commit-convention paragraph, so deleting a legitimately optional `- Docs:` line would have
+  # failed the guard while pointing at prose.
+  if [ -z "$value" ] && grep -qi -- "^[^A-Za-z]*$key *:" "$file" 2>/dev/null; then
     failed="${failed}
   $file: '$key' is present but written in a form its reader cannot parse.
-      found:  $(grep -i -m1 -- "$key *:" "$file" | sed 's/^ *//')
+      found:  $(grep -i -- "^[^A-Za-z]*$key *:" "$file" | head -1 | sed 's/^ *//')
       The reader is: sed -n 's/^ *- *$key: *//p'  — so the line must begin with '- $key:',
       with no emphasis markers or other characters before the key."
   fi
@@ -73,6 +88,14 @@ IFS=$old_ifs
 if [ -n "$failed" ]; then
   echo "check-steering-anchors FAILED$failed" >&2
   exit 1
+fi
+
+if [ "$checked" -eq 0 ]; then
+  # "Checked nothing" and "found nothing wrong" must not share a sentence. Legitimate — the
+  # guard may be installed before init writes steering — but #16 was exactly this wording on
+  # exactly this exit code, and AC7 closed the neighbouring door while leaving this one open.
+  echo "check-steering-anchors: no steering files found — nothing was checked"
+  exit 0
 fi
 
 echo "check-steering-anchors: $checked anchor(s) checked, all readable"
