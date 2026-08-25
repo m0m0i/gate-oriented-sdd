@@ -55,17 +55,17 @@
   that looks right to a human and matches nothing.**
 
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN a steering anchor is present in a form its consumer cannot parse THE SYSTEM
+  - [x] **AC1:** WHEN a steering anchor is present in a form its consumer cannot parse THE SYSTEM
         SHALL fail and name the anchor and the file.
-  - [ ] **AC2:** WHEN an optional anchor is absent entirely THE SYSTEM SHALL NOT fail. Absence and
+  - [x] **AC2:** WHEN an optional anchor is absent entirely THE SYSTEM SHALL NOT fail. Absence and
         unparseability are different states and only the second is a defect.
-  - [ ] **AC3:** this repository's own `- Owns:` line SHALL parse.
-  - [ ] **AC4:** the check SHALL derive what it reads from the same expression its consumer uses,
+  - [x] **AC3:** this repository's own `- Owns:` line SHALL parse.
+  - [x] **AC4:** the check SHALL derive what it reads from the same expression its consumer uses,
         not a lookalike — a second definition that can disagree is #14 and #23 again.
-  - [ ] **AC5:** the regression test fails before the fix and passes after.
-  - [ ] **AC6:** the check SHALL be a shipped asset that `init` copies into a project and adds to
+  - [x] **AC5:** the regression test fails before the fix and passes after.
+  - [x] **AC6:** the check SHALL be a shipped asset that `init` copies into a project and adds to
         its `- Validators:` line, so it runs in every project rather than only in this one.
-  - [ ] **AC7:** WHEN the check cannot locate the shared reader it SHALL fail, not skip. A guard
+  - [x] **AC7:** WHEN the check cannot locate the shared reader it SHALL fail, not skip. A guard
         that silently checks nothing is #16, and this one would be shipping into projects.
 
 - Out of scope: the wrapped-value truncation `init` warns about (`sed ... | head -1` silently drops
@@ -159,6 +159,6 @@
       against `origin/main` to confirm no pre-existing case changed verdict
 - [x] T5: fix this repo's own `- Owns:` line, and confirm the digest now emits the quality property
       it has been silently omitting since #17
-- [ ] T6: `init` copies the check and adds it to the project's `- Validators:` line, pinned by
+- [x] T6: `init` copies the check and adds it to the project's `- Validators:` line, pinned by
       `check-skill-contracts.py`. **Presence assertion, not adherence** — the same limit as #9's AC3
-- [ ] T7: refactor
+- [x] T7: refactor

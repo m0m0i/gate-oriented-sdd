@@ -43,6 +43,11 @@ jobs:
       - name: Skills still carry their load-bearing instructions
         run: ./scripts/check-skill-contracts.py
 
+      # A steering line written in a form its reader cannot parse produces nothing and no
+      # complaint. This repo lost its own quality anchor that way for a week.
+      - name: Steering anchors are readable
+        run: ./assets/check-steering-anchors.sh
+
       # The repo's central claim is that the review gate is enforced rather than
       # advisory. That is testable without a model, so it is tested.
       - name: Review gate behaves
