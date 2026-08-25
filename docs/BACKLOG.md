@@ -1,6 +1,6 @@
 # Product backlog
 
-- Last groomed: 2026-08-25 (second grooming — see **What changed** below)
+- Last groomed: 2026-08-25 (third grooming — see **What changed** below)
 - Ordered, not prioritized. Position reflects value, risk, cost, and dependency together.
   There is no separate priority field, and adding one would contradict this.
 
@@ -20,29 +20,31 @@ documents except this one — see #22, itself on this list.
 
 ## What changed at this grooming
 
-- **#27 shipped and is closed.** It was item 1. Its fix — teaching `implement` how to wait —
-  is what makes the top of this list movable at all.
-- **Three issues arrived** while #27 was in flight: #34, #35, #36, all found by doing the work
-  rather than by looking for work.
-- **#26 moves to the top and its reason changed.** It was second because it was "the only
-  escape from #27". That rationale died twice over: the premise behind it was retracted, and
-  #27 is now closed. It leads on its own merits instead.
-- **#34 goes above it.** Reasoning in the table.
+- **#34 shipped and is closed.** It was item 1. Four review rounds; three HIGH findings, one of
+  which was #14's recorded hazard firing live on that branch.
+- **#39 arrived**, collecting six guards that can report success having checked nothing — the
+  residue of #34's review rounds plus pre-existing instances nobody had gathered.
+- **#26 is unchanged at the top of the remaining work, and has been through two branches
+  without being started.** It was used four times this week as the only way out of a stuck
+  turn. Now that #27 has shipped the instruction that removes the need for it, closing the
+  bypass is safe — which was the stated condition.
+- **#28 is promoted to second** for a reason that is not severity: it is the small,
+  self-contained one, and it is the task chosen for the fresh-session test.
 
 | # | Item | Blocks | Rough size | Why here |
 | :-- | :-- | :-- | :-- | :-- |
-| 1 | **#34** — nothing checks that steering's machine-read anchors parse; this repo's `Owns` line never has | — | ~1 issue | Above #2 because it is **already happening and requires nobody to do anything wrong.** The quality anchor every reviewer severity is judged against has never loaded into the digest, since bolding the line defeated the `sed`. It only stayed invisible here because `init` wrote the anchor into the reviewer file too; a project without that duplication has a reviewer working from taste. The general fix guards the four other lines the gates read — `Validators`, `Reviewer`, `Source globs`, `Docs` — so it protects the inputs of everything below it. |
-| 2 | **#26** — the gate is silenced by `git checkout` | #25 | ~1–2 issues | The only *deliberate* bypass of the only enforced rule, and silent: a skipped review and a clean repo produce identical output. Below #1 because it takes an act — someone must type the command — whereas #1 fails on its own. Its old reason for being second ("the only escape from #27") is retracted and #27 is closed, so it now leads on merit. Used four times in one session, disclosed each time, which is the evidence for how reachable it is. |
-| 3 | **#36** — enforce at `git push` / `gh pr create` rather than at turn end | — | ~1 issue, or 0 | **Adjacent to #2 on purpose: it may be #2's answer rather than a separate item.** It enforces the promise the harness actually makes — "no PR without a clean review" — and cannot loop, since it fires at a boundary crossed deliberately. Whoever specs #26 must decide whether to adopt it, fold it in, or reject it in writing. Ordering it separately keeps that decision visible instead of buried. |
-| 4 | **#35** — a review conducted by ref produces a `reviewed_sha` of the working tree | — | ~1 issue | Can clear the gate on a review of *different code*, which is the fail-open direction on the enforced rule. It sits at 4 rather than 2 because **#27 shipping made it rarer**: reviewing by ref existed because the deadlock forced a parked working tree, and that reason is gone. A real hazard whose likelihood the previous item just reduced. |
-| 5 | **#25** — the gate should refuse CLEAN on a self-review | — | ~1 issue | Independence is what the judgment layer is sold on, and the gate still clears `reviewed_by=inline`. Its prerequisite shipped with #9. Below #2 because enforcing independence through a gate that can be stepped around enforces nothing — the order between these two is the one real dependency in the top half. |
-| 6 | **#19** — `--update` cannot create a lock, so a new rulebook can never be pinned | — | ~1 issue | `AGENTS.md` names the hash-pinned rulebook as one of the two ideas this repo exists for, and the dogfooded instance ships **unpinned** with a three-place explanation. A core claim is false in the reference implementation. Above #7 because it is a broken promise rather than a latent hazard. |
-| 7 | **#28** — a strippable `assert` guards the path that keeps a check from checking nothing | — | ~1 issue | Five lines, replacement supplied verbatim by the reviewer that found it. Unreachable today — nothing runs with `-O` — which is the only reason it is not higher, because the shape is #16's exactly. Cheap enough that it should not be allowed to age. |
-| 8 | **#14** — `Source globs` duplicates the shipped-path definition by hand | #18 | ~2 issues | A decision before it is a change: how many places define "what is shipped", and which is authoritative. It also answers two questions with opposite right answers for the manifests. Above #9 because whatever is decided here determines what #9's fix should look like. |
-| 9 | **#18** — the review gate is unsatisfiable without a `Source globs` line | — | ~1 issue | The fallback is `globs='*'`, so committing the receipt invalidates the receipt, forever. Real impact on any partial install, and it fails *closed* — a loud failure can wait behind the decision that shapes its fix. |
-| 10 | **#23** — rule C-2 enumerates the files that state a fact, so it goes stale | — | ~1–2 issues | Bitten repeatedly, most recently three times inside #27's own review rounds. Below #9 because it damages credibility rather than behaviour: no gate fails open, a number is merely untrue. |
-| 11 | **#10** — "one task, one commit" contradicts the quality gate | — | ~1 issue | A spec is written and merged, so it is the cheapest here to start. Eleventh anyway because the decision was made a week ago and every spec since folds red and green into one task — documentation catching up to practice. |
-| 12 | **#22** — the mandatory document set is declared but never verified | — | ~2–3 issues | Widest blast radius on the list: it would run in every project the harness installs into, including ones mid-setup, and a guard that fires on a considered choice gets deleted. Its central question — what the opt-out is — is unanswered. Last because it needs a decision this repo has not made, not because it is unimportant. |
+| 1 | **#26** — the gate is silenced by `git checkout` | #25 | ~1–2 issues | The only deliberate bypass of the only enforced rule, and silent: a skipped review and a clean repo produce identical output. Its stated precondition is now met — #27 shipped the instruction that removes the reason to reach for it, and it was still reached for four times this week while that instruction did not exist. It has led this list through two branches without being started, which is itself an argument for taking it before something else displaces it again. |
+| 2 | **#28** — a strippable `assert` guards the path that keeps a check from checking nothing | — | ~1 issue | Second **not on severity** — it is unreachable today, since nothing runs with `-O`. It is here because it is small, self-contained, has its replacement supplied verbatim, and is the task chosen to test whether a cold session can carry `spec` → `implement` → reviewer without help. A first task should be one where a failure is legible as a harness problem rather than a hard problem. |
+| 3 | **#39** — six guards can report success having checked nothing | — | ~2–3 issues | The generalisation of #16, #34 and half of this week's review findings, now that they are gathered in one place. Its first item — `report` has no `skip` state, so `45 passed` can mean 44 verified plus one skipped — probably retires the whole family. Above #4 because it includes a regression #34 shipped: routing the quality gate's read through the shared function suppressed the only signal that an unreadable `tech.md` was being read as an absent one. |
+| 4 | **#36** — enforce at `git push` / `gh pr create` rather than at turn end | — | ~1 issue, or 0 | Still adjacent to #26 and still possibly its answer rather than a separate item. Whoever specs #26 must adopt, fold, or reject it in writing. Below #3 now because #39 contains a live regression and this does not. |
+| 5 | **#35** — a review by ref produces a `reviewed_sha` of the working tree | — | ~1 issue | Can clear the gate on a review of *different code* — the fail-open direction. It stays mid-list because #27 removed the reason to review by ref at all: the parked working tree existed to escape the deadlock, and the deadlock is gone. A real hazard whose likelihood two shipped items have now reduced. |
+| 6 | **#25** — the gate should refuse CLEAN on a self-review | — | ~1 issue | Its prerequisite shipped with #9, and the reviewer is now genuinely independent — so this is the difference between independence being available and being required. Below #1 because enforcing independence through a gate that can be stepped around enforces nothing. |
+| 7 | **#19** — `--update` cannot create a lock, so a new rulebook can never be pinned | — | ~1 issue | `AGENTS.md` names the hash-pinned rulebook as one of the two ideas this repo exists for, and the dogfooded instance still ships **unpinned**. A core claim false in the reference implementation. |
+| 8 | **#14** — `Source globs` duplicates the shipped-path definition by hand | #18 | ~2 issues | **Promoted in evidence, not in position.** #34's review caught this firing for real: a new `.sh` under `assets/` was invisible to both gates while `check-version-bump.py`'s prefix list counted it. It is no longer hypothetical. Still below the fail-opens above it, but the next person who argues it is theoretical has a counter-example. |
+| 9 | **#18** — the review gate is unsatisfiable without a `Source globs` line | — | ~1 issue | Fails *closed*, so a loud failure can wait behind the decision at #8 that shapes its fix. |
+| 10 | **#23** — rule C-2 enumerates the files that state a fact | — | ~1–2 issues | Bitten four more times this week, all inside review rounds. Damages credibility rather than behaviour: no gate fails open, a number is merely untrue. |
+| 11 | **#10** — "one task, one commit" contradicts the quality gate | — | ~1 issue | A spec is written and merged. Eleventh because practice adopted the decision a week ago — every spec since folds red and green into one task. Documentation catching up. |
+| 12 | **#22** — the mandatory document set is declared but never verified | — | ~2–3 issues | Widest blast radius: it would run in every project the harness installs into, including ones mid-setup. Its central question — what the opt-out is — is still unanswered. |
 
 ## Unshaped
 
@@ -67,16 +69,22 @@ it stays here.
 
 ## What would change this order
 
-- **#36 turning out to be the right fix for #26.** Then they are one item, not two, and
-  everything below shifts up one.
-- **#34's fix revealing other unparsed anchors.** If `Validators` or `Source globs` is also
-  silently absent in some project shape, the gates below it have been running on defaults and
-  several items change meaning.
-- **Anyone other than the author using this.** Every item on this list was found by
-  dogfooding, which finds what the author's own habits reach. A second user would reorder it
-  within a day, and that is an argument for shipping before polishing.
+- **The fresh-session test failing at #27's wait instruction.** #27's AC1 is presence-checked
+  only; a cold agent that reads "keep the turn open" and still says "Holding." means the fix
+  did not work, and #36 — enforcing at the push boundary instead of turn end — stops being
+  fourth.
+- **#36 turning out to be the right fix for #26.** Then they are one item and everything below
+  shifts up.
+- **Anyone other than the author using this.** Every item was found by dogfooding, which finds
+  what the author's own habits reach. A second user would reorder this within a day — which is
+  precisely what the fresh-session test is for.
 
 ### Triggers that have already fired
+
+- **2026-08-25 — "#34's fix revealing other unparsed anchors."** Fired sideways. No other
+  anchor was unparsed, but the fix revealed that the new guard itself was outside `Source
+  globs` — the *shipped-path* definition drifting rather than the *anchor* one. #14 moved in
+  evidence rather than in position; see its row.
 
 - **2026-08-25 — "#27 turning out to be a harness limitation rather than a plugin bug."**
   Fired, and the order held. #27's spec conceded that a blocking `Stop` hook cannot coexist
