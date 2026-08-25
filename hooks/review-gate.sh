@@ -59,7 +59,7 @@ reviewer=$(sed -n 's/^ *- *Reviewer: *//p' .steering/tech.md 2>/dev/null | head 
 [ -n "$reviewer" ] || reviewer="the reviewer named in .steering/tech.md"
 
 if [ ! -f "$receipt" ]; then
-  gate_block "Review gate: every task in $spec is ticked, but no reviewer receipt exists. Run $reviewer on the branch diff, then write its Receipt block to $receipt."
+  gate_block "Review gate: every task in $spec is ticked, but no reviewer receipt exists. Run $reviewer on the branch diff, then write its Receipt block to $receipt. If $reviewer is already running, wait for it and write the receipt from its result — do not start a second one."
 fi
 
 verdict=$(sed -n 's/^verdict=//p' "$receipt" | head -1)

@@ -439,5 +439,20 @@ out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "reviewed_by=inline is recorded, not gated (see #25)" ok ;;
                         *) report "reviewed_by=inline is recorded, not gated (see #25)" no "$out" ;; esac
 
+# 22. The missing-receipt message must name waiting as a valid action.
+#
+# #27. The gate fires on Stop, so it can fire while a spawned reviewer is still reading —
+# and it then told the author to run a reviewer that was already running. That is advice
+# which cannot be taken, and an agent has no way to wait, so the turn re-entered the gate
+# forever. This does not fix the loop; nothing the gate can do fixes it without failing
+# open. It stops the loop lying about what to do.
+r=$(make_repo waiting-msg 0)
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"already running"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"no reviewer receipt exists"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "missing-receipt message names waiting as valid" ok \
+  || report "missing-receipt message names waiting as valid" no "blocks=$c1 waiting=$c2 kept-substring=$c3"
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
