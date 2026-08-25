@@ -39,7 +39,7 @@ claude plugin tag        # creates {name}--v{version}, validating manifest again
 ```bash
 ./scripts/check-leakage.sh          # no private context
 ./scripts/check-manifests.py        # both manifests agree; hook shapes correct
-./scripts/check-receipt-schema.py   # the receipt schema agrees across its two copies
+./scripts/check-receipt-schema.py   # the receipt schema agrees across its copies
 ./scripts/check-skill-contracts.py  # skills still carry their load-bearing instructions
 ./assets/check-locks.py             # rulebooks match their locks (--update to re-pin)
 ./scripts/test-gates.sh             # the gates still behave
