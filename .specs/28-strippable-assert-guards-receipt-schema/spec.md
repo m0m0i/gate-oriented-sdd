@@ -167,7 +167,7 @@ _2026-08-25._
 ## 3. Tasks (TDD-ordered)
 > Folded red-and-green per #10: one task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: failing case — the mutated copy exits 0 with its success line under `python3 -O` and
+- [x] T1: failing case — the mutated copy exits 0 with its success line under `python3 -O` and
       under `PYTHONOPTIMIZE=1` through the shebang, with the unmutated control exiting 0 — then
       replace the `assert` with the print-and-exit idiom, leaving the comment verbatim.
       *(AC1, AC2, AC4, AC5, AC6)*
