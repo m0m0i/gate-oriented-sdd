@@ -240,3 +240,18 @@ true.
   deleting a directory exercises the `missing_dirs` loop and not the `rc -eq 2` branch, whose live
   trigger is a present-but-unreadable directory — the state case 32 established as real. Both are
   recorded rather than fixed here.
+
+**Third pass at `d2b2fa2`: APPROVE — CLEAN, no findings at any severity.** The count sweep is
+complete (`docs/BACKLOG.md`:38 confirmed as the one deliberate exclusion), and `stripped_fails` is
+self-discriminating: four conditions, each with its own early return, and the only `echo ok` is the
+last arm of the last `case`, so any unanticipated stderr fails closed. The reviewer confirmed that
+the guard's implicit string concatenation at `check-receipt-schema.py`:107-108 leaves the required
+phrase contiguous, and that rewording the message turns the case red rather than silently green.
+
+Asked directly whether INFO-2 and INFO-4 belonged in this branch, the reviewer said no to both, and
+gave INFO-2 a structural reason worth keeping: case 35 scans `$ROOT` itself — that is what makes it
+a convention pin rather than a fixture test — so exercising its `rc -eq 2` branch would mean making
+part of the live repository unreadable during the suite run. Testing it properly needs the case to
+take its work-set as a parameter, which is a #39-shaped refactor rather than a #28-shaped one.
+
+Receipt at `.specs/28-strippable-assert-guards-receipt-schema/.review-receipt`.
