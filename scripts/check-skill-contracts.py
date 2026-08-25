@@ -39,11 +39,11 @@ CONTRACTS = (
     ),
     (
         "skills/implement/SKILL.md",
-        "wait for its result in the same turn",
-        "The review gate fires on Stop, so it assumes the review finished inside the turn. "
-        "Spawning the reviewer and continuing makes that false, and the resulting block cannot "
-        "be escaped from inside — an agent has no wait primitive, so every reply re-enters the "
-        "gate. See #27.",
+        "waiting means keeping the turn open",
+        "The review gate fires on turn end. A turn stays open across tool calls, so a spawned "
+        "review CAN be waited for — the failure is emitting a final message while it runs, "
+        "because each one ends the turn and re-arms the gate. See #27, and docs/verified.md "
+        "for the observation.",
     ),
     (
         "skills/implement/SKILL.md",

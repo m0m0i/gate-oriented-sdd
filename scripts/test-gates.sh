@@ -443,9 +443,10 @@ case "$out" in *"exit=0"*) report "reviewed_by=inline is recorded, not gated (se
 #
 # #27. The gate fires on Stop, so it can fire while a spawned reviewer is still reading —
 # and it then told the author to run a reviewer that was already running. That is advice
-# which cannot be taken, and an agent has no way to wait, so the turn re-entered the gate
-# forever. This does not fix the loop; nothing the gate can do fixes it without failing
-# open. It stops the loop lying about what to do.
+# which cannot be taken by an author who does not know how to wait. A turn stays open across
+# tool calls, so waiting is possible — the failure was emitting a final message between checks,
+# each of which ended the turn and re-armed the gate. This message does not fix that; it stops
+# the message misleading about what to do while the reviewer runs.
 r=$(make_repo waiting-msg 0)
 out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac

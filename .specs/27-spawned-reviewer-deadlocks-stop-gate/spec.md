@@ -62,8 +62,10 @@
   - [x] **AC5:** the spec SHALL declare which criteria are presence assertions rather than
         behavioural ones. **Declared: AC1 is presence-only** — it is a sentence in a skill, checked
         by `check-skill-contracts.py` asserting the sentence exists. Nothing here can check that a
-        model obeys it; only an eval could, and `evals/` has never run. AC2, AC3 and AC4 are
-        behavioural and testable in `scripts/test-gates.sh`.
+        model obeys it; only an eval could, and `evals/` has never run. AC2 and AC3 are behavioural and
+        testable in `scripts/test-gates.sh`. **AC4 is inspected, not tested** — no case asserts the
+        gate creates no files; it is verified by reading the diff, which is one string literal
+        inside an existing branch.
 
 - Out of scope: **#26.** The `git checkout` escape is the symptom this drove the author into three
   times, and the backlog deliberately orders it _after_ this — closing the escape while the
@@ -90,8 +92,9 @@
 
 ### The uncomfortable part, stated before Design exists
 
-The plugin ships prose and shell. It cannot change how a harness spawns subagents. So of the three
-candidate fixes, only one actually breaks the loop, and it is the one this repo can least verify:
+The plugin ships prose and shell. It cannot change how a harness spawns subagents. Of the four
+candidate fixes below, two actually break the loop, and the one adopted here is the one this repo
+can least verify:
 
 | Candidate | Breaks the loop? | Testable? |
 | :-- | :-- | :-- |

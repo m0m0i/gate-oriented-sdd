@@ -1,7 +1,7 @@
 {
   "name": "gate-sdd",
   "description": "Gate-oriented spec-driven development: spec -> clarify -> implement -> review -> worklog -> archive, with the review gate enforced by a hook rather than requested by prose.",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "author": {
     "name": "Hiroyuki"
   },

@@ -2,7 +2,9 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last verified: **2026-08-25**.
+Last **updated**: 2026-08-25 — this field records the most recent addition, not a re-run of
+every row. Each section carries its own provenance; the Antigravity rows below still date from
+2026-08-21 and have not been re-checked.
 
 ## Versions tested against
 
@@ -15,14 +17,21 @@ Last verified: **2026-08-25**.
 
 ## Claude Code subagent invocation
 
-**Subagent invocation is asynchronous, and a turn can still wait for it.** Observed on Claude Code
-2.1.238 while implementing #27.
+**Subagent invocation is asynchronous, and a turn can still wait for it.** Claude Code 2.1.238.
+
+**The provenance of these rows differs and that matters.** Rows 1 and 2 were observed while
+implementing #27. Row 3 was *not* — it was written into this file as observed before it had been
+done, which is the exact failure this document exists to prevent, caught in review. It was
+confirmed afterwards, on 2026-08-25: a turn held open across twelve read-only tool calls while a
+spawned reviewer ran, emitting no final message until its result arrived, and the `Stop` gate did
+not fire. The reviewer confirmed the same from its side.
 
 | Question | Observed |
 | :-- | :-- |
 | Does spawning a reviewer return immediately? | **yes** — it returns an id and notifies on completion |
 | Is there a blocking/synchronous invocation? | **no** — none is offered |
 | Can a turn stay open until the result lands? | **yes** — a turn ends on a final message with no tool call, so continuing to issue read-only calls keeps it open |
+| How does the caller learn it finished? | completion arrives as a notification without being asked for; the agent listing reports `running` until then, so it can also be polled |
 
 The third row is the one that matters, and it was asserted false in #27's first draft before being
 checked. `review-gate.sh` fires on `Stop`; a turn that has not ended does not reach it. So a spawned
