@@ -22,9 +22,17 @@ set -u
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$DIR/gate-lib.sh"
 
+# The validator list is read through gate_steering_value. If this hooks/ directory is a mix of
+# versions the function is undefined — and `set -u` does not catch an undefined FUNCTION, so
+# the read yields empty, the "no validators configured" branch below fires, and the gate exits
+# 0 having run nothing. That is a fail-open created by the migration to a shared reader, so the
+# migration has to carry the check. The asset guards itself this way; the gate is the half that
+# matters more, because its failure is silent.
+command -v gate_steering_value >/dev/null 2>&1 || gate_block "Quality gate: gate-lib.sh predates the shared steering reader, so this gate cannot read its validator list. Re-copy the plugin's hooks/ into this project and run again rather than treating this as a pass."
+
 [ -f .steering/tech.md ] || gate_pass
 
-validators=$(sed -n 's/^ *- *Validators: *//p' .steering/tech.md | head -1)
+validators=$(gate_steering_value .steering/tech.md Validators)
 [ -n "$validators" ] || gate_pass
 
 # Skip when nothing this gate is about has changed.
@@ -38,7 +46,7 @@ validators=$(sed -n 's/^ *- *Validators: *//p' .steering/tech.md | head -1)
 # source, so a project states "what is code here" once and both gates obey it. When the line
 # is absent the gate runs: for a guarantee, failing toward MORE checking is the right
 # direction.
-globs=$(sed -n 's/^ *- *Source globs: *//p' .steering/tech.md | head -1)
+globs=$(gate_steering_value .steering/tech.md 'Source globs')
 if [ -n "$globs" ] && git rev-parse --git-dir >/dev/null 2>&1; then
   # Unquoted on purpose: the line holds several space-separated globs and each has to reach
   # git as its own pathspec. Quotes inside a variable are NOT removed on expansion, so a

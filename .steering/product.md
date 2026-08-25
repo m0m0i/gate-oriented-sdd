@@ -3,7 +3,7 @@
 A spec-driven development harness, packaged as one plugin directory that installs into both
 Claude Code and Google Antigravity.
 
-- **Owns: gates never fail open.**
+- Owns: gates never fail open
 
 That line is machine-read by the reviewer and the steering digest, and it is the anchor every
 severity is judged against. A defect that lets a gate exit 0 when it should have blocked is at
