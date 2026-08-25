@@ -80,11 +80,11 @@
 
 - [x] T1: failing schema check — the Receipt block in `reviewer-contract.md` and the copy in
       `implement/SKILL.md` must agree field-for-field — then add `reviewed_by` to both so it passes
-- [ ] T2: failing `test-gates.sh` case — a legacy receipt with no `reviewed_by` and `verdict=CLEAN`
+- [x] T2: failing `test-gates.sh` case — a legacy receipt with no `reviewed_by` and `verdict=CLEAN`
       still clears the gate (AC2) — then confirm the gate genuinely ignores the field today
-- [ ] T3: `init` step 4 verifies the reviewer is spawnable and instructs a restart when it is not,
+- [x] T3: `init` step 4 verifies the reviewer is spawnable and instructs a restart when it is not,
       with a presence check that the step exists in the skill — **AC5 applies: this asserts the
       instruction is present, not that a model follows it. An eval is the only real check, and
       `evals/` is unrun.**
-- [ ] T4: file the follow-up issue for gating `reviewed_by=inline`, and link it from Out of scope
+- [x] T4: file the follow-up issue for gating `reviewed_by=inline`, and link it from Out of scope
 - [ ] T5: refactor

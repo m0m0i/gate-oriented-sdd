@@ -414,5 +414,30 @@ else
     || report "unreadable reviewer directory fails rather than being skipped" no "exit=$c1 msg=$c2"
 fi
 
+# 20. A legacy receipt with no reviewed_by must still clear the gate.
+#
+# AC2 of #9. The field is new, and every receipt written before it existed lacks it. The
+# gate must not start blocking those — but equally it must not read their silence as
+# independence, which is why the field is recorded rather than inferred. Today the gate
+# ignores the field entirely; this case exists so that stays deliberate rather than
+# accidental when the gate is eventually taught to read it (#25).
+r=$(make_repo legacy-receipt 0)
+( cd "$r" && printf 'reviewed_sha=%s\nreviewer=test-reviewer\nverdict=CLEAN\nblockers=0\nhigh=0\nreviewed_at=2026-01-01T00:00:00Z\n' "$(git rev-parse HEAD)" > .specs/9-feature/.review-receipt ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a receipt without reviewed_by still clears the gate" ok ;;
+                        *) report "a receipt without reviewed_by still clears the gate" no "$out" ;; esac
+
+# 21. A receipt carrying reviewed_by=inline clears the gate too, for now.
+#
+# Recorded, not gated — the clarification on #9 was "record now, gate later", because
+# refusing CLEAN on a self-review before init guarantees a spawnable reviewer would block
+# every new project's first implement. This case pins the CURRENT contract so that changing
+# it is a deliberate act with a failing test, not a quiet tightening.
+r=$(make_repo inline-receipt 0)
+( cd "$r" && printf 'reviewed_sha=%s\nreviewer=test-reviewer\nverdict=CLEAN\nblockers=0\nhigh=0\nreviewed_at=2026-01-01T00:00:00Z\nreviewed_by=inline\n' "$(git rev-parse HEAD)" > .specs/9-feature/.review-receipt ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "reviewed_by=inline is recorded, not gated (see #25)" ok ;;
+                        *) report "reviewed_by=inline is recorded, not gated (see #25)" no "$out" ;; esac
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

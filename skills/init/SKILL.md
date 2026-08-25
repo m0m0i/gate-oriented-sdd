@@ -69,7 +69,9 @@ Do not report completion on files written. Verify:
 1. Every gating validator runs clean on the current tree, and `quality-gate.sh` exits 0. Arm the gate on a green tree — otherwise the user's first turn is blocked by a failure that predates them, and their first act is to disable it.
 2. `review-gate.sh` exits silently on the current branch — if it fires immediately, the scoping is wrong and the user's first experience of the harness is a false block.
 3. Both gates actually block when they should: introduce a trivial lint violation, confirm `quality-gate.sh` fires, revert it.
-4. Report what you verified, and anything you could not.
+4. **The reviewer is spawnable.** You just wrote it into the project's agents directory, and a subagent registered mid-session is usually not available until the harness restarts. Check whether it can actually be invoked — if it cannot, **say so and tell the user to restart before their first `implement`.**
+   This is not tidiness. `implement` step 2 falls back to running the reviewer's procedure inline when it is not spawnable, which means the author of the diff reviews their own work. That fallback exists for good reasons and it still finds real defects, but it is not the independence the judgment layer is sold on — and on a fresh install it is not the exception, it is guaranteed. A restart costs seconds; a project whose every early review was a self-review does not find that out until someone reads the receipts.
+5. Report what you verified, and anything you could not.
 
 ## Rules
 

@@ -6,7 +6,7 @@ package manager and no build. The repository root *is* the installable plugin.
 Machine-read lines. Each must stay on ONE physical line — the gates read them with
 `sed ... | head -1`, so a wrapped value is truncated at the first newline without complaint.
 
-- Validators: ./scripts/check-leakage.sh, ./scripts/check-manifests.py, ./scripts/check-receipt-schema.py, ./assets/check-locks.py, ./scripts/test-gates.sh
+- Validators: ./scripts/check-leakage.sh, ./scripts/check-manifests.py, ./scripts/check-receipt-schema.py, ./scripts/check-skill-contracts.py, ./assets/check-locks.py, ./scripts/test-gates.sh
 - Reviewer: gate-sdd-reviewer
 - Source globs: :(glob)skills/**/*.md :(glob)agents/**/*.md :(glob)hooks/**/*.sh :(glob)assets/**/*.py :(glob)assets/**/*.md :(glob)scripts/**/*.py :(glob)scripts/**/*.sh
 - Docs: docs/
