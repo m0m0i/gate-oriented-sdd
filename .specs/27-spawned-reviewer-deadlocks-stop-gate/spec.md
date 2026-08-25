@@ -135,7 +135,7 @@ is on the caller, and the caller is prose.
 - [x] T1: failing case in `test-gates.sh` — the missing-receipt message names waiting as a valid
       action when a review may be in flight — then the `review-gate.sh` reword that makes it pass,
       keeping `no reviewer receipt exists` intact so case 13 still asserts what it always did
-- [ ] T2: failing needle in `check-skill-contracts.py` for the synchronous mandate — then the
+- [x] T2: failing needle in `check-skill-contracts.py` for the synchronous mandate — then the
       `implement` step 2 rewording. **AC5 applies: presence, not adherence.**
 - [ ] T3: blast radius — diff the full case list against `origin/main`'s hooks and confirm no
       pre-existing case changed verdict, and that AC4 holds by inspection: no file is created,

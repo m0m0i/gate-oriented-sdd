@@ -39,6 +39,14 @@ CONTRACTS = (
     ),
     (
         "skills/implement/SKILL.md",
+        "wait for its result in the same turn",
+        "The review gate fires on Stop, so it assumes the review finished inside the turn. "
+        "Spawning the reviewer and continuing makes that false, and the resulting block cannot "
+        "be escaped from inside — an agent has no wait primitive, so every reply re-enters the "
+        "gate. See #27.",
+    ),
+    (
+        "skills/implement/SKILL.md",
         "Never record `subagent` for a review you ran inline",
         "reviewed_by is only worth having if it is written honestly. See #9.",
     ),

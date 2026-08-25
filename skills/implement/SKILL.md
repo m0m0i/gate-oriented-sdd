@@ -27,6 +27,7 @@ When every task is committed and the validators pass:
 
 1. Run the full validator set from `.steering/tech.md`. Set the spec `Status: done`.
 2. **Invoke the reviewer subagent** named in `.steering/tech.md`, asking it to review the branch diff against the default branch, and against `.specs/<slug>/spec.md`. If it is not yet spawnable — added mid-session, needs a restart — run its procedure inline from its agent file.
+   **Invoke it and wait for its result in the same turn. Do not spawn it and carry on.** The review gate runs on turn end, so it assumes the review finished inside the turn — and if it did not, the gate blocks with a message telling you to start a review that is already running. There is no way out of that from inside: ending a turn is the only thing an agent can do, so every attempt re-enters the gate. Nothing useful can happen during a review anyway, because touching the files it is reading is exactly what must not happen.
 3. Address every **BLOCKER** and **HIGH** through the TDD loop: a failing test, then the fix. Re-run the reviewer until none remain. Triage MEDIUM/LOW/INFO explicitly — fixed, or recorded with a reason.
 4. **Write the receipt.** The reviewer is read-only, so you record its result at `.specs/<slug>/.review-receipt`, copying its Receipt block verbatim:
 
