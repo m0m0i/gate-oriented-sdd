@@ -35,6 +35,19 @@ gate_pass() {
   exit 0
 }
 
+# Read one machine-read value out of a steering file.
+#
+# THE definition of how a steering anchor is read. Five call sites across the three hooks
+# used to carry this expression by hand, and a sixth — the anchor check in assets/ — needs
+# to ask the same question the gates ask. A copy that can disagree with its subject is the
+# defect #14 and #23 are about; this exists so there is nothing to disagree with.
+#
+# Exact by design. `- **Owns: ...**` does not match, and that is correct: the consumer would
+# not match it either, so a checker using this function sees precisely what a gate sees.
+gate_steering_value() {  # <file> <key>
+  sed -n "s/^ *- *$2: *//p" "$1" 2>/dev/null | head -1
+}
+
 # Emit a spec's Tasks section ONLY — section 3, up to the next heading.
 #
 # The scoping is the load-bearing part. Acceptance criteria are checkboxes too, and on a

@@ -1,5 +1,5 @@
 # Spec: nothing checks that steering's machine-read anchors parse
-- Slug: 34-steering-anchors-unchecked   Issue: 34   Type: bug   Status: draft
+- Slug: 34-steering-anchors-unchecked   Issue: 34   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-08-25
 
 ## 1. Requirements (WHAT / WHY)
@@ -148,12 +148,12 @@
 ## 3. Tasks (TDD-ordered)
 > Folded red-and-green per #10: one task is one complete Red-Green-Refactor cycle.
 
-- [ ] T1: failing case — a fixture whose `- **Owns: …**` is bolded exactly as this repo's was makes
+- [x] T1: failing case — a fixture whose `- **Owns: …**` is bolded exactly as this repo's was makes
       the check fail naming the anchor and the file — then `gate_steering_value` and the check that
       uses it
-- [ ] T2: failing cases for the two states that must **not** fail — an absent optional anchor, and
+- [x] T2: failing cases for the two states that must **not** fail — an absent optional anchor, and
       a correctly written one — then whatever narrowing makes them pass
-- [ ] T3: failing case — the check cannot locate `gate-lib.sh` and **fails rather than skipping**
+- [x] T3: failing case — the check cannot locate `gate-lib.sh` and **fails rather than skipping**
       (AC7) — then the discovery that searches `hooks/` and `.claude/hooks/`
 - [ ] T4: migrate all five hook call sites to `gate_steering_value`, and diff the full case list
       against `origin/main` to confirm no pre-existing case changed verdict

@@ -455,5 +455,67 @@ case "$err" in *"no reviewer receipt exists"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "missing-receipt message names waiting as valid" ok \
   || report "missing-receipt message names waiting as valid" no "blocks=$c1 waiting=$c2 kept-substring=$c3"
 
+# --- guards: assets/check-steering-anchors.sh --------------------------------------
+#
+# Steering carries five machine-read lines. Each is read by a hook with a `sed` whose
+# anchor is exact, and a value that fails that anchor produces nothing and no complaint —
+# the file still looks right to a human. This repo's own `- Owns:` line was bolded and
+# therefore unreadable for a week (#34). These fixtures pin the difference between a line
+# that is ABSENT, which is legitimate, and one that is PRESENT and unparseable, which is not.
+
+# $1 = repo name, $2 = the literal Owns line to write (or empty to omit it)
+anchor_repo() {
+  r="$TMP/$1"; mkdir -p "$r/.steering" "$r/hooks" "$r/assets"
+  cp "$ROOT/hooks/gate-lib.sh" "$r/hooks/"
+  cp "$ROOT/assets/check-steering-anchors.sh" "$r/assets/" 2>/dev/null || true
+  printf -- '- Validators: true\n- Reviewer: r\n- Source globs: :(glob)**/*.txt\n- Docs: docs/\n' > "$r/.steering/tech.md"
+  printf '# Product\n\n' > "$r/.steering/product.md"
+  [ -n "$2" ] && printf '%s\n' "$2" >> "$r/.steering/product.md"
+  echo "$r"
+}
+# Prints the bare exit code, NOT "exit=$?". A case glob of *"exit=1"* also matches
+# "exit=127" — what sh returns for a missing script — so the first draft of case 23 reported
+# ok while the script did not exist. The two older uses of that glob above are safe only
+# because their subject always exists; this one could not rely on that.
+# stdout is discarded as well as captured stderr: the success line would otherwise be
+# concatenated with the exit code, so `out` read "…all readable0" and every equality test
+# failed. Case 23 hid it, because a failing run prints nothing to stdout.
+run_anchors() { ( cd "$1" && sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" ) }
+
+# 23. A bolded anchor is present and unparseable -> fail, naming anchor and file.
+r=$(anchor_repo anc-bold '- **Owns: gates never fail open.**')
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"Owns"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"product.md"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a bolded steering anchor fails, naming anchor and file" ok \
+  || report "a bolded steering anchor fails, naming anchor and file" no "exit=$c1 anchor=$c2 file=$c3"
+
+# 24. A correctly written anchor passes, and an absent optional one does not fail.
+#
+# Absence is legitimate — a project may have no `Docs` line at all — so failing on it would
+# fire on a configuration the harness supports, which is how a guard earns being deleted.
+r=$(anchor_repo anc-ok '- Owns: gates never fail open.')
+out=$(run_anchors "$r")
+[ "$out" = "0" ] && c1=ok || c1=no
+r=$(anchor_repo anc-absent '')          # no Owns line at all
+out=$(run_anchors "$r")
+[ "$out" = "0" ] && c2=ok || c2=no
+[ "$c1$c2" = "okok" ] && report "a readable anchor passes and an absent one is not a failure" ok \
+  || report "a readable anchor passes and an absent one is not a failure" no "readable=$c1 absent=$c2"
+
+# 25. The check must FAIL, not skip, when it cannot find gate-lib.sh.
+#
+# AC7, and the reason it is a criterion: locating gate-lib.sh is the problem that produced
+# #16, and this script ships into every project. A guard that reports success because it
+# could not find its own dependency is the exact bug it exists to prevent.
+r=$(anchor_repo anc-nolib '- **Owns: bolded.**')
+rm -f "$r/hooks/gate-lib.sh"
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"cannot find gate-lib.sh"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "missing gate-lib.sh fails rather than skipping" ok \
+  || report "missing gate-lib.sh fails rather than skipping" no "exit=$c1 msg=$c2"
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
