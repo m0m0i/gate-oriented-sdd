@@ -1,5 +1,5 @@
 # Spec: a receipt cannot distinguish an independent review from a self-review
-- Slug: 9-receipt-review-provenance   Issue: 9   Type: bug   Status: approved
+- Slug: 9-receipt-review-provenance   Issue: 9   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-08-23
 
 ## 1. Requirements (WHAT / WHY)
