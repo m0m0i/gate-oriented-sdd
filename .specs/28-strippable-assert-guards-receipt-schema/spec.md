@@ -215,3 +215,28 @@ three MEDIUMs were fixed rather than recorded, because each was cheap and each w
 The reviewer's one spec-accuracy finding — that "Why this cannot recur" overstated what case 35
 guaranteed — is resolved in the code rather than by softening the sentence. The sentence is now
 true.
+
+**Second pass at `78a9312`: CLEAN — 0 BLOCKER, 0 HIGH, 1 MEDIUM, 1 LOW, 5 INFO.** Both were fixed.
+
+- **MEDIUM — the count sweep missed `CONTRIBUTING.md`:21.** Fixed: "45 paths are covered; a 46th
+  behaviour needs a 46th test" → 47 and 48th. It was doubly wrong, and unlike the README lines it
+  is an instruction a contributor acts on. `docs/BACKLOG.md`:38 was raised in the same finding as
+  optional and is **deliberately left**: its "`45 passed` can mean 44 verified plus one skipped" is
+  an illustration of #39's argument, and the pairing is what makes the point — renumbering it to 47
+  and 46 would not make it truer.
+
+- **LOW — `stripped_fails` discriminated on a substring a sibling branch also prints.** Fixed. The
+  `SOURCES` loop's own "is missing" message at `check-receipt-schema.py`:82 names the same path and
+  exits 1 with no traceback, so the assertion's discrimination rested on the fixture builder
+  removing the `SOURCES` entry and the mirror as one act, rather than on the assertion itself. It
+  now additionally requires "is a mirror but not a SOURCE", the phrase unique to the branch under
+  test. Demonstrated rather than assumed: a fixture loosened the way the finding describes produces
+  `exit=1` and the path, which the old check accepted and the new one rejects.
+
+- **INFO-1 to INFO-5** are confirmations and forward notes, not defects. INFO-4 — that case 35's
+  `scripts assets hooks` list can fall behind a future fourth guard directory without going red —
+  is real and is G-8's shape. It matches AC3's scope verbatim, so it is not a defect in this spec;
+  it belongs to #39, where the same class of drift is already gathered. INFO-2 records that
+  deleting a directory exercises the `missing_dirs` loop and not the `rc -eq 2` branch, whose live
+  trigger is a present-but-unreadable directory — the state case 32 established as real. Both are
+  recorded rather than fixed here.

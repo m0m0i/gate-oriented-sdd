@@ -741,11 +741,17 @@ else
   # "Traceback", which no crash can satisfy. That pairing is this file's own rule at :481-484.
   stripped_fails() { # stripped_fails <exit-code> <stderr-file> -> ok|no
     [ "$1" = "1" ] || { echo no; return; }
-    case "$(cat "$2")" in
-      *Traceback*) echo no ;;
-      *".claude/agents/_shared/reviewer-contract.md"*) echo ok ;;
-      *) echo no ;;
-    esac
+    serr=$(cat "$2" 2>/dev/null)
+    case "$serr" in *Traceback*) echo no; return ;; esac
+    # AC1 asks for the path, so the path is required. It is not SUFFICIENT: the SOURCES loop's
+    # own "is missing" message at check-receipt-schema.py:82 names the same path and also exits
+    # 1 with no traceback, so the path alone is satisfied by a sibling branch of the same guard.
+    # That branch cannot fire while the fixture drops the SOURCES entry and the mirror as one
+    # act — but then the discrimination rests on the fixture builder rather than on the
+    # assertion, and a later loosening of the fixture would turn this green against the unfixed
+    # script. Require the phrase unique to the branch under test as well.
+    case "$serr" in *".claude/agents/_shared/reviewer-contract.md"*) : ;; *) echo no; return ;; esac
+    case "$serr" in *"is a mirror but not a SOURCE"*) echo ok ;; *) echo no ;; esac
   }
   out=$( cd "$r" && python3 -O scripts/check-receipt-schema.py >/dev/null 2>"$TMP/rerr"; printf '%s' "$?" )
   c1=$(stripped_fails "$out" "$TMP/rerr")
