@@ -31,9 +31,20 @@
   prior review was inline, run synchronously by the author of the diff. The first genuinely spawned
   review broke it within seconds.
 
-  The part that makes it unbreakable is not in the gate at all: **an agent has no wait primitive.**
-  Every reply is a turn-end attempt, so a blocked `Stop` re-invokes the agent, the agent replies,
-  and `Stop` fires again. There is no action available that means "hold, without ending the turn".
+  **Corrected after review — the first version of this root cause was wrong, and the fix that grew
+  out of it was wrong with it.** It claimed "an agent has no wait primitive". That is false. A turn
+  ends when the agent emits a final message with no tool call; it stays open across tool calls. So
+  waiting is available: keep issuing read-only calls until the result lands and emit nothing final
+  before it does. A turn that has not ended cannot trip a gate that fires on turn end.
+
+  What actually happened is narrower and more embarrassing. During the deadlock the pattern was
+  *check the agent, then say "Holding."* — and that second half is a final message. Each one ended
+  the turn and re-armed the gate. Twenty-five turns were spent re-arming a trap by announcing that
+  I was waiting instead of waiting.
+
+  So the defect is that **nothing said how to wait.** `implement` told the author to invoke a
+  reviewer and said nothing about what to do while it ran, and the gate's message named an action
+  the author had no reason to believe was available.
   Writing a receipt to escape is what `implement` forbids most explicitly; un-ticking a finished
   task is the same lie wearing bookkeeping.
 
@@ -82,11 +93,25 @@
 The plugin ships prose and shell. It cannot change how a harness spawns subagents. So of the three
 candidate fixes, only one actually breaks the loop, and it is the one this repo can least verify:
 
-| Candidate                                         | Breaks the loop?                                  | Testable?                    |
-| :------------------------------------------------ | :------------------------------------------------ | :--------------------------- |
-| `implement` mandates a **synchronous** invocation | yes — the assumption becomes true by construction | presence only, like #9's AC3 |
-| the gate detects repeated blocks and says so      | **no** — it still blocks, just informatively      | yes, in `test-gates.sh`      |
-| the message stops giving unactionable advice      | no                                                | yes                          |
+| Candidate | Breaks the loop? | Testable? |
+| :-- | :-- | :-- |
+| `implement` mandates a **synchronous** invocation, and says how to wait | yes | presence only, like #9's AC3 |
+| the gate detects repeated blocks and says so | no — it narrates, and buys that with gate-owned state | yes |
+| the message stops giving unactionable advice | no, but it stops misleading | yes |
+| **move the check off `Stop`** — block on `PreToolUse` for `git push` / `gh pr create` | yes, and it cannot loop: it fires at a boundary crossed deliberately, not on every reply | yes |
+
+The fourth was missed on the first pass and is not obviously worse. It enforces the promise the
+harness actually makes — `implement` says *"Do not open a PR before the reviewer pass is clean"*,
+and `README.md` sells a receipt rather than a turn-end trap — while adding no state and never
+passing on unreviewed code. It is **not** adopted here: `Stop` is strictly stricter, and a
+`PreToolUse` gate sits nearer to #26's shape. Recorded so the decision is one someone can argue
+with rather than one nobody knows was made. Worth its own issue.
+
+One rejection in the first draft proved too much and is withdrawn: *"any in-flight marker is
+author-forgeable"*. Every input this gate reads is author-forgeable — the receipt is a file the
+author writes, the ticks are checkboxes the author types. Forgeability is not the threat model;
+visible, deliberate, diffable lying is. The sound half of that rejection stands on its own: a gate
+that **passes** while a review is in flight is a fail-open.
 
 Anything that makes the gate _pass_ while a review is "in flight" is a fail-open, and any marker
 the author writes to signal that is the fabricated receipt one step further back. So the real fix

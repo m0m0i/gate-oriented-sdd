@@ -57,6 +57,12 @@ it stays here.
 
 ## What would change this order
 
+- **FIRED, 2026-08-25, and the order held.** #27's spec conceded that a blocking `Stop` hook
+  cannot coexist with an async subagent — the trigger below, verbatim. The order did not change,
+  because the review of that spec then established the concession was wrong: a turn *can* wait for
+  an async subagent by staying open, so the coexistence is fine and #27 is a plugin bug after all
+  (`docs/verified.md`). #26 stays second on its original reasoning — it remains the only escape
+  when a turn does get stuck.
 - **#27 turning out to be a harness limitation rather than a plugin bug.** If a blocking
   `Stop` hook simply cannot coexist with an async subagent, then #26 stops being second —
   the escape it describes becomes load-bearing and closing it would be wrong.

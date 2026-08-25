@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last verified: **2026-08-21**.
+Last verified: **2026-08-25**.
 
 ## Versions tested against
 
@@ -12,6 +12,23 @@ Last verified: **2026-08-21**.
 | Antigravity CLI (`agy`) | 1.1.17 |
 | Antigravity IDE | 2.3.1 |
 | Platform | macOS (darwin, arm64) |
+
+## Claude Code subagent invocation
+
+**Subagent invocation is asynchronous, and a turn can still wait for it.** Observed on Claude Code
+2.1.238 while implementing #27.
+
+| Question | Observed |
+| :-- | :-- |
+| Does spawning a reviewer return immediately? | **yes** — it returns an id and notifies on completion |
+| Is there a blocking/synchronous invocation? | **no** — none is offered |
+| Can a turn stay open until the result lands? | **yes** — a turn ends on a final message with no tool call, so continuing to issue read-only calls keeps it open |
+
+The third row is the one that matters, and it was asserted false in #27's first draft before being
+checked. `review-gate.sh` fires on `Stop`; a turn that has not ended does not reach it. So a spawned
+review *can* be waited for without tripping the gate — the mistake that produced the twenty-five
+turn loop was emitting a short "still waiting" message between checks, each of which ended the turn
+and re-armed the gate.
 
 ## Antigravity hooks
 
