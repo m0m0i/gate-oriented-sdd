@@ -24,16 +24,15 @@
   reviewer mid-session and never checks that it became spawnable before the first `implement`. The
   schema gap makes the state invisible; `init` makes the state certain.
 - Acceptance criteria:
-  - [ ] **AC1:** the Receipt block SHALL carry a field recording how the review was obtained.
-  - [ ] **AC2:** WHEN that field is absent from a receipt THE SYSTEM SHALL treat it as unknown and
+  - [x] **AC1:** the Receipt block SHALL carry a field recording how the review was obtained.
+  - [x] **AC2:** WHEN that field is absent from a receipt THE SYSTEM SHALL treat it as unknown and
         SHALL NOT infer independence — an old receipt must not be upgraded by silence.
-  - [ ] **AC3:** `init` SHALL verify the reviewer is spawnable, and SHALL tell the user to restart
+  - [x] **AC3:** `init` SHALL verify the reviewer is spawnable, and SHALL tell the user to restart
         before their first `implement` when it is not.
-  - [ ] **AC4:** the regression test fails before the fix and passes after.
-  - [ ] **AC5:** every AC above SHALL be checked mechanically, or the spec SHALL say plainly which
+  - [x] **AC4:** the regression test fails before the fix and passes after.
+  - [x] **AC5:** every AC above SHALL be checked mechanically, or the spec SHALL say plainly which
         check is a presence assertion rather than a behavioural one.
-- Out of scope: **the gate refusing a CLEAN verdict on `reviewed_by=inline`.** Clarified as a
-  separate issue, to be filed: gating before AC3 lands would hard-block every new project's first
+- Out of scope: **the gate refusing a CLEAN verdict on `reviewed_by=inline`.** Filed as **#25**: gating before AC3 lands would hard-block every new project's first
   `implement`, which is #8's failure mode wearing different clothes. Sequencing is the point.
   Also out of scope: changing what the reviewer's procedure does; #8 and #10.
 
@@ -87,4 +86,4 @@
       instruction is present, not that a model follows it. An eval is the only real check, and
       `evals/` is unrun.**
 - [x] T4: file the follow-up issue for gating `reviewed_by=inline`, and link it from Out of scope
-- [ ] T5: refactor
+- [x] T5: refactor

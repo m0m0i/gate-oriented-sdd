@@ -37,14 +37,16 @@ Antigravity has five hook events: `PreToolUse`, `PostToolUse`, `PreInvocation`, 
 
 ## Working on this repo
 
-Run all five before every commit — CI runs the same five:
+Run all seven before every commit — CI runs the same seven:
 
 ```bash
-./scripts/check-leakage.sh      # no private context
-./scripts/check-manifests.py    # both manifests agree; hook shapes correct
-./assets/check-locks.py         # rulebooks match their locks (--update to re-pin)
-./scripts/test-gates.sh         # the gates still behave
-./scripts/check-version-bump.py # shipped changes carry a version bump (PR-only in CI)
+./scripts/check-leakage.sh          # no private context
+./scripts/check-manifests.py        # both manifests agree; hook shapes correct
+./scripts/check-receipt-schema.py   # the receipt schema agrees across its two copies
+./scripts/check-skill-contracts.py  # skills still carry their load-bearing instructions
+./assets/check-locks.py             # rulebooks match their locks (--update to re-pin)
+./scripts/test-gates.sh             # the gates still behave
+./scripts/check-version-bump.py     # shipped changes carry a version bump (PR-only in CI)
 ```
 
 - `check-leakage.sh` matters most. This harness was extracted from a private polyrepo; the extraction is clean-room. If the guard fires, **rewrite the file — do not scrub it in place.** Scrubbing leaves the shape, and the shape is where the private structure lives.
