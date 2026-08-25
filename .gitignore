@@ -3,3 +3,8 @@ node_modules/
 *.log
 .venv/
 __pycache__/
+
+# Personal, per-machine Claude Code settings. Deliberately not shared: .claude/settings.json
+# is checked in because it IS the dogfood config — the worked example of what init produces —
+# and a maintainer's own tool permissions do not belong in an example other people read.
+.claude/settings.local.json
