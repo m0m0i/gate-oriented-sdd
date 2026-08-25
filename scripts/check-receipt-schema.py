@@ -99,9 +99,14 @@ MIRRORS = (
 )
 
 for _src, _dst in MIRRORS:
+    # Every mirror must also be a SOURCE. That is what makes the skip below unreachable: the
+    # SOURCES loop hard-exits on a missing file before this runs. Stated rather than left as
+    # an ordering accident, because this repo has twice shipped a guard whose safety rested on
+    # something no comment named.
+    assert _dst in SOURCES, f"{_dst} is a mirror but not a SOURCE, so a missing file would skip"
     a, b = ROOT / _src, ROOT / _dst
     if not b.is_file():
-        continue  # a consumer project has no mirror; only this repo does
+        continue  # unreachable today; a mirror that does not exist cannot have drifted
     if a.read_bytes() != b.read_bytes():
         print("check-receipt-schema FAILED — a mirrored contract has drifted", file=sys.stderr)
         print(f"  {_dst} differs from {_src}", file=sys.stderr)

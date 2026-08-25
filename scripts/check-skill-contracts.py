@@ -47,8 +47,10 @@ CONTRACTS = (
 def flat(s: str) -> str:
     """Collapse whitespace runs so a phrase matches across a line wrap.
 
-    Found the hard way: the first contract added here spanned two lines in the source, so a
-    literal substring test reported it missing while it was plainly there. Prose gets
+    Found the hard way: the `implement` contract's needle wraps in the source, so a literal
+    substring test reported it missing while it was plainly there. Named rather than numbered
+    on purpose — an ordinal goes stale the moment CONTRACTS is reordered, which is how this
+    sentence came to be wrong twice. Prose gets
     rewrapped constantly, and a check that fails on reflowing is a check that gets deleted
     rather than fixed.
     """
