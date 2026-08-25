@@ -59,9 +59,10 @@ def flat(s: str) -> str:
     constantly, so a literal substring test reports a phrase missing while it is plainly
     there. A check that fails on reflowing is a check that gets deleted rather than fixed.
 
-    Deliberately names no example. Three earlier versions named one — an ordinal, then a
-    file, then a needle — and each went stale when the thing it pointed at moved. The
-    reason is general and needs no exhibit.
+    Deliberately names no example. Two earlier versions named one and each failed
+    differently: naming the file became ambiguous when that file gained a second contract,
+    and naming the needle was a paraphrase that could not be grepped for. The reason this
+    function exists is general and needs no exhibit.
     """
     return re.sub(r"\s+", " ", s)
 

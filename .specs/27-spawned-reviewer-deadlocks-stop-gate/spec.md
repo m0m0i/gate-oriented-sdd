@@ -22,8 +22,8 @@
   user interrupted, and the only exit found was `git checkout main` — which is #26.
 
 - Impact: every `implement` that uses a spawned reviewer, which is the path the harness recommends
-  and the one #9 changed `init` to guarantee is available. **The harness deadlocks on the path it
-  tells you to use and works fine on the fallback it calls second-best.** Both gates ship enabled,
+  and the one #9 changed `init` to guarantee is available. **The plugin's own instructions
+  deadlock the author on the path they recommend, and say nothing about how to wait on it.** Both gates ship enabled,
   so a new project reaches this on its first reviewed spec.
 
 - **Root cause:** `review-gate.sh` fires on `Stop` and therefore assumes the review completes
@@ -83,9 +83,10 @@
   that narration with gate-owned state in `.specs/` that can drift, be deleted, or be mistaken for
   something the author maintains. A counter is a poor trade for a message.
 - **Q: close it as a harness constraint instead?**
-  A: no. It is true that a blocking `Stop` hook cannot coexist with an async subagent, but that is
-  an argument for not spawning async — not for leaving the recommended path broken and documenting
-  the wreck.
+  A: no — and the premise this answer first rested on is itself retracted. A blocking `Stop` hook
+  and an async subagent coexist perfectly well; coexistence just requires the caller to keep the
+  turn open, which is exactly what nothing told it to do. There is no harness constraint here to
+  close this against. Even if there had been, documenting the wreck would not be a fix.
 - **Q: how far should the message go — should it name the `git checkout` escape as forbidden?**
   A: no. Naming it advertises #26 to every reader who had not thought of it, at the moment they are
   most tempted. The message names _waiting_ as the valid action and stops there.

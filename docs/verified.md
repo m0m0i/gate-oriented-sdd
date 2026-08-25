@@ -24,7 +24,10 @@ implementing #27. Row 3 was *not* — it was written into this file as observed 
 done, which is the exact failure this document exists to prevent, caught in review. It was
 confirmed afterwards, on 2026-08-25: a turn held open across twelve read-only tool calls while a
 spawned reviewer ran, emitting no final message until its result arrived, and the `Stop` gate did
-not fire. The reviewer confirmed the same from its side.
+not fire. The reviewer confirmed the same from its side. **Row 4 was observed in that same run** — completion
+arrived as an unrequested notification, and the running-agent listing was polled repeatedly while
+waiting. It is called out separately because it was added in the same commit as this paragraph and
+the paragraph did not originally mention it, which is the omission this accounting exists to stop.
 
 | Question | Observed |
 | :-- | :-- |
