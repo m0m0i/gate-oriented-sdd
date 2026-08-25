@@ -171,8 +171,11 @@ _2026-08-25._
       under `PYTHONOPTIMIZE=1` through the shebang, with the unmutated control exiting 0 — then
       replace the `assert` with the print-and-exit idiom, leaving the comment verbatim.
       *(AC1, AC2, AC4, AC5, AC6)*
-- [ ] T2: failing case — no statement-position `assert` in `scripts/`, `assets/`, `hooks/`. Its red
+- [x] T2: failing case — no statement-position `assert` in `scripts/`, `assets/`, `hooks/`. Its red
       state is demonstrated against T1's parent commit, since the same edit cures both.
       *(AC3)*
+      *Both cases were in fact written red together and the one edit turned both green; T2 is
+      still its own commit, and its redness at `9344b79` was confirmed by running its grep
+      against that revision rather than inferred.*
 - [ ] T3: run all eight validators, and diff the case list against `main` to confirm no
       pre-existing case changed verdict.

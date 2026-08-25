@@ -746,5 +746,27 @@ else
        "control=$c0 minus-O=$c1 names-path=$c2 PYTHONOPTIMIZE=$c3"
 fi
 
+# 35. No guard expresses a safety check as an assert.
+#
+# #28 generalised, and pinned rather than remembered because the convention had already been
+# deviated from once. `assert` is the one Python statement the interpreter is allowed to
+# delete, so a safety check written as one is a check an environment variable removes.
+#
+# Anchored to statement position on purpose: an unanchored `assert` matches "asserts the" in
+# check-skill-contracts.py and "asserted in a README" in this file's own header, so the loose
+# pattern would arrive permanently red and be deleted rather than obeyed.
+scanned=$(find "$ROOT/scripts" "$ROOT/assets" "$ROOT/hooks" -type f 2>/dev/null | wc -l | tr -d ' ')
+# A recursive grep over a directory that moved exits 2, and `|| true` turns that into "no
+# hits" — a clean report from a scan that read nothing. Corroborate the work-set first; this
+# is case 30's lesson, applied on arrival rather than after a round of review.
+if [ "$scanned" -lt 3 ]; then
+  report "no guard expresses a safety check as an assert" no \
+    "nothing to scan: $scanned file(s) found under scripts/, assets/ and hooks/"
+else
+  hits=$(grep -rnE '^[[:space:]]*assert[[:space:]]' "$ROOT/scripts" "$ROOT/assets" "$ROOT/hooks" || true)
+  [ -z "$hits" ] && report "no guard expresses a safety check as an assert" ok \
+    || report "no guard expresses a safety check as an assert" no "$(echo "$hits" | tr '\n' ' ')"
+fi
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
