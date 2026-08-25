@@ -25,10 +25,14 @@ Produce ONE document a teammate can review *before* any code is written. That do
 
 | Status | Meaning | Set by |
 | :-- | :-- | :-- |
-| `draft` | Written, under review in its own PR. Not implementable. | `spec` |
-| `approved` | The spec PR merged. `implement` may start. | you, when that PR merges |
+| `draft` | Written, not yet agreed. Not implementable. | `spec` |
+| `approved` | The spec is agreed. `implement` may start. | you, when you accept it |
 | `done` | Every task ticked, reviewer gate CLEAN, PR open. | `implement` |
 | `archived` | Shipped, moved to `.specs/_archive/<slug>/`. | `archive` |
+
+**The spec is not a separate pull request.** One issue is one branch and one PR, and the spec is the first commit on that branch — so the diff reads spec first, then the code that satisfies it, and a reader can see what was agreed before any code existed.
+
+What that gives up is worth stating: a merge used to sit between agreeing and building, and now nothing mechanical does. `approved` is a judgment you record, not an event a merge proves. If a spec is contentious enough that you want it settled before anyone writes code, push the spec commit and say so — the branch is reviewable at any point, and `clarify` still runs before Design exists, which is where the expensive misunderstandings actually get caught.
 
 ## Spec shapes
 

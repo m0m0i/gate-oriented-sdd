@@ -24,5 +24,5 @@ This step exists to make the model's uncertainty **visible while it is still che
 - **Five is a ceiling, not a target.** Two good questions beat five padded ones, and padding trains the user to skim.
 - **Never ask what the repo can answer.** `.steering/`, the issue, the existing code, and the project's own docs are yours to read first. A question whose answer sits in `.steering/tech.md` spends the user's attention to save your own.
 - **Never ask for a decision that is yours.** "Which of these two equivalent namings" is not a clarification; it is you avoiding a call you are paid to make.
-- An unresolved ambiguity does not block the spec PR — it is a documented open question. Say so rather than stalling.
+- An unresolved ambiguity does not block the spec — it is a documented open question. Say so rather than stalling.
 - This skill writes no Design, no Tasks, and no code.
