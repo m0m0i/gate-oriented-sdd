@@ -1,6 +1,6 @@
 # Spec: a strippable assert guards the path that keeps check-receipt-schema from checking nothing
-- Slug: 28-strippable-assert-guards-receipt-schema   Issue: 28   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-08-25
+- Slug: 28-strippable-assert-guards-receipt-schema   Issue: 28   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-08-25   Archived: 2026-08-26
 
 ## 1. Requirements (WHAT / WHY)
 
@@ -254,4 +254,4 @@ a convention pin rather than a fixture test — so exercising its `rc -eq 2` bra
 part of the live repository unreadable during the suite run. Testing it properly needs the case to
 take its work-set as a parameter, which is a #39-shaped refactor rather than a #28-shaped one.
 
-Receipt at `.specs/28-strippable-assert-guards-receipt-schema/.review-receipt`.
+Receipt at `.review-receipt`, beside this file — written relative so it survives archiving.

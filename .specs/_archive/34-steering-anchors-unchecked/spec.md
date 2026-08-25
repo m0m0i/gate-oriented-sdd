@@ -1,6 +1,6 @@
 # Spec: nothing checks that steering's machine-read anchors parse
-- Slug: 34-steering-anchors-unchecked   Issue: 34   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-08-25
+- Slug: 34-steering-anchors-unchecked   Issue: 34   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-08-25   Archived: 2026-08-26
 
 ## 1. Requirements (WHAT / WHY)
 
