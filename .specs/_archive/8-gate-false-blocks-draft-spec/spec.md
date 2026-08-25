@@ -1,6 +1,6 @@
 # Spec: review-gate.sh false-blocks a spec that is still being drafted
-- Slug: 8-gate-false-blocks-draft-spec   Issue: 8   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-08-23
+- Slug: 8-gate-false-blocks-draft-spec   Issue: 8   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-08-23   Archived: 2026-08-25
 
 ## 1. Requirements (WHAT / WHY)
 - Reproduction: on a branch `<n>-<slug>` one commit ahead of the default branch, create
