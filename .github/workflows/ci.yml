@@ -30,6 +30,19 @@ jobs:
       - name: Rulebooks match their locks
         run: ./assets/check-locks.py
 
+      # The receipt schema lives in three documents at once — the reviewer defines it, the
+      # implement skill reproduces it, and this repo's own reviewer mirrors it — and a field
+      # added to one and not the others is
+      # invisible until a receipt is silently poorer than the schema claims.
+      - name: The receipt schema agrees across its copies
+        run: ./scripts/check-receipt-schema.py
+
+      # Skills are prose executed by a model, so their load-bearing sentences have
+      # dependants and no compiler. This asserts they are present — not that a model
+      # follows them, which only an eval can check.
+      - name: Skills still carry their load-bearing instructions
+        run: ./scripts/check-skill-contracts.py
+
       # The repo's central claim is that the review gate is enforced rather than
       # advisory. That is testable without a model, so it is tested.
       - name: Review gate behaves

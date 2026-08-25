@@ -1,5 +1,5 @@
 # Spec: a receipt cannot distinguish an independent review from a self-review
-- Slug: 9-receipt-review-provenance   Issue: 9   Type: bug   Status: draft
+- Slug: 9-receipt-review-provenance   Issue: 9   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-08-23
 
 ## 1. Requirements (WHAT / WHY)
@@ -24,16 +24,20 @@
   reviewer mid-session and never checks that it became spawnable before the first `implement`. The
   schema gap makes the state invisible; `init` makes the state certain.
 - Acceptance criteria:
-  - [ ] **AC1:** the Receipt block SHALL carry a field recording how the review was obtained.
-  - [ ] **AC2:** WHEN that field is absent from a receipt THE SYSTEM SHALL treat it as unknown and
+  - [x] **AC1:** the Receipt block SHALL carry a field recording how the review was obtained.
+  - [x] **AC2:** WHEN that field is absent from a receipt THE SYSTEM SHALL treat it as unknown and
         SHALL NOT infer independence — an old receipt must not be upgraded by silence.
-  - [ ] **AC3:** `init` SHALL verify the reviewer is spawnable, and SHALL tell the user to restart
+  - [x] **AC3:** `init` SHALL verify the reviewer is spawnable, and SHALL tell the user to restart
         before their first `implement` when it is not.
-  - [ ] **AC4:** the regression test fails before the fix and passes after.
-  - [ ] **AC5:** every AC above SHALL be checked mechanically, or the spec SHALL say plainly which
+  - [x] **AC4:** the regression test fails before the fix and passes after.
+  - [x] **AC5:** every AC above SHALL be checked mechanically, or the spec SHALL say plainly which
         check is a presence assertion rather than a behavioural one.
-- Out of scope: **the gate refusing a CLEAN verdict on `reviewed_by=inline`.** Clarified as a
-  separate issue, to be filed: gating before AC3 lands would hard-block every new project's first
+        **Declared:** AC3's guard is a presence assertion — it checks the instructions are written,
+        not that a model follows them; only an eval could do that and `evals/` is unrun. AC4 rests
+        on `check-skill-contracts.py`, the one new check that was red before the fix; the gate cases
+        are characterisation, not regression. AC1 is behavioural via `REQUIRED` in
+        `check-receipt-schema.py`, added after review found it had no check at all.
+- Out of scope: **the gate refusing a CLEAN verdict on `reviewed_by=inline`.** Filed as **#25**: gating before AC3 lands would hard-block every new project's first
   `implement`, which is #8's failure mode wearing different clothes. Sequencing is the point.
   Also out of scope: changing what the reviewer's procedure does; #8 and #10.
 
@@ -78,13 +82,16 @@
 ## 3. Tasks (TDD-ordered)
 > Folded red-and-green per #10.
 
-- [ ] T1: failing schema check — the Receipt block in `reviewer-contract.md` and the copy in
+- [x] T1: failing schema check — the Receipt block in `reviewer-contract.md` and the copy in
       `implement/SKILL.md` must agree field-for-field — then add `reviewed_by` to both so it passes
-- [ ] T2: failing `test-gates.sh` case — a legacy receipt with no `reviewed_by` and `verdict=CLEAN`
-      still clears the gate (AC2) — then confirm the gate genuinely ignores the field today
-- [ ] T3: `init` step 4 verifies the reviewer is spawnable and instructs a restart when it is not,
+- [x] T2: **characterisation** cases in `test-gates.sh` pinning what the gate does with the new
+      field — a legacy receipt without it still clears (AC2), and `reviewed_by=inline` is recorded
+      rather than gated. Not red-then-green: `review-gate.sh` is untouched by this spec, so neither
+      case could have failed beforehand. They exist so #25 must change a failing test rather than
+      tighten the rule quietly.
+- [x] T3: `init` step 4 verifies the reviewer is spawnable and instructs a restart when it is not,
       with a presence check that the step exists in the skill — **AC5 applies: this asserts the
       instruction is present, not that a model follows it. An eval is the only real check, and
       `evals/` is unrun.**
-- [ ] T4: file the follow-up issue for gating `reviewed_by=inline`, and link it from Out of scope
-- [ ] T5: refactor
+- [x] T4: file the follow-up issue for gating `reviewed_by=inline`, and link it from Out of scope
+- [x] T5: refactor

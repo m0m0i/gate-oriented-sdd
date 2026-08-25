@@ -18,7 +18,7 @@ The gates are the reason this repo exists. A change to `hooks/` must:
 
 1. Keep both blocking channels. One script emits JSON for Antigravity **and** exits 2 for Claude Code. A change that serves one harness only is a change that makes the other silently advisory.
 2. Keep the gate narrow. It stays silent on merged branches, mid-implementation turns, and post-review documentation commits. A gate that fires on ordinary turns gets switched off, and a switched-off gate protects nothing.
-3. Come with a case in `scripts/test-gates.sh`. 31 paths are covered; a 32nd behaviour needs a 32nd test.
+3. Come with a case in `scripts/test-gates.sh`. 33 paths are covered; a 34th behaviour needs a 34th test.
 
 ## Releasing
 
@@ -37,11 +37,13 @@ claude plugin tag        # creates {name}--v{version}, validating manifest again
 ## Before you open a PR
 
 ```bash
-./scripts/check-leakage.sh      # no private context
-./scripts/check-manifests.py    # both manifests agree, hook shapes correct
-./assets/check-locks.py         # rulebooks match their locks
-./scripts/test-gates.sh         # the gate still behaves
-./scripts/check-version-bump.py # shipped changes carry a version bump
+./scripts/check-leakage.sh          # no private context
+./scripts/check-manifests.py        # both manifests agree; hook shapes correct
+./scripts/check-receipt-schema.py   # the receipt schema agrees across its copies
+./scripts/check-skill-contracts.py  # skills still carry their load-bearing instructions
+./assets/check-locks.py             # rulebooks match their locks (--update to re-pin)
+./scripts/test-gates.sh             # the gates still behave
+./scripts/check-version-bump.py     # shipped changes carry a version bump (PR-only in CI)
 claude plugin validate . --strict
 ```
 

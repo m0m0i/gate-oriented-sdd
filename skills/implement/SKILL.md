@@ -37,7 +37,17 @@ When every task is committed and the validators pass:
    blockers=<n>
    high=<n>
    reviewed_at=<YYYY-MM-DDTHH:MM:SSZ>
+   reviewed_by=subagent|inline
    ```
+
+   `reviewed_by` records **how** the review was obtained, not who ran it. `subagent` means
+   the reviewer ran as its own agent, outside this session's context, which is the
+   independence the whole layer exists to provide. `inline` means step 2's fallback was
+   taken and the author of the diff ran the reviewer's procedure themselves — still useful,
+   since it finds real defects, but not independent, and a reader of the receipt cannot tell
+   the difference unless you write it down. **Never record `subagent` for a review you ran
+   inline.** It is the same lie as a receipt for a review that did not happen, one step
+   quieter.
 
    The review gate reads this file and refuses to end a turn when a spec whose tasks are all ticked has no receipt, a non-CLEAN one, or one whose `reviewed_sha` predates a later source change.
 

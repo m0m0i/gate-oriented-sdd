@@ -22,6 +22,8 @@ Evidence gathering only:
 - these validators, and no others:
   - `./scripts/check-leakage.sh`
   - `./scripts/check-manifests.py`
+  - `./scripts/check-receipt-schema.py`
+  - `./scripts/check-skill-contracts.py`
   - `./assets/check-locks.py`
   - `./scripts/test-gates.sh`
   - `./scripts/check-version-bump.py <base-sha>` — read-only, safe to run for evidence
