@@ -26,7 +26,17 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 SOURCES = (
     "agents/_shared/reviewer-contract.md",
     "skills/implement/SKILL.md",
+    # This repo runs the harness on itself, so its own reviewer reads a COPY of the contract
+    # and that copy is what actually governs a review here. It was missed on the first pass:
+    # the guard reported agreement across the two it knew about while the third — the one
+    # doing the reviewing — still described a six-field receipt.
+    ".claude/agents/_shared/reviewer-contract.md",
 )
+
+#: Fields the schema must still contain, not merely agree about. Equality alone is satisfied
+#: by every copy dropping the same field, which is exactly how this guard could have been
+#: green while the field #9 exists to add was deleted from all of them.
+REQUIRED = ("reviewed_sha", "verdict", "reviewed_by")
 
 FIELD = re.compile(r"^\s*([a-z_]+)=")
 
@@ -41,14 +51,20 @@ def fields(path: pathlib.Path) -> list[str]:
     started = False
     for line in path.read_text().splitlines():
         m = FIELD.match(line)
+        if m and not started and m.group(1) == "reviewed_sha":
+            # First block only. A second `reviewed_sha=` further down is prose about the
+            # schema, not another definition of it.
+            started, names = True, [m.group(1)]
+            continue
+        if not started:
+            continue
+        if line.strip().startswith("```"):
+            break  # the fence closed: the block is over
         if m:
-            if m.group(1) == "reviewed_sha":
-                started, names = True, [m.group(1)]
-                continue
-            if started:
-                names.append(m.group(1))
-        elif started:
-            break  # the block ended; take the first one only
+            names.append(m.group(1))
+        # Anything else inside the fence — a blank line, a comment — is skipped rather than
+        # treated as the end. Breaking on the first gap let a cosmetic blank line silently
+        # narrow what was compared, and the guard still exited 0.
     return names
 
 
@@ -64,6 +80,14 @@ for rel in SOURCES:
         sys.exit(1)
     found[rel] = names
 
+if len(SOURCES) < 2:
+    print(
+        "check-receipt-schema: SOURCES lists fewer than two copies, so there is nothing to "
+        "compare. A guard with an empty work-set must not report success — see #16.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
 first, *rest = SOURCES
 if any(found[r] != found[first] for r in rest):
     print("check-receipt-schema FAILED — the receipt schema differs between its copies", file=sys.stderr)
@@ -75,6 +99,14 @@ if any(found[r] != found[first] for r in rest):
         print(f"  fields present in one copy and not the other: {sorted(only)}", file=sys.stderr)
     else:
         print("  same fields, different order — the block is copied top to bottom", file=sys.stderr)
+    sys.exit(1)
+
+absent = [f for f in REQUIRED if f not in found[first]]
+if absent:
+    print("check-receipt-schema FAILED — the agreed schema is missing required field(s)", file=sys.stderr)
+    print(f"  missing: {absent}", file=sys.stderr)
+    print(f"  agreed:  {found[first]}", file=sys.stderr)
+    print("  The copies agreeing is not enough. Every copy dropping the same field agrees too.", file=sys.stderr)
     sys.exit(1)
 
 print(f"check-receipt-schema: {len(found[first])} field(s) agree across {len(SOURCES)} copies")

@@ -80,7 +80,13 @@ verdict=CLEAN|BLOCKED
 blockers=<n>
 high=<n>
 reviewed_at=<YYYY-MM-DDTHH:MM:SSZ>
+reviewed_by=subagent|inline
 ```
+
+`reviewed_by` is the one field you may not know the answer to from inside your own run: say
+`subagent` if you were spawned as an agent, and `inline` if your procedure is being followed
+by the author of the diff. An **absent** `reviewed_by` means unknown — receipts written
+before this field existed must not be read as independent, because silence is not evidence.
 
 The **Receipt** block is copied verbatim by `implement` into `.specs/<slug>/.review-receipt`, where the review gate reads it. You do not write that file — you are read-only — but emit the block on **every** review, including a BLOCKED one, so the gate always has something truthful to read.
 

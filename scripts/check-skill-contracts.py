@@ -25,6 +25,13 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONTRACTS = (
     (
         "skills/init/SKILL.md",
+        "Check whether it can actually be invoked",
+        "AC3 is a conjunction — verify AND instruct. Pinning only the instruction let the "
+        "verification half be deleted with this check still green, which is a presence check "
+        "asserting the wrong half rather than merely a weak one.",
+    ),
+    (
+        "skills/init/SKILL.md",
         "tell the user to restart before their first `implement`",
         "Without it, init leaves every project where implement's inline fallback is "
         "guaranteed, so the first review of the first spec is a self-review and the "
@@ -47,6 +54,14 @@ def flat(s: str) -> str:
     """
     return re.sub(r"\s+", " ", s)
 
+
+if len(CONTRACTS) < 2:
+    print(
+        "check-skill-contracts: fewer than two contracts listed, so this guard is checking "
+        "almost nothing. An empty work-set must not report success — see #16.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 missing = []
 for rel, needle, why in CONTRACTS:
