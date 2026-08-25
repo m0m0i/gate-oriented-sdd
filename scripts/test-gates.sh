@@ -678,5 +678,125 @@ case "$(cat "$TMP/dgout")" in *"degraded"*) c1=ok ;; *) c1=no ;; esac
 [ "$c1$c2" = "okok" ] && report "a stale gate-lib degrades the digest visibly, not silently" ok \
   || report "a stale gate-lib degrades the digest visibly, not silently" no "visible=$c1 clean-stderr=$c2"
 
+# --- guards: scripts/check-receipt-schema.py ---------------------------------------
+#
+# #28. The invariant that makes the mirror-skip unreachable — every MIRRORS destination is
+# also a SOURCE, so the SOURCES loop hard-exits on a missing file before the skip can run —
+# was written as an `assert`. `python3 -O` deletes it, and so does PYTHONOPTIMIZE=1 in the
+# environment, which reaches an `env python3` shebang without any caller opting in. With it
+# gone the guard skips a mirror it never checked for and prints its success line. That is
+# #16's shape, in the guard added by the spec whose sibling fixed #16.
+
+# A tree the guard resolves against instead of this repository: ROOT comes from __file__,
+# so a copy of the script under $TMP compares the copies sitting next to it.
+receipt_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/agents/_shared" "$r/skills/implement"
+  cp "$ROOT/scripts/check-receipt-schema.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-receipt-schema.py"   # the PYTHONOPTIMIZE case runs the shebang
+  cp "$ROOT/agents/_shared/reviewer-contract.md" "$r/agents/_shared/"
+  cp "$ROOT/skills/implement/SKILL.md" "$r/skills/implement/"
+  # The mirror starts PRESENT. It has to: it is a SOURCE, and the SOURCES loop hard-exits on a
+  # missing file, so a fixture built without it fails before reaching the branch under test —
+  # which is what the control below is there to catch. Case 34 removes it and its SOURCES entry
+  # together, which is the pair of edits that makes the skip reachable.
+  mkdir -p "$r/.claude/agents/_shared"
+  cp "$ROOT/.claude/agents/_shared/reviewer-contract.md" "$r/.claude/agents/_shared/"
+  echo "$r"
+}
+
+# 34. A mirror that is not a SOURCE must fail, with assertions stripped.
+r=$(receipt_repo receipt-mirror)
+
+# The control runs FIRST, and it is not decoration: without it a case that fails for any
+# reason at all — a bad copy, a python3 that is not there — reads as a caught bug. It is
+# also AC5: the untouched guard behaves identically under -O.
+ctl=$( cd "$r" && python3 -O scripts/check-receipt-schema.py 2>/dev/null; echo "exit=$?" )
+case "$ctl" in *"field(s) agree"*"exit=0"*) c0=ok ;; *) c0=no ;; esac
+
+# Break the invariant the way the reviewer broke it by hand. python3 rather than `sed -i`,
+# which is not portable, and it EXITS NON-ZERO when its needle is gone — a reworded SOURCES
+# entry would otherwise no-op the mutation and leave this case reporting ok having run a
+# script that was never broken.
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-receipt-schema.py")
+src = p.read_text()
+needle = '    ".claude/agents/_shared/reviewer-contract.md",\n'
+if needle not in src:
+    sys.exit(3)
+p.write_text(src.replace(needle, "", 1))
+pathlib.Path(sys.argv[1], ".claude", "agents", "_shared", "reviewer-contract.md").unlink()
+PYEOF
+built=$?
+
+if [ "$built" -ne 0 ]; then
+  report "a mirror that is not a SOURCE fails even with assertions stripped" no \
+    "fixture could not be built: the SOURCES entry this case removes was not found"
+else
+  # Both invocations are checked the same way, and exit code alone is not the check. Exit 1 is
+  # also what a traceback returns — including the AssertionError this fix removes — so a bare
+  # `= "1"` would read ok against the UNFIXED script on any interpreter where PYTHONOPTIMIZE
+  # did not really strip assertions. Each half therefore needs a diagnostic naming the path
+  # (which is AC1, and what AC2 asks to hold under both invocations) and an absence of
+  # "Traceback", which no crash can satisfy. That pairing is this file's own rule at :481-484.
+  stripped_fails() { # stripped_fails <exit-code> <stderr-file> -> ok|no
+    [ "$1" = "1" ] || { echo no; return; }
+    serr=$(cat "$2" 2>/dev/null)
+    case "$serr" in *Traceback*) echo no; return ;; esac
+    # AC1 asks for the path, so the path is required. It is not SUFFICIENT: the SOURCES loop's
+    # own "is missing" message at check-receipt-schema.py:82 names the same path and also exits
+    # 1 with no traceback, so the path alone is satisfied by a sibling branch of the same guard.
+    # That branch cannot fire while the fixture drops the SOURCES entry and the mirror as one
+    # act — but then the discrimination rests on the fixture builder rather than on the
+    # assertion, and a later loosening of the fixture would turn this green against the unfixed
+    # script. Require the phrase unique to the branch under test as well.
+    case "$serr" in *".claude/agents/_shared/reviewer-contract.md"*) : ;; *) echo no; return ;; esac
+    case "$serr" in *"is a mirror but not a SOURCE"*) echo ok ;; *) echo no ;; esac
+  }
+  out=$( cd "$r" && python3 -O scripts/check-receipt-schema.py >/dev/null 2>"$TMP/rerr"; printf '%s' "$?" )
+  c1=$(stripped_fails "$out" "$TMP/rerr")
+  # No flag, through the shebang — how this arrives without any caller choosing it.
+  out2=$( cd "$r" && PYTHONOPTIMIZE=1 ./scripts/check-receipt-schema.py >/dev/null 2>"$TMP/rerr2"; printf '%s' "$?" )
+  c2=$(stripped_fails "$out2" "$TMP/rerr2")
+  [ "$c0$c1$c2" = "okokok" ] \
+    && report "a mirror that is not a SOURCE fails even with assertions stripped" ok \
+    || report "a mirror that is not a SOURCE fails even with assertions stripped" no \
+       "control=$c0 minus-O=$c1 PYTHONOPTIMIZE=$c2"
+fi
+
+# 35. No guard expresses a safety check as an assert.
+#
+# #28 generalised, and pinned rather than remembered because the convention had already been
+# deviated from once. `assert` is the one Python statement the interpreter is allowed to
+# delete, so a safety check written as one is a check an environment variable removes.
+#
+# Anchored to statement position on purpose: an unanchored `assert` matches "asserts the" in
+# check-skill-contracts.py and "asserted in a README" in this file's own header, so the loose
+# pattern would arrive permanently red and be deleted rather than obeyed.
+# The work-set is corroborated PER DIRECTORY. Counting the union — which the first draft of
+# this case did — cannot detect one of the three vanishing: `find` keeps going on the surviving
+# operands, any one directory alone holds well over three files, and its non-zero status is
+# never read. `grep -rnE` then exits 2 on the missing operand, and a trailing `|| true`
+# flattens that into the same silence as "no matches". That is precisely the confusion this
+# file records at :640-644, so the comment named the failure mode while the check did not
+# reach it — the guard-shaped hole this whole spec is about, in the case pinning it.
+missing_dirs=
+for d in scripts assets hooks; do
+  [ -d "$ROOT/$d" ] || missing_dirs="$missing_dirs $d"
+done
+if [ -n "$missing_dirs" ]; then
+  report "no guard expresses a safety check as an assert" no "work-set incomplete:$missing_dirs"
+else
+  hits=$(grep -rnE '^[[:space:]]*assert[[:space:]]' "$ROOT/scripts" "$ROOT/assets" "$ROOT/hooks")
+  rc=$?   # 0 matched, 1 no match, 2 ERROR. Only 1 is a pass; 2 must not read as silence.
+  if [ "$rc" -eq 2 ]; then
+    report "no guard expresses a safety check as an assert" no "grep could not read its work-set"
+  elif [ "$rc" -eq 1 ]; then
+    report "no guard expresses a safety check as an assert" ok
+  else
+    report "no guard expresses a safety check as an assert" no "$(echo "$hits" | tr '\n' ' ')"
+  fi
+fi
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

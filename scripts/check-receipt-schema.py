@@ -103,7 +103,10 @@ for _src, _dst in MIRRORS:
     # SOURCES loop hard-exits on a missing file before this runs. Stated rather than left as
     # an ordering accident, because this repo has twice shipped a guard whose safety rested on
     # something no comment named.
-    assert _dst in SOURCES, f"{_dst} is a mirror but not a SOURCE, so a missing file would skip"
+    if _dst not in SOURCES:
+        print(f"check-receipt-schema: {_dst} is a mirror but not a SOURCE, so a missing "
+              "file would be skipped rather than caught — see #16.", file=sys.stderr)
+        sys.exit(1)
     a, b = ROOT / _src, ROOT / _dst
     if not b.is_file():
         continue  # unreachable today; a mirror that does not exist cannot have drifted
