@@ -1,6 +1,6 @@
 # Spec: a spawned reviewer deadlocks the Stop gate into an unbreakable loop
 
-- Slug: 27-spawned-reviewer-deadlocks-stop-gate Issue: 27 Type: bug Status: approved
+- Slug: 27-spawned-reviewer-deadlocks-stop-gate Issue: 27 Type: bug Status: done
 - Author: m0m0i Date: 2026-08-25
 
 ## 1. Requirements (WHAT / WHY)
@@ -18,7 +18,7 @@
 
 - Expected: the workflow `implement` prescribes can be followed without the gate firing on it.
 
-- Actual: an unbreakable loop. Observed cost: roughly twenty-five turns in one session before the
+- Actual (as understood at the time): an unbreakable loop. Observed cost: roughly twenty-five turns in one session before the
   user interrupted, and the only exit found was `git checkout main` — which is #26.
 
 - Impact: every `implement` that uses a spawned reviewer, which is the path the harness recommends
@@ -68,8 +68,12 @@
         inside an existing branch.
 
 - Out of scope: **#26.** The `git checkout` escape is the symptom this drove the author into three
-  times, and the backlog deliberately orders it _after_ this — closing the escape while the
-  deadlock stands would leave a stuck turn with no exit at all.
+  times, and the backlog deliberately orders it _after_ this. Note the original reason for that
+  order — "closing the escape would leave a stuck turn with no exit" — does not survive the
+  retraction above: a stuck turn has an exit that is not `git checkout`, and teaching it is what
+  this spec ships. `git checkout` is the only *bypass*, never the only *exit*. The order still
+  holds, on a different reason: #26 is the larger change, and closing a bypass is safer once the
+  instruction that removes the need for it has bedded in.
 
 ### Clarifications
 
