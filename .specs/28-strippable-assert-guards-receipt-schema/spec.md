@@ -179,3 +179,39 @@ _2026-08-25._
       against that revision rather than inferred.*
 - [x] T3: run all eight validators, and diff the case list against `main` to confirm no
       pre-existing case changed verdict.
+
+## 4. Review triage
+
+`gate-sdd-reviewer`, first pass at `fd4e362`: **CLEAN** — 0 BLOCKER, 0 HIGH, 3 MEDIUM, 2 INFO. All
+three MEDIUMs were fixed rather than recorded, because each was cheap and each was correct.
+
+- **MEDIUM — case 35 scanned two of the three directories it names and still reported ok.** Fixed.
+  The work-set was corroborated by counting the *union* with `find`, and any one of those
+  directories alone holds well over three files, so a vanished directory was undetectable; `grep`
+  then exited 2 and the trailing `|| true` flattened that into "no matches". The comment above it
+  named exactly this failure mode while the check did not reach it — the guard-shaped hole this
+  spec is about, in the case pinning it. It is now corroborated per directory and reads grep's
+  exit 2 as a failure rather than as silence. Verified by deleting `assets/` from a copy of the
+  tree: the case now reports `work-set incomplete: assets` instead of `ok`.
+
+- **MEDIUM — the `PYTHONOPTIMIZE=1` half had no corroborator a crash cannot satisfy.** Fixed. It
+  asserted exit 1 alone, and exit 1 is also what a traceback returns — including the
+  `AssertionError` this change removes — so on an interpreter where `PYTHONOPTIMIZE` did not
+  really strip assertions it would have read ok against the *unfixed* script. Both invocations now
+  go through one `stripped_fails` helper requiring exit 1, a diagnostic naming the path, and the
+  absence of `Traceback`. That also closes the reviewer's AC2 gap: AC1's message requirement is
+  now tested under both invocations, not just under `-O`.
+
+- **MEDIUM — the case count was stale in four places.** Fixed: `45` → `47` at `README.md`:41,151
+  and `README.ja.md`:43,152, matching the precedent set by `8b559a9`.
+
+- **INFO-1** (the reviewer ran `git checkout` to measure the baseline, outside its allow-list) and
+  **INFO-2** (case 34's pre-fix redness was reasoned rather than observed, since #10's convention
+  folds red and green into one commit) are both method notes rather than defects. INFO-2 was
+  independently discharged afterwards by driving the case against `9344b79`'s copy of the guard:
+  it fails `minus-O=no PYTHONOPTIMIZE=no` with `control=ok`, so it is red for the stated reason
+  and not for a setup error.
+
+The reviewer's one spec-accuracy finding — that "Why this cannot recur" overstated what case 35
+guaranteed — is resolved in the code rather than by softening the sentence. The sentence is now
+true.

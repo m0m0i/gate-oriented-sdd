@@ -733,17 +733,29 @@ if [ "$built" -ne 0 ]; then
   report "a mirror that is not a SOURCE fails even with assertions stripped" no \
     "fixture could not be built: the SOURCES entry this case removes was not found"
 else
+  # Both invocations are checked the same way, and exit code alone is not the check. Exit 1 is
+  # also what a traceback returns — including the AssertionError this fix removes — so a bare
+  # `= "1"` would read ok against the UNFIXED script on any interpreter where PYTHONOPTIMIZE
+  # did not really strip assertions. Each half therefore needs a diagnostic naming the path
+  # (which is AC1, and what AC2 asks to hold under both invocations) and an absence of
+  # "Traceback", which no crash can satisfy. That pairing is this file's own rule at :481-484.
+  stripped_fails() { # stripped_fails <exit-code> <stderr-file> -> ok|no
+    [ "$1" = "1" ] || { echo no; return; }
+    case "$(cat "$2")" in
+      *Traceback*) echo no ;;
+      *".claude/agents/_shared/reviewer-contract.md"*) echo ok ;;
+      *) echo no ;;
+    esac
+  }
   out=$( cd "$r" && python3 -O scripts/check-receipt-schema.py >/dev/null 2>"$TMP/rerr"; printf '%s' "$?" )
-  err=$(cat "$TMP/rerr")
-  [ "$out" = "1" ] && c1=ok || c1=no
-  case "$err" in *".claude/agents/_shared/reviewer-contract.md"*) c2=ok ;; *) c2=no ;; esac
+  c1=$(stripped_fails "$out" "$TMP/rerr")
   # No flag, through the shebang — how this arrives without any caller choosing it.
-  out2=$( cd "$r" && PYTHONOPTIMIZE=1 ./scripts/check-receipt-schema.py >/dev/null 2>&1; printf '%s' "$?" )
-  [ "$out2" = "1" ] && c3=ok || c3=no
-  [ "$c0$c1$c2$c3" = "okokokok" ] \
+  out2=$( cd "$r" && PYTHONOPTIMIZE=1 ./scripts/check-receipt-schema.py >/dev/null 2>"$TMP/rerr2"; printf '%s' "$?" )
+  c2=$(stripped_fails "$out2" "$TMP/rerr2")
+  [ "$c0$c1$c2" = "okokok" ] \
     && report "a mirror that is not a SOURCE fails even with assertions stripped" ok \
     || report "a mirror that is not a SOURCE fails even with assertions stripped" no \
-       "control=$c0 minus-O=$c1 names-path=$c2 PYTHONOPTIMIZE=$c3"
+       "control=$c0 minus-O=$c1 PYTHONOPTIMIZE=$c2"
 fi
 
 # 35. No guard expresses a safety check as an assert.
@@ -755,17 +767,29 @@ fi
 # Anchored to statement position on purpose: an unanchored `assert` matches "asserts the" in
 # check-skill-contracts.py and "asserted in a README" in this file's own header, so the loose
 # pattern would arrive permanently red and be deleted rather than obeyed.
-scanned=$(find "$ROOT/scripts" "$ROOT/assets" "$ROOT/hooks" -type f 2>/dev/null | wc -l | tr -d ' ')
-# A recursive grep over a directory that moved exits 2, and `|| true` turns that into "no
-# hits" — a clean report from a scan that read nothing. Corroborate the work-set first; this
-# is case 30's lesson, applied on arrival rather than after a round of review.
-if [ "$scanned" -lt 3 ]; then
-  report "no guard expresses a safety check as an assert" no \
-    "nothing to scan: $scanned file(s) found under scripts/, assets/ and hooks/"
+# The work-set is corroborated PER DIRECTORY. Counting the union — which the first draft of
+# this case did — cannot detect one of the three vanishing: `find` keeps going on the surviving
+# operands, any one directory alone holds well over three files, and its non-zero status is
+# never read. `grep -rnE` then exits 2 on the missing operand, and a trailing `|| true`
+# flattens that into the same silence as "no matches". That is precisely the confusion this
+# file records at :640-644, so the comment named the failure mode while the check did not
+# reach it — the guard-shaped hole this whole spec is about, in the case pinning it.
+missing_dirs=
+for d in scripts assets hooks; do
+  [ -d "$ROOT/$d" ] || missing_dirs="$missing_dirs $d"
+done
+if [ -n "$missing_dirs" ]; then
+  report "no guard expresses a safety check as an assert" no "work-set incomplete:$missing_dirs"
 else
-  hits=$(grep -rnE '^[[:space:]]*assert[[:space:]]' "$ROOT/scripts" "$ROOT/assets" "$ROOT/hooks" || true)
-  [ -z "$hits" ] && report "no guard expresses a safety check as an assert" ok \
-    || report "no guard expresses a safety check as an assert" no "$(echo "$hits" | tr '\n' ' ')"
+  hits=$(grep -rnE '^[[:space:]]*assert[[:space:]]' "$ROOT/scripts" "$ROOT/assets" "$ROOT/hooks")
+  rc=$?   # 0 matched, 1 no match, 2 ERROR. Only 1 is a pass; 2 must not read as silence.
+  if [ "$rc" -eq 2 ]; then
+    report "no guard expresses a safety check as an assert" no "grep could not read its work-set"
+  elif [ "$rc" -eq 1 ]; then
+    report "no guard expresses a safety check as an assert" ok
+  else
+    report "no guard expresses a safety check as an assert" no "$(echo "$hits" | tr '\n' ' ')"
+  fi
 fi
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
