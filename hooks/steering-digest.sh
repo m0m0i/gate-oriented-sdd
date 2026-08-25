@@ -14,9 +14,7 @@ set -u
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$DIR/gate-lib.sh"
 
-# Thin wrapper: every steering read in this repo goes through one expression, in gate-lib.sh.
-# This used to carry its own copy of that sed, which made it the sixth.
-steer() { gate_steering_value .steering/tech.md "$1"; }
+
 
 echo "## Repo facts"
 [ -f .steering/product.md ] && echo "- Persistent context is in .steering/product.md, .steering/tech.md, .steering/structure.md."
@@ -24,8 +22,8 @@ echo "## Repo facts"
 owns=$(gate_steering_value .steering/product.md Owns)
 [ -n "$owns" ] && echo "- This project owns $owns."
 
-v=$(steer Validators);  [ -n "$v" ] && echo "- Validators: $v"
-r=$(steer Reviewer);    [ -n "$r" ] && echo "- The reviewer for this repo is $r."
+v=$(gate_steering_value .steering/tech.md Validators);  [ -n "$v" ] && echo "- Validators: $v"
+r=$(gate_steering_value .steering/tech.md Reviewer);    [ -n "$r" ] && echo "- The reviewer for this repo is $r."
 
 echo "- The flow is spec -> clarify -> implement -> reviewer -> worklog -> archive. One issue = one spec = one branch = one PR."
 echo "- Live specs are .specs/<slug>/spec.md; shipped ones are under .specs/_archive/."

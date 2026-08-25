@@ -571,7 +571,7 @@ case "$o" in *"all readable"*) c3=no ;; *) c3=ok ;; esac
 r=$(anchor_repo anc-stalelib '- Owns: x')
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
-src = pathlib.Path("hooks/gate-lib.sh").read_text()
+src = pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh").read_text()  # the fixture's own copy, not cwd's
 i = src.index("# Read one machine-read value out of a steering file.")
 j = src.index("\n}\n", src.index("gate_steering_value()")) + 3
 pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh").write_text(src[:i] + src[j:])
@@ -588,8 +588,11 @@ case "$err" in *"predates the shared reader"*) c2=ok ;; *) c2=no ;; esac
 # same whether the hooks have five anchors or six. Deriving the table would be worse; detecting
 # drift is not. Every call site passes literal arguments, so they can be compared.
 declared=$(sed -n 's/^\.steering\/[a-z]*\.md|//p' "$ROOT/assets/check-steering-anchors.sh" | sort -u)
+# The `s/"\$1"//` clause that used to be here could never match — grep's [A-Za-z ] class
+# excludes the quote — so it read as though the steer() wrapper were handled while the wrapper
+# was silently dropped instead. The wrapper is gone; every call site is literal.
 used=$(grep -ho "gate_steering_value [^ ]* '\?[A-Za-z ]*'\?" "$ROOT"/hooks/*.sh \
-       | sed "s/.*gate_steering_value [^ ]* //; s/'//g; s/\"\$1\"//" | grep -v '^$' | sort -u)
+       | sed "s/.*gate_steering_value [^ ]* //; s/'//g" | grep -v '^$' | sort -u)
 # The relation is containment, not equality. ANCHORS may legitimately hold more than the hooks
 # read — `Docs` is consumed by skills and no hook touches it — and that is not drift. Drift is
 # a hook reading an anchor the table does not cover, which is the direction that makes
@@ -600,8 +603,36 @@ used=$(grep -ho "gate_steering_value [^ ]* '\?[A-Za-z ]*'\?" "$ROOT"/hooks/*.sh 
 # substitution yield nothing — so the case could not fail, and a mutation adding an uncovered
 # anchor still reported ok. An untested fallback disabled the test it was guarding.
 missing=$(echo "$used" | grep -vxF "$declared" || true)
-if [ -z "$missing" ]; then report "every anchor a hook reads is covered by the ANCHORS table" ok
+# An empty `used` makes the comparison vacuous: `echo "" | grep -vxF` emits nothing, `missing`
+# is empty, and the case reports ok having compared nothing. Any reformatting of the call sites
+# — a variable key, a line break, a rename — would turn this detector off silently rather than
+# red. That is the same shape as the untested fallback removed from this case last round.
+if [ -z "$used" ]; then
+  report "every anchor a hook reads is covered by the ANCHORS table" no "call-site extraction matched nothing"
+elif [ -z "$missing" ]; then report "every anchor a hook reads is covered by the ANCHORS table" ok
 else report "every anchor a hook reads is covered by the ANCHORS table" no "uncovered: $(echo "$missing" | tr '\n' ',')"; fi
+
+# 31. A gate-lib.sh predating the shared reader must BLOCK the quality gate, not pass it.
+#
+# The migration to gate_steering_value created this: `set -u` does not catch an undefined
+# FUNCTION, so a stale library made the validator read return empty, the "nothing configured"
+# branch fire, and the gate exit 0 having run nothing. A fail-open introduced by the change
+# that centralised the reader — and the asset already guarded itself against the same skew,
+# which made the gate the unguarded half and the one whose failure is silent.
+r=$(qg_repo qg-stalelib)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+src = pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh").read_text()
+i = src.index("# Read one machine-read value out of a steering file.")
+j = src.index("\n}\n", src.index("gate_steering_value()")) + 3
+pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh").write_text(src[:i] + src[j:])
+PYEOF
+echo more >> "$r/src.txt"
+out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"predates the shared steering reader"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a stale gate-lib blocks the quality gate rather than passing it" ok \
+  || report "a stale gate-lib blocks the quality gate rather than passing it" no "exit=$c1 msg=$c2"
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

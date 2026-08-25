@@ -55,17 +55,16 @@ if ! command -v gate_steering_value >/dev/null 2>&1; then
 fi
 
 failed=""
-checked=0
+resolved=0
+present=0
 old_ifs=$IFS
 IFS='
 '
 for row in $ANCHORS; do
-  IFS=$old_ifs
   [ -n "$row" ] || continue
   file=${row%%|*}
   key=${row#*|}
-  [ -f "$file" ] || { IFS='
-'; continue; }
+  [ -f "$file" ] || continue
   value=$(gate_steering_value "$file" "$key")
   # Anchored to the start of a line, modulo leading punctuation. Deliberately looser than the
   # reader — it must still see `- **Owns:` and `  * Owns :` — but not so loose that ordinary
@@ -79,9 +78,11 @@ for row in $ANCHORS; do
       The reader is: sed -n 's/^ *- *$key: *//p'  — so the line must begin with '- $key:',
       with no emphasis markers or other characters before the key."
   fi
-  checked=$((checked + 1))
-  IFS='
-'
+  # Count what RESOLVED, not what had a file. Counting files meant a tech.md holding only
+  # `- Validators:` still printed "5 anchor(s) checked, all readable" having read one — the
+  # same room case 28 locks the other door to, and the likelier state in a real project.
+  [ -n "$value" ] && resolved=$((resolved + 1))
+  present=$((present + 1))
 done
 IFS=$old_ifs
 
@@ -90,7 +91,7 @@ if [ -n "$failed" ]; then
   exit 1
 fi
 
-if [ "$checked" -eq 0 ]; then
+if [ "$present" -eq 0 ]; then
   # "Checked nothing" and "found nothing wrong" must not share a sentence. Legitimate — the
   # guard may be installed before init writes steering — but #16 was exactly this wording on
   # exactly this exit code, and AC7 closed the neighbouring door while leaving this one open.
@@ -98,4 +99,4 @@ if [ "$checked" -eq 0 ]; then
   exit 0
 fi
 
-echo "check-steering-anchors: $checked anchor(s) checked, all readable"
+echo "check-steering-anchors: $resolved of $present anchor(s) resolved, none unreadable"

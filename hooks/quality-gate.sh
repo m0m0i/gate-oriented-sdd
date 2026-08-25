@@ -22,6 +22,14 @@ set -u
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$DIR/gate-lib.sh"
 
+# The validator list is read through gate_steering_value. If this hooks/ directory is a mix of
+# versions the function is undefined — and `set -u` does not catch an undefined FUNCTION, so
+# the read yields empty, the "no validators configured" branch below fires, and the gate exits
+# 0 having run nothing. That is a fail-open created by the migration to a shared reader, so the
+# migration has to carry the check. The asset guards itself this way; the gate is the half that
+# matters more, because its failure is silent.
+command -v gate_steering_value >/dev/null 2>&1 || gate_block "Quality gate: gate-lib.sh predates the shared steering reader, so this gate cannot read its validator list. Re-copy the plugin's hooks/ into this project and run again rather than treating this as a pass."
+
 [ -f .steering/tech.md ] || gate_pass
 
 validators=$(gate_steering_value .steering/tech.md Validators)
