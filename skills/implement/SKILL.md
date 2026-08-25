@@ -26,7 +26,10 @@ For each task in the spec's Tasks list, in order:
 When every task is committed and the validators pass:
 
 1. Run the full validator set from `.steering/tech.md`. Set the spec `Status: done`.
-2. **Invoke the reviewer subagent** named in `.steering/tech.md`, asking it to review the branch diff against the default branch, and against `.specs/<slug>/spec.md`. If it is not yet spawnable — added mid-session, needs a restart — run its procedure inline from its agent file.
+2. **Invoke the reviewer subagent** named in `.steering/tech.md`, asking it to review the branch diff against the default branch, and against `.specs/<slug>/spec.md`.
+   **Invoke it and wait for its result in the same turn. Do not spawn it and carry on.** The review gate runs on turn end, so it assumes the review finished inside the turn.
+   **If your harness returns from the invocation immediately and notifies you later, waiting means keeping the turn open** — keep issuing read-only calls until the result arrives, and emit no final message before it does. Completion normally arrives as a notification without being asked for; if your harness lists running agents, that listing can be polled instead. A turn that has not ended cannot trip a gate that fires on turn end. Announcing that you are waiting *is* ending the turn, and it re-arms the gate every time — that mistake cost twenty-five turns in the repository this harness was built in.
+   Nothing useful can happen during a review anyway, because touching the files it is reading is exactly what must not happen. If the reviewer genuinely cannot be invoked at all — not registered, added mid-session and needing a restart, or the harness has no subagents — run its procedure yourself from its agent file and record `reviewed_by=inline`.
 3. Address every **BLOCKER** and **HIGH** through the TDD loop: a failing test, then the fix. Re-run the reviewer until none remain. Triage MEDIUM/LOW/INFO explicitly — fixed, or recorded with a reason.
 4. **Write the receipt.** The reviewer is read-only, so you record its result at `.specs/<slug>/.review-receipt`, copying its Receipt block verbatim:
 

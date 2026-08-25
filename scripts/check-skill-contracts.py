@@ -39,6 +39,14 @@ CONTRACTS = (
     ),
     (
         "skills/implement/SKILL.md",
+        "waiting means keeping the turn open",
+        "The review gate fires on turn end. A turn stays open across tool calls, so a spawned "
+        "review CAN be waited for — the failure is emitting a final message while it runs, "
+        "because each one ends the turn and re-arms the gate. See #27, and docs/verified.md "
+        "for the observation.",
+    ),
+    (
+        "skills/implement/SKILL.md",
         "Never record `subagent` for a review you ran inline",
         "reviewed_by is only worth having if it is written honestly. See #9.",
     ),
@@ -47,12 +55,14 @@ CONTRACTS = (
 def flat(s: str) -> str:
     """Collapse whitespace runs so a phrase matches across a line wrap.
 
-    Found the hard way: the `implement` contract's needle wraps in the source, so a literal
-    substring test reported it missing while it was plainly there. Named rather than numbered
-    on purpose — an ordinal goes stale the moment CONTRACTS is reordered, which is how this
-    sentence came to be wrong twice. Prose gets
-    rewrapped constantly, and a check that fails on reflowing is a check that gets deleted
-    rather than fixed.
+    Needles are hand-written on one line; the prose they match is wrapped and rewrapped
+    constantly, so a literal substring test reports a phrase missing while it is plainly
+    there. A check that fails on reflowing is a check that gets deleted rather than fixed.
+
+    Deliberately names no example. Two earlier versions named one and each failed
+    differently: naming the file became ambiguous when that file gained a second contract,
+    and naming the needle was a paraphrase that could not be grepped for. The reason this
+    function exists is general and needs no exhibit.
     """
     return re.sub(r"\s+", " ", s)
 
