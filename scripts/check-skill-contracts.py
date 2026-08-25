@@ -55,12 +55,14 @@ CONTRACTS = (
 def flat(s: str) -> str:
     """Collapse whitespace runs so a phrase matches across a line wrap.
 
-    Found the hard way: the `implement` contract's needle wraps in the source, so a literal
-    substring test reported it missing while it was plainly there. Named rather than numbered
-    on purpose — an ordinal goes stale the moment CONTRACTS is reordered, which is how this
-    sentence came to be wrong twice. Prose gets
-    rewrapped constantly, and a check that fails on reflowing is a check that gets deleted
-    rather than fixed.
+    Found the hard way: the `Never record subagent` needle wraps mid-phrase in the
+    source, so a literal substring test reported it missing while it was plainly
+    there. The needle is named rather than numbered because an ordinal goes stale the
+    moment CONTRACTS is reordered — which is how this sentence came to be wrong twice,
+    and why naming the file was not enough once that file held two contracts.
+
+    Prose gets rewrapped constantly, and a check that fails on reflowing is a check
+    that gets deleted rather than fixed.
     """
     return re.sub(r"\s+", " ", s)
 

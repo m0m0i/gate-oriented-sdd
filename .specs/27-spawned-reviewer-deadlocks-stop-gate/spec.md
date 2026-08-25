@@ -38,17 +38,17 @@
   task is the same lie wearing bookkeeping.
 
 - Acceptance criteria:
-  - [ ] **AC1:** following `implement` step 2 as written SHALL NOT produce a turn that cannot end.
-  - [ ] **AC2:** WHEN the gate blocks for a missing receipt, its message SHALL NOT instruct the
+  - [x] **AC1:** following `implement` step 2 as written SHALL NOT produce a turn that cannot end.
+  - [x] **AC2:** WHEN the gate blocks for a missing receipt, its message SHALL NOT instruct the
         author to start a review that may already be running — the instruction must be actionable.
-  - [ ] **AC3:** no change SHALL introduce a state in which the gate stops blocking while a spec has
+  - [x] **AC3:** no change SHALL introduce a state in which the gate stops blocking while a spec has
         ticked tasks and no CLEAN receipt. A quieter gate is a fail-open, and this is the only
         enforced rule in the harness.
-  - [ ] **AC4:** the gate SHALL gain no new state. No counter, no marker, no file written by
+  - [x] **AC4:** the gate SHALL gain no new state. No counter, no marker, no file written by
         either the author or the gate to record that a review is in flight. Recorded as a criterion
         because it was the rejected alternative, and because any such marker is a line someone can
         write to make the only enforced rule go quiet.
-  - [ ] **AC5:** the spec SHALL declare which criteria are presence assertions rather than
+  - [x] **AC5:** the spec SHALL declare which criteria are presence assertions rather than
         behavioural ones. **Declared: AC1 is presence-only** — it is a sentence in a skill, checked
         by `check-skill-contracts.py` asserting the sentence exists. Nothing here can check that a
         model obeys it; only an eval could, and `evals/` has never run. AC2, AC3 and AC4 are
@@ -137,7 +137,7 @@ is on the caller, and the caller is prose.
       keeping `no reviewer receipt exists` intact so case 13 still asserts what it always did
 - [x] T2: failing needle in `check-skill-contracts.py` for the synchronous mandate — then the
       `implement` step 2 rewording. **AC5 applies: presence, not adherence.**
-- [ ] T3: blast radius — diff the full case list against `origin/main`'s hooks and confirm no
+- [x] T3: blast radius — diff the full case list against `origin/main`'s hooks and confirm no
       pre-existing case changed verdict, and that AC4 holds by inspection: no file is created,
       written, or read that was not before
-- [ ] T4: refactor
+- [x] T4: refactor
