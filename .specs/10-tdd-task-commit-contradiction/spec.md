@@ -157,7 +157,7 @@ The task list was renumbered T1–T7 accordingly and each task now names the cri
       cycle, one task is one green commit, a turn must not end red — and pin it as a third
       `skills/implement/SKILL.md` entry in `check-skill-contracts.py`'s `CONTRACTS`
       (**AC-limited: presence, not adherence**) *(AC2)*
-- [ ] T4: reconcile `skills/spec/SKILL.md`'s "The first task is always" table with the folded
+- [x] T4: reconcile `skills/spec/SKILL.md`'s "The first task is always" table with the folded
       templates *(AC8)*
 - [ ] T5: wire `check-templates.py` into `.github/workflows/ci.yml` AND onto `.steering/tech.md`'s
       `- Validators:` line; update `AGENTS.md`'s "all eight" and any other count site; confirm it
