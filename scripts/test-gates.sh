@@ -1005,9 +1005,23 @@ write_templates "$r" "- [ ] T1: add a failing test, per skills/implement/SKILL.m
 out=$(run_templates "$r")
 [ "$out" = "1" ] && c7=ok || c7=no
 
-[ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] && report "markdown drift and a bare path citation cannot hide a split" ok \
-  || report "markdown drift and a bare path citation cannot hide a split" no \
-     "bold=$c1 names-line=$c2 emdash=$c3 numbered=$c4 empty-section=$c5 names-section=$c6 path-citation=$c7"
+# Markup on the RED phrase itself must not hide the split. Stripping code spans and paths is
+# what stops a path citation reading as green — but normalisation is not symmetric: stripping
+# before the CLEARING pattern can only make the guard louder, while stripping before the
+# ACCUSING one can only make it quieter. Applied to both, it traded a wide hole for two narrow
+# ones. The second form needs no code span at all: `failing/regression test` is an ordinary way
+# to write a task line for a template serving both a feature and a bug.
+r=$(templates_repo tpl-redmarkup)
+write_templates "$r" '- [ ] T1: write the `failing test` for <behavior>'
+out=$(run_templates "$r")
+[ "$out" = "1" ] && c8=ok || c8=no
+write_templates "$r" "- [ ] T1: add the failing/regression test for <behavior>"
+out=$(run_templates "$r")
+[ "$out" = "1" ] && c9=ok || c9=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] && report "markup on either side cannot hide a split" ok \
+  || report "markup on either side cannot hide a split" no \
+     "bold=$c1 names-line=$c2 emdash=$c3 numbered=$c4 empty-section=$c5 names-section=$c6 path-citation=$c7 backticked-red=$c8 slashed-red=$c9"
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

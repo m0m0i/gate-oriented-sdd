@@ -43,7 +43,7 @@ GREEN = re.compile(
     re.I,
 )
 
-#: Inline code spans and path-like tokens, stripped before either pattern is applied.
+#: Inline code spans and path-like tokens, stripped before GREEN is applied — and ONLY GREEN.
 #:
 #: A path is not a statement about the task. `skills/implement/SKILL.md` contains the word
 #: `implement` between two slashes, and a word boundary matches there — so
@@ -138,8 +138,13 @@ total = sum(len(v) for v in blocks.values())
 split = []
 for section, lines in blocks.items():
     for n, line in lines:
-        prose = CODE_OR_PATH.sub(" ", line)
-        if RED.search(prose) and not GREEN.search(prose):
+        # ACCUSE on the raw line, CLEAR only on the stripped prose. Normalisation is not
+        # symmetric and applying it to both sides was a fail-open: stripping before GREEN can
+        # only make this guard louder — a stripped green cue means the line gets flagged — but
+        # stripping before RED can only make it quieter, because a stripped red cue means the
+        # line is never examined at all. With it on both sides, `write the \`failing test\` for
+        # X` and `add the failing/regression test for X` both cleared, and neither is contrived.
+        if RED.search(line) and not GREEN.search(CODE_OR_PATH.sub(" ", line)):
             split.append((section, n, line))   # report the line as written, not as stripped
 
 if split:

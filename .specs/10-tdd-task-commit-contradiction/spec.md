@@ -209,5 +209,41 @@ All four findings fixed; the INFOs are confirmations or deferrals to #39.
 
 **Every fix was mutation-tested rather than trusted.** Reverting each one reddens exactly the case
 that covers it: scanning Feature only reddens case 36; the old `TASK_LINE` reddens case 39's three
-drift assertions; the old key-presence floor reddens cases 38 and 39; dropping the prose stripping
+drift assertions; the old key-presence floor reddens **case 39 only**; dropping the prose stripping
 reddens case 39's path citation.
+
+*Corrected in round two.* That third entry first read "cases 38 and 39", which was wrong, and wrong
+in the direction that flatters the work — it claimed a case covered something it does not. The
+mutation I actually ran disabled the whole per-section floor, which is more than the original floor
+was. Reconstructing `b92af1d`'s floor exactly — key presence plus a global `total == 0` — reddens
+case 39 alone. Case 38 stays green and correctly so: its two fixtures are an all-sections-empty
+file, caught by the global total, and a deleted Bug block, caught by key presence. The shape the old
+floor missed is the third one, which is case 39's.
+
+
+**Second pass at `c553eaa`: BLOCKED — 0 BLOCKER, 1 HIGH, 1 LOW, 3 INFO.** Both fixed.
+
+- **HIGH — the round-one MEDIUM fix introduced a new fail-open.** The prose stripping was applied to
+  `RED` as well as `GREEN`, and normalisation is not symmetric: stripping before the *clearing*
+  pattern can only make the guard louder, because a stripped green cue means the line gets flagged;
+  stripping before the *accusing* pattern can only make it quieter, because a stripped red cue means
+  the line is never examined. So `- [ ] T1: write the \`failing test\` for X` and
+  `- [ ] T1: add the failing/regression test for X` both cleared — and the second needs no code span
+  at all, since `failing/regression test` is an ordinary way to write a task line for a template
+  serving both a feature and a bug. Both were correctly flagged before the round-one fix; it traded
+  a wide hole for two narrow ones. The guard now accuses on the raw line and clears only on the
+  stripped prose. All six of the reviewer's reproductions across both rounds are flagged, and the
+  correctly folded line still passes.
+
+- **LOW — §4 overstated a mutation result.** Corrected above, in place, with the reconstruction that
+  establishes the right answer.
+
+- **INFO** — the broadened `TASK_LINE` over-includes non-task checkbox lines, which can only produce
+  a false *flag* and is therefore the fail-closed direction; `- [X]` with a capital X is unmatched
+  and now fails closed via the per-section floor rather than passing silently. Recorded, not
+  objected to. The count sweep was confirmed complete and consistent at 51 across six sites.
+
+**The durable lesson from each round**, kept because the pattern is the point:
+1. *An ablation removes a branch you wrote; it cannot find a work-set no fixture exercises.*
+2. *Normalisation applied to both sides of a test is not symmetric — stripping before the accusing
+   pattern can only make a guard quieter.*
