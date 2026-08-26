@@ -153,7 +153,7 @@ The task list was renumbered T1–T7 accordingly and each task now names the cri
       `templates.md` — then whatever the third one needs. The fixture copies the guard into a
       throwaway tree with its own `templates.md`, the way case 34 does, so the cases do not depend
       on the live file staying broken *(AC6)*
-- [ ] T3: state the resolution in `skills/implement/SKILL.md` — a task is a full Red-Green-Refactor
+- [x] T3: state the resolution in `skills/implement/SKILL.md` — a task is a full Red-Green-Refactor
       cycle, one task is one green commit, a turn must not end red — and pin it as a third
       `skills/implement/SKILL.md` entry in `check-skill-contracts.py`'s `CONTRACTS`
       (**AC-limited: presence, not adherence**) *(AC2)*

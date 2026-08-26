@@ -54,6 +54,15 @@ CONTRACTS = (
     ),
     (
         "skills/implement/SKILL.md",
+        "task is one COMPLETE Red-Green-Refactor cycle",
+        "Without it, `implement`'s loop and the spec templates disagree about what a task "
+        "is, and the templates lose the argument silently — a reader who splits red from "
+        "green again gets a turn that ends red and no sentence explaining why. "
+        "check-templates.py guards the templates; this guards the sentence that says what "
+        "the templates were folded FOR. See #10.",
+    ),
+    (
+        "skills/implement/SKILL.md",
         "Never record `subagent` for a review you ran inline",
         "reviewed_by is only worth having if it is written honestly. See #9.",
     ),
