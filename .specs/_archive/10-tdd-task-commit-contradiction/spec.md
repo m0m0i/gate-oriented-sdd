@@ -1,6 +1,6 @@
 # Spec: the TDD task/commit rule contradicts the quality gate
-- Slug: 10-tdd-task-commit-contradiction   Issue: 10   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-08-23
+- Slug: 10-tdd-task-commit-contradiction   Issue: 10   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-08-23   Archived: 2026-08-26
 
 ## 1. Requirements (WHAT / WHY)
 - Reproduction: author a spec from the feature or bug template. Both split the pair across tasks —
