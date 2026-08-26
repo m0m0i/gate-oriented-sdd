@@ -7,6 +7,11 @@ user story — there is a thing that is broken.
 All three share the same front matter and the same TDD-ordered Tasks section.
 What differs is section 1, which is where the type actually matters.
 
+**One task is one complete Red-Green-Refactor cycle**, so a task ends green and is one
+commit. The red and green halves are deliberately not separate tasks: `quality-gate.sh` runs
+the project's validators on turn end, so a task that is only the red half cannot be committed
+without ending the turn red. `scripts/check-templates.py` fails if that split returns. See #10.
+
 ---
 
 ## Feature
@@ -33,9 +38,9 @@ What differs is section 1, which is where the type actually matters.
 - Risks and trade-offs:
 
 ## 3. Tasks (TDD-ordered)
-- [ ] T1: write the failing test for ...
-- [ ] T2: implement ... to make it pass
-- [ ] T3: refactor ...
+> One task is one complete Red-Green-Refactor cycle, so one green commit.
+- [ ] T1: failing test for <behavior> — then the implementation that makes it pass
+- [ ] T2: refactor ...
 ```
 
 ---
@@ -74,10 +79,10 @@ without it will be reverted by the next person who touches the file.
   impossible rather than just this instance fixed>
 
 ## 3. Tasks (TDD-ordered)
-- [ ] T1: write the regression test — confirm it fails, and fails for the right reason
-- [ ] T2: fix the root cause
-- [ ] T3: check the blast radius — tests for the other callers
-- [ ] T4: refactor
+> One task is one complete Red-Green-Refactor cycle, so one green commit.
+- [ ] T1: regression test that fails for the right reason — then the fix for the root cause
+- [ ] T2: check the blast radius — tests for the other callers
+- [ ] T3: refactor
 ```
 
 ---

@@ -38,11 +38,13 @@ What that gives up is worth stating: a merge used to sit between agreeing and bu
 
 Three of them, in [`templates.md`](./templates.md). They share front matter and the TDD-ordered Tasks section; section 1 is where the type matters.
 
-| Type | Section 1 is built around | The first task is always |
+| Type | Section 1 is built around | The first task always begins with |
 | :-- | :-- | :-- |
 | `feature` | a user story and numbered acceptance criteria | a failing test for the new behavior |
 | `bug` | reproduction, expected vs actual, and the **root cause** | a regression test that fails for the right reason |
 | `chore` | **what must not change** — the invariant | tests covering preserved behavior that is currently untested |
+
+**Begins with, not consists of.** The failing test and the code that answers it are **folded into a single task that ends green** — one task is one complete Red-Green-Refactor cycle, and therefore one commit. Splitting them across two tasks produces a first task that cannot be committed without ending the turn red, which the quality gate blocks. That is #10, and `scripts/check-templates.py` fails if the split returns to the templates.
 
 A bug written to the feature template produces a user story that does not exist and acceptance criteria that are fiction. A chore with no stated invariant is indistinguishable from a rewrite, and the reviewer has no way to tell them apart.
 

@@ -53,6 +53,23 @@ CONTRACTS = (
         "for the observation.",
     ),
     (
+        "skills/spec/SKILL.md",
+        "folded into a single task that ends green",
+        "The shapes table states what the first task is, which is the same subject as "
+        "`implement`'s loop and the templates' Tasks blocks. Left saying the first task is "
+        "a failing test, it is a third document disagreeing with the two that were "
+        "reconciled in #10 — and the one a spec author reads FIRST.",
+    ),
+    (
+        "skills/implement/SKILL.md",
+        "task is one COMPLETE Red-Green-Refactor cycle",
+        "Without it, `implement`'s loop and the spec templates disagree about what a task "
+        "is, and the templates lose the argument silently — a reader who splits red from "
+        "green again gets a turn that ends red and no sentence explaining why. "
+        "check-templates.py guards the templates; this guards the sentence that says what "
+        "the templates were folded FOR. See #10.",
+    ),
+    (
         "skills/implement/SKILL.md",
         "Never record `subagent` for a review you ran inline",
         "reviewed_by is only worth having if it is written honestly. See #9.",

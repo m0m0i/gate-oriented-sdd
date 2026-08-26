@@ -61,6 +61,12 @@ When every task is committed and the validators pass:
 
 - **Never write implementation code before its failing test exists.**
 - One task, one commit. No batching, no half-tasks.
+- **A task is one COMPLETE Red-Green-Refactor cycle, so a task ends green and is one commit.**
+  Red and green are not separate tasks. The quality gate runs the project's validators on turn
+  end, so a task that is only the red half cannot be committed without ending the turn red —
+  the harness would be blocking its own prescribed workflow. If you are holding a spec whose
+  tasks still split the pair, fold them as you go and say so; the templates were fixed in #10
+  but a spec written before that keeps the split it was authored with.
 - **If a task proves the spec wrong, stop.** Amend `.specs/<slug>/spec.md`, say what changed and why, and get agreement before resuming. Do not code around a spec you no longer believe.
 - Match the surrounding code. `.steering/structure.md` says where code belongs.
 - Do not open a PR before the reviewer pass is clean of BLOCKER/HIGH.
