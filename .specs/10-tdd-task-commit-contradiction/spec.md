@@ -148,7 +148,7 @@ The task list was renumbered T1–T7 accordingly and each task now names the cri
 - [x] T1: failing `check-templates.py` against the current `templates.md` — it must flag the feature
       and bug T1 lines and must NOT flag the chore template — then fold the two templates so it passes
       *(AC1, AC3, AC4, AC5)*
-- [ ] T2: failing cases in `scripts/test-gates.sh` for the guard's own three behaviours — flags a
+- [x] T2: failing cases in `scripts/test-gates.sh` for the guard's own three behaviours — flags a
       split `T1`, does not flag chore, and fails rather than passes on a missing or unreadable
       `templates.md` — then whatever the third one needs. The fixture copies the guard into a
       throwaway tree with its own `templates.md`, the way case 34 does, so the cases do not depend

@@ -798,5 +798,148 @@ else
   fi
 fi
 
+# --- guards: scripts/check-templates.py --------------------------------------------
+#
+# #10. The feature and bug templates split a TDD pair across two tasks while implement's
+# loop defines a task as a complete Red-Green-Refactor cycle, so following both literally
+# ends a turn red and quality-gate.sh blocks it. check-templates.py fails when a task names
+# a red step with no green step to answer it. These cases pin the guard itself: it ships as
+# a new validator, and .steering/structure.md makes this file the project's whole notion of
+# test coverage, so a guard with no case here is a guard nothing checks.
+
+# A tree the guard resolves against instead of this repository. $1 = name, and the caller
+# writes templates.md afterwards, so each case controls exactly the line under test.
+templates_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/skills/spec"
+  cp "$ROOT/scripts/check-templates.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-templates.py"
+  echo "$r"
+}
+
+# $1 = repo dir, $2 = the Feature block's T1 line — the only thing that varies between the
+# control and the case. Bug and Chore are fixed and already folded, so a failure can only be
+# about the line under test. python3 rather than a shell heredoc: the fixture contains fenced
+# code blocks, and escaping backticks through sh is how a fixture quietly stops being the
+# shape it claims to be.
+write_templates() {
+  python3 - "$1" "$2" <<'PYEOF'
+import pathlib, sys
+root, t1 = sys.argv[1], sys.argv[2]
+doc = f"""# Spec templates by issue type
+
+## Feature
+
+```markdown
+## 3. Tasks (TDD-ordered)
+{t1}
+- [ ] T2: refactor ...
+```
+
+## Bug
+
+```markdown
+## 3. Tasks (TDD-ordered)
+- [ ] T1: regression test that fails for the right reason — then the fix for the root cause
+- [ ] T2: refactor
+```
+
+## Chore
+
+```markdown
+## 3. Tasks (TDD-ordered)
+- [ ] T1: add tests covering the behavior that must be preserved but is untested
+- [ ] T2: confirm they pass BEFORE the change — this is the baseline
+- [ ] T3: make the change
+```
+"""
+pathlib.Path(root, "skills", "spec", "templates.md").write_text(doc)
+PYEOF
+}
+
+run_templates() { ( cd "$1" && python3 scripts/check-templates.py >/dev/null 2>"$TMP/terr"; printf '%s' "$?" ) }
+
+# 36. A split red step fails; a folded one passes; the chore block is never flagged.
+#
+# The control runs FIRST. A guard that failed on every input would satisfy the split half of
+# this case on its own, and "flags the thing we broke" is not evidence unless "passes the
+# thing we did not" is established beside it. The chore assertion is the other half of the
+# same argument: chore's T1 adds tests with no red step, and flagging it would mean the guard
+# had learned "mentions tests" rather than "names a red step with nothing to answer it".
+r=$(templates_repo tpl-split)
+write_templates "$r" "- [ ] T1: failing test for <behavior> — then the implementation that makes it pass"
+out=$(run_templates "$r")
+[ "$out" = "0" ] && c0=ok || c0=no
+
+write_templates "$r" "- [ ] T1: write the failing test for ..."
+out=$(run_templates "$r"); err=$(cat "$TMP/terr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"write the failing test for"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"add tests covering the behavior"*) c3=no ;; *) c3=ok ;; esac   # chore must NOT appear
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "a split red step fails, a folded one passes, chore is untouched" ok \
+  || report "a split red step fails, a folded one passes, chore is untouched" no \
+     "folded-passes=$c0 split-fails=$c1 names-line=$c2 chore-not-flagged=$c3"
+
+# 37. A templates.md the guard cannot read must fail, not pass.
+#
+# The guard's whole job is to compare something. Existence is not readability — case 32
+# established that as a real third state — and a guard that reports success about a file it
+# never opened is the shape this repo has shipped four times.
+r=$(templates_repo tpl-missing)          # no templates.md written at all
+out=$(run_templates "$r"); err=$(cat "$TMP/terr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"is missing"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(templates_repo tpl-unreadable)
+write_templates "$r" "- [ ] T1: failing test for X — then the implementation that makes it pass"
+chmod 000 "$r/skills/spec/templates.md" 2>/dev/null
+# Skipped where chmod does not actually deny access (root, or a filesystem without POSIX
+# permissions). A case that cannot fail is worse than no case.
+if cat "$r/skills/spec/templates.md" >/dev/null 2>&1; then
+  chmod 644 "$r/skills/spec/templates.md" 2>/dev/null
+  c3=ok; c4=ok
+else
+  out2=$(run_templates "$r"); err2=$(cat "$TMP/terr")
+  chmod 644 "$r/skills/spec/templates.md" 2>/dev/null
+  [ "$out2" = "1" ] && c3=ok || c3=no
+  case "$err2" in *"cannot be read"*) c4=ok ;; *) c4=no ;; esac
+fi
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "a templates.md that cannot be read fails rather than passing" ok \
+  || report "a templates.md that cannot be read fails rather than passing" no \
+     "missing-exit=$c1 missing-msg=$c2 unreadable-exit=$c3 unreadable-msg=$c4"
+
+# 38. An empty work-set must fail, and a vanished section must not read as "nothing to check".
+#
+# Both are #16 in this guard. Zero task lines compared is not zero disagreements found, and a
+# template section whose Tasks block was deleted is a section the guard stopped covering — in
+# neither case may the success line be reachable.
+r=$(templates_repo tpl-empty)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+# Three sections, every Tasks heading present, and not one task line under any of them.
+doc = "# t\n\n## Feature\n\n## 3. Tasks (TDD-ordered)\n\n## Bug\n\n## 3. Tasks (TDD-ordered)\n\n## Chore\n\n## 3. Tasks (TDD-ordered)\n"
+pathlib.Path(sys.argv[1], "skills", "spec", "templates.md").write_text(doc)
+PYEOF
+out=$(run_templates "$r"); err=$(cat "$TMP/terr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"nothing"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(templates_repo tpl-nosection)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+# Bug's Tasks block has been deleted entirely. Feature and Chore are intact and folded, so
+# the guard could compare two of three and report success on what it did look at.
+doc = ("# t\n\n## Feature\n\n## 3. Tasks (TDD-ordered)\n"
+       "- [ ] T1: failing test for X — then the implementation that makes it pass\n\n"
+       "## Bug\n\nprose only, no Tasks block\n\n"
+       "## Chore\n\n## 3. Tasks (TDD-ordered)\n- [ ] T1: add tests for preserved behavior\n")
+pathlib.Path(sys.argv[1], "skills", "spec", "templates.md").write_text(doc)
+PYEOF
+out2=$(run_templates "$r"); err2=$(cat "$TMP/terr")
+[ "$out2" = "1" ] && c3=ok || c3=no
+case "$err2" in *"Bug"*) c4=ok ;; *) c4=no ;; esac
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "an empty work-set and a vanished section both fail" ok \
+  || report "an empty work-set and a vanished section both fail" no \
+     "empty-exit=$c1 empty-msg=$c2 section-exit=$c3 names-section=$c4"
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
