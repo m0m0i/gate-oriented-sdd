@@ -53,6 +53,14 @@ GREEN = re.compile(
 #: does. The folded templates reference implement's loop in a blockquote directly above the
 #: task lines, so moving that citation onto a task line was one ordinary edit from disarming
 #: this guard.
+#: Its breadth is safe because the substitution only ever REMOVES characters and inserts a
+#: single space, and `\S*/\S*` always consumes a whole whitespace-delimited token. So it can
+#: delete a green cue but never assemble one: it cannot split a word to make a single-word cue
+#: whole, and it cannot leave the one-space gap a multi-word cue like `the fix` needs. A code
+#: span opened and closed INSIDE a word could do both — `re`z`implementation` clears — and that
+#: is accepted rather than closed: it is not writable prose, no ordinary edit to templates.md
+#: reaches it, and the alternatives are dropping the code-span branch, which reopens a real
+#: hole, or a sentinel substitution, which is more machinery than the boundary is worth.
 CODE_OR_PATH = re.compile(r"`[^`]*`|\S*/\S*")
 
 #: Section heading OUTSIDE the fenced blocks — `## Feature`, not `## 1. Requirements`.
