@@ -1,7 +1,7 @@
 # Spec: a spawned reviewer deadlocks the Stop gate into an unbreakable loop
 
-- Slug: 27-spawned-reviewer-deadlocks-stop-gate Issue: 27 Type: bug Status: done
-- Author: m0m0i Date: 2026-08-25
+- Slug: 27-spawned-reviewer-deadlocks-stop-gate Issue: 27 Type: bug Status: archived
+- Author: m0m0i Date: 2026-08-25 Archived: 2026-08-26
 
 ## 1. Requirements (WHAT / WHY)
 

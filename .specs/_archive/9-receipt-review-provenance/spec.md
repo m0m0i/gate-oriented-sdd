@@ -1,6 +1,6 @@
 # Spec: a receipt cannot distinguish an independent review from a self-review
-- Slug: 9-receipt-review-provenance   Issue: 9   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-08-23
+- Slug: 9-receipt-review-provenance   Issue: 9   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-08-23   Archived: 2026-08-26
 
 ## 1. Requirements (WHAT / WHY)
 - Reproduction: run `init` in a project — it writes the reviewer into `.claude/agents/`. Continue in
