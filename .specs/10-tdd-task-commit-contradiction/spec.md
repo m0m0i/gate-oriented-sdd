@@ -159,7 +159,7 @@ The task list was renumbered T1–T7 accordingly and each task now names the cri
       (**AC-limited: presence, not adherence**) *(AC2)*
 - [x] T4: reconcile `skills/spec/SKILL.md`'s "The first task is always" table with the folded
       templates *(AC8)*
-- [ ] T5: wire `check-templates.py` into `.github/workflows/ci.yml` AND onto `.steering/tech.md`'s
+- [x] T5: wire `check-templates.py` into `.github/workflows/ci.yml` AND onto `.steering/tech.md`'s
       `- Validators:` line; update `AGENTS.md`'s "all eight" and any other count site; confirm it
       fails the build when the fold is reverted *(AC7)*
 - [ ] T6: blast radius — the chore template byte-identical, `test-gates.sh` green, and the case list

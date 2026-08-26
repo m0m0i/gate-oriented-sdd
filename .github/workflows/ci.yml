@@ -43,6 +43,14 @@ jobs:
       - name: Skills still carry their load-bearing instructions
         run: ./scripts/check-skill-contracts.py
 
+      # implement's loop defines a task as a complete Red-Green-Refactor cycle; a template
+      # that splits red from green asks for a task that cannot be committed without ending
+      # the turn red, which the quality gate blocks. The harness would block its own
+      # prescribed workflow. Written against the split, so re-separating them fails here on
+      # the day the edit is made rather than on the day someone follows it.
+      - name: No spec template splits a red step from its green step
+        run: ./scripts/check-templates.py
+
       # A steering line written in a form its reader cannot parse produces nothing and no
       # complaint. This repo lost its own quality anchor that way for a week.
       - name: Steering anchors are readable
