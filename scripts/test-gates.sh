@@ -816,15 +816,18 @@ templates_repo() {
   echo "$r"
 }
 
-# $1 = repo dir, $2 = the Feature block's T1 line — the only thing that varies between the
-# control and the case. Bug and Chore are fixed and already folded, so a failure can only be
-# about the line under test. python3 rather than a shell heredoc: the fixture contains fenced
-# code blocks, and escaping backticks through sh is how a fixture quietly stops being the
-# shape it claims to be.
+# $1 = repo dir, $2 = the Feature block's T1 line, $3 = the Bug block's T1 line (optional,
+# defaults to the folded form). BOTH are parameters: an earlier version varied only Feature,
+# and the consequence was that no fixture anywhere contained a split line outside that
+# section — so narrowing the guard to scan Feature alone deleted half its work-set with the
+# whole suite still green. Isolation is worth having, but not at the price of a work-set no
+# case ever exercises. python3 rather than a shell heredoc: the fixture contains fenced code
+# blocks, and escaping backticks through sh is how a fixture quietly stops being the shape it
+# claims to be.
 write_templates() {
-  python3 - "$1" "$2" <<'PYEOF'
+  python3 - "$1" "$2" "${3:-- [ ] T1: regression test that fails for the right reason — then the fix for the root cause}" <<'PYEOF'
 import pathlib, sys
-root, t1 = sys.argv[1], sys.argv[2]
+root, t1, bug = sys.argv[1], sys.argv[2], sys.argv[3]
 doc = f"""# Spec templates by issue type
 
 ## Feature
@@ -839,7 +842,7 @@ doc = f"""# Spec templates by issue type
 
 ```markdown
 ## 3. Tasks (TDD-ordered)
-- [ ] T1: regression test that fails for the right reason — then the fix for the root cause
+{bug}
 - [ ] T2: refactor
 ```
 
@@ -875,9 +878,19 @@ out=$(run_templates "$r"); err=$(cat "$TMP/terr")
 [ "$out" = "1" ] && c1=ok || c1=no
 case "$err" in *"write the failing test for"*) c2=ok ;; *) c2=no ;; esac
 case "$err" in *"add tests covering the behavior"*) c3=no ;; *) c3=ok ;; esac   # chore must NOT appear
-[ "$c0$c1$c2$c3" = "okokokok" ] && report "a split red step fails, a folded one passes, chore is untouched" ok \
-  || report "a split red step fails, a folded one passes, chore is untouched" no \
-     "folded-passes=$c0 split-fails=$c1 names-line=$c2 chore-not-flagged=$c3"
+
+# The Bug section, with Feature folded. Without this nothing pins that the guard looks
+# outside Feature at all, and a guard narrowed to one section passes the whole suite.
+write_templates "$r" "- [ ] T1: failing test for <behavior> — then the implementation that makes it pass" \
+                     "- [ ] T1: write the regression test — confirm it fails, and fails for the right reason"
+out=$(run_templates "$r"); berr=$(cat "$TMP/terr")
+[ "$out" = "1" ] && c4=ok || c4=no
+case "$berr" in *"write the regression test"*) c5=ok ;; *) c5=no ;; esac
+case "$berr" in *"(Bug)"*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "a split red step fails in either section, a folded one passes, chore is untouched" ok \
+  || report "a split red step fails in either section, a folded one passes, chore is untouched" no \
+     "folded-passes=$c0 feature-fails=$c1 names-line=$c2 chore-not-flagged=$c3 bug-fails=$c4 names-bug-line=$c5 names-section=$c6"
 
 # 37. A templates.md the guard cannot read must fail, not pass.
 #
@@ -940,6 +953,61 @@ case "$err2" in *"Bug"*) c4=ok ;; *) c4=no ;; esac
 [ "$c1$c2$c3$c4" = "okokokok" ] && report "an empty work-set and a vanished section both fail" ok \
   || report "an empty work-set and a vanished section both fail" no \
      "empty-exit=$c1 empty-msg=$c2 section-exit=$c3 names-section=$c4"
+
+# 39. One section contributing nothing must fail, and ordinary markdown drift must not hide a split.
+#
+# The emptiness checks were asymmetric: the section check asserted only that a `## 3. Tasks`
+# heading had produced a KEY, which `setdefault` creates whether or not a task line parsed
+# under it, and the zero-total check was GLOBAL. So one section could contribute an empty
+# work-set while the other two kept the total non-zero, and the success line was reachable
+# with the split still in the file. Reaching it needed nothing adversarial — bolding a task
+# id, or an em dash instead of a colon, is ordinary drift in the file this guard watches.
+r=$(templates_repo tpl-drift)
+
+# Feature's Tasks heading is present and its only task line is bolded. Under the old
+# TASK_LINE it parsed as nothing at all; the section still had a key, the global total was
+# non-zero from Bug and Chore, and the guard printed its success line.
+write_templates "$r" "- [ ] **T1:** write the failing test for <behavior>"
+out=$(run_templates "$r"); err=$(cat "$TMP/terr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"write the failing test"*) c2=ok ;; *) c2=no ;; esac
+
+# An em dash instead of the colon, and a numbered id instead of T1. Same shape, two more of
+# the three forms the review demonstrated.
+write_templates "$r" "- [ ] T1 — write the failing test for <behavior>"
+out=$(run_templates "$r")
+[ "$out" = "1" ] && c3=ok || c3=no
+write_templates "$r" "- [ ] 1. write the failing test for <behavior>"
+out=$(run_templates "$r")
+[ "$out" = "1" ] && c4=ok || c4=no
+
+# And a section that genuinely contributes no task lines, while the others do — the case the
+# global total cannot see.
+r=$(templates_repo tpl-onesection)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+doc = ("# t\n\n## Feature\n\n## 3. Tasks (TDD-ordered)\n\n"          # heading, no task lines
+       "## Bug\n\n## 3. Tasks (TDD-ordered)\n"
+       "- [ ] T1: regression test that fails for the right reason — then the fix\n\n"
+       "## Chore\n\n## 3. Tasks (TDD-ordered)\n- [ ] T1: add tests for preserved behavior\n")
+pathlib.Path(sys.argv[1], "skills", "spec", "templates.md").write_text(doc)
+PYEOF
+out=$(run_templates "$r"); err2=$(cat "$TMP/terr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err2" in *"Feature"*) c6=ok ;; *) c6=no ;; esac
+
+# A purely red task line that merely CITES implement's file path must still be flagged. The
+# green cue was a bare `implement`, which matches the substring inside `skills/implement/` —
+# and the folded templates now reference that loop in a blockquote right above the task lines,
+# so moving the reference onto a task line was one edit away from disarming this guard.
+r=$(templates_repo tpl-cite)
+write_templates "$r" "- [ ] T1: add a failing test, per skills/implement/SKILL.md"
+out=$(run_templates "$r")
+[ "$out" = "1" ] && c7=ok || c7=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] && report "markdown drift and a bare path citation cannot hide a split" ok \
+  || report "markdown drift and a bare path citation cannot hide a split" no \
+     "bold=$c1 names-line=$c2 emdash=$c3 numbered=$c4 empty-section=$c5 names-section=$c6 path-citation=$c7"
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

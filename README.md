@@ -38,7 +38,7 @@ The six inception skills account for ~450 of that always-on total while firing p
 
 ### Why the gate is narrow
 
-A gate that fires on ordinary turns gets disabled, and a disabled gate protects nothing. So `review-gate.sh` is silent unless a spec branch has every task ticked and no fresh clean review. It skips merged branches, mid-implementation turns, and the documentation commits that legitimately land *after* a review. `quality-gate.sh` is the other half, and it carries no commands of its own — it runs the `- Validators:` line from `.steering/tech.md`, so enforcement is a property of the project rather than of the hook. 50 paths across the gates and guards, [tested deterministically](./scripts/test-gates.sh) with no model in the loop.
+A gate that fires on ordinary turns gets disabled, and a disabled gate protects nothing. So `review-gate.sh` is silent unless a spec branch has every task ticked and no fresh clean review. It skips merged branches, mid-implementation turns, and the documentation commits that legitimately land *after* a review. `quality-gate.sh` is the other half, and it carries no commands of its own — it runs the `- Validators:` line from `.steering/tech.md`, so enforcement is a property of the project rather than of the hook. 51 paths across the gates and guards, [tested deterministically](./scripts/test-gates.sh) with no model in the loop.
 
 ## The flow
 
@@ -148,7 +148,7 @@ The last row is a real gap, not a rounding error. `PreInvocation` is the candida
 
 Tested against: Claude Code 2.1.238 · Antigravity CLI 1.1.17 · Antigravity IDE 2.3.1 · macOS.
 
-What *is* verified: the gates' and guards' 50 behaviours, tested deterministically with no model in the loop ([`scripts/test-gates.sh`](./scripts/test-gates.sh)); Antigravity's `Stop` hook genuinely blocking, run rather than read from documentation ([`docs/verified.md`](./docs/verified.md)); both plugin manifests, the rulebook hashes, and the leakage guard, all in CI.
+What *is* verified: the gates' and guards' 51 behaviours, tested deterministically with no model in the loop ([`scripts/test-gates.sh`](./scripts/test-gates.sh)); Antigravity's `Stop` hook genuinely blocking, run rather than read from documentation ([`docs/verified.md`](./docs/verified.md)); both plugin manifests, the rulebook hashes, and the leakage guard, all in CI.
 
 What is not: the skills themselves have never been executed end to end, and no reviewer has yet reviewed a real diff.
 

@@ -26,20 +26,44 @@ TEMPLATES = "skills/spec/templates.md"
 
 #: The template sections that carry a Tasks block. Named rather than discovered so that a
 #: section disappearing is a failure below, not a silently smaller scan.
+#:
+#: This is a FLOOR, not a filter. The split check iterates every section actually found, so a
+#: fourth template section added tomorrow is scanned whether or not it is listed here — a
+#: wrong entry makes this guard fail, never pass.
 EXPECTED_SECTIONS = ("Feature", "Bug", "Chore")
 
 #: A task line names a RED step. Deliberately a short list of the phrases the templates
 #: actually use for "write the test that fails first".
 RED = re.compile(r"failing test|regression test|test that reproduces|test .{0,20}\bfails\b", re.I)
 
-#: ...and one that also names the GREEN step answering it. `implement` covers "implementation"
-#: too, which is the word the folded form uses.
-GREEN = re.compile(r"implement|the fix\b|fix the\b|makes? it pass|passes it|answers it", re.I)
+#: ...and one that also names the GREEN step answering it.
+GREEN = re.compile(
+    r"\bimplementation\b|\bimplements?\b|\bthe fix\b|\bfix the\b|\bmakes? it pass\b"
+    r"|\bpasses it\b|\banswers it\b",
+    re.I,
+)
+
+#: Inline code spans and path-like tokens, stripped before either pattern is applied.
+#:
+#: A path is not a statement about the task. `skills/implement/SKILL.md` contains the word
+#: `implement` between two slashes, and a word boundary matches there — so
+#: `- [ ] T1: add a failing test, per skills/implement/SKILL.md`, a purely red task that
+#: merely cites this repo's own file, read as green and cleared the check. Word-bounding the
+#: alternatives does not fix it, because `/` is not a word character. Judging the line's prose
+#: does. The folded templates reference implement's loop in a blockquote directly above the
+#: task lines, so moving that citation onto a task line was one ordinary edit from disarming
+#: this guard.
+CODE_OR_PATH = re.compile(r"`[^`]*`|\S*/\S*")
 
 #: Section heading OUTSIDE the fenced blocks — `## Feature`, not `## 1. Requirements`.
 SECTION = re.compile(r"^## ([A-Z][A-Za-z ]*?)\s*$")
 TASKS_HEADING = re.compile(r"^## 3\. Tasks")
-TASK_LINE = re.compile(r"^- \[[ x]\] (T\d+):")
+#: ANY checkbox line inside a Tasks block is a task line. Deliberately not `T\d+:` — that
+#: required an id and a colon, so `- [ ] **T1:** ...`, `- [ ] T1 — ...` and `- [ ] 1. ...`
+#: parsed as nothing at all and were skipped in silence. Bolding an id or using an em dash is
+#: ordinary drift in the file this guard watches, and each of those three forms let a split
+#: red step through with the guard exiting 0.
+TASK_LINE = re.compile(r"^- \[[ x]\]\s")
 
 
 def tasks_by_section(text: str) -> dict[str, list[tuple[int, str]]]:
@@ -87,28 +111,36 @@ except OSError as exc:
 
 blocks = tasks_by_section(text)
 
-missing = [s for s in EXPECTED_SECTIONS if s not in blocks]
-if missing:
-    print("check-templates FAILED — a template section has no Tasks block", file=sys.stderr)
-    print(f"  expected a Tasks block under each of: {list(EXPECTED_SECTIONS)}", file=sys.stderr)
-    print(f"  found none under: {missing}", file=sys.stderr)
-    print("  A section whose block vanished is not a section with nothing to check.", file=sys.stderr)
+#: Per SECTION, not in aggregate. The first version asserted only that each expected section
+#: had a KEY in `blocks` — which `setdefault` creates at the `## 3. Tasks` heading whether or
+#: not a line parsed underneath it — and then checked the total across all sections for zero.
+#: One section could therefore contribute an empty work-set while the other two kept the total
+#: non-zero, and the success line was reachable with the split still in the file. The floor has
+#: to be as deep as the work-set, and the work-set is task lines, not headings. See #16.
+thin = []
+for name in EXPECTED_SECTIONS:
+    lines = blocks.get(name)
+    if lines is None:
+        thin.append((name, "has no Tasks block at all"))
+    elif not lines:
+        thin.append((name, "has a Tasks block with no task line this guard could parse"))
+if thin:
+    print("check-templates FAILED — a template section contributed nothing to check", file=sys.stderr)
+    for name, why in thin:
+        print(f"  {name}: {why}", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  A section the guard could not read is not a section with nothing wrong in it.", file=sys.stderr)
+    print("  A task line is any `- [ ] ...` line inside the section's Tasks block.", file=sys.stderr)
     sys.exit(1)
 
 total = sum(len(v) for v in blocks.values())
-if total == 0:
-    print(
-        "check-templates: found Tasks headings but no task lines at all, so there is nothing "
-        "to compare. A guard with an empty work-set must not report success — see #16.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
 
 split = []
 for section, lines in blocks.items():
     for n, line in lines:
-        if RED.search(line) and not GREEN.search(line):
-            split.append((section, n, line))
+        prose = CODE_OR_PATH.sub(" ", line)
+        if RED.search(prose) and not GREEN.search(prose):
+            split.append((section, n, line))   # report the line as written, not as stripped
 
 if split:
     print("check-templates FAILED — a task names a red step with no green step to answer it", file=sys.stderr)

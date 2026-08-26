@@ -165,3 +165,49 @@ The task list was renumbered T1–T7 accordingly and each task now names the cri
 - [x] T6: blast radius — the chore template byte-identical, `test-gates.sh` green, and the case list
       diffed against `main` to confirm no pre-existing case changed verdict
 - [x] T7: version bump in both manifests, then refactor
+
+## 4. Review triage
+
+`gate-sdd-reviewer`, first pass at `b92af1d`: **BLOCKED** — 0 BLOCKER, 2 HIGH, 2 MEDIUM, 3 INFO.
+All four findings fixed; the INFOs are confirmations or deferrals to #39.
+
+- **HIGH — a section contributing nothing was skipped and the guard exited 0 with the split
+  present.** Fixed, and it was two defects compounding. The section floor asserted only that each
+  expected section had a *key* in `blocks` — which `setdefault` creates at the `## 3. Tasks`
+  heading whether or not a line parsed under it — and the emptiness check was *global*, so one
+  section could contribute nothing while the other two kept the total non-zero. Underneath it,
+  `TASK_LINE` required `T\d+:`, so `- [ ] **T1:** …`, `- [ ] T1 — …` and `- [ ] 1. …` parsed as
+  nothing at all. None of those is adversarial; bolding an id is ordinary drift in the file this
+  guard watches. The floor is now per section, and **any** `- [ ] …` line inside a Tasks block is
+  a task line. AC4 did not hold before this and does now.
+
+- **HIGH — every fixture varied only the Feature section, so nothing pinned that the guard scans
+  Bug at all.** Fixed. `write_templates` takes a Bug `T1` too, and case 36 asserts a split Bug line
+  is flagged and its section named. The reviewer demonstrated this with a mutation the ablations
+  could not see: narrowing the split loop to `section == "Feature"` deleted half the work-set with
+  the whole suite still green. It now reddens case 36. The lesson is worth keeping: **an ablation
+  removes a branch you wrote; it cannot find a work-set no fixture exercises.**
+
+- **MEDIUM — `GREEN`'s bare `implement` matched inside a file path.** Fixed, but not the way the
+  finding proposed. Word-bounding the alternatives does not work, because `/` is not a word
+  character and `\bimplement\b` matches happily inside `skills/implement/SKILL.md`. Code spans and
+  path-like tokens are now stripped before either pattern is applied, so the line is judged on its
+  prose. `RED`'s narrowness was explicitly *not* flagged, correctly — the docstring declares it a
+  short list and the Design section commits to a guard on prose staying narrow.
+
+- **MEDIUM — `.steering/structure.md`:21 said "45 paths are currently pinned".** Fixed, along with
+  the five other count sites, all now 51. It was already stale on `main` at 47, but T5 puts every
+  count site in scope. `docs/BACKLOG.md`:38 remains the one deliberate exclusion.
+
+- **INFO ×3, all accepted.** `EXPECTED_SECTIONS` is confirmed *not* a G-8 exemption list — it is a
+  floor, not a filter, and the split loop iterates every section discovered, so a fourth section
+  added tomorrow is scanned regardless. The reviewer's judgement was that the weakness was the
+  floor's *depth*, which is the first HIGH. Case 37's `chmod`-ineffective branch reporting `ok`
+  having asserted nothing is #39's first item verbatim, and `report` has no `skip` state to use
+  instead — deferred, and noted as not making the case vacuous since the missing-file half runs
+  unconditionally. `docs/BACKLOG.md`:38 confirmed as correctly excluded.
+
+**Every fix was mutation-tested rather than trusted.** Reverting each one reddens exactly the case
+that covers it: scanning Feature only reddens case 36; the old `TASK_LINE` reddens case 39's three
+drift assertions; the old key-presence floor reddens cases 38 and 39; dropping the prose stripping
+reddens case 39's path citation.
