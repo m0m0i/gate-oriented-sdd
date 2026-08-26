@@ -247,3 +247,27 @@ floor missed is the third one, which is case 39's.
 1. *An ablation removes a branch you wrote; it cannot find a work-set no fixture exercises.*
 2. *Normalisation applied to both sides of a test is not symmetric — stripping before the accusing
    pattern can only make a guard quieter.*
+
+**Third pass at `b2f83db`: APPROVE — CLEAN, nothing at any severity.** The reviewer answered the
+`\S*/\S*` breadth question with a proof rather than an absence of counterexamples: the substitution
+only removes characters and inserts one space, and a slash token is always consumed whole, so it can
+delete a green cue but never assemble one. The residual — a code span opened and closed *inside* a
+word, which can do both — was recommended for no action.
+
+**Fourth pass at `4805394`: APPROVE — CLEAN.** Comment-only, and the reviewer verified that rather
+than accepting it: `git diff` adds eight lines all beginning `#:`, and the parsed AST is identical
+to the approved revision. The pass exists because `scripts/**/*.py` is in Source globs, so even a
+comment re-stales the receipt — the gate working as designed.
+
+That fourth pass happened because the reviewer's "no action" was taken as advice rather than as a
+verdict. Its finding was that the boundary needs no *code* change, which is not the same as no
+change: a known boundary living only in a review transcript is not in the repo at all, which is the
+condition `.steering/product.md` argues against everywhere else. The reviewer agreed on re-reading.
+The boundary is now recorded beside the regex it constrains, with the reason for accepting it.
+
+**Filed rather than fixed:** the reviewer's suggestion that lesson 2 — normalisation applied to both
+sides of a test is not symmetric — belongs in `agents/*/rules/gates-and-guards.md` as a `G-9`. Out
+of scope here: that rulebook is hash-pinned by `check-locks.py`, so adding a rule needs a re-pin
+that has no business in a bug fix for #10.
+
+Receipt at `.review-receipt`, beside this file.
