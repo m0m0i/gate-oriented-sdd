@@ -37,7 +37,7 @@ RED = re.compile(r"failing test|regression test|test that reproduces|test .{0,20
 GREEN = re.compile(r"implement|the fix\b|fix the\b|makes? it pass|passes it|answers it", re.I)
 
 #: Section heading OUTSIDE the fenced blocks — `## Feature`, not `## 1. Requirements`.
-SECTION = re.compile(r"^## ([A-Z][a-z]+)\s*$")
+SECTION = re.compile(r"^## ([A-Z][A-Za-z ]*?)\s*$")
 TASKS_HEADING = re.compile(r"^## 3\. Tasks")
 TASK_LINE = re.compile(r"^- \[[ x]\] (T\d+):")
 

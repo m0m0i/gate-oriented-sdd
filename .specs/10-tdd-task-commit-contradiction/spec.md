@@ -1,5 +1,5 @@
 # Spec: the TDD task/commit rule contradicts the quality gate
-- Slug: 10-tdd-task-commit-contradiction   Issue: 10   Type: bug   Status: approved
+- Slug: 10-tdd-task-commit-contradiction   Issue: 10   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-08-23
 
 ## 1. Requirements (WHAT / WHY)
@@ -22,27 +22,27 @@
   `quality-gate.sh` never inspects commits, so a red *commit* is not what blocks; a turn that *ends*
   red is.
 - Acceptance criteria:
-  - [ ] **AC1:** following the templates and `implement`'s rules literally SHALL NOT produce a turn
+  - [x] **AC1:** following the templates and `implement`'s rules literally SHALL NOT produce a turn
         that ends with failing validators.
-  - [ ] **AC2:** `implement` SHALL state the resolution explicitly, rather than leaving each user to
+  - [x] **AC2:** `implement` SHALL state the resolution explicitly, rather than leaving each user to
         rediscover it.
-  - [ ] **AC3:** the feature and bug templates and `implement`'s loop SHALL agree on what one task is.
-  - [ ] **AC4:** a check SHALL fail when a shipped task template contains a task that is only a red
+  - [x] **AC3:** the feature and bug templates and `implement`'s loop SHALL agree on what one task is.
+  - [x] **AC4:** a check SHALL fail when a shipped task template contains a task that is only a red
         step, so the split cannot quietly return.
-  - [ ] **AC5:** the regression test fails before the fix and passes after.
-  - [ ] **AC6:** every behaviour of `check-templates.py` SHALL be pinned by cases in
+  - [x] **AC5:** the regression test fails before the fix and passes after.
+  - [x] **AC6:** every behaviour of `check-templates.py` SHALL be pinned by cases in
         `scripts/test-gates.sh`: that it flags a split feature or bug `T1`, that it does NOT flag
         the chore template, and that it FAILS rather than passes when `templates.md` is missing or
         unreadable. *Added 2026-08-26.* `.steering/structure.md` makes that file the project's whole
         notion of test coverage, and a new guard with no case there is #39's family — the shape this
         repo has now shipped four times, twice inside #28's own review.
-  - [ ] **AC7:** `check-templates.py` SHALL appear on `.steering/tech.md`'s `- Validators:` line as
+  - [x] **AC7:** `check-templates.py` SHALL appear on `.steering/tech.md`'s `- Validators:` line as
         well as in CI, and every place that states how many validators there are SHALL agree with
         the new count. *Added 2026-08-26.* The quality gate executes that line at turn end; a guard
         absent from it runs only in CI, which is the half of the enforcement this repo does not
         control. `AGENTS.md`:40 currently reads "Run all eight before every commit — CI runs the
         same eight".
-  - [ ] **AC8:** `skills/spec/SKILL.md`'s "The first task is always" table SHALL agree with the
+  - [x] **AC8:** `skills/spec/SKILL.md`'s "The first task is always" table SHALL agree with the
         folded templates. *Added 2026-08-26.* It is a third statement of the thing AC3 is about, and
         once the templates fold it becomes the outlier — "a failing test for the new behavior" is
         no longer what the first task is.
@@ -164,4 +164,4 @@ The task list was renumbered T1–T7 accordingly and each task now names the cri
       fails the build when the fold is reverted *(AC7)*
 - [x] T6: blast radius — the chore template byte-identical, `test-gates.sh` green, and the case list
       diffed against `main` to confirm no pre-existing case changed verdict
-- [ ] T7: version bump in both manifests, then refactor
+- [x] T7: version bump in both manifests, then refactor
