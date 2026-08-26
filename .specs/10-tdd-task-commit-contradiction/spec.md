@@ -145,7 +145,7 @@ The task list was renumbered T1–T7 accordingly and each task now names the cri
 ## 3. Tasks (TDD-ordered)
 > Folded red-and-green — this spec is the first written under its own decision.
 
-- [ ] T1: failing `check-templates.py` against the current `templates.md` — it must flag the feature
+- [x] T1: failing `check-templates.py` against the current `templates.md` — it must flag the feature
       and bug T1 lines and must NOT flag the chore template — then fold the two templates so it passes
       *(AC1, AC3, AC4, AC5)*
 - [ ] T2: failing cases in `scripts/test-gates.sh` for the guard's own three behaviours — flags a
