@@ -101,17 +101,23 @@ _2026-08-28._
   observable check — and carries the carve-out from the second clarification, because the rule was
   derived from a case that has a legitimate near-neighbour in this very repository.
 
-  *Wider, rejected:* a mechanical check that G-series ids are unique and that cross-references
-  inside the rulebook resolve. It is buildable and it would be green on arrival, so it would be
-  ceremony rather than a test — and `check-skill-contracts.py`'s own docstring makes the argument
-  against it: "a check that grows to police every sentence becomes an obstacle to editing prose, and
-  prose that cannot be edited rots." Nine rules do not need an index.
+  *Wider, rejected — on cost, and the first version of this paragraph rejected it on a false
+  premise.* A mechanical check on the rulebook's citations was rejected here as "green on arrival".
+  That was true only of the scope named — ids unique, cross-references *inside* the file resolving —
+  and that is the scope guaranteed to find nothing. The scope that would have found something is
+  resolving citations *outward*: `case N` against `test-gates.sh`, `#N` against the tracker, file
+  paths against the tree. It would have gone red on this very branch, on a `case 39` that resolves
+  to two different cases depending on whether you count source comments or printed output. So the
+  conclusion stands but the ground for it does not: the reason not to build it is that nine rules do
+  not need an index and `check-skill-contracts.py`'s docstring argues against policing prose — not
+  that nothing was broken. Something was, and the fix was to stop citing ordinals at all.
 
 - **There is no failing test for AC1 and AC2, and that is not a skipped step.** The deliverable is a
   rule for the judgment layer — a subagent that reads prose — and the harness's whole design is that
   judgment rules live in a rulebook precisely because they cannot be made deterministic. The
-  property `G-9` describes *is* already pinned mechanically, by case 39 in `scripts/test-gates.sh`
-  (`backticked-red`, `slashed-red`), added in #10 when the defect was fixed. This spec adds the
+  property `G-9` describes *is* already pinned mechanically, by the `backticked-red` and
+  `slashed-red` assertions in `scripts/test-gates.sh`
+  (`backticked-red` / `slashed-red`), added in #10 when the defect was fixed. This spec adds the
   name, not the enforcement. Stated here because a bug spec with no red step otherwise reads as a
   corner cut, and because `G-4` — "every new gate behaviour needs a case" — correctly does not apply:
   no gate behaviour changes.
@@ -128,7 +134,7 @@ _2026-08-28._
 
 - **Why this cannot recur:** it can, and the honest claim is narrower. `G-9` does not prevent the
   defect; it makes it *nameable* in review, which is the layer this repo assigns to judgment. The
-  one instance that existed is fixed and pinned by case 39. What changes is that the next reviewer
+  one instance that existed is fixed and pinned by the `backticked-red` / `slashed-red` assertions. What changes is that the next reviewer
   cites an id instead of deriving the principle mid-review, which is what happened on #44 and cost a
   round.
 
@@ -139,7 +145,7 @@ Every guard in `scripts/`, `assets/` and `hooks/`, and what it normalises:
 
 | Guard | Normalises | Side | Verdict |
 | :-- | :-- | :-- | :-- |
-| `check-templates.py` | `CODE_OR_PATH.sub` | **clearing only** | correct — the fixed instance, pinned by case 39 |
+| `check-templates.py` | `CODE_OR_PATH.sub` | **clearing only** | correct — the fixed instance, pinned by the `backticked-red` / `slashed-red` assertions |
 | `check-templates.py` | `line.strip()` at collection | **accusing** | safe, see below |
 | `check-skill-contracts.py` | `flat()` on both operands | one comparison | legitimate — the carve-out |
 | `check-receipt-schema.py` | `line.strip()` for fence detection | structural | safe — `FIELD` matches the raw line |
@@ -148,10 +154,20 @@ Every guard in `scripts/`, `assets/` and `hooks/`, and what it normalises:
 | `check-version-bump.py` | `.stdout.strip()` | subprocess hygiene | not a matching normalisation |
 | `review-gate.sh` | `tr -d "\"'"`; `tr '\n' ' '` | input to `git`; display | safe — no pattern pair; this is #1's fix |
 | `quality-gate.sh` | `tr -d '\042\047'` | input to `git` | safe — same |
-| `check-manifests.py`, `check-locks.py`, `steering-digest.sh`, `gate-lib.sh` | none | — | — |
+| `quality-gate.sh` | `sed -e 's/^ *//' -e 's/ *$//'` on each validator command | feeds an emptiness test | safe — a whitespace-only entry is not a validator |
+| `gate-lib.sh` | `sed -n "s/^ *- *$2: *//p"`; the JSON escaper | extraction; display | safe — no pattern pair |
+| `steering-digest.sh` | `sed -n 's/.*Status: *\([A-Za-z]*\).*/\1/p'` | extraction | safe — no pattern pair |
+| `check-manifests.py`, `check-locks.py` | none | — | — |
+
+*Three rows above were missing from the first version of this table and were added on review.* All
+three are safe and the conclusion is unchanged, but a reader applying `G-9`'s Check literally — it
+names `sed` — would have hit three lines the table said were not there. Their category is also what
+forced `G-9`'s Check to grow a third outcome: most shell normalisation feeds an *extraction* or an
+*emptiness test*, and the rule originally had no verdict for that, which is why this table needed
+five ad-hoc categories the rule never defined.
 
 **One live instance, already fixed** (`check-templates.py`'s `CODE_OR_PATH`, corrected in #10 and
-pinned by case 39's `backticked-red` and `slashed-red`). **No new instance found**, so AC4 has
+pinned by the `backticked-red` / `slashed-red` assertions's `backticked-red` and `slashed-red`). **No new instance found**, so AC4 has
 nothing to fix or file.
 
 **The audit's one real finding is a normalisation on the accusing side that is nonetheless safe.**
@@ -166,7 +182,7 @@ reviewers learn to skip.
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No red step exists for
-> T2 — see the Design note above; the property is already pinned by case 39 from #10.
+> T2 — see the Design note above; the property is already pinned by the `backticked-red` / `slashed-red` assertions from #10.
 
 - [x] T1: audit every guard in `scripts/`, `assets/` and `hooks/` for normalisation applied before
       matching, and record the per-guard result in the section above — which normalise at all, and
@@ -176,3 +192,69 @@ reviewers learn to skip.
 - [x] T3: confirm `check-locks.py` still reports six pinned files across both reviewer directories,
       that no `rules-lock.json` appeared under `.claude/agents/`, and that all nine validators pass
       *(AC5)*
+
+## 4. Review triage
+
+`gate-sdd-reviewer`, first pass at `2acf6ba`: **BLOCKED** — 0 BLOCKER, 2 HIGH, 2 MEDIUM, 1 LOW,
+3 INFO. All five findings fixed; the INFOs are answered below.
+
+- **HIGH — "stripping before the clearing pattern can only make the guard louder" is false for a
+  substitution, and the counter-example is in the file G-9 cites as its own worked example.** Fixed.
+  `CODE_OR_PATH.sub(" ", line)` *inserts*, so it can assemble a clearing cue that was not in the
+  input — which `check-templates.py` documents on its own clearing side and accepts with an
+  argument. G-9 as written told the next reviewer the clearing side was risk-free, so the one
+  residual hole this repo knows about was the one the rule instructed them not to look for. The rule
+  now rests the direction claim on "can only **delete**", and says a clearing-side substitution
+  needs its own argument rather than inheriting the rule's blessing.
+
+- **HIGH — the whitespace carve-out was granted categorically on a premise about this repo's current
+  cues.** Fixed. "Cues live in a line's interior" is false for any accuser whose cue is indentation
+  or trailing whitespace — and `G-7` names wrapped machine-read lines as a real failure with no
+  mechanical check yet, so this repo is one plausible guard away from that class. Under the original
+  wording a reviewer would have cited G-9 to *clear* a `.strip()` that destroyed the cue, which is
+  `G-8`'s shape: an exemption certifying what it is not checking. Now conditioned on the accusing
+  pattern's cues being unable to occur at a line's edges.
+
+- **MEDIUM — `case 39` does not resolve.** Fixed, and the finding needs one correction. The reviewer
+  said case 39 "never denoted this case"; it does — `scripts/test-gates.sh`:957 carries a literal
+  `# 39.` comment above it. What is true, and is the part that matters, is that the file has **two
+  numbering schemes that have diverged by twelve**: the source comments say 39, the printed output
+  makes it the 51st, and the suite prints no numbers at all, so a reader cannot resolve the
+  citation from the output they are looking at. An ordinal was the wrong handle regardless of which
+  scheme is "right". All six sites now cite the greppable assertion names, and
+  `scripts/check-templates.py`'s own pre-existing `case 32` was fixed with them rather than left as
+  a known-drifted citation beside six corrected ones.
+
+- **MEDIUM — the `flat()` carve-out gave the wrong reason, and the wrong reason generalises.**
+  Fixed. "No second pattern to be asymmetric against" is true and irrelevant: a presence check
+  accuses by *non-match*, so canonicalising the haystack is the lenient direction — which the
+  clarification named and the rule then dropped. As written it pre-authorised any single-comparison
+  guard with both operands canonicalised, including one whose equivalence class is far too coarse.
+  Restated as the equivalence-class test: the class must be one the property does not distinguish.
+
+- **LOW — the audit table missed three normalisations and recorded two files as "none".** Fixed:
+  `quality-gate.sh`'s per-command trim, `gate-lib.sh`'s extraction and JSON escaper, and
+  `steering-digest.sh`'s status extraction. All three are safe and the conclusion is unchanged, but
+  a reader applying the Check literally would have hit three lines the table denied. Their category
+  is also what forced the Check to grow a third outcome — most shell normalisation feeds an
+  extraction or an emptiness test, and the rule had no verdict for that, which is why the table
+  needed five ad-hoc categories the rule never defined.
+
+- **INFO — was the no-failing-test reasoning self-serving?** Partly, and the reviewer was right
+  about which part. The rejected checker was scoped to "ids unique, cross-references *inside* the
+  file resolve", which is the scope guaranteed to find nothing; the scope that resolves citations
+  *outward* would have gone red on this very branch, on `case 39`. The conclusion stands — nine
+  rules do not need an index — but the ground for it was rewritten to cost rather than to the claim
+  that nothing was broken, because something was.
+
+- **INFO — both premise corrections were verified against the tree** by the reviewer independently.
+  It also found the false justification still live at `.work_logs/2026-08-26.md`:66-68, pointing at
+  a path that does not exist. Corrected at the worklog step rather than by rewriting a past entry,
+  per that skill's rule that a corrected past is not an audit trail.
+
+- **INFO — the reviewer's own Bash allow-list names six validators against the Validators line's
+  eight**, so it cannot run `check-templates.py` or `check-steering-anchors.sh`. It disclosed this
+  rather than reporting a complete-looking table. Filed as **#49** rather than fixed here: it is
+  #14's shape in a different pair of documents, and the interesting half — deriving the allow-list
+  from steering instead of restating it — is an escalation that needs its own argument, since it
+  would make a reviewer's permitted commands a function of a file the branch under review can edit.

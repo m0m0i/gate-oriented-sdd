@@ -113,7 +113,9 @@ try:
     text = path.read_text()
 except OSError as exc:
     # Existence is not readability. A guard that cannot read its subject must fail rather
-    # than report success about a file it never opened — see #16, and case 32.
+    # than report success about a file it never opened — see #16, and test-gates.sh's
+    # "unreadable steering file" case. Cited by name: the suite prints no case numbers, and
+    # its source comments and its output order have already diverged.
     print(f"check-templates: {TEMPLATES} exists but cannot be read: {exc}", file=sys.stderr)
     sys.exit(1)
 

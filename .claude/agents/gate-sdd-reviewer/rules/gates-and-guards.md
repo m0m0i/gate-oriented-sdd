@@ -41,25 +41,41 @@ open*, and every rule here is a way that has already happened.
 
 - **G-9 — normalisation belongs on the clearing side, not the accusing one.** Where a guard has two
   patterns — one that *accuses* (the input is wrong) and one that *clears* (but here is why it is
-  fine) — canonicalising the input before both is not symmetric. Stripping before the clearing
-  pattern can only make the guard louder: a removed clearing cue means the input gets flagged.
-  Stripping before the accusing pattern can only make it quieter, because a removed accusing cue
-  means the input is never examined at all. The second is a fail-open, and it reads as a tightening,
-  which is why it survives review. HIGH.
+  fine) — canonicalising the input before both is not symmetric. A normalisation that can only
+  **delete** makes the clearing side louder: a removed clearing cue means the input gets flagged.
+  The same normalisation on the accusing side can only make it quieter, because a removed accusing
+  cue means the input is never examined at all. The second is a fail-open, and it reads as a
+  tightening, which is why it survives review. HIGH.
 
-  Check: find every normalisation — `strip`, `sub`, `lower`, `tr`, `sed` — that runs between reading
-  an input and matching it. Ask which pattern consumes the normalised value. Accusing on normalised
-  input is the finding; clearing on it is the fix.
+  Check: find every normalisation — `strip`, `sub`, `lower`, `tr`, `sed` — sitting between reading an
+  input and matching it, and ask which pattern consumes the normalised value.
 
-  **Two things this rule does not condemn.** A normalisation on the accusing side is safe when it
-  provably cannot remove an accusing cue — trimming leading and trailing whitespace qualifies, since
-  cues live in a line's interior; anything that removes interior content does not.
-  `scripts/check-templates.py` does both, and the difference between its `line.strip()` and its
-  `CODE_OR_PATH.sub` is the worked example. Separately, a *single* comparison with both operands
-  canonicalised — `flat(needle) not in flat(haystack)` in `scripts/check-skill-contracts.py` — is
-  canonicalisation for comparison, not asymmetry; there is no second pattern for it to be asymmetric
-  against.
+  | consumed by | verdict |
+  | :-- | :-- |
+  | the accusing pattern | the finding, unless it provably cannot remove an accusing cue |
+  | the clearing pattern | the fix — subject to the substitution caveat below |
+  | no pattern — an extraction, an emptiness test, display text, an argument to a subprocess | not an instance |
 
-  Introduced by #45 after #10 (PR #44), where a fix for one fail-open created another and it took a
-  full extra review round to find, because the reviewer had to derive the principle rather than cite
-  it. The instance is pinned by case 39 in `scripts/test-gates.sh`.
+  **A substitution that inserts is not monotonic on either side.** "Can only delete" is the premise
+  that makes the clearing side safe, and `re.sub(..., " ", s)` breaks it: inserting a separator can
+  *assemble* a clearing cue that was not in the input. `scripts/check-templates.py` documents that
+  residue on its own clearing side and accepts it with an argument. A clearing-side substitution
+  needs its own argument; it does not inherit this rule's blessing.
+
+  **Two carve-outs, each narrower than it first looks.** A normalisation on the accusing side is
+  safe when it provably cannot remove an accusing cue — trimming leading and trailing whitespace
+  qualifies **only where the accusing pattern's cues cannot occur at a line's edges**. That is true
+  of `check-templates.py`'s `RED` and false of any accuser whose cue is indentation or trailing
+  whitespace, which is the shape a mechanical check for `G-7` would have. Separately, a *single*
+  comparison with both operands mapped into the same equivalence class is canonicalisation for
+  comparison rather than asymmetry — **provided the class is one the property does not
+  distinguish**. `flat()` in `scripts/check-skill-contracts.py` collapses whitespace runs and a
+  rewrapped sentence is the same sentence, so it qualifies; a coarser class, such as case-folding
+  plus punctuation-stripping on a presence check, would not. "One comparison" alone does not earn
+  the exemption.
+
+  Introduced by #45 after #10 (PR #44), where a fix for one fail-open created another and cost a
+  full extra review round, because the reviewer had to derive the principle rather than cite it. The
+  instance is pinned by the `backticked-red` and `slashed-red` assertions in `scripts/test-gates.sh`
+  — cited by name because the suite prints no case numbers, and its source comments and its output
+  order have already diverged by twelve.
