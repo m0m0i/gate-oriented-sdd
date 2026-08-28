@@ -38,3 +38,38 @@ open*, and every rule here is a way that has already happened.
 - **G-8 — a guard's exemption list is part of the guard.** A wrong entry in it is worse than no
   guard, because the guard now certifies the thing it is not checking. Exemptions need a stated
   reason. HIGH.
+
+- **G-9 — normalisation belongs on the clearing side, not the accusing one.** Where a guard has two
+  patterns — one that *accuses* (whose match means the input is wrong) and one that *clears* (but
+  here is why it is fine) — canonicalising the input before both is not symmetric. A normalisation
+  that can only **delete** makes the clearing side louder: a removed clearing cue means the input
+  gets flagged. The same normalisation on the accusing side can only make it quieter, because a
+  removed accusing cue means the input is never examined at all. That is a fail-open, and it reads
+  as a tightening, which is why it survives review. A substitution that *inserts* has neither
+  property — it can assemble a clearing cue that was never in the input — so it needs its own
+  argument on either side; `scripts/check-templates.py` makes that argument and accepts the residue.
+  HIGH.
+
+  Check: find every normalisation — `strip`, `sub`, `lower`, `tr`, `sed` — sitting between reading an
+  input and matching it, and ask which pattern consumes the value.
+
+  | consumed by | verdict |
+  | :-- | :-- |
+  | the accusing pattern | the finding, unless it provably cannot remove an accusing cue |
+  | the clearing pattern | the fix, subject to the insertion caveat above |
+  | no pattern — an extraction, an emptiness test, display, a subprocess argument | not an instance **of G-9** — but the value still reaches a decision, so check it against `G-1` and `G-2` |
+
+  **Two carve-outs, each narrower than it looks.** A normalisation on the accusing side is safe when
+  it provably cannot remove an accusing cue — trimming leading and trailing whitespace qualifies
+  **only where the accusing pattern's cues cannot occur at a line's edges**, which is true of
+  `check-templates.py`'s `RED` and false of any accuser whose cue is indentation or trailing
+  whitespace, the shape a mechanical `G-7` check would have. And a *single* comparison with both
+  operands mapped into the same equivalence class is canonicalisation for comparison rather than
+  asymmetry — **provided the class is one the property does not distinguish**. `flat()` in
+  `scripts/check-skill-contracts.py` collapses whitespace runs and a rewrapped sentence is the same
+  sentence, so it qualifies; "one comparison" alone does not earn the exemption.
+
+  Every guard in `scripts/`, `assets/` and `hooks/` was audited in #45: one instance, fixed, and
+  pinned by `test-gates.sh`'s `backticked-red` and `slashed-red` assertions; the rest are
+  extractions, display, or covered by the two carve-outs above. Cite those assertions by name — the
+  suite prints no case numbers, and its source comments and its output order have already diverged.
