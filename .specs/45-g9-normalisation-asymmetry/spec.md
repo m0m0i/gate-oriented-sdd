@@ -135,11 +135,40 @@ _2026-08-28._
 ### The audit (AC3)
 Recorded here rather than in a commit message, because it is the part a future reader needs.
 
+Every guard in `scripts/`, `assets/` and `hooks/`, and what it normalises:
+
+| Guard | Normalises | Side | Verdict |
+| :-- | :-- | :-- | :-- |
+| `check-templates.py` | `CODE_OR_PATH.sub` | **clearing only** | correct — the fixed instance, pinned by case 39 |
+| `check-templates.py` | `line.strip()` at collection | **accusing** | safe, see below |
+| `check-skill-contracts.py` | `flat()` on both operands | one comparison | legitimate — the carve-out |
+| `check-receipt-schema.py` | `line.strip()` for fence detection | structural | safe — `FIELD` matches the raw line |
+| `check-leakage.sh` | `sed 's\|^\./\|\|'`; `sed 's/^/  /'` | work-set; display | safe — the three accusing greps read raw file content |
+| `check-steering-anchors.sh` | `sed 's/^ *//'` | display, inside the error text | safe — the accusing `grep` reads the raw file |
+| `check-version-bump.py` | `.stdout.strip()` | subprocess hygiene | not a matching normalisation |
+| `review-gate.sh` | `tr -d "\"'"`; `tr '\n' ' '` | input to `git`; display | safe — no pattern pair; this is #1's fix |
+| `quality-gate.sh` | `tr -d '\042\047'` | input to `git` | safe — same |
+| `check-manifests.py`, `check-locks.py`, `steering-digest.sh`, `gate-lib.sh` | none | — | — |
+
+**One live instance, already fixed** (`check-templates.py`'s `CODE_OR_PATH`, corrected in #10 and
+pinned by case 39's `backticked-red` and `slashed-red`). **No new instance found**, so AC4 has
+nothing to fix or file.
+
+**The audit's one real finding is a normalisation on the accusing side that is nonetheless safe.**
+`check-templates.py` stores `line.strip()` at collection, and `RED` then matches that stripped
+string. By the naive reading of this rule that is exactly the defect. It is not, and the reason is
+the thing `G-9` has to say precisely: `.strip()` removes only *leading and trailing* whitespace, and
+an accusing cue lives in the interior of a line. A normalisation on the accusing side is safe when
+it provably cannot remove an accusing cue — and unsafe as soon as it removes interior content, which
+is what `CODE_OR_PATH` does and why it had to move. Without that distinction the rule would condemn
+a `.strip()` in every guard in the repository, and a rule that fires on correct code is a rule
+reviewers learn to skip.
+
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No red step exists for
 > T2 — see the Design note above; the property is already pinned by case 39 from #10.
 
-- [ ] T1: audit every guard in `scripts/`, `assets/` and `hooks/` for normalisation applied before
+- [x] T1: audit every guard in `scripts/`, `assets/` and `hooks/` for normalisation applied before
       matching, and record the per-guard result in the section above — which normalise at all, and
       for each, on which side *(AC3, AC4)*
 - [ ] T2: write `G-9` in the dogfood rulebook, with its observable check and the `flat()` carve-out
