@@ -339,3 +339,16 @@ paragraph earlier. Invited to name a clause to cut, it declined: nothing left is
 closing observation is worth keeping — the real invariant is not a line budget but a shape, `G-9` is
 the only rule in the file with a decision table, and if a `G-10` ever wants one the answer is to
 lift tables into a shared section rather than to trim this one.
+
+**Fourth pass at `8883e36`: APPROVE — clean, nothing at any severity.** Two INFOs, both
+confirmations. The reviewer checked whether the second-pass triage entry above contradicts the third
+— it describes a closing line the third pass then changed — and declined to report it, on the
+grounds that it is a dated record of what was true at `8da1dd3` and that correcting it in place is
+the move `worklog` forbids. Recorded so the reading order is understood to be deliberate.
+
+Its own closing observation is the one worth keeping: both HIGHs were a rule stating a true
+principle in a form broader than its evidence, and both were found by testing the rule's sentences
+against the repository it was written from — which is the check `G-9` now tells the next reviewer to
+run. The rule has been applied to itself once.
+
+Receipt at `.review-receipt`, beside this file.
