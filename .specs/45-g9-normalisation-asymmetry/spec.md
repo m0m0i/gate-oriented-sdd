@@ -1,5 +1,5 @@
 # Spec: the normalisation-asymmetry fail-open has no rule id
-- Slug: 45-g9-normalisation-asymmetry   Issue: 45   Type: bug   Status: approved
+- Slug: 45-g9-normalisation-asymmetry   Issue: 45   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-08-28
 
 ## 1. Requirements (WHAT / WHY)
@@ -56,16 +56,16 @@
      reason, and the record should not keep a wrong justification.
 
 - Acceptance criteria:
-  - [ ] **AC1:** `G-9` SHALL exist in `.claude/agents/gate-sdd-reviewer/rules/gates-and-guards.md`,
+  - [x] **AC1:** `G-9` SHALL exist in `.claude/agents/gate-sdd-reviewer/rules/gates-and-guards.md`,
         citable by id, stating the asymmetry as a property rather than as an anecdote.
-  - [ ] **AC2:** `G-9` SHALL carry an observable check — concrete enough that two reviewers would
+  - [x] **AC2:** `G-9` SHALL carry an observable check — concrete enough that two reviewers would
         flag the same lines — matching the format the surrounding G-rules use.
-  - [ ] **AC3:** every guard in `scripts/`, `assets/` and `hooks/` SHALL be audited for the shape,
+  - [x] **AC3:** every guard in `scripts/`, `assets/` and `hooks/` SHALL be audited for the shape,
         and the result recorded in the spec: which guards normalise input at all, and for each, on
         which side.
-  - [ ] **AC4:** WHEN the audit finds a live instance THE SYSTEM SHALL have it either fixed with a
+  - [x] **AC4:** WHEN the audit finds a live instance THE SYSTEM SHALL have it either fixed with a
         failing case first, or filed as its own issue with the reasoning — never left implicit.
-  - [ ] **AC5:** `./assets/check-locks.py` SHALL still report six pinned files across both reviewer
+  - [x] **AC5:** `./assets/check-locks.py` SHALL still report six pinned files across both reviewer
         directories, so this change does not disturb #16's standing workaround.
 
 - Out of scope:
@@ -171,8 +171,8 @@ reviewers learn to skip.
 - [x] T1: audit every guard in `scripts/`, `assets/` and `hooks/` for normalisation applied before
       matching, and record the per-guard result in the section above — which normalise at all, and
       for each, on which side *(AC3, AC4)*
-- [ ] T2: write `G-9` in the dogfood rulebook, with its observable check and the `flat()` carve-out
+- [x] T2: write `G-9` in the dogfood rulebook, with its observable check and the `flat()` carve-out
       *(AC1, AC2)*
-- [ ] T3: confirm `check-locks.py` still reports six pinned files across both reviewer directories,
+- [x] T3: confirm `check-locks.py` still reports six pinned files across both reviewer directories,
       that no `rules-lock.json` appeared under `.claude/agents/`, and that all nine validators pass
       *(AC5)*

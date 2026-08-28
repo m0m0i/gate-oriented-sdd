@@ -38,3 +38,28 @@ open*, and every rule here is a way that has already happened.
 - **G-8 — a guard's exemption list is part of the guard.** A wrong entry in it is worse than no
   guard, because the guard now certifies the thing it is not checking. Exemptions need a stated
   reason. HIGH.
+
+- **G-9 — normalisation belongs on the clearing side, not the accusing one.** Where a guard has two
+  patterns — one that *accuses* (the input is wrong) and one that *clears* (but here is why it is
+  fine) — canonicalising the input before both is not symmetric. Stripping before the clearing
+  pattern can only make the guard louder: a removed clearing cue means the input gets flagged.
+  Stripping before the accusing pattern can only make it quieter, because a removed accusing cue
+  means the input is never examined at all. The second is a fail-open, and it reads as a tightening,
+  which is why it survives review. HIGH.
+
+  Check: find every normalisation — `strip`, `sub`, `lower`, `tr`, `sed` — that runs between reading
+  an input and matching it. Ask which pattern consumes the normalised value. Accusing on normalised
+  input is the finding; clearing on it is the fix.
+
+  **Two things this rule does not condemn.** A normalisation on the accusing side is safe when it
+  provably cannot remove an accusing cue — trimming leading and trailing whitespace qualifies, since
+  cues live in a line's interior; anything that removes interior content does not.
+  `scripts/check-templates.py` does both, and the difference between its `line.strip()` and its
+  `CODE_OR_PATH.sub` is the worked example. Separately, a *single* comparison with both operands
+  canonicalised — `flat(needle) not in flat(haystack)` in `scripts/check-skill-contracts.py` — is
+  canonicalisation for comparison, not asymmetry; there is no second pattern for it to be asymmetric
+  against.
+
+  Introduced by #45 after #10 (PR #44), where a fix for one fail-open created another and it took a
+  full extra review round to find, because the reviewer had to derive the principle rather than cite
+  it. The instance is pinned by case 39 in `scripts/test-gates.sh`.
