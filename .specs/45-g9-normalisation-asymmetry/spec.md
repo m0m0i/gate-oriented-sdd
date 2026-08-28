@@ -117,10 +117,9 @@ _2026-08-28._
   judgment rules live in a rulebook precisely because they cannot be made deterministic. The
   property `G-9` describes *is* already pinned mechanically, by the `backticked-red` and
   `slashed-red` assertions in `scripts/test-gates.sh`, added in #10 when the defect was fixed. This
-  spec adds the
-  name, not the enforcement. Stated here because a bug spec with no red step otherwise reads as a
-  corner cut, and because `G-4` — "every new gate behaviour needs a case" — correctly does not apply:
-  no gate behaviour changes.
+  spec adds the name, not the enforcement. Stated here because a bug spec with no red step otherwise
+  reads as a corner cut, and because `G-4` — "every new gate behaviour needs a case" — correctly does
+  not apply: no gate behaviour changes.
 
 - **Affected files:** `.claude/agents/gate-sdd-reviewer/rules/gates-and-guards.md`, and this spec.
   Nothing shipped, so **no version bump** — `.claude/` is not in `check-version-bump.py`'s `SHIPPED`
@@ -136,8 +135,7 @@ _2026-08-28._
   defect; it makes it *nameable* in review, which is the layer this repo assigns to judgment. The
   one instance that existed is fixed, and pinned by the `backticked-red` and `slashed-red`
   assertions. What changes is that the next reviewer cites an id instead of deriving the principle
-  mid-review, which is what happened on #44 and cost a
-  round.
+  mid-review, which is what happened on #44 and cost a round.
 
 ### The audit (AC3)
 Recorded here rather than in a commit message, because it is the part a future reader needs.
@@ -312,3 +310,32 @@ files that nothing checks, and a snapshot outliving its subject certifies what i
 no guard. What moved instead is its one durable sentence, now the closing line of `G-9`: twelve
 guards audited, one instance found and fixed, the rest extractions or display. The evidence stays
 where evidence goes; the conclusion goes where the reviewer is already reading.
+
+**Third pass at `8da1dd3`: APPROVE WITH NITS — CLEAN receipt, 0 BLOCKER, 0 HIGH, 3 LOW.** All fixed.
+
+- **LOW — "all twelve guards" resolved, but excluded a thirteenth file silently and would rot in the
+  affirmative direction.** The count was right (thirteen rows, twelve distinct guards — the question
+  I asked was unfounded), but `ls -1 scripts assets hooks` yields thirteen `.py`/`.sh` files, and the
+  thirteenth is `scripts/test-gates.sh`, which the audit omits without saying so. It is on the
+  Validators line, so it runs at turn end and in CI. Worse, a numeral there goes stale *affirming*:
+  a future reviewer reads "all twelve were audited" and does not audit the new one — `G-8`'s shape
+  applied to a sentence. Now reads "Every guard in `scripts/`, `assets/` and `hooks/`", with nothing
+  to reconcile and nothing to rot.
+
+- **LOW — "the rest are extractions or display" was narrower than the table it summarises.** Fixed
+  to "extractions, display, or covered by the two carve-outs above". The old wording denied the
+  existence of the two cases `G-9` spends a paragraph on — the accusing-side `.strip()` that is the
+  audit's one real finding, and the `flat()` carve-out — three lines after explaining how to reason
+  about them.
+
+- **LOW — two orphaned fragments left by my hand repair.** Rejoined, plus one line that was still
+  over-long.
+
+**On length, the reviewer withdrew its own target.** It had said "roughly twice a normal rule",
+then on being pushed did the arithmetic and found the three conditions plus the decision table plus
+minimum context do not compress below about 22–24 lines — so its estimate of 8 was never reachable
+and it had produced the number without checking it against the constraint it had insisted on one
+paragraph earlier. Invited to name a clause to cut, it declined: nothing left is decorative. Its
+closing observation is worth keeping — the real invariant is not a line budget but a shape, `G-9` is
+the only rule in the file with a decision table, and if a `G-10` ever wants one the answer is to
+lift tables into a shared section rather than to trim this one.

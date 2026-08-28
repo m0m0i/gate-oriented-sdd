@@ -69,7 +69,7 @@ open*, and every rule here is a way that has already happened.
   `scripts/check-skill-contracts.py` collapses whitespace runs and a rewrapped sentence is the same
   sentence, so it qualifies; "one comparison" alone does not earn the exemption.
 
-  All twelve guards were audited in #45: one instance, fixed, and pinned by `test-gates.sh`'s
-  `backticked-red` and `slashed-red` assertions; the rest are extractions or display. Cite those
-  assertions by name — the suite prints no case numbers, and its source comments and its output
-  order have already diverged.
+  Every guard in `scripts/`, `assets/` and `hooks/` was audited in #45: one instance, fixed, and
+  pinned by `test-gates.sh`'s `backticked-red` and `slashed-red` assertions; the rest are
+  extractions, display, or covered by the two carve-outs above. Cite those assertions by name — the
+  suite prints no case numbers, and its source comments and its output order have already diverged.
