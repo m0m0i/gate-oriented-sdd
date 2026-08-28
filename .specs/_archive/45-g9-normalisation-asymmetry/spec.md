@@ -1,6 +1,6 @@
 # Spec: the normalisation-asymmetry fail-open has no rule id
-- Slug: 45-g9-normalisation-asymmetry   Issue: 45   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-08-28
+- Slug: 45-g9-normalisation-asymmetry   Issue: 45   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-08-28   Archived: 2026-08-28
 
 ## 1. Requirements (WHAT / WHY)
 
