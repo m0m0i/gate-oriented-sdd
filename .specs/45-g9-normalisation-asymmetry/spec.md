@@ -116,8 +116,8 @@ _2026-08-28._
   rule for the judgment layer — a subagent that reads prose — and the harness's whole design is that
   judgment rules live in a rulebook precisely because they cannot be made deterministic. The
   property `G-9` describes *is* already pinned mechanically, by the `backticked-red` and
-  `slashed-red` assertions in `scripts/test-gates.sh`
-  (`backticked-red` / `slashed-red`), added in #10 when the defect was fixed. This spec adds the
+  `slashed-red` assertions in `scripts/test-gates.sh`, added in #10 when the defect was fixed. This
+  spec adds the
   name, not the enforcement. Stated here because a bug spec with no red step otherwise reads as a
   corner cut, and because `G-4` — "every new gate behaviour needs a case" — correctly does not apply:
   no gate behaviour changes.
@@ -134,8 +134,9 @@ _2026-08-28._
 
 - **Why this cannot recur:** it can, and the honest claim is narrower. `G-9` does not prevent the
   defect; it makes it *nameable* in review, which is the layer this repo assigns to judgment. The
-  one instance that existed is fixed and pinned by the `backticked-red` / `slashed-red` assertions. What changes is that the next reviewer
-  cites an id instead of deriving the principle mid-review, which is what happened on #44 and cost a
+  one instance that existed is fixed, and pinned by the `backticked-red` and `slashed-red`
+  assertions. What changes is that the next reviewer cites an id instead of deriving the principle
+  mid-review, which is what happened on #44 and cost a
   round.
 
 ### The audit (AC3)
@@ -166,8 +167,8 @@ forced `G-9`'s Check to grow a third outcome: most shell normalisation feeds an 
 *emptiness test*, and the rule originally had no verdict for that, which is why this table needed
 five ad-hoc categories the rule never defined.
 
-**One live instance, already fixed** (`check-templates.py`'s `CODE_OR_PATH`, corrected in #10 and
-pinned by the `backticked-red` / `slashed-red` assertions's `backticked-red` and `slashed-red`). **No new instance found**, so AC4 has
+**One live instance, already fixed** — `check-templates.py`'s `CODE_OR_PATH`, corrected in #10 and
+pinned by the `backticked-red` and `slashed-red` assertions. **No new instance found**, so AC4 has
 nothing to fix or file.
 
 **The audit's one real finding is a normalisation on the accusing side that is nonetheless safe.**
@@ -182,7 +183,8 @@ reviewers learn to skip.
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No red step exists for
-> T2 — see the Design note above; the property is already pinned by the `backticked-red` / `slashed-red` assertions from #10.
+> T2 — see the Design note above; the property is already pinned by the `backticked-red` and
+> `slashed-red` assertions, from #10.
 
 - [x] T1: audit every guard in `scripts/`, `assets/` and `hooks/` for normalisation applied before
       matching, and record the per-guard result in the section above — which normalise at all, and
@@ -258,3 +260,55 @@ reviewers learn to skip.
   #14's shape in a different pair of documents, and the interesting half — deriving the allow-list
   from steering instead of restating it — is an escalation that needs its own argument, since it
   would make a reviewer's permitted commands a function of a file the branch under review can edit.
+
+**Second pass at `267dc78`: APPROVE WITH NITS — CLEAN receipt, 0 BLOCKER, 0 HIGH, 1 MEDIUM,
+2 LOW, 3 INFO.** All fixed.
+
+- **MEDIUM — the Check's third verdict row read as a clean bill of health, and the reviewer raised
+  it against a row it had asked for.** Fixed. "Not an instance" inherited the safety register of
+  the two rows above it, while two of the four routes it names do reach a decision:
+  `check-steering-anchors.sh` feeds an extraction into an emptiness test that is half its accusing
+  condition (loosen it and you get #34), and `quality-gate.sh` and `review-gate.sh` strip quotes so
+  `git` sees bare globs (get that wrong and you get #1). The verdict now hands off — *not an
+  instance of G-9, but the value still reaches a decision, so check it against `G-1` and `G-2`.*
+
+- **LOW — my citation replacement was applied mechanically and mangled three sentences.** Fixed by
+  hand. Chained `.replace()` calls double-applied, leaving `assertions's backticked-red` in the
+  sentence stating the audit's conclusion, a doubled citation in the Design note, and three prose
+  lines over 125 columns. Worth recording rather than quietly repairing: the finding it was fixing
+  was *about* citations being unreliable, and I introduced a worse one while fixing it.
+
+- **LOW — "diverged by twelve" is a count in prose, inside the sentence explaining why counts make
+  bad handles.** Fixed by dropping the number. The reviewer also found the source scheme is not
+  injective: `# 14.` through `# 18.` are each used twice in `scripts/test-gates.sh`, so `case 15`
+  through `case 18` are ambiguous *today*, and there are three counts in play — 44 numbered blocks,
+  49 distinct case names, 51 printed results. The argument never needed the magnitude.
+
+- **INFO — the rule assumed the accusing pattern accuses by matching.** Taken, three words: *whose
+  match means the input is wrong*. For a presence check the accusation is the non-match, where a
+  delete-only normalisation makes the accuser louder — the rule would have fired on something safe.
+  Carve-out 2 already caught the one live case, so this was noise rather than a fail-open, but a
+  rule that fires on correct code is one reviewers learn to skip.
+
+- **INFO — the reviewer withdrew its own `case 39` evidence.** It had asserted "39 never denoted
+  this case" from a count of `report` names without grepping for a source-side scheme. The
+  conclusion survived; the evidence did not.
+
+### On length, and where the audit table lives
+
+`G-9` is 34 lines against 3–5 for every other rule. The reviewer's arrangement advice was taken in
+full — the insertion caveat folded into the opening, the provenance cut to one line, the
+illustrative counter-example dropped, the verdict table moved directly under the property — and that
+is 6 lines, close to its own estimate of 8. Its accompanying target of "roughly twice a normal rule"
+was not reachable and is not consistent with its own instruction that the three conditions *are* the
+rule and must not be traded for brevity: the table alone is five lines and each condition is a
+sentence that has already been wrong once. **Recorded as a deliberate miss rather than silently
+approximated.** It is the only rule in the file whose misapplication is dangerous in both
+directions, and the two-line version of it was wrong on two consecutive commits.
+
+The audit table stays in this spec rather than moving to `docs/`. It is a dated snapshot of twelve
+files that nothing checks, and a snapshot outliving its subject certifies what it is not checking —
+`G-8`'s shape applied to a document. A second inventory in `docs/` would need hand-maintenance with
+no guard. What moved instead is its one durable sentence, now the closing line of `G-9`: twelve
+guards audited, one instance found and fixed, the rest extractions or display. The evidence stays
+where evidence goes; the conclusion goes where the reviewer is already reading.

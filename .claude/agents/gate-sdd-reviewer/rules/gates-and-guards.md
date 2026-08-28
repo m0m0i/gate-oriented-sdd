@@ -40,42 +40,36 @@ open*, and every rule here is a way that has already happened.
   reason. HIGH.
 
 - **G-9 — normalisation belongs on the clearing side, not the accusing one.** Where a guard has two
-  patterns — one that *accuses* (the input is wrong) and one that *clears* (but here is why it is
-  fine) — canonicalising the input before both is not symmetric. A normalisation that can only
-  **delete** makes the clearing side louder: a removed clearing cue means the input gets flagged.
-  The same normalisation on the accusing side can only make it quieter, because a removed accusing
-  cue means the input is never examined at all. The second is a fail-open, and it reads as a
-  tightening, which is why it survives review. HIGH.
+  patterns — one that *accuses* (whose match means the input is wrong) and one that *clears* (but
+  here is why it is fine) — canonicalising the input before both is not symmetric. A normalisation
+  that can only **delete** makes the clearing side louder: a removed clearing cue means the input
+  gets flagged. The same normalisation on the accusing side can only make it quieter, because a
+  removed accusing cue means the input is never examined at all. That is a fail-open, and it reads
+  as a tightening, which is why it survives review. A substitution that *inserts* has neither
+  property — it can assemble a clearing cue that was never in the input — so it needs its own
+  argument on either side; `scripts/check-templates.py` makes that argument and accepts the residue.
+  HIGH.
 
   Check: find every normalisation — `strip`, `sub`, `lower`, `tr`, `sed` — sitting between reading an
-  input and matching it, and ask which pattern consumes the normalised value.
+  input and matching it, and ask which pattern consumes the value.
 
   | consumed by | verdict |
   | :-- | :-- |
   | the accusing pattern | the finding, unless it provably cannot remove an accusing cue |
-  | the clearing pattern | the fix — subject to the substitution caveat below |
-  | no pattern — an extraction, an emptiness test, display text, an argument to a subprocess | not an instance |
+  | the clearing pattern | the fix, subject to the insertion caveat above |
+  | no pattern — an extraction, an emptiness test, display, a subprocess argument | not an instance **of G-9** — but the value still reaches a decision, so check it against `G-1` and `G-2` |
 
-  **A substitution that inserts is not monotonic on either side.** "Can only delete" is the premise
-  that makes the clearing side safe, and `re.sub(..., " ", s)` breaks it: inserting a separator can
-  *assemble* a clearing cue that was not in the input. `scripts/check-templates.py` documents that
-  residue on its own clearing side and accepts it with an argument. A clearing-side substitution
-  needs its own argument; it does not inherit this rule's blessing.
+  **Two carve-outs, each narrower than it looks.** A normalisation on the accusing side is safe when
+  it provably cannot remove an accusing cue — trimming leading and trailing whitespace qualifies
+  **only where the accusing pattern's cues cannot occur at a line's edges**, which is true of
+  `check-templates.py`'s `RED` and false of any accuser whose cue is indentation or trailing
+  whitespace, the shape a mechanical `G-7` check would have. And a *single* comparison with both
+  operands mapped into the same equivalence class is canonicalisation for comparison rather than
+  asymmetry — **provided the class is one the property does not distinguish**. `flat()` in
+  `scripts/check-skill-contracts.py` collapses whitespace runs and a rewrapped sentence is the same
+  sentence, so it qualifies; "one comparison" alone does not earn the exemption.
 
-  **Two carve-outs, each narrower than it first looks.** A normalisation on the accusing side is
-  safe when it provably cannot remove an accusing cue — trimming leading and trailing whitespace
-  qualifies **only where the accusing pattern's cues cannot occur at a line's edges**. That is true
-  of `check-templates.py`'s `RED` and false of any accuser whose cue is indentation or trailing
-  whitespace, which is the shape a mechanical check for `G-7` would have. Separately, a *single*
-  comparison with both operands mapped into the same equivalence class is canonicalisation for
-  comparison rather than asymmetry — **provided the class is one the property does not
-  distinguish**. `flat()` in `scripts/check-skill-contracts.py` collapses whitespace runs and a
-  rewrapped sentence is the same sentence, so it qualifies; a coarser class, such as case-folding
-  plus punctuation-stripping on a presence check, would not. "One comparison" alone does not earn
-  the exemption.
-
-  Introduced by #45 after #10 (PR #44), where a fix for one fail-open created another and cost a
-  full extra review round, because the reviewer had to derive the principle rather than cite it. The
-  instance is pinned by the `backticked-red` and `slashed-red` assertions in `scripts/test-gates.sh`
-  — cited by name because the suite prints no case numbers, and its source comments and its output
-  order have already diverged by twelve.
+  All twelve guards were audited in #45: one instance, fixed, and pinned by `test-gates.sh`'s
+  `backticked-red` and `slashed-red` assertions; the rest are extractions or display. Cite those
+  assertions by name — the suite prints no case numbers, and its source comments and its output
+  order have already diverged.
