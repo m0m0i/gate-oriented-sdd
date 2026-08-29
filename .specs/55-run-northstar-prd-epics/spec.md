@@ -142,7 +142,7 @@ Resolved 2026-08-29.
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: capture the baseline and confirm it green — `./scripts/test-gates.sh`, all eight
+- [x] T1: capture the baseline and confirm it green — `./scripts/test-gates.sh`, all eight
       `- Validators:` commands, the `- Owns:` line, and a `sha256` of `docs/BACKLOG.md` — recorded
       verbatim into the branch. This is the before-value AC1, AC2 and AC8 are compared against,
       and without it they cannot be observed.
