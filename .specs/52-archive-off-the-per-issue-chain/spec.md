@@ -1,5 +1,5 @@
 # Spec: Archive leaves the per-issue chain, and the chain stops describing a PR that is gone
-- Slug: 52-archive-off-the-per-issue-chain   Issue: 52   Type: feature   Status: draft
+- Slug: 52-archive-off-the-per-issue-chain   Issue: 52   Type: feature   Status: approved
 - Author: m0m0i   Date: 2026-08-29
 
 ## 1. Requirements (WHAT / WHY)
@@ -132,7 +132,7 @@ Three decisions worth recording:
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] **T1:** failing `test-gates.sh` case asserting the digest names the chain through `worklog`
+- [x] **T1:** failing `test-gates.sh` case asserting the digest names the chain through `worklog`
       with no `archive` step and states the sweep is on request — then the `hooks/steering-digest.sh`
       edit that makes it pass. (AC1 digest half, AC2)
 - [ ] **T2:** failing `check-skill-contracts.py` — add the `implement` contract pinning the closing

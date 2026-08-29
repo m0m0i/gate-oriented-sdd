@@ -1023,5 +1023,30 @@ out=$(run_templates "$r")
   || report "markup on either side cannot hide a split" no \
      "bold=$c1 names-line=$c2 emdash=$c3 numbered=$c4 empty-section=$c5 names-section=$c6 path-citation=$c7 backticked-red=$c8 slashed-red=$c9"
 
+# --- hooks/steering-digest.sh: the flow it announces ---------------------------------
+#
+# 40. The digest names the per-issue chain, and keeps archive out of it.
+#
+# Every cold session reads this line, which makes it the one description of the flow that is
+# guaranteed to be acted on rather than merely read. #30 folded the spec's own pull request
+# away and this line went on announcing it until a human happened to notice — prose drifting
+# where no case could see it, in the one hook whose whole job is to state facts.
+#
+# The negative half cannot stand alone: a digest that printed nothing at all would satisfy
+# "no archive in the chain". Two positive assertions and a clean stderr corroborate it, so a
+# run that checked nothing cannot report ok. See #16 for why that is written down.
+r=$(anchor_repo dg-flow '- Owns: gates never fail open')
+cp "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+flow=$(grep -F 'The flow is' "$TMP/dgout")
+sweep=$(grep -F 'Archiving' "$TMP/dgout")
+case "$flow" in *"spec -> clarify -> implement -> reviewer -> worklog"*) c1=ok ;; *) c1=no ;; esac
+case "$flow" in *archive*) c2=no ;; *) c2=ok ;; esac
+case "$sweep" in *"on request"*) c3=ok ;; *) c3=no ;; esac
+[ -s "$TMP/dgerr" ] && c4=no || c4=ok
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "the digest names the chain and keeps archive out of it" ok \
+  || report "the digest names the chain and keeps archive out of it" no \
+     "chain=$c1 no-archive=$c2 sweep-on-request=$c3 clean-stderr=$c4"
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
