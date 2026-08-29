@@ -83,8 +83,11 @@ CONTRACTS = (
     ),
     (
         "skills/archive/SKILL.md",
-        "not after every merge",
-        "Pins the `description:` line, not the body: that line is what a harness surfaces "
+        "to be noise — not after every merge",
+        "Pins the `description:` line, and is worded so only that line can satisfy it — the "
+        "body says the same thing twice in near-miss forms and README.md uses the bare "
+        "phrase, so a shorter needle would let a reverted description pass on a match "
+        "found elsewhere in the file. That line is what a harness surfaces "
         "before the body is ever loaded, so it alone decides whether the skill is invoked per "
         "merge or per noisy directory — reverting it puts a git mv back on the critical path "
         "of every issue for any consumer whose model never opens the file. The body's fuller "

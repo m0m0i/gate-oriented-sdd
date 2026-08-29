@@ -103,7 +103,7 @@ Three decisions worth recording:
 | `scripts/test-gates.sh` | no | one case over the digest's flow line |
 | `README.md`, `README.ja.md` | no | delivery diagram: `(review PR)` gone, `archive` moved beside the chain |
 | `.specs/README.md`, `docs/layout.md` | no | same chain, stated once each |
-| `plugin.json`, `.claude-plugin/plugin.json` | yes | `0.3.9` → `0.4.0` |
+| `plugin.json`, `.claude-plugin/plugin.json` | yes | `0.3.9` → `0.4.0`, and the `description` chain — an AC1 surface, found in review |
 
 ### Contract changes, and who else consumes them
 
@@ -123,6 +123,17 @@ Three decisions worth recording:
   rewording the sentence fails the build even when the meaning survives. That is the intended cost —
   it forces the edit to be deliberate — but it means the needles must be short and quote the load-
   bearing clause only, not a whole sentence with punctuation in it.
+
+  Two exceptions were argued in review and are recorded here so they are not re-opened as
+  oversights. The `implement` needle keeps its conjunction — "Do not propose archiving, **and** do
+  not open a follow-up pull request" — and is deliberately not split into two entries. The reason
+  is *not* the init precedent about pinning one half of a conjunction: splitting would pin both
+  halves and would not repeat that mistake. It is that one conjoined string already asserts both
+  halves, so splitting buys zero coverage while spending the budget the docstring's new limit was
+  just given. And the `archive` needle is deliberately *longer* than this bullet advises,
+  `"to be noise — not after every merge"`, because the short form occurs in `README.md` and in
+  near-miss wording in this skill's own body — a needle that can be satisfied somewhere other than
+  the line it claims to pin is a guard that goes green having checked nothing.
 - **`check-version-bump.py` is red from T1 until T5.** It is CI-only and deliberately not on the
   Validators line, so this blocks no turn; it is stated here so a reader of a mid-branch failure
   knows it is expected.
@@ -147,7 +158,8 @@ Three decisions worth recording:
       `.specs/README.md`, `docs/layout.md`, plus the lifecycle sentence in `skills/spec/SKILL.md`
       and the one line in `skills/worklog/SKILL.md`. Verified by the reviewer against AC1, not by a
       check — and this task is where that limitation is acknowledged rather than papered over.
-      (AC1)
+      The `description` field of both manifests belongs to this task and was missed: review found
+      it, and it is the AC1 surface a consumer sees first. (AC1)
 - [x] **T5:** failing `./scripts/check-version-bump.py origin/main` — red since T1 touched a shipped
       path — then `0.3.9` → `0.4.0` in both manifests, green, with `./scripts/check-manifests.py`
       confirming they still agree. (AC5)
