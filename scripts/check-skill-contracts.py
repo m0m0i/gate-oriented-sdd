@@ -71,6 +71,14 @@ CONTRACTS = (
     ),
     (
         "skills/implement/SKILL.md",
+        "Do not propose archiving, and do not open a follow-up pull request",
+        "The closing step is where the chain says what comes next, and while it said "
+        "archive, every merged spec bought a second pull request whose entire diff was a "
+        "git mv. Deleting this clause restores that silently — the flow reads fine either "
+        "way, which is exactly the failure prose has no compiler to catch. See #52.",
+    ),
+    (
+        "skills/implement/SKILL.md",
         "Never record `subagent` for a review you ran inline",
         "reviewed_by is only worth having if it is written honestly. See #9.",
     ),

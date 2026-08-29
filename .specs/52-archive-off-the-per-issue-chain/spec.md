@@ -135,7 +135,7 @@ Three decisions worth recording:
 - [x] **T1:** failing `test-gates.sh` case asserting the digest names the chain through `worklog`
       with no `archive` step and states the sweep is on request — then the `hooks/steering-digest.sh`
       edit that makes it pass. (AC1 digest half, AC2)
-- [ ] **T2:** failing `check-skill-contracts.py` — add the `implement` contract pinning the closing
+- [x] **T2:** failing `check-skill-contracts.py` — add the `implement` contract pinning the closing
       step's "no follow-up pull request" clause — then the `skills/implement/SKILL.md` edit that
       makes it pass. (AC3)
 - [ ] **T3:** failing `check-skill-contracts.py` — add the `archive` contract pinning the

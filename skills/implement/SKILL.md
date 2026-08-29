@@ -55,7 +55,16 @@ When every task is committed and the validators pass:
    The review gate reads this file and refuses to end a turn when a spec whose tasks are all ticked has no receipt, a non-CLEAN one, or one whose `reviewed_sha` predates a later source change.
 
    **Never write a receipt for a review that did not run.** The gate catches omission and staleness; a fabricated receipt defeats the only mechanical check in the flow, and it defeats it silently.
-5. Run `worklog`, then summarize the diff and propose the PR, closing its issue.
+5. Run `worklog`. The entry is committed on this branch, so it ships inside this issue's single
+   pull request rather than in one of its own. Then summarize the diff and propose that PR,
+   closing its issue.
+
+   **That PR is the last step. Do not propose archiving, and do not open a follow-up pull
+   request for it.** Moving a shipped spec into `.specs/_archive/` is a sweep run on request,
+   whenever `.specs/` has grown noisy enough to be worth a minute — a `git mv` is not a change
+   that earns a branch, a review and a merge of its own. Nothing downstream is waiting on it
+   either: the review gate reads `.specs/<current branch>/spec.md` and cannot see a shipped
+   spec still sitting in `.specs/`.
 
 ## Rules
 
