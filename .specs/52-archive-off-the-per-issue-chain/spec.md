@@ -1,5 +1,5 @@
 # Spec: Archive leaves the per-issue chain, and the chain stops describing a PR that is gone
-- Slug: 52-archive-off-the-per-issue-chain   Issue: 52   Type: feature   Status: approved
+- Slug: 52-archive-off-the-per-issue-chain   Issue: 52   Type: feature   Status: done
 - Author: m0m0i   Date: 2026-08-29
 
 ## 1. Requirements (WHAT / WHY)
