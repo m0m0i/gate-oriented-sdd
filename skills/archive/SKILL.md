@@ -9,6 +9,8 @@ description: Sweep shipped specs out of .specs/ into .specs/_archive/ and set St
 
 **This is a sweep you run when you choose, not the step that follows a merge.** One shipped spec is a `git mv`, and a branch, a review and a merge to carry it is more process than the change contains — a flow with that step in it spends a second pull request per issue on a diff nobody reads. Nothing mechanical is waiting either: the review gate reads `.specs/<current branch>/spec.md`, so a shipped spec still sitting in `.specs/` cannot block a turn or stale a receipt. What it costs is **context, per session rather than per spec**, which is why the right trigger is a directory that has grown noisy rather than a merge that has just happened.
 
+There is one direction in which this is not symmetric, and it is worth knowing before you sweep: archiving the spec of the branch you are **on** moves `.specs/<branch>/spec.md` out from under the review gate, which passes on any branch it finds no spec for. That silences the gate for that branch entirely, receipt freshness included. Sweeping from its own branch, as below, is what keeps it out of reach.
+
 ## Steps
 
 1. Determine the targets — a named slug, or with `--swept`, every spec whose `Status` is `done` **and** whose PR has merged. Check the tracker when in doubt; do not archive work that merely looks finished.

@@ -12,9 +12,11 @@
   the whole harness skipped along with it.
 - Acceptance criteria:
   - [ ] **AC1:** WHEN any document in this repository describes the delivery chain — `README.md`,
-    `README.ja.md`, `hooks/steering-digest.sh`, `.specs/README.md`, `docs/layout.md` — THE SYSTEM
-    SHALL name it as `spec → clarify → implement → reviewer → worklog`, containing neither a spec
-    review PR nor an `archive` step.
+    `README.ja.md`, `hooks/steering-digest.sh`, `.specs/README.md`, `docs/layout.md`, and the
+    `description` field of **both manifests**, which is the chain a marketplace listing shows
+    before a single skill body loads — THE SYSTEM SHALL name it as
+    `spec → clarify → implement → reviewer → worklog`, containing neither a spec review PR nor an
+    `archive` step.
   - [ ] **AC2:** WHEN a session starts THE SYSTEM SHALL state in the digest that archiving shipped
     specs is a sweep run on request, not a step in the per-issue flow.
   - [ ] **AC3:** WHEN `implement` reaches its closing step THE SYSTEM SHALL have the work-log entry

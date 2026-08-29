@@ -13,6 +13,10 @@ plainly is better than implying the stronger one.
 Keep the list short. A check that grows to police every sentence becomes an obstacle to
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
+
+Nine today. A tenth needs an argument, in the spec that proposes it, for why review cannot
+defend that sentence instead — "short" with no number attached is not a limit, and the list
+grows one defensible entry at a time.
 """
 
 import pathlib
@@ -79,11 +83,13 @@ CONTRACTS = (
     ),
     (
         "skills/archive/SKILL.md",
-        "a sweep you run when you choose, not the step that follows a merge",
-        "The counterpart to `implement`'s clause, and the one a harness surfaces first: this "
-        "skill's own framing is what decides whether it is invoked per merge or per noisy "
-        "directory. Described as the step after a merge, it puts a git mv on the critical "
-        "path of every issue. See #52.",
+        "not after every merge",
+        "Pins the `description:` line, not the body: that line is what a harness surfaces "
+        "before the body is ever loaded, so it alone decides whether the skill is invoked per "
+        "merge or per noisy directory — reverting it puts a git mv back on the critical path "
+        "of every issue for any consumer whose model never opens the file. The body's fuller "
+        "statement of the same rule is deliberately left to review; one needle can assert one "
+        "string, and this is the string a consumer acts on. See #52.",
     ),
     (
         "skills/implement/SKILL.md",
