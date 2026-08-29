@@ -19,6 +19,9 @@
     commands exiting 0, before and after.
   - `docs/BACKLOG.md`, byte-identical. `backlog` is not in this issue, and re-grooming a
     curated ordering is a deliberate act rather than a side effect of a verification run.
+  - `.steering/tech.md` and `.steering/structure.md`, byte-identical. `.steering/product.md`
+    is **no longer** on this list as a whole file — see clarification 4 — but its `- Owns:`
+    line still is, and that is the constraint AC2 enforces.
   - Every shipped path: `skills/`, `agents/`, `hooks/`, `assets/`. This spec authors documents
     and records observations. A defect found mid-run gets an issue, not a fix — a fixed chain
     is no longer the shipped chain, and the run stops describing what a consumer would get.
@@ -59,7 +62,8 @@ fail open` verbatim in `.steering/product.md`, and `./assets/check-steering-anch
         reporting only successes has not been recorded honestly; that file's own account of the row
         written before it was observed is the standard.
   - [ ] **AC8:** WHEN the run completes `git diff --stat main` SHALL show changes confined to
-        `docs/` and `.specs/55-run-northstar-prd-epics/`, with `docs/BACKLOG.md` unchanged.
+        `docs/`, `.specs/55-run-northstar-prd-epics/`, and `.steering/product.md`, with
+        `docs/BACKLOG.md` unchanged. _Amended 2026-08-29 — see clarification 4._
 
 - Out of scope:
   - `contract` and `design-doc` — #56. They write state the gates already read, which is a
@@ -100,6 +104,24 @@ Resolved 2026-08-29.
    receipts and `.steering/product.md` carries a paragraph of rationale for the current value.
    Changing it would turn a verification run into a steering change with a far wider blast
    radius. AC2 stands as written.
+
+4. **Q: `prd` step 7 says "register the ids … and summarise into `.steering/product.md`", which
+   AC8 as originally written forbids. Amend, or scope the step out?**
+   **A: Amend AC8 to permit `.steering/product.md`, and run step 7 as written.** Raised at the
+   start of T3, before `prd` ran.
+   The conflict is a scoping error in #55 itself, not in the skill: this issue was split from #56
+   on the premise that #55 touches no state the gates read, and `prd` step 7 does. The split
+   missed it.
+   Amending rather than skipping, for a reason beyond fidelity: `.steering/product.md` is
+   hand-authored today — "Who uses it", "What it deliberately is not", "The claim that has to stay
+   true" — so a PRD summary must either merge with that prose or replace it. **That is the same
+   preserve-merge-clobber seam T2 set out to observe and could not**, because `northstar`'s
+   derivation agreed with the existing `Owns:` value. Step 7 is a second chance at it on a
+   different file, and skipping it would leave two of this run's three skills with an unexercised
+   seam.
+   Guarded by: AC2 is unchanged, so `- Owns:` must stay byte-identical;
+   `check-steering-anchors.sh` must still resolve 5 of 5; and T1 recorded the file's checksum, so
+   the before-state is recoverable.
 
 ## 2. Design (HOW)
 
