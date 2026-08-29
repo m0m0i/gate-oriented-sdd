@@ -146,7 +146,7 @@ Resolved 2026-08-29.
       `- Validators:` commands, the `- Owns:` line, and a `sha256` of `docs/BACKLOG.md` — recorded
       verbatim into the branch. This is the before-value AC1, AC2 and AC8 are compared against,
       and without it they cannot be observed.
-- [ ] T2: run `northstar`; assert AC2 and AC3 — anchors resolve 5 of 5, `- Owns:` byte-identical,
+- [x] T2: run `northstar`; assert AC2 and AC3 — anchors resolve 5 of 5, `- Owns:` byte-identical,
       `docs/NORTH_STAR.md` written with `LV-` lever ids — and record what the skill did on finding
       an `Owns:` value already present.
 - [ ] T3: run `prd`; assert AC4 and AC4b — `docs/PRD.md` at `Status: draft`, every capability's
