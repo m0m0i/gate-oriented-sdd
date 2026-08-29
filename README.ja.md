@@ -77,13 +77,18 @@ northstar ──▶ prd ──▶ design-doc ──▶ epics ──▶ backlog �
 **下流。Issue につき一度:**
 
 ```text
-spec ──▶ clarify ──▶ (spec の PR) ──▶ implement ──▶ reviewer ──▶ worklog ──▶ archive
-         5問以内                    Red/Green/Refactor   receipt
+spec ──▶ clarify ──▶ implement ──▶ reviewer ──▶ worklog ──▶ PR 1本、Issue を閉じる
+         5問以内     Red/Green/Refactor  receipt
+
+archive ····· チェーンの中ではなく、その傍らに。出荷済みの spec を .specs/ から掃き出す
+              作業で、マージのたびではなく、ディレクトリが散らかってきたときに走らせる
 ```
 
 Issue、ブランチ、spec ディレクトリ、PR は同じ slug を共有し、PR が Issue を閉じます。ルールは **Issue なくして spec なし**。`spec` は Issue がなければ黙って作ることをせず、そこで停止して尋ねます。Issue のない spec とは、誰も選んでいない作業が始まっているということだからです。ゲートはこれを機械的に検査します。slug は `<issue>-<title>` なので、Issue 番号のない spec ディレクトリはターンを止めます。
 
 1つの Issue に対して、spec もブランチも PR も1つです。そしてこのチェーンの中で、多くのスペック駆動開発に欠けていると思うのが `clarify` です。スペック駆動開発でいちばん多い失敗は、構造が足りないことではありません。要件を読み違えたまま、自信を持って書かれた spec です。しかもこれはレビューでは捕まえられません。読み違えていても、いなくても、ドキュメントの見た目は同じだからです。
+
+**チェーンは PR 1本で終わります。** spec はその PR の最初のコミットであって、spec 自体の PR はありません。work log は最後のほうのコミットで、マージがおしまいです。続く PR はありません。`archive` がチェーンの傍らにあるのはそのためです。`git mv` 1回にブランチとレビューとマージを1式与えるほどの中身はなく、機械的に待っているものもありません。review gate が読むのは現在のブランチの spec だけで、`.specs/` に残った出荷済みの spec は見えないからです。掃除の代金はマージごとではなく、散らかったディレクトリごとに払います。
 
 上流の skill は、ハーネスが機械的に使うものに行き着かないかぎり採用しません。`northstar` は reviewer が重大度の判断に読む品質のアンカーを、`contract` は reviewer のルールブックを、`backlog` → `sprint` は `spec` が消費する型付きの Issue を、`design-doc` は `.steering/structure.md` と reviewer がエスカレーション先にする ADR を生みます。文章で終わるだけのドキュメントは、このリポジトリが生成すべきものではありません。
 
@@ -103,7 +108,7 @@ Issue、ブランチ、spec ディレクトリ、PR は同じ slug を共有し�
 | `clarify`    | 設計の前に、影響範囲の大きい順で5問まで                                    | spec に記録された曖昧さ                      |
 | `implement`  | TDD ループと、必須の reviewer パス                                         | ゲートが検査する receipt                     |
 | `worklog`    | 追記のみのセッション記録                                                   | 理由つきの決定                               |
-| `archive`    | 出荷済みの spec を `.specs/` の外へ                                        | `.specs/` が「生きている作業」を意味する状態 |
+| `archive`    | 出荷済みの spec を `.specs/` の外へ、頼まれたときにまとめて                | `.specs/` が「生きている作業」を意味する状態 |
 
 加えて、読み取り専用の reviewer が3つ（TypeScript、Python、Dart/Flutter）と、どれにも当てはまらないスタック向けのテンプレートがあります。
 

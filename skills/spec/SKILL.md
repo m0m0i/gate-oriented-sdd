@@ -28,7 +28,9 @@ Produce ONE document a teammate can review *before* any code is written. That do
 | `draft` | Written, not yet agreed. Not implementable. | `spec` |
 | `approved` | The spec is agreed. `implement` may start. | you, when you accept it |
 | `done` | Every task ticked, reviewer gate CLEAN, PR open. | `implement` |
-| `archived` | Shipped, moved to `.specs/_archive/<slug>/`. | `archive` |
+| `archived` | Shipped, moved to `.specs/_archive/<slug>/` by a sweep run on request. | `archive` |
+
+**Four statuses, not four steps.** Delivery ends at `done`, with the PR open; it then merges and closes its issue. `archived` is bookkeeping applied whenever `.specs/` has grown noisy, so a merged spec still sitting in `.specs/` is finished work, not an unfinished one.
 
 **The spec is not a separate pull request.** One issue is one branch and one PR, and the spec is the first commit on that branch — so the diff reads spec first, then the code that satisfies it, and a reader can see what was agreed before any code existed.
 

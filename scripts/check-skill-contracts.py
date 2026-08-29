@@ -13,6 +13,10 @@ plainly is better than implying the stronger one.
 Keep the list short. A check that grows to police every sentence becomes an obstacle to
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
+
+Nine today. A tenth needs an argument, in the spec that proposes it, for why review cannot
+defend that sentence instead — "short" with no number attached is not a limit, and the list
+grows one defensible entry at a time.
 """
 
 import pathlib
@@ -68,6 +72,27 @@ CONTRACTS = (
         "green again gets a turn that ends red and no sentence explaining why. "
         "check-templates.py guards the templates; this guards the sentence that says what "
         "the templates were folded FOR. See #10.",
+    ),
+    (
+        "skills/implement/SKILL.md",
+        "Do not propose archiving, and do not open a follow-up pull request",
+        "The closing step is where the chain says what comes next, and while it said "
+        "archive, every merged spec bought a second pull request whose entire diff was a "
+        "git mv. Deleting this clause restores that silently — the flow reads fine either "
+        "way, which is exactly the failure prose has no compiler to catch. See #52.",
+    ),
+    (
+        "skills/archive/SKILL.md",
+        "to be noise — not after every merge",
+        "Pins the `description:` line, and is worded so only that line can satisfy it — the "
+        "body says the same thing twice in near-miss forms and README.md uses the bare "
+        "phrase, so a shorter needle would let a reverted description pass on a match "
+        "found elsewhere in the file. That line is what a harness surfaces "
+        "before the body is ever loaded, so it alone decides whether the skill is invoked per "
+        "merge or per noisy directory — reverting it puts a git mv back on the critical path "
+        "of every issue for any consumer whose model never opens the file. The body's fuller "
+        "statement of the same rule is deliberately left to review; one needle can assert one "
+        "string, and this is the string a consumer acts on. See #52.",
     ),
     (
         "skills/implement/SKILL.md",

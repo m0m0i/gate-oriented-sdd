@@ -34,6 +34,7 @@ A spec says what was intended. A diff says what changed. Neither says **why the 
 
 ## Rules
 
+- **The entry rides the branch it describes.** Run after `implement`, it is committed on the issue's branch and ships inside that issue's single pull request — it is never a pull request of its own.
 - **Append. Never rewrite past entries.** This is an audit trail; a corrected past is not one. If an earlier entry was wrong, say so in today's entry.
 - One section per session. Several people on the same day means several sections under that date, not a merged one.
 - **Record decisions with their reasons**, including the options rejected. A decision without its "why" gets re-litigated in three weeks by someone who has forgotten there was a reason.

@@ -33,8 +33,9 @@ owns=$(gate_steering_value .steering/product.md Owns)
 v=$(gate_steering_value .steering/tech.md Validators);  [ -n "$v" ] && echo "- Validators: $v"
 r=$(gate_steering_value .steering/tech.md Reviewer);    [ -n "$r" ] && echo "- The reviewer for this repo is $r."
 
-echo "- The flow is spec -> clarify -> implement -> reviewer -> worklog -> archive. One issue = one spec = one branch = one PR."
+echo "- The flow is spec -> clarify -> implement -> reviewer -> worklog. One issue = one spec = one branch = one PR, and that PR is the last step."
 echo "- Live specs are .specs/<slug>/spec.md; shipped ones are under .specs/_archive/."
+echo "- Archiving a shipped spec into .specs/_archive/ is a sweep run on request, not a step in that flow."
 echo "- A Stop hook enforces the quality gate and the freshness of the review receipt."
 
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')
