@@ -146,6 +146,6 @@ Three decisions worth recording:
       and the one line in `skills/worklog/SKILL.md`. Verified by the reviewer against AC1, not by a
       check — and this task is where that limitation is acknowledged rather than papered over.
       (AC1)
-- [ ] **T5:** failing `./scripts/check-version-bump.py origin/main` — red since T1 touched a shipped
+- [x] **T5:** failing `./scripts/check-version-bump.py origin/main` — red since T1 touched a shipped
       path — then `0.3.9` → `0.4.0` in both manifests, green, with `./scripts/check-manifests.py`
       confirming they still agree. (AC5)
