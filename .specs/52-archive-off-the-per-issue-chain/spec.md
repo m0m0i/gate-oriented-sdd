@@ -141,7 +141,7 @@ Three decisions worth recording:
 - [x] **T3:** failing `check-skill-contracts.py` — add the `archive` contract pinning the
       on-request-sweep clause — then the `skills/archive/SKILL.md` rewrite, `description:` line
       included, that makes it pass. (AC4)
-- [ ] **T4:** the prose with no guard, in one commit: `README.md`, `README.ja.md`,
+- [x] **T4:** the prose with no guard, in one commit: `README.md`, `README.ja.md`,
       `.specs/README.md`, `docs/layout.md`, plus the lifecycle sentence in `skills/spec/SKILL.md`
       and the one line in `skills/worklog/SKILL.md`. Verified by the reviewer against AC1, not by a
       check — and this task is where that limitation is acknowledged rather than papered over.

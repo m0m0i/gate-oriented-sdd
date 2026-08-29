@@ -31,7 +31,7 @@ your-project/
 │   │   ├── spec.md                ←   Requirements → Design → TDD Tasks
 │   │   └── .review-receipt        ← implement    what the reviewer found, and at which SHA
 │   └── _archive/
-│       └── 17-parse-durations/    ← archive      shipped, moved with git mv, slug preserved
+│       └── 17-parse-durations/    ← archive      swept on request, git mv, slug preserved
 │
 ├── .work_logs/
 │   └── 2026-08-21.md              ← worklog      append-only session log
@@ -61,6 +61,10 @@ inception docs ──▶ backlog ──▶ sprint ──▶ Issue ──▶ bran
 ```
 
 The **issue, the branch, the spec directory, and the PR share one slug** — `<issue-number>-<kebab-title>` — and a PR closes its issue. That is the invariant everything else is arranged around, and the review gate checks the first half of it mechanically: a spec directory whose slug has no issue number blocks the turn.
+
+The chain ends when that PR merges. `archive` is not part of it — shipped specs move to
+`_archive/` in a sweep run on request, whenever `.specs/` has grown noisy enough that a
+session's glob returns work that is no longer live.
 
 A **milestone** (or Linear cycle, or Jira sprint) is an optional grouping label over issues. Nothing in the chain depends on one — no spec, branch, or PR hangs off it.
 

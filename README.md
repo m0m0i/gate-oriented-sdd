@@ -60,11 +60,16 @@ It creates nothing. `sprint` decomposes the top of it into tracker issues — **
 **Delivery — once per issue:**
 
 ```
-spec ──▶ clarify ──▶ (review PR) ──▶ implement ──▶ reviewer ──▶ worklog ──▶ archive
-         ≤5 questions               Red/Green/Refactor   receipt
+spec ──▶ clarify ──▶ implement ──▶ reviewer ──▶ worklog ──▶ one PR, closing the issue
+         ≤5 questions  Red/Green/Refactor  receipt
+
+archive ····· beside the chain, not a step in it: a sweep of shipped specs out of
+              .specs/, run when the directory has grown noisy — not after every merge
 ```
 
 The issue, the branch, the spec directory, and the PR all share one slug, and the PR closes the issue. The rule is **no issue, no spec**. `sprint` creates typed issues from templates; `spec` refuses to start without one rather than quietly creating it, because a spec written without an issue is something being built that nobody chose. The gate checks it mechanically: the slug is `<issue>-<title>`, so a spec directory without a numeric prefix blocks the turn. `spec` reads the type — `feature`, `bug`, or `chore` — and writes a differently shaped spec for each. A bug pushed through feature scaffolding produces a user story that does not exist and acceptance criteria that are fiction, so the type is not decoration: it decides what the first task is.
+
+**The chain ends at one pull request.** The spec is that PR's first commit rather than a pull request of its own, the work-log entry is one of its last, and the merge is the end — there is no follow-up PR to open. `archive` sits beside the chain for that reason: a `git mv` does not earn a branch, a review and a merge of its own, and nothing mechanical waits on it, since the review gate reads only the current branch's spec and cannot see a shipped one left in `.specs/`. Sweeping is therefore paid per noisy directory, not per merge.
 
 Each inception skill has to terminate in something the harness mechanically uses, or it does not ship: `northstar` produces the quality anchor the reviewer reads for severity, `contract` compiles its enforceable rules into the rulebook, `backlog` creates the tracker issues `spec` consumes, `design-doc` writes `.steering/structure.md` and the ADRs the reviewer escalates to. A document that ends in prose alone is one this repo has no business generating.
 
@@ -102,7 +107,7 @@ The middle of that chain is not this plugin's invention — it is **GitHub's**. 
 | `clarify` | ≤5 questions ranked by blast radius, before any design | ambiguity recorded in the spec |
 | `implement` | TDD loop, then the mandatory reviewer pass | a receipt the gate checks |
 | `worklog` | append-only session record | decisions with their reasons |
-| `archive` | shipped specs out of `.specs/` | `.specs/` means live work |
+| `archive` | shipped specs out of `.specs/`, swept on request | `.specs/` means live work |
 
 Plus three read-only reviewers — TypeScript, Python, Dart/Flutter — and a template for a stack none of them fit.
 
