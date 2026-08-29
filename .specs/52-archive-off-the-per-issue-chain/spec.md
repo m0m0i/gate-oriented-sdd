@@ -138,7 +138,7 @@ Three decisions worth recording:
 - [x] **T2:** failing `check-skill-contracts.py` — add the `implement` contract pinning the closing
       step's "no follow-up pull request" clause — then the `skills/implement/SKILL.md` edit that
       makes it pass. (AC3)
-- [ ] **T3:** failing `check-skill-contracts.py` — add the `archive` contract pinning the
+- [x] **T3:** failing `check-skill-contracts.py` — add the `archive` contract pinning the
       on-request-sweep clause — then the `skills/archive/SKILL.md` rewrite, `description:` line
       included, that makes it pass. (AC4)
 - [ ] **T4:** the prose with no guard, in one commit: `README.md`, `README.ja.md`,

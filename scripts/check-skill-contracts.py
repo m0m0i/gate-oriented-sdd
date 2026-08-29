@@ -78,6 +78,14 @@ CONTRACTS = (
         "way, which is exactly the failure prose has no compiler to catch. See #52.",
     ),
     (
+        "skills/archive/SKILL.md",
+        "a sweep you run when you choose, not the step that follows a merge",
+        "The counterpart to `implement`'s clause, and the one a harness surfaces first: this "
+        "skill's own framing is what decides whether it is invoked per merge or per noisy "
+        "directory. Described as the step after a merge, it puts a git mv on the critical "
+        "path of every issue. See #52.",
+    ),
+    (
         "skills/implement/SKILL.md",
         "Never record `subagent` for a review you ran inline",
         "reviewed_by is only worth having if it is written honestly. See #9.",
