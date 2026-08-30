@@ -171,7 +171,7 @@ Resolved 2026-08-29.
 - [x] T2: run `northstar`; assert AC2 and AC3 — anchors resolve 5 of 5, `- Owns:` byte-identical,
       `docs/NORTH_STAR.md` written with `LV-` lever ids — and record what the skill did on finding
       an `Owns:` value already present.
-- [ ] T3: run `prd`; assert AC4 and AC4b — `docs/PRD.md` at `Status: draft`, every capability's
+- [x] T3: run `prd`; assert AC4 and AC4b — `docs/PRD.md` at `Status: draft`, every capability's
       lever id grep-matched in `NORTH_STAR.md` with the count recorded, and the absence of any
       mechanical consumer noted.
 - [ ] T4: run `epics`; assert AC5 — every `- Serves:` id grep-matched in `PRD.md`, every epic
