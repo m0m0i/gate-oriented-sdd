@@ -156,10 +156,10 @@ join" and the run recorded only the seams it went looking for.
 ### What this run does not support
 
 **The interviews are untested.** The spec chose propose-then-correct: drafts derived from the
-repository, put to the author for correction. Across three skills there were three author pauses
-carrying five questions, and **every one was accepted as recommended** — the four product
-decisions (the metric, the non-negotiable, CAP-6's falsifier, the third user) and a fifth, the
-amendment to AC5. That cannot distinguish "the drafts were right because
+repository, put to the author for correction. Counting every point at which the run stopped and put
+a question to the author, there were **four pauses carrying six questions** — four product
+decisions (the metric, the non-negotiable, CAP-6's falsifier, the third user) and two spec
+amendments (AC8, AC5). **All six were accepted as recommended.** That cannot distinguish "the drafts were right because
 the repository already encodes these decisions" from "a plausible answer was accepted because it
 arrived first with a recommendation" — which is precisely what `northstar`'s own last rule warns
 about: *"ask the user, and record their answer rather than a plausible one."*

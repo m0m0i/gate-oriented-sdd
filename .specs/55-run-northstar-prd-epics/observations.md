@@ -101,11 +101,18 @@ backed by an actual write, which makes it the stronger candidate of the two for 
 
 Clarification 2's protocol has run **twice** as of T3 — T2 carrying the metric and the
 non-negotiable, T3 carrying CAP-6's falsifier and the third user — and all four answers confirmed
-the draft exactly. *(Corrected on review: this section originally read "three of three", counting
-four items as three pauses. T4 later added a third pause carrying one question. Final tally: three
-pauses, five questions, all five accepted as recommended.)* T2 recorded that
+the draft exactly.
+
+*(Corrected across two reviews. This section first read "three of three", counting four items as
+three pauses; the first correction said "three pauses, five questions", which counted the AC5
+amendment as a pause and not the AC8 one. **Counting rule: every point at which the run stopped and
+put a question to the author.** By that rule the tally is **four pauses carrying six questions** —
+two for `northstar` (the metric, the non-negotiable), one before `prd` (the AC8 amendment), two for
+`prd` (CAP-6's falsifier, the third user), one before `epics` (the AC5 amendment). Four were
+product decisions, two were spec amendments, and all six were accepted as recommended.)* T2 recorded that
 this cannot distinguish "the drafts were right" from "a plausible answer was accepted because it
-came first". Three for three does not resolve that; it raises how much of this run rests on it.
+came first". Two for two at this point — six for six by the end — does not resolve that; it raises
+how much of this run rests on it.
 
 Stated plainly: **this run tests the skills' mechanics and their seams. It does not test their
 interviews.** Anything claimed about whether these skills elicit good product decisions from a
@@ -135,6 +142,14 @@ is every consumer, eventually.
 
 Recorded in `EPICS.md` under its own heading rather than by designation. AC5 was amended to accept
 that; see clarification 5.
+
+*Recorded on review:* `docs/EPICS.md` is no longer byte-for-byte what this task produced. The
+review commit replaced its document-level `- Serves: docs/PRD.md capabilities CAP-1 … CAP-7` line,
+whose ellipsis defeated a mechanical read of the very seam this section is about. The change
+improves fidelity — that line has no counterpart in `skills/epics/SKILL.md`'s template and was an
+operator addition — but the deliverable here is the trustworthiness of the record, so a post-run
+edit is noted rather than left to the commit log. Same convention as `baseline.md`'s recorded
+correction.
 
 ### The forward-only citation check, second instance
 
@@ -175,9 +190,11 @@ this run as the incident.
 
 - The template's `- Serves: <capability id>` is singular. Every epic here serves two or three, and
   nothing says whether that is allowed. Writing multiple ids is an inference, like T3's merge.
-- Epic contents came from the tracker, not from a backlog: `docs/BACKLOG.md` already orders **12**
-  of the 16. Six — #47, #48, #49, #54, #55, #56 — are in no backlog row, and two of the backlog's
-  rows, #10 and #28, are in no epic. Step 5 says to list issues "at the granularity `spec` consumes", and here they
+- Epic contents came from the tracker, not from a backlog: `docs/BACKLOG.md` already orders **10**
+  of the 16 — its table has 12 rows, but two of them, #10 and #28, are in no epic, and six of the
+  epics' issues (#47, #48, #49, #54, #55, #56) are in no backlog row. *(Corrected twice: the first
+  version said "the same 16", the second said 12, which was the backlog's row count relabelled as
+  the overlap.)* Step 5 says to list issues "at the granularity `spec` consumes", and here they
   already existed at that granularity — the inversion `BACKLOG.md` names in its own preamble.
   `epics` assumes it runs before issues exist, and gives no instruction for the case where they do.
 
@@ -222,7 +239,7 @@ IDS='\bNS-[0-9]|\bCAP-[a-z]|\bCON-[a-z]|\bADR-[0-9]{4}'
 and its own comment at `:24-26` says *"it is the **numbered** forms that carry meaning from the
 private docs hub."* `CAP-` is guarded only in its lowercase form, so `CAP-1` passes — which is why
 the guard is green today. This branch has now made `CAP-1`…`CAP-7` the repository's permanent
-public id vocabulary across four files. Correcting the pattern to `CAP-[0-9]`, the fix the comment
+public id vocabulary across five tracked files. Correcting the pattern to `CAP-[0-9]`, the fix the comment
 asks for, would immediately fail on this repo's own documents; and `:18` forbids the only other
 exit — *"Nothing else may be excluded — an allowlist here is how a guard rots."*
 
@@ -230,4 +247,5 @@ The run took deliberate care over `LV-`, choosing it because it appeared nowhere
 and verifying that in `baseline.md`. It applied none of that care to `CAP-`, and `CAP-` is the one
 that appears in a guard.
 
-Both need follow-up issues. Neither is fixable on this branch without breaching AC8.
+Filed as **#58** and **#57** respectively. Neither is fixable on this branch without breaching
+AC8. The amendment-ordering convention the reviewer identified alongside them is **#59**.
