@@ -74,3 +74,13 @@ That is #16's and #39's exact shape, occurring in the verifier this branch wrote
 Worth stating plainly: the AC2 evidence was never actually at risk, because the reviewer reproduced 83/1 independently rather than taking the tool's word. The defect is that the tool would have said yes to a question it had not asked, and nothing in this branch would have noticed.
 
 `baseline.md`'s per-file table was also truncated — T1 piped `detect.py` through `tail -3`, so one of 54 rows survived under a heading promising a per-file count. The full listing is restored.
+
+## Review — the blind spot's second instance, and the rule that closes it
+
+The reviewer found `skills/sprint/SKILL.md`. Step 2 lists three seams as a sub-list and then closes them with a sentence summarising all three, sitting at the **parent** item's content column. The transform joined that sentence onto the third seam, so the shipped skill read `- a migration, rename, or dependency bump the change forces These are different issue *types*…`.
+
+CommonMark renders both forms identically — a lazy continuation belongs to the preceding item either way — which is exactly why `canon.py` reported nothing. This is the second instance of the class recorded above for `agents/_template/reviewer.md`: **a fold invisible to a rendering-equivalence check, because the damage is not in the rendering.** The reader that suffers is the model reading `skills/` as source.
+
+Fixed with a rule rather than an edit, as the slot case was. A continuation indented **less** than the open item's content column belongs to an outer block, so the transform now closes the item instead of joining. Surveying `main` for the pattern found five instances across the repository; two were already handled by the `SLOT` rule and the fence boundary, and the indent rule closes the remaining three — `skills/sprint/SKILL.md`, `agents/_template/rules/starter.md` (whose HTML comment terminator `-->` had been pulled onto the last bullet), and one in this branch's own spec.
+
+Both instances of this class were found by the reviewer and neither by the tooling, which is the honest summary of what a rendering-equivalence check is worth: it proves the HTML is unchanged, and the HTML was never the thing at risk.

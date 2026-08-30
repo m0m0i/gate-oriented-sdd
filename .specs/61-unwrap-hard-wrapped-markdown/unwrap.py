@@ -20,6 +20,8 @@ import sys
 # A marker may be bare: an issue template's "1." on its own line is a list item with no
 # content yet, and treating it as prose merged it with the "2." beneath it.
 NEW_BLOCK = re.compile(r"^\s*(?:[-*+](?:\s|$)|\d+[.)](?:\s|$)|>|#{1,6}(?:\s|$)|\|)")
+#: A list marker plus its trailing space; the width of the two is the item's content column.
+MARKER = re.compile(r"^(\s*)([-*+]\s+|\d+[.)]\s+)")
 # A line that is only a substitution slot is structure, not prose. `agents/_template/`
 # pastes a multi-line bullet list into `{{VALIDATOR_LIST}}`, so folding the slot into the
 # sentence above it turns the first pasted validator into a stray nested list once the
@@ -69,6 +71,16 @@ def unwrap(text: str) -> str:
             out.append(ln.rstrip())
             continue
         if NEW_BLOCK.match(ln) or buf is None:
+            flush()
+            buf = ln.rstrip()
+            continue
+        # A continuation indented LESS than the open item's content column belongs to an
+        # outer block, not to this one. `skills/sprint/SKILL.md` closes a three-item sub-list
+        # with a sentence summarising all three, sitting at the parent item's column: joining
+        # it attached the summary to the third seam alone. CommonMark renders both the same
+        # way, which is why canon.py cannot see it — the reader that suffers is the model
+        # reading the raw text, and skills/ is source.
+        if (m := MARKER.match(buf)) and len(ln) - len(ln.lstrip()) < len(m.group(1)) + len(m.group(2)):
             flush()
             buf = ln.rstrip()
             continue
