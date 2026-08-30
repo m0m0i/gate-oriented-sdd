@@ -1,6 +1,6 @@
 # Spec: Run northstar, prd, and epics on this repo and record what was observed
 
-- Slug: 55-run-northstar-prd-epics Issue: 55 Type: chore Status: approved
+- Slug: 55-run-northstar-prd-epics Issue: 55 Type: chore Status: done
 - Author: m0m0i Date: 2026-08-29
 
 ## 1. Requirements (WHAT / WHY)
@@ -34,36 +34,36 @@
   mandatory documents, and that is still true.
 
 - Acceptance criteria:
-  - [ ] **AC1:** THE SYSTEM SHALL behave identically for every gate and guard — `test-gates.sh`
+  - [x] **AC1:** THE SYSTEM SHALL behave identically for every gate and guard — `test-gates.sh`
         reporting 52 passed / 0 failed and all eight validators exiting 0 — demonstrated by running
         both before the first skill and after the last, with both results recorded.
-  - [ ] **AC2:** WHEN `northstar` completes THE SYSTEM SHALL still carry `- Owns: gates never
+  - [x] **AC2:** WHEN `northstar` completes THE SYSTEM SHALL still carry `- Owns: gates never
 fail open` verbatim in `.steering/product.md`, and `./assets/check-steering-anchors.sh`
         SHALL resolve 5 of 5 anchors with none unreadable.
-  - [ ] **AC3:** WHEN `northstar` completes THE SYSTEM SHALL have written `docs/NORTH_STAR.md`
+  - [x] **AC3:** WHEN `northstar` completes THE SYSTEM SHALL have written `docs/NORTH_STAR.md`
         in which every lever carries a stable id.
-  - [ ] **AC4:** WHEN `prd` completes THE SYSTEM SHALL have written `docs/PRD.md` carrying
+  - [x] **AC4:** WHEN `prd` completes THE SYSTEM SHALL have written `docs/PRD.md` carrying
         `Status: draft`, in which every capability names a lever id that appears verbatim in
         `docs/NORTH_STAR.md`, demonstrated by grep with the matched count recorded — not by reading.
-  - [ ] **AC4b:** THE SYSTEM SHALL record in `docs/verified.md` that no mechanical consumer of
+  - [x] **AC4b:** THE SYSTEM SHALL record in `docs/verified.md` that no mechanical consumer of
         `PRD.md` or `EPICS.md` exists in this repo today, and that nothing is required to cite the
         capability ids. `.steering/product.md` says this project is not a document generator; a run
         that produces two documents nothing consumes must say so rather than let the gap pass as
         normal. This is #22's argument, restated from observation.
-  - [ ] **AC5:** WHEN `epics` completes THE SYSTEM SHALL have written `docs/EPICS.md` in which
+  - [x] **AC5:** WHEN `epics` completes THE SYSTEM SHALL have written `docs/EPICS.md` in which
         every `- Serves:` id appears verbatim in `docs/PRD.md`, every epic carries a `Demo:`
         sentence, and **either** exactly one epic is `Walking skeleton: yes` **or**
         `docs/EPICS.md` records an explicit reason none applies. _Amended 2026-08-30 — see
         clarification 5._
-  - [ ] **AC6:** WHEN an id prefix is chosen at `northstar` step 2 THE SYSTEM SHALL be observed
+  - [x] **AC6:** WHEN an id prefix is chosen at `northstar` step 2 THE SYSTEM SHALL be observed
         to either carry it through `prd` and `epics` or not, and the answer recorded either way.
         The prefix SHALL be one that could not be guessed from the domain, so that a match cannot
         be coincidence.
-  - [ ] **AC7:** WHEN the run completes THE SYSTEM SHALL have a `docs/verified.md` section
+  - [x] **AC7:** WHEN the run completes THE SYSTEM SHALL have a `docs/verified.md` section
         recording, per handoff, what was observed — **including any seam that did not join.** A run
         reporting only successes has not been recorded honestly; that file's own account of the row
         written before it was observed is the standard.
-  - [ ] **AC8:** WHEN the run completes `git diff --stat main` SHALL show changes confined to
+  - [x] **AC8:** WHEN the run completes `git diff --stat main` SHALL show changes confined to
         `docs/`, `.specs/55-run-northstar-prd-epics/`, and `.steering/product.md`, with
         `docs/BACKLOG.md` unchanged. _Amended 2026-08-29 — see clarification 4._
 
