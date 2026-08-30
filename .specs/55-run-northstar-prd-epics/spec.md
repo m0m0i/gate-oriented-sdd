@@ -192,7 +192,7 @@ Resolved 2026-08-29.
       mechanical consumer noted.
 - [x] T4: run `epics`; assert AC5 — every `- Serves:` id grep-matched in `PRD.md`, every epic
       carrying a `Demo:`, exactly one `Walking skeleton: yes`.
-- [ ] T5: write the `docs/verified.md` section from the recorded observations, satisfying AC6 and
+- [x] T5: write the `docs/verified.md` section from the recorded observations, satisfying AC6 and
       AC7 — including every seam that did not join, and the `LV-` prefix outcome either way.
 - [ ] T6: re-run the baseline and assert AC1 and AC8 — suite and validators matching T1's
       recorded values, `BACKLOG.md` checksum unchanged, `git diff --stat main` confined to `docs/`
