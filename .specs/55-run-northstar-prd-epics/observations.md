@@ -165,14 +165,28 @@ were right; their citations were incomplete, and neither the skill nor AC5 would
 After completing the `Serves:` lines, the same reverse check:
 
 ```
-CAP-1 served by 3 epic lines
-CAP-2 served by 1
-CAP-3 served by 2      <-- 0 in the first draft
-CAP-4 served by 1      <-- 0 in the first draft
-CAP-5 served by 1
-CAP-6 served by 1
-CAP-7 served by 2
+$ for c in $(grep -o '^### CAP-[0-9]' docs/PRD.md | grep -o 'CAP-[0-9]'); do
+    printf '%s %s\n' "$c" "$(grep -c "^- Serves:.*$c" docs/EPICS.md)"
+  done
+CAP-1 2
+CAP-2 1
+CAP-3 2      <-- 0 in the first draft
+CAP-4 1      <-- 0 in the first draft
+CAP-5 1
+CAP-6 1
+CAP-7 1
 ```
+
+Counting rule: per-epic `^- Serves:` lines only, of which `docs/EPICS.md` has four.
+
+*Recorded on second review:* the first version of this table reported CAP-1 as 3 and CAP-7 as 2,
+and did not reproduce. The cause is exact and worth keeping. The count was taken while
+`docs/EPICS.md` still carried a **document-level** `- Serves: docs/PRD.md capabilities CAP-1 …
+CAP-7` line, which matched `^- Serves:` and contained both ids — and the same commit that added
+this table removed that line, as the fix for a LOW saying its ellipsis defeated a mechanical read.
+So the artifact supplied to answer *"this claim has no evidence"* was itself unreproducible for one
+commit. That is the failure this run keeps finding in the skills, occurring in the run's own
+record, and caught by the reviewer rather than the operator both times.
 
 *Recorded on review:* the pre-fix drafts do not exist on the branch. Each was corrected inside its
 own task commit, so `git show 94a91f8:docs/PRD.md` already contains CAP-7 and
