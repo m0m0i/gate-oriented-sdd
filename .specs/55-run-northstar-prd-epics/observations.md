@@ -76,9 +76,10 @@ LV-5 1
 
 Counting rule: per-capability `^- Serves:` lines in `docs/PRD.md`. That file has eight such
 lines — seven capabilities plus a document-level one naming the metric, which carries no
-`LV-` id and so does not affect the count. *(Grounded on third review. The numbers always reproduced, but the file
-did not say which lines were counted or where, which is the same ungrounded-artifact class that
-failed review twice.)*
+`LV-` id and so does not affect the count.
+
+*(Grounded on third review. The numbers always reproduced, but the file did not say which lines
+were counted or where — the same ungrounded-artifact class that failed review twice.)*
 
 `LV-2` is gate narrowness, which `NORTH_STAR.md` calls one of "the pair that actually decides the
 number", and no capability served it. `prd`'s rules cover the forward direction — *"Every
