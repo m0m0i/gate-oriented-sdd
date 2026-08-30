@@ -29,7 +29,11 @@ That is #19 ("`--update` cannot create a lock, so a new rulebook can never be pi
 
 ## Note on `detect.py`
 
-It stays as the survey tool that produced the scope, and it is deliberately loose: it counts any block of consecutive short lines, so YAML front matter and a list of five short items both register. Its post-transform count of 30 across 23 files is those, not work left undone. AC1 was amended to the exact question — whether the transform is a fixed point — in its own commit ahead of T3, per #59.
+It stays as the survey tool that produced the scope, and it is loose in **both** directions.
+
+It over-counts: any block of consecutive short lines registers, so YAML front matter and a list of five short items both do. Its post-transform count of 30 across 23 files is those, not work left undone.
+
+It also **under**-counts, which review found and this note originally missed. `wrapped()` requires every line in a block to be ≤105 columns, so a block whose first line is long hides its wrapped continuations entirely. Three shipped skills — `skills/init/SKILL.md`, `skills/spec/SKILL.md`, `skills/sprint/SKILL.md` — were modified by the transform and appear in no survey. They were reached only because AC2 compares all 83 files present on `main` rather than the 54 the survey named, which is what the design's "broader than the survey, so a file the survey missed cannot slip through" was written for. It is a hit, not a hypothetical. AC1 was amended to the exact question — whether the transform is a fixed point — in its own commit ahead of T3, per #59.
 
 ## T5 — AC2 needed one carve-out, verified rather than waived
 
@@ -49,4 +53,6 @@ Two things worth keeping from this.
 
 **The durable fix is a rule, not an edit.** A line that is only a `{{PLACEHOLDER}}` is now structural in both files: `unwrap.py` never joins one, and `canon.py` treats it as its own unit so a future fold is visible rather than silent. Verified both ways — the transform now leaves `agents/_template/reviewer.md` unchanged, and `canon` reports a difference between the correct and folded forms. Restoring the line by hand without the rule would have left the next run to break it again.
 
-`{{RULEBOOK_TABLE}}` is the only other standalone slot in the repository. It survived because a blank line preceded it.
+`{{RULEBOOK_TABLE}}` is the only other standalone slot in the repository. *(Corrected on review: this first said it survived "because a blank line preceded it". No blank line precedes it — `agents/_template/reviewer.md:28` is a table separator row, and a table row already terminates the block under `unwrap.py`'s `STRUCTURAL` rule. The near-miss was real; the reason recorded for it was a different mechanism from the one that actually held, in the document whose job is to record why it did not bite.)*
+
+One more thing the fix changed and this note did not, until review pointed it out. The `SLOT` regex is now duplicated **verbatim** in both files, which reinstates at narrower scope exactly the shared assumption the paragraph above calls structural: a slot neither recogniser matches is folded by `unwrap.py` and invisible to `canon.py`, which is the failure that just shipped. It is not live — all twelve slot tokens in the repository are `[A-Z_]+` — but a slot named with a digit or a lowercase letter would reopen it. Left as one regex rather than two: a second independent recogniser for two lines would cost more than it protects, and saying so is better than implying the blind spot is gone.
