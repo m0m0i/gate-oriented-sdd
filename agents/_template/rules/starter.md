@@ -17,7 +17,8 @@ Check: <what to look for in a diff, concretely enough that two reviewers would f
 
 ---
 
-<!-- Writing rules that survive contact with real diffs:
+<!--
+Writing rules that survive contact with real diffs:
 
 - One property per rule, with an id that can be cited in a commit message.
 - Severity is anchored to the quality property this project owns, not to taste.

@@ -7,7 +7,8 @@ model: inherit
 
 # {{REVIEWER_NAME}}
 
-<!-- The frontmatter placeholders are quoted deliberately: bare {{...}} is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before it is ever substituted. Keep the quotes. -->
+<!-- The frontmatter placeholders are quoted deliberately: bare {{...}} is a flow
+     mapping in YAML, so an unquoted placeholder parses as an object and fails validation before it is ever substituted. Keep the quotes. -->
 
 **Read `_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to {{LANGUAGE}} and to this project.
 

@@ -28,12 +28,13 @@ MARKER = re.compile(r"^(\s*)([-*+]\s+|\d+[.)]\s+)")
 # template is rendered. The template's own HTML is unchanged, which is why canon.py cannot
 # see it: the damage is invisible until substitution.
 SLOT = re.compile(r"^\s*\{\{[A-Z_]+\}\}\s*$")
-STRUCTURAL = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|\|)")
+STRUCTURAL = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|\||-->|<!--)")
 
 
 def unwrap(text: str) -> str:
     lines = text.split("\n")
     out, fence, buf = [], False, None
+    open_cols = []  # content columns of the currently open list items, outermost first
     i = 0
 
     # YAML front matter: verbatim, including its internal line breaks.
@@ -64,23 +65,40 @@ def unwrap(text: str) -> str:
         s = ln.strip()
         if not s or s == "---":
             flush()
+            open_cols = []
             out.append(ln)
             continue
         if STRUCTURAL.match(ln) or SLOT.match(ln):
             flush()
             out.append(ln.rstrip())
             continue
-        if NEW_BLOCK.match(ln) or buf is None:
+        if (m := MARKER.match(ln)):
             flush()
+            col = len(m.group(1)) + len(m.group(2))
+            while open_cols and open_cols[-1] > col:
+                open_cols.pop()
+            if not open_cols or open_cols[-1] != col:
+                open_cols.append(col)
             buf = ln.rstrip()
             continue
-        # A continuation indented LESS than the open item's content column belongs to an
-        # outer block, not to this one. `skills/sprint/SKILL.md` closes a three-item sub-list
-        # with a sentence summarising all three, sitting at the parent item's column: joining
-        # it attached the summary to the third seam alone. CommonMark renders both the same
-        # way, which is why canon.py cannot see it — the reader that suffers is the model
-        # reading the raw text, and skills/ is source.
-        if (m := MARKER.match(buf)) and len(ln) - len(ln.lstrip()) < len(m.group(1)) + len(m.group(2)):
+        if NEW_BLOCK.match(ln) or buf is None:
+            flush()
+            open_cols = []
+            buf = ln.rstrip()
+            continue
+        # A continuation sitting at an ENCLOSING item's content column belongs to that outer
+        # item. `skills/sprint/SKILL.md` closes a three-item sub-list with a sentence
+        # summarising all three, at the parent item's column; joining it attached the summary
+        # to the third seam alone. CommonMark renders both the same way, which is why canon.py
+        # cannot see it — the reader that suffers is the model reading skills/ as source.
+        #
+        # Deliberately "equals an enclosing column" and not "less than the current one": a
+        # continuation at column 0 under an indented item is usually a plain hard wrap that
+        # SHOULD join — `.specs/55-.../spec.md` puts one there so a code span does not gain a
+        # stray space — and the broader test refused it, leaving the transform unable to
+        # reproduce its own output.
+        ind = len(ln) - len(ln.lstrip())
+        if any(c == ind for c in open_cols[:-1]) if len(open_cols) > 1 else False:
             flush()
             buf = ln.rstrip()
             continue
