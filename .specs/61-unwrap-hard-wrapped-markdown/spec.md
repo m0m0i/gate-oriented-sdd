@@ -18,7 +18,7 @@
 - Why now: nothing defines the width — no `.editorconfig`, no Prettier, no markdownlint, no formatter in CI, and no rule in `AGENTS.md`, `CONTRIBUTING.md`, `.steering/`, or any rulebook. It has already cost a review round: on #55's branch the reviewer twice cited "repo convention" for a wrap width it had inferred from a file written minutes earlier in the same session, and commit `7916a52` exists only to chase that. A convention nothing states gets enforced from whatever is nearby, which is #23's shape applied to style.
 
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN the change is complete THE SYSTEM SHALL contain no hand-wrapped block in any tracked Markdown file — every prose paragraph and every list item is one physical line — verified by the same detector that produced the scope, reporting zero.
+  - [ ] **AC1:** WHEN the change is complete THE SYSTEM SHALL be a fixed point of the transform — applying it again changes no file — verified by running it over every tracked Markdown file and reporting the count that would change, which must be zero. _Amended 2026-08-30, before T3 was committed — see clarification 3._
   - [ ] **AC2:** THE SYSTEM SHALL render identically before and after, demonstrated per file by comparing both sides with intra-block newlines collapsed to single spaces and reporting the count of files compared — not asserted by inspection.
   - [ ] **AC3:** WHEN the change is complete all eight `- Validators:` commands SHALL exit 0 at their recorded baseline values: `check-steering-anchors.sh` 5 of 5, `check-skill-contracts.py` 9 contracts, `check-templates.py` 10 task lines across 3 templates, `check-receipt-schema.py` 7 fields across 3 copies, `check-locks.py` a nonzero pinned count, `test-gates.sh` 52 passed 0 failed.
   - [ ] **AC4:** WHEN the change is complete `.steering/tech.md` and `.steering/product.md` SHALL still carry each machine-read line on one physical line, byte-identical to the baseline, verified by sha256 per line rather than by the anchor check alone.
@@ -34,11 +34,13 @@
 ### Clarifications
 Resolved 2026-08-30.
 
-1. **Q: This branch touches shipped paths, so `check-version-bump.py` forces a bump — but 0.4.0 is already in both manifests and was never tagged. What does this PR bump to?**
-   **A: 0.4.1.** 0.4.0 becomes a version that existed only in the manifests, and consumers move 0.3.9 → 0.4.1 carrying both #52's flow change and this reflow. Rejected: retroactively tagging 0.4.0 from today's `main`, because that tag would point at a tree containing #55's documents rather than at where 0.4.0 was set, which is honest about the number and dishonest about its contents. Also rejected: 0.5.0, since a reflow changes no meaning and #52 already had its bump.
-   Consequence for #62: it is no longer "tag the version that exists" but "tag 0.4.1, and add the guard that would have caught a bumped-but-untagged version" — the check-version-bump/tag gap it describes is unchanged by this decision.
+1. **Q: This branch touches shipped paths, so `check-version-bump.py` forces a bump — but 0.4.0 is already in both manifests and was never tagged. What does this PR bump to?** **A: 0.4.1.** 0.4.0 becomes a version that existed only in the manifests, and consumers move 0.3.9 → 0.4.1 carrying both #52's flow change and this reflow. Rejected: retroactively tagging 0.4.0 from today's `main`, because that tag would point at a tree containing #55's documents rather than at where 0.4.0 was set, which is honest about the number and dishonest about its contents. Also rejected: 0.5.0, since a reflow changes no meaning and #52 already had its bump. Consequence for #62: it is no longer "tag the version that exists" but "tag 0.4.1, and add the guard that would have caught a bumped-but-untagged version" — the check-version-bump/tag gap it describes is unchanged by this decision.
 
 2. Nothing else was genuinely ambiguous. Two candidates were discarded because both readings lead to the same design: whether a reflow of shipped skill text is patch or minor (it changes no meaning a model reads, so patch), and whether `evals/` needs a bump (it is not in `check-version-bump.py`'s `SHIPPED` tuple, and `.steering/structure.md` records it as not shipped).
+
+3. **Q: AC1 said "verified by the same detector that produced the scope, reporting zero". That detector counts any block of consecutive short lines, which includes YAML front matter and a list of five short items — both legitimately multi-line. It cannot reach zero.**
+   **A: Restate AC1 as a fixed point.** The exact question is whether the transform would still change anything, so AC1 now asserts that applying it again changes no file. Raised after T2's tooling was corrected and before T3's application was committed, so the amendment precedes the artifact it judges — the convention #59 exists to write down, and which #55 got wrong once.
+   `detect.py` stays in the branch as the survey tool that produced the scope. It is deliberately loose, and its remaining count of 30 across 23 files is front matter and short-item lists, not work left undone.
 
 ## 2. Design (HOW)
 
