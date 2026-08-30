@@ -12,7 +12,7 @@
   - **The machine-read steering lines**, each on one physical line and byte-identical: `- Owns:`, `- Validators:`, `- Reviewer:`, `- Source globs:`, `- Docs:`. They are read with `sed … | head -1`, so a join that pulled a following line into one of them corrupts the value in a way nothing reports. `assets/check-steering-anchors.sh` must resolve 5 of 5 throughout.
   - **Both mirror pairs, still byte-identical.** `agents/_shared/reviewer-contract.md` ↔ `.claude/agents/_shared/reviewer-contract.md`, enforced by `check-receipt-schema.py`; and `.github/ISSUE_TEMPLATE/*.md` ↔ `assets/issue-templates/*.md`, currently identical and enforced by nothing.
   - **Every guard's count**: 9 skill contracts, 10 task lines across 3 templates, 7 receipt fields across 3 copies, 5 of 5 anchors, a nonzero pinned-lock count, and `test-gates.sh` at 52/0.
-  - **Rule ids and rule text.** The rulebooks are hash-pinned; their content changes only in line breaks, and the locks are re-pinned to match.
+  - **Rule ids and rule text.** None of the six hash-pinned rulebooks changed, so no lock needed re-pinning; the two that did change are the unpinned dogfooded pair under `.claude/agents/gate-sdd-reviewer/rules/`, which nothing covers — see `observations.md` T4 and #19.
   - Code fences, tables, headings, front matter, and list nesting. Only line joins.
 
 - Why now: nothing defines the width — no `.editorconfig`, no Prettier, no markdownlint, no formatter in CI, and no rule in `AGENTS.md`, `CONTRIBUTING.md`, `.steering/`, or any rulebook. It has already cost a review round: on #55's branch the reviewer twice cited "repo convention" for a wrap width it had inferred from a file written minutes earlier in the same session, and commit `7916a52` exists only to chase that. A convention nothing states gets enforced from whatever is nearby, which is #23's shape applied to style.
@@ -50,7 +50,7 @@ Resolved 2026-08-30.
 
 - **Order of operations.** The baseline (T1) must precede the transform, because AC3 and AC4 are comparisons and there is nothing to compare against otherwise — the lesson #55 recorded. The version bump lands with the shipped-path change, not after it, because `check-version-bump.py` evaluates the PR as a whole.
 
-- **Affected files.** 50 Markdown files across `.specs/`, `.work_logs/`, `evals/`, `docs/`, `.claude/agents/`, `.steering/`, `agents/`, `skills/`, and `AGENTS.md`; plus `CONTRIBUTING.md` for the convention, and both manifests for the bump. `.github/ISSUE_TEMPLATE/` and `assets/issue-templates/` were in the survey but come out byte-unchanged — their front matter and bare list markers are all structure.
+- **Affected files.** 50 Markdown files across `.specs/`, `.work_logs/`, `evals/`, `docs/`, `.claude/agents/`, `.steering/`, `agents/`, `skills/`, and `AGENTS.md`; plus `CONTRIBUTING.md` for the convention, and both manifests for the bump. Eight surveyed files come out unmodified — the six issue templates, whose front matter and bare list markers are all structure, plus `evals/clarify-before-design/prompt.md` and `skills/epics/SKILL.md`. Four modified files were in no survey, three of them shipped skills; see `observations.md` on the detector under-reporting.
 
 - **Coverage gap.** Nothing in this repo asserts that the two issue-template mirrors are byte-identical — `check-receipt-schema.py` covers the reviewer-contract pair only. They are identical today by habit. AC5 checks both pairs here, but after this branch the issue-template pair remains unguarded; that is a finding to record, not to fix under this spec.
 

@@ -56,3 +56,11 @@ Two things worth keeping from this.
 `{{RULEBOOK_TABLE}}` is the only other standalone slot in the repository. *(Corrected on review: this first said it survived "because a blank line preceded it". No blank line precedes it — `agents/_template/reviewer.md:28` is a table separator row, and a table row already terminates the block under `unwrap.py`'s `STRUCTURAL` rule. The near-miss was real; the reason recorded for it was a different mechanism from the one that actually held, in the document whose job is to record why it did not bite.)*
 
 One more thing the fix changed and this note did not, until review pointed it out. The `SLOT` regex is now duplicated **verbatim** in both files, which reinstates at narrower scope exactly the shared assumption the paragraph above calls structural: a slot neither recogniser matches is folded by `unwrap.py` and invisible to `canon.py`, which is the failure that just shipped. It is not live — all twelve slot tokens in the repository are `[A-Z_]+` — but a slot named with a digit or a lowercase letter would reopen it. Left as one regex rather than two: a second independent recogniser for two lines would cost more than it protects, and saying so is better than implying the blind spot is gone.
+
+## The commit that claimed a fix it did not contain, twice
+
+`5a9e7ff` says it corrected three false statements. It corrected two. The edit script wrote `observations.md`, then failed an assertion on `spec.md`, and the commit went ahead anyway — so the spec kept promising locks "re-pinned to match" while the message said otherwise.
+
+This is the second instance on this branch, after `2e0238f` in #55 did the same thing. Both times the cause was identical: a multi-file edit script that writes as it goes and asserts as it goes, so a late failure leaves earlier writes committed under a message describing all of them. Both times it was caught by re-running the check rather than by reading the diff.
+
+The fix is not a better script. It is that a commit message is a claim like any other, and this branch's own standard applies to it: **assert nothing you have not just verified.** Recorded here rather than left in the log, because the log is where the wrong claim already is.
