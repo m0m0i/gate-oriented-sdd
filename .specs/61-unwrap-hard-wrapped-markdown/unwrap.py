@@ -28,7 +28,11 @@ MARKER = re.compile(r"^(\s*)([-*+]\s+|\d+[.)]\s+)")
 # template is rendered. The template's own HTML is unchanged, which is why canon.py cannot
 # see it: the damage is invisible until substitution.
 SLOT = re.compile(r"^\s*\{\{[A-Z_]+\}\}\s*$")
-STRUCTURAL = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|\||-->|<!--)")
+# A comment delimiter is structure only when it stands ALONE. `starter.md` relies on that;
+# matching a bare prefix instead made `reviewer.md`'s content-bearing `<!--` opaque, so the
+# transform emitted it verbatim and left the paragraph under it hand-wrapped — in the branch
+# that writes down "do not hand-wrap".
+STRUCTURAL = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|\||-->\s*$|<!--\s*$)")
 
 
 def unwrap(text: str) -> str:
@@ -98,7 +102,7 @@ def unwrap(text: str) -> str:
         # stray space — and the broader test refused it, leaving the transform unable to
         # reproduce its own output.
         ind = len(ln) - len(ln.lstrip())
-        if any(c == ind for c in open_cols[:-1]) if len(open_cols) > 1 else False:
+        if any(c == ind for c in open_cols[:-1]):
             flush()
             buf = ln.rstrip()
             continue

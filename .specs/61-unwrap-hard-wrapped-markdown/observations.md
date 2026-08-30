@@ -90,3 +90,13 @@ Fixed with a rule rather than an edit, as the slot case was — and the first ve
 **And the third instance named here was the wrong file.** It said "one in this branch's own spec"; the file is `.specs/55-run-northstar-prd-epics/spec.md`, a different issue's. That misattribution is what let the over-broad rule stand: naming the wrong file made the case look already handled, so nobody re-derived the tree and noticed the transform had stopped reproducing it. After narrowing, every one of the 49 reflow-only files satisfies `unwrap(main:F) == F` again.
 
 Both instances of this class were found by the reviewer and neither by the tooling, which is the honest summary of what a rendering-equivalence check is worth: it proves the HTML is unchanged, and the HTML was never the thing at risk.
+
+## Review — the fix for the last finding was itself the next one
+
+`2b6696e` added `<!--` and `-->` to `STRUCTURAL` so `starter.md`'s bare terminator would stop being pulled onto a bullet. Matching the delimiter as a bare prefix also made `agents/_template/reviewer.md`'s **content-bearing** opener opaque: the transform emitted that line verbatim and joined only the two beneath it, leaving a paragraph split mid-sentence in a shipped template — in the branch that writes down "do not hand-wrap", and in the file `init` copies into every generated project.
+
+Two properties made it invisible. `unwrap(main:F) == F` held, because the file had been edited to agree with the tool rather than derived from it. And `detect.py` could not see the residue either: the joined second line runs past 105 columns, so `wrapped()` suppresses the whole block — the under-count this file already recorded, biting the thing it was recorded about.
+
+Narrowed to `-->\s*$` and `<!--\s*$`: a comment delimiter is structure only when it stands **alone**, which is the property `starter.md` actually relied on. `reviewer.md`'s comment is one line again, `starter.md`'s bare delimiters are unchanged from `main`, and every reflow-only file satisfies `unwrap(main:F) == F` after re-deriving the whole tree rather than patching the one file.
+
+**The pattern across this branch is worth naming.** Four defects, each introduced by the fix for the one before it: the destructive transform, the vacuous verifier, the over-broad indent rule, and this. Every one was caught by the reviewer and none by the tooling, and three of the four were invisible to a rendering-equivalence check because the damage was never in the rendering. AC1 is the honest illustration — a fixed-point criterion is satisfied by moving *either* side, so it reports green on a file edited to match the tool just as readily as on one the tool produced.

@@ -97,5 +97,5 @@ bf6eac7756a8e4b696e6017a63f07a24a61b6bff7550736775b00cecbff50cea  assets/issue-t
    1  evals/tdd-order-enforced/prompt.md
    1  skills/epics/SKILL.md
 
-478 hand-wrapped block(s) across 54 of 86 file(s) on `main`
+478 hand-wrapped block(s) across 54 of 83 file(s) on `main`
 ```
