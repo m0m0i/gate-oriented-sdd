@@ -144,7 +144,8 @@ Resolved 2026-08-29, except clarification 5 (2026-08-30).
    nothing on the branch corroborates that ordering, so **AC5's tick must not be read as an
    independent check.** The convention that makes clarification 4 checkable was available and was
    not followed. Recorded rather than reversed: the amendment stands on its merits, and the defect
-   is in the evidence, not the reasoning.
+   is in the evidence, not the reasoning. The convention itself is unwritten anywhere in the repo,
+   which is why it could be missed — filed as **#59**.
 
 ## 2. Design (HOW)
 

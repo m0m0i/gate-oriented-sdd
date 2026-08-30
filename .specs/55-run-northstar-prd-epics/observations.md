@@ -64,12 +64,21 @@ The criterion asks one direction — every capability names a lever that exists.
 passed on the first draft. Run in **reverse**, which the spec never required, it did not:
 
 ```
-LV-1 served by 2 capability lines
-LV-2 served by 0        <-- the first draft
-LV-3 served by 1
-LV-4 served by 3
-LV-5 served by 1
+$ for lv in $(grep -o '^- \*\*LV-[0-9]' docs/NORTH_STAR.md | grep -o 'LV-[0-9]'); do
+    printf '%s %s\n' "$lv" "$(grep -c "^- Serves:.*$lv" docs/PRD.md)"
+  done
+LV-1 2
+LV-2 1      <-- 0 in the first draft, before CAP-7 was added
+LV-3 1
+LV-4 3
+LV-5 1
 ```
+
+Counting rule: per-capability `^- Serves:` lines in `docs/PRD.md`. That file has eight such
+lines — seven capabilities plus a document-level one naming the metric, which carries no
+`LV-` id and so does not affect the count. *(Grounded on third review. The numbers always reproduced, but the file
+did not say which lines were counted or where, which is the same ungrounded-artifact class that
+failed review twice.)*
 
 `LV-2` is gate narrowness, which `NORTH_STAR.md` calls one of "the pair that actually decides the
 number", and no capability served it. `prd`'s rules cover the forward direction — *"Every
@@ -109,10 +118,12 @@ amendment as a pause and not the AC8 one. **Counting rule: every point at which 
 put a question to the author.** By that rule the tally is **four pauses carrying six questions** —
 two for `northstar` (the metric, the non-negotiable), one before `prd` (the AC8 amendment), two for
 `prd` (CAP-6's falsifier, the third user), one before `epics` (the AC5 amendment). Four were
-product decisions, two were spec amendments, and all six were accepted as recommended.)* T2 recorded that
-this cannot distinguish "the drafts were right" from "a plausible answer was accepted because it
-came first". Two for two at this point — six for six by the end — does not resolve that; it raises
-how much of this run rests on it.
+product decisions, two were spec amendments, and all six were accepted as recommended.)*
+
+T2 recorded that this cannot distinguish "the drafts were right" from "a plausible answer was
+accepted because it
+came first". Six questions for six by the end does not resolve that; it raises how much of this
+run rests on it.
 
 Stated plainly: **this run tests the skills' mechanics and their seams. It does not test their
 interviews.** Anything claimed about whether these skills elicit good product decisions from a
@@ -188,6 +199,11 @@ So the artifact supplied to answer *"this claim has no evidence"* was itself unr
 commit. That is the failure this run keeps finding in the skills, occurring in the run's own
 record, and caught by the reviewer rather than the operator both times.
 
+The fix itself then took two commits. `2e0238f`'s message claimed the recount; the edit had aborted
+on a later assertion before writing, so nothing landed, and `57591db` wrote it. **A commit message
+asserting a change it does not contain is the same defect one layer down**, and it is recorded here
+rather than left in the log because this file's stated preference is the file over the log.
+
 *Recorded on review:* the pre-fix drafts do not exist on the branch. Each was corrected inside its
 own task commit, so `git show 94a91f8:docs/PRD.md` already contains CAP-7 and
 `git show d5445dd:docs/EPICS.md` already contains the completed `Serves:` lines. These count
@@ -253,9 +269,9 @@ IDS='\bNS-[0-9]|\bCAP-[a-z]|\bCON-[a-z]|\bADR-[0-9]{4}'
 and its own comment at `:24-26` says *"it is the **numbered** forms that carry meaning from the
 private docs hub."* `CAP-` is guarded only in its lowercase form, so `CAP-1` passes — which is why
 the guard is green today. This branch has now made `CAP-1`…`CAP-7` the repository's permanent
-public id vocabulary across five tracked files. Correcting the pattern to `CAP-[0-9]`, the fix the comment
-asks for, would immediately fail on this repo's own documents; and `:18` forbids the only other
-exit — *"Nothing else may be excluded — an allowlist here is how a guard rots."*
+public id vocabulary across five tracked files. Correcting the pattern to `CAP-[0-9]`, the fix
+the comment asks for, would immediately fail on this repo's own documents; and `:18` forbids the
+only other exit — *"Nothing else may be excluded — an allowlist here is how a guard rots."*
 
 The run took deliberate care over `LV-`, choosing it because it appeared nowhere in the repository
 and verifying that in `baseline.md`. It applied none of that care to `CAP-`, and `CAP-` is the one
