@@ -1,23 +1,40 @@
 #!/usr/bin/env python3
 """Join hand-wrapped lines so a paragraph or list item is one physical line.
 
-Within a block, line n+1 is joined into line n UNLESS it starts a new construct. Refusing
-to join across a list marker is what makes the steering hazard impossible rather than
-merely unlikely: `- Validators: a, b, c` must never absorb the `- Reviewer: …` beneath it,
-because the gates read those with `sed … | head -1` and would keep returning something
-that looked plausible.
+Within a block, line n+1 is joined into line n UNLESS it starts a new construct. Three
+things pass through completely untouched, because their line breaks are structure rather
+than cosmetics: YAML front matter, fenced code, and tables.
 
-Fenced code, tables, headings, blockquotes and front matter pass through untouched — their
-line breaks are structural, not cosmetic.
+Refusing to join across a list marker is what makes the steering hazard impossible rather
+than merely unlikely: `- Validators: a, b, c` must never absorb the `- Reviewer: …` line
+beneath it, because the gates read those with `sed … | head -1` and would keep returning
+something that looked plausible.
+
+A heading also terminates its block. An earlier version did not, so every heading absorbed
+the paragraph under it — words preserved, structure destroyed. See verify.py, which is
+written to detect exactly that and originally could not.
 """
 import re
 import sys
 
-NEW_BLOCK = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|>|#{1,6}\s|\|)")
+# A marker may be bare: an issue template's "1." on its own line is a list item with no
+# content yet, and treating it as prose merged it with the "2." beneath it.
+NEW_BLOCK = re.compile(r"^\s*(?:[-*+](?:\s|$)|\d+[.)](?:\s|$)|>|#{1,6}(?:\s|$)|\|)")
+STRUCTURAL = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|\|)")
 
 
 def unwrap(text: str) -> str:
+    lines = text.split("\n")
     out, fence, buf = [], False, None
+    i = 0
+
+    # YAML front matter: verbatim, including its internal line breaks.
+    if lines and lines[0].strip() == "---":
+        for j in range(1, len(lines)):
+            if lines[j].strip() == "---":
+                out.extend(lines[: j + 1])
+                i = j + 1
+                break
 
     def flush():
         nonlocal buf
@@ -25,7 +42,9 @@ def unwrap(text: str) -> str:
             out.append(buf)
             buf = None
 
-    for ln in text.split("\n"):
+    while i < len(lines):
+        ln = lines[i]
+        i += 1
         if ln.strip().startswith("```"):
             flush()
             fence = not fence
@@ -39,6 +58,10 @@ def unwrap(text: str) -> str:
             flush()
             out.append(ln)
             continue
+        if STRUCTURAL.match(ln):
+            flush()
+            out.append(ln.rstrip())
+            continue
         if NEW_BLOCK.match(ln) or buf is None:
             flush()
             buf = ln.rstrip()
@@ -46,11 +69,6 @@ def unwrap(text: str) -> str:
         buf = buf.rstrip() + " " + s
     flush()
     return "\n".join(out)
-
-
-def normalise(text: str) -> str:
-    """Collapse every intra-block newline, so two renderings compare exactly."""
-    return unwrap(unwrap(text))
 
 
 if __name__ == "__main__":
