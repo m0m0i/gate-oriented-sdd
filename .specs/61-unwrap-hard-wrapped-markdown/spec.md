@@ -1,6 +1,6 @@
 # Spec: Unwrap hard-wrapped Markdown and write the convention down
 
-- Slug: 61-unwrap-hard-wrapped-markdown Issue: 61 Type: chore Status: draft
+- Slug: 61-unwrap-hard-wrapped-markdown Issue: 61 Type: chore Status: approved
 - Author: m0m0i Date: 2026-08-30
 
 ## 1. Requirements (WHAT / WHY)
@@ -59,7 +59,7 @@ Resolved 2026-08-30.
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: capture the baseline — the eight validator results, `test-gates.sh`, a sha256 per machine-read steering line, a sha256 per mirror-pair member, and the hard-wrapped-block count per file — into the branch. This is the before-side of AC1, AC3, AC4 and AC5.
+- [x] T1: capture the baseline — the eight validator results, `test-gates.sh`, a sha256 per machine-read steering line, a sha256 per mirror-pair member, and the hard-wrapped-block count per file — into the branch. This is the before-side of AC1, AC3, AC4 and AC5.
 - [ ] T2: write the transform and the normalised-equivalence check, and prove the check catches a real difference before trusting it — feed it a file with a word deleted and confirm it reports a mismatch. A verifier that cannot fail is the guard this repo exists to reject.
 - [ ] T3: apply the transform to all 54 files; assert AC1 (detector reports zero) and AC2 (every file normalises identically), with the compared count recorded.
 - [ ] T4: assert AC4 and AC5 — every machine-read line byte-identical by sha256, both mirror pairs byte-identical — then re-pin the rulebook locks with `./assets/check-locks.py --update` and assert AC3's eight validators at their baseline values.
