@@ -97,10 +97,13 @@ Paired with T2's note on `northstar` step 6, this is one finding on two skills: 
 `.steering/product.md`, and neither states a merge rule.** Unlike T2's null result this one is
 backed by an actual write, which makes it the stronger candidate of the two for #54.
 
-### Three of three author pauses returned the draft unchanged
+### Every author pause so far has returned the draft unchanged
 
-Clarification 2's protocol has now run three times — the metric, the non-negotiable, CAP-6's
-falsifier, and the third user — and every answer confirmed the draft exactly. T2 recorded that
+Clarification 2's protocol has run **twice** as of T3 — T2 carrying the metric and the
+non-negotiable, T3 carrying CAP-6's falsifier and the third user — and all four answers confirmed
+the draft exactly. *(Corrected on review: this section originally read "three of three", counting
+four items as three pauses. T4 later added a third pause carrying one question. Final tally: three
+pauses, five questions, all five accepted as recommended.)* T2 recorded that
 this cannot distinguish "the drafts were right" from "a plausible answer was accepted because it
 came first". Three for three does not resolve that; it raises how much of this run rests on it.
 
@@ -115,7 +118,7 @@ verbatim in `docs/PRD.md`, and an explicit recorded reason no epic is the walkin
 
 ### `epics` has no vocabulary for a product that already ships
 
-Rule 6: *"Say which epic is the walking skeleton — the thinnest end-to-end path through the whole
+Step 6: *"Say which epic is the walking skeleton — the thinnest end-to-end path through the whole
 system. It goes first, always, because it is the only thing that discovers integration problems
 while they are still cheap."* Red flag: *"No epic is the walking skeleton. Then integration risk
 is being deferred."* Field: `Walking skeleton: yes | no`.
@@ -136,13 +139,31 @@ that; see clarification 5.
 ### The forward-only citation check, second instance
 
 T3 found `prd` checks that every capability names a real lever, and nothing checks that every
-lever is served. `epics` has the identical asymmetry: rule 3 says *"Give each an id and name the
+lever is served. `epics` has the identical asymmetry: step 3 says *"Give each an id and name the
 capability it serves"*, and nothing asks whether every capability has an epic.
 
 Run in reverse, the first draft left **CAP-3 and CAP-4 served by nothing** — while their remaining
 work sat in three of the four epics under other `Serves:` lines. #25 is independence work, #19 is
 what makes a rulebook pinnable, #22 is the completeness of what `init` leaves behind. The epics
 were right; their citations were incomplete, and neither the skill nor AC5 would have noticed.
+
+After completing the `Serves:` lines, the same reverse check:
+
+```
+CAP-1 served by 3 epic lines
+CAP-2 served by 1
+CAP-3 served by 2      <-- 0 in the first draft
+CAP-4 served by 1      <-- 0 in the first draft
+CAP-5 served by 1
+CAP-6 served by 1
+CAP-7 served by 2
+```
+
+*Recorded on review:* the pre-fix drafts do not exist on the branch. Each was corrected inside its
+own task commit, so `git show 94a91f8:docs/PRD.md` already contains CAP-7 and
+`git show d5445dd:docs/EPICS.md` already contains the completed `Serves:` lines. These count
+tables are the artifact; the drafts are not reproducible, and a reader who was not present is
+taking the operator's word for what they contained.
 
 **Two skills, same defect, found the same way.** That makes it one issue rather than two
 observations: *every citation seam in the inception chain is checked forward and never backward.*
@@ -154,8 +175,9 @@ this run as the incident.
 
 - The template's `- Serves: <capability id>` is singular. Every epic here serves two or three, and
   nothing says whether that is allowed. Writing multiple ids is an inference, like T3's merge.
-- Epic contents came from the tracker, not from a backlog: `docs/BACKLOG.md` already orders the
-  same 16 issues. Step 5 says to list issues "at the granularity `spec` consumes", and here they
+- Epic contents came from the tracker, not from a backlog: `docs/BACKLOG.md` already orders **12**
+  of the 16. Six — #47, #48, #49, #54, #55, #56 — are in no backlog row, and two of the backlog's
+  rows, #10 and #28, are in no epic. Step 5 says to list issues "at the granularity `spec` consumes", and here they
   already existed at that granularity — the inversion `BACKLOG.md` names in its own preamble.
   `epics` assumes it runs before issues exist, and gives no instruction for the case where they do.
 
@@ -171,3 +193,41 @@ shipped path.
 
 Nothing in the run degraded a gate or a guard, which was the thing most worth being sure of and
 the thing that could not have been asserted without T1's capture.
+
+
+## Recorded on review — two consequences the run created and did not name
+
+The reviewer found both. Neither is a defect in a skill; both are things this run did to the
+repository that AC7 required it to record and it did not.
+
+### `docs/BACKLOG.md`'s preamble is now false by construction
+
+It still reads: *"There are still no epics. `epics` has never run, and `docs/` holds none of the
+inception documents except this one — see #22."* All three clauses were true at `main`. All three
+are false at this tip.
+
+The file was correctly **not** edited — "What must NOT change" forbids it, AC8 confines the diff,
+and "a defect found mid-run gets an issue, not a fix" is the right handling. But the run's
+deliverable is the record, and a document this run falsified is exactly what the record is for.
+Re-grooming is `backlog`'s job on its own branch. Same shape as #23.
+
+### The `CAP-` prefix collides with `check-leakage.sh`'s tier-2 pattern
+
+`scripts/check-leakage.sh:27` is:
+
+```
+IDS='\bNS-[0-9]|\bCAP-[a-z]|\bCON-[a-z]|\bADR-[0-9]{4}'
+```
+
+and its own comment at `:24-26` says *"it is the **numbered** forms that carry meaning from the
+private docs hub."* `CAP-` is guarded only in its lowercase form, so `CAP-1` passes — which is why
+the guard is green today. This branch has now made `CAP-1`…`CAP-7` the repository's permanent
+public id vocabulary across four files. Correcting the pattern to `CAP-[0-9]`, the fix the comment
+asks for, would immediately fail on this repo's own documents; and `:18` forbids the only other
+exit — *"Nothing else may be excluded — an allowlist here is how a guard rots."*
+
+The run took deliberate care over `LV-`, choosing it because it appeared nowhere in the repository
+and verifying that in `baseline.md`. It applied none of that care to `CAP-`, and `CAP-` is the one
+that appears in a guard.
+
+Both need follow-up issues. Neither is fixable on this branch without breaching AC8.

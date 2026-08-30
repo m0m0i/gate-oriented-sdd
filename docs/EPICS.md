@@ -1,6 +1,8 @@
 # Epics
 
-- Serves: `docs/PRD.md` capabilities CAP-1 … CAP-7
+- Covers the capabilities in `docs/PRD.md`. The per-epic `- Serves:` lines below carry the
+  citations; this line deliberately carries none, so a mechanical reader is not handed an elision
+  to resolve.
 - Status: draft — nothing cites these ids; see `docs/verified.md`.
 
 Cut from the **remaining** work. Every capability in the PRD is already partly built, so these are

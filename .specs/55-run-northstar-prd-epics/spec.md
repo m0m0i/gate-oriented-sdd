@@ -72,14 +72,14 @@ fail open` verbatim in `.steering/product.md`, and `./assets/check-steering-anch
     different blast radius and a separate review.
   - `backlog`, `sprint`, and `init`. `init` is a migration here rather than a cold start, so it
     cannot exercise detection or the interview; `sprint` would create real issues in a tracker
-    that already has fifteen open; `backlog` would clobber a curated document.
+    that already has 16 open; `backlog` would clobber a curated document.
   - Probe P1 from the run sheet — a non-default `- Docs:` path. `Docs: docs/` is live in this
     repo and changing it to probe a default would be vandalism. It belongs on a throwaway.
   - Fixing anything the run finds, and building the guard #22 asks for.
 
 ### Clarifications
 
-Resolved 2026-08-29.
+Resolved 2026-08-29, except clarification 5 (2026-08-30).
 
 1. **Q: `.steering/product.md` says this project is not a document generator — every skill must
    terminate in something the harness mechanically uses. `northstar` terminates in `- Owns:`,
@@ -125,7 +125,7 @@ Resolved 2026-08-29.
    `check-steering-anchors.sh` must still resolve 5 of 5; and T1 recorded the file's checksum, so
    the before-state is recoverable.
 
-5. **Q: `epics` rule 6 requires a walking skeleton — "the thinnest end-to-end path through the
+5. **Q: `epics` step 6 requires a walking skeleton — "the thinnest end-to-end path through the
    whole system", which "goes first, always, because it is the only thing that discovers
    integration problems while they are still cheap." This system already runs end to end. AC5
    requires exactly one epic marked `yes`.**
@@ -135,9 +135,16 @@ Resolved 2026-08-29.
    field with a different meaning to satisfy a checkbox — the same failure #54's AC2 forbids one
    layer up, and the reason this run does not simply pass.
    The finding is structural rather than a missing sentence: **`epics` has no vocabulary for a
-   product that already ships.** Its rule 6, its red flag "No epic is the walking skeleton", and
+   product that already ships.** Its step 6, its red flag "No epic is the walking skeleton", and
    its `Walking skeleton: yes | no` field all assume greenfield, and a mature project running the
    skill is pushed toward a false designation with nothing to warn it.
+   **Audit trail, recorded on review:** this amendment was committed in `d5445dd`, the same commit
+   that adds `docs/EPICS.md` — not standalone and ahead of the run, as clarification 4's AC8
+   amendment was at `67befe3`. The question was raised and answered before `epics` ran, but
+   nothing on the branch corroborates that ordering, so **AC5's tick must not be read as an
+   independent check.** The convention that makes clarification 4 checkable was available and was
+   not followed. Recorded rather than reversed: the amendment stands on its merits, and the defect
+   is in the evidence, not the reasoning.
 
 ## 2. Design (HOW)
 

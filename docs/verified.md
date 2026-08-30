@@ -135,15 +135,31 @@ Full working record: `.specs/55-run-northstar-prd-epics/observations.md`. Spec: 
 | Does `epics` check that every capability has an epic? | **no.** Same asymmetry. The first draft left CAP-3 and CAP-4 served by nothing while their work sat in three epics under other `Serves:` lines. |
 | Does `prd` say what to do when `.steering/product.md` already has content? | **no.** Step 7 says "summarise into". The additive merge here — 19 insertions, 0 deletions, `Owns:` intact — came from the operator. Replacing the file would be equally compliant with the text. |
 | Same question for `northstar` step 6? | **no**, identically. Two skills write that file; neither states a merge rule. |
-| Can `epics` describe a product that already ships? | **no.** Rule 6, its red flag, and the `Walking skeleton: yes \| no` field all assume greenfield. This system's skeleton shipped weeks ago and the skill offers no way to say so. |
+| Can `epics` describe a product that already ships? | **no.** Step 6, its red flag, and the `Walking skeleton: yes \| no` field all assume greenfield. This system's skeleton shipped weeks ago and the skill offers no way to say so. |
 | Do `PRD.md` and `EPICS.md` have a mechanical consumer here? | **no.** Nothing cites a capability or epic id, and no check requires one to exist. Both carry `Status: draft` saying so. See #22. |
+| Did running the chain falsify anything already written down? | **yes, two things.** `docs/BACKLOG.md`'s preamble ("`epics` has never run… `docs/` holds none of the inception documents") is false at this tip — #58. And `CAP-1`…`CAP-7` collide with `check-leakage.sh`'s tier-2 pattern, which guards `CAP-[a-z]` while its comment says the numbered forms are the ones that matter — #57. |
 | Did the gates and guards survive the run? | **yes.** Eight validators at exit 0 and `test-gates.sh` at 52/0, before and after; `- Owns:` byte-identical; `check-steering-anchors.sh` at 5 of 5 throughout. |
+
+### Two consequences the run created and did not notice
+
+Both were found by the reviewer, not by the run. That is worth recording as plainly as the
+findings themselves: the section above argues that citation seams are only ever checked forward,
+and this section is the same defect in the run's own record — AC7 required "any seam that did not
+join" and the run recorded only the seams it went looking for.
+
+- **#58** — `docs/BACKLOG.md`'s preamble is now false by construction. The file was correctly not
+  edited; the run's job was to say so, and it did not.
+- **#57** — the `CAP-` ids this run established collide with `check-leakage.sh`'s tier-2 pattern.
+  The run took deliberate care choosing `LV-` because it appeared nowhere in the repository, and
+  applied none of that care to `CAP-`, which appears in a guard.
 
 ### What this run does not support
 
 **The interviews are untested.** The spec chose propose-then-correct: drafts derived from the
-repository, put to the author for correction. Across three skills, **all four product decisions
-came back confirmed exactly as drafted.** That cannot distinguish "the drafts were right because
+repository, put to the author for correction. Across three skills there were three author pauses
+carrying five questions, and **every one was accepted as recommended** — the four product
+decisions (the metric, the non-negotiable, CAP-6's falsifier, the third user) and a fifth, the
+amendment to AC5. That cannot distinguish "the drafts were right because
 the repository already encodes these decisions" from "a plausible answer was accepted because it
 arrived first with a recommendation" — which is precisely what `northstar`'s own last rule warns
 about: *"ask the user, and record their answer rather than a plausible one."*
