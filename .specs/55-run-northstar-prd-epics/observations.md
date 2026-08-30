@@ -158,3 +158,16 @@ this run as the incident.
   same 16 issues. Step 5 says to list issues "at the granularity `spec` consumes", and here they
   already existed at that granularity — the inversion `BACKLOG.md` names in its own preamble.
   `epics` assumes it runs before issues exist, and gives no instruction for the case where they do.
+
+## T6 — baseline re-verified
+
+**AC1 verified.** All eight validators exit 0; `test-gates.sh` at 52 passed, 0 failed — identical
+to T1.
+**AC2 verified.** `- Owns:` sha256 `3f52ee31…`, matching the baseline exactly.
+**AC8 verified, as amended.** `docs/BACKLOG.md` (`d72253ff…`), `.steering/tech.md` (`5e544055…`)
+and `.steering/structure.md` (`061e0ff7…`) all byte-identical. The diff against `main` touches
+`docs/`, `.specs/55-run-northstar-prd-epics/`, and `.steering/product.md` — nothing else, and no
+shipped path.
+
+Nothing in the run degraded a gate or a guard, which was the thing most worth being sure of and
+the thing that could not have been asserted without T1's capture.
