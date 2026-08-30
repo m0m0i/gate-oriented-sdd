@@ -30,3 +30,9 @@ That is #19 ("`--update` cannot create a lock, so a new rulebook can never be pi
 ## Note on `detect.py`
 
 It stays as the survey tool that produced the scope, and it is deliberately loose: it counts any block of consecutive short lines, so YAML front matter and a list of five short items both register. Its post-transform count of 30 across 23 files is those, not work left undone. AC1 was amended to the exact question — whether the transform is a fixed point — in its own commit ahead of T3, per #59.
+
+## T5 — AC2 needed one carve-out, verified rather than waived
+
+`verify.py` compares every tracked Markdown file against `main` and reported one change: `CONTRIBUTING.md`, which gained the convention section AC6 asks for. That is intentional new content, not a reflow defect, but "the checker flagged it and I decided it was fine" is exactly the reasoning this branch exists to distrust.
+
+So it was checked instead. Comparing the canonical forms element by element: headings +1, tokens +3, **nothing removed or altered in any of the five categories.** The change is purely additive. Excluding that one file, the remaining **82 files compare identically** against `main`.
