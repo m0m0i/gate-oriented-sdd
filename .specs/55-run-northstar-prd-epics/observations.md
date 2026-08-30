@@ -107,3 +107,54 @@ came first". Three for three does not resolve that; it raises how much of this r
 Stated plainly: **this run tests the skills' mechanics and their seams. It does not test their
 interviews.** Anything claimed about whether these skills elicit good product decisions from a
 user is unsupported by this run.
+
+## T4 — `epics`
+
+**AC5 verified**, as amended. Four epics, four `Demo:` sentences, every `- Serves:` id resolving
+verbatim in `docs/PRD.md`, and an explicit recorded reason no epic is the walking skeleton.
+
+### `epics` has no vocabulary for a product that already ships
+
+Rule 6: *"Say which epic is the walking skeleton — the thinnest end-to-end path through the whole
+system. It goes first, always, because it is the only thing that discovers integration problems
+while they are still cheap."* Red flag: *"No epic is the walking skeleton. Then integration risk
+is being deferred."* Field: `Walking skeleton: yes | no`.
+
+Every one of those assumes greenfield. This system's thinnest end-to-end path was the first spec
+carried through `implement`, the reviewer and a merged PR; it discovered exactly the integration
+problems it exists to discover — #1, #2, #8 — weeks ago. Nothing remaining is a skeleton.
+
+The skill offers no way to say that. A mature project running it is pushed toward marking some
+epic `yes` to satisfy a defined field with a meaning that does not apply, and **no rule, red flag,
+or template line warns against it.** This is the first finding of this run that is structural
+rather than a missing sentence, and it applies to every consumer past their first release — which
+is every consumer, eventually.
+
+Recorded in `EPICS.md` under its own heading rather than by designation. AC5 was amended to accept
+that; see clarification 5.
+
+### The forward-only citation check, second instance
+
+T3 found `prd` checks that every capability names a real lever, and nothing checks that every
+lever is served. `epics` has the identical asymmetry: rule 3 says *"Give each an id and name the
+capability it serves"*, and nothing asks whether every capability has an epic.
+
+Run in reverse, the first draft left **CAP-3 and CAP-4 served by nothing** — while their remaining
+work sat in three of the four epics under other `Serves:` lines. #25 is independence work, #19 is
+what makes a rulebook pinnable, #22 is the completeness of what `init` leaves behind. The epics
+were right; their citations were incomplete, and neither the skill nor AC5 would have noticed.
+
+**Two skills, same defect, found the same way.** That makes it one issue rather than two
+observations: *every citation seam in the inception chain is checked forward and never backward.*
+`northstar` → `prd` → `epics` all pass while a lever or a capability quietly serves nothing, and
+the document set reads as complete. It is also a candidate contract for #54 on both skills, with
+this run as the incident.
+
+### Smaller notes
+
+- The template's `- Serves: <capability id>` is singular. Every epic here serves two or three, and
+  nothing says whether that is allowed. Writing multiple ids is an inference, like T3's merge.
+- Epic contents came from the tracker, not from a backlog: `docs/BACKLOG.md` already orders the
+  same 16 issues. Step 5 says to list issues "at the granularity `spec` consumes", and here they
+  already existed at that granularity — the inversion `BACKLOG.md` names in its own preamble.
+  `epics` assumes it runs before issues exist, and gives no instruction for the case where they do.

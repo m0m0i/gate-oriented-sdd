@@ -52,7 +52,9 @@ fail open` verbatim in `.steering/product.md`, and `./assets/check-steering-anch
         normal. This is #22's argument, restated from observation.
   - [ ] **AC5:** WHEN `epics` completes THE SYSTEM SHALL have written `docs/EPICS.md` in which
         every `- Serves:` id appears verbatim in `docs/PRD.md`, every epic carries a `Demo:`
-        sentence, and exactly one epic is `Walking skeleton: yes`.
+        sentence, and **either** exactly one epic is `Walking skeleton: yes` **or**
+        `docs/EPICS.md` records an explicit reason none applies. _Amended 2026-08-30 — see
+        clarification 5._
   - [ ] **AC6:** WHEN an id prefix is chosen at `northstar` step 2 THE SYSTEM SHALL be observed
         to either carry it through `prd` and `epics` or not, and the answer recorded either way.
         The prefix SHALL be one that could not be guessed from the domain, so that a match cannot
@@ -123,6 +125,20 @@ Resolved 2026-08-29.
    `check-steering-anchors.sh` must still resolve 5 of 5; and T1 recorded the file's checksum, so
    the before-state is recoverable.
 
+5. **Q: `epics` rule 6 requires a walking skeleton — "the thinnest end-to-end path through the
+   whole system", which "goes first, always, because it is the only thing that discovers
+   integration problems while they are still cheap." This system already runs end to end. AC5
+   requires exactly one epic marked `yes`.**
+   **A: Record it as already shipped and amend AC5** to accept an explicit recorded reason in
+   place of a designation. Raised at the start of T4, before `epics` ran.
+   Marking an epic `yes` that discovers no integration problems would fill a precisely defined
+   field with a different meaning to satisfy a checkbox — the same failure #54's AC2 forbids one
+   layer up, and the reason this run does not simply pass.
+   The finding is structural rather than a missing sentence: **`epics` has no vocabulary for a
+   product that already ships.** Its rule 6, its red flag "No epic is the walking skeleton", and
+   its `Walking skeleton: yes | no` field all assume greenfield, and a mature project running the
+   skill is pushed toward a false designation with nothing to warn it.
+
 ## 2. Design (HOW)
 
 - **Approach.** Nothing here is code. The run is an experiment, and the design is the protocol
@@ -174,7 +190,7 @@ Resolved 2026-08-29.
 - [x] T3: run `prd`; assert AC4 and AC4b — `docs/PRD.md` at `Status: draft`, every capability's
       lever id grep-matched in `NORTH_STAR.md` with the count recorded, and the absence of any
       mechanical consumer noted.
-- [ ] T4: run `epics`; assert AC5 — every `- Serves:` id grep-matched in `PRD.md`, every epic
+- [x] T4: run `epics`; assert AC5 — every `- Serves:` id grep-matched in `PRD.md`, every epic
       carrying a `Demo:`, exactly one `Walking skeleton: yes`.
 - [ ] T5: write the `docs/verified.md` section from the recorded observations, satisfying AC6 and
       AC7 — including every seam that did not join, and the `LV-` prefix outcome either way.
