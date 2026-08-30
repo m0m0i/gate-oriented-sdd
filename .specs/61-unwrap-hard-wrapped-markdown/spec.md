@@ -1,6 +1,6 @@
 # Spec: Unwrap hard-wrapped Markdown and write the convention down
 
-- Slug: 61-unwrap-hard-wrapped-markdown Issue: 61 Type: chore Status: approved
+- Slug: 61-unwrap-hard-wrapped-markdown Issue: 61 Type: chore Status: done
 - Author: m0m0i Date: 2026-08-30
 
 ## 1. Requirements (WHAT / WHY)
@@ -18,13 +18,13 @@
 - Why now: nothing defines the width — no `.editorconfig`, no Prettier, no markdownlint, no formatter in CI, and no rule in `AGENTS.md`, `CONTRIBUTING.md`, `.steering/`, or any rulebook. It has already cost a review round: on #55's branch the reviewer twice cited "repo convention" for a wrap width it had inferred from a file written minutes earlier in the same session, and commit `7916a52` exists only to chase that. A convention nothing states gets enforced from whatever is nearby, which is #23's shape applied to style.
 
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN the change is complete THE SYSTEM SHALL be a fixed point of the transform — applying it again changes no file — verified by running it over every tracked Markdown file and reporting the count that would change, which must be zero. _Amended 2026-08-30, before T3 was committed — see clarification 3._
-  - [ ] **AC2:** THE SYSTEM SHALL render identically before and after, demonstrated per file by comparing both sides with intra-block newlines collapsed to single spaces and reporting the count of files compared — not asserted by inspection.
-  - [ ] **AC3:** WHEN the change is complete all eight `- Validators:` commands SHALL exit 0 at their recorded baseline values: `check-steering-anchors.sh` 5 of 5, `check-skill-contracts.py` 9 contracts, `check-templates.py` 10 task lines across 3 templates, `check-receipt-schema.py` 7 fields across 3 copies, `check-locks.py` a nonzero pinned count, `test-gates.sh` 52 passed 0 failed.
-  - [ ] **AC4:** WHEN the change is complete `.steering/tech.md` and `.steering/product.md` SHALL still carry each machine-read line on one physical line, byte-identical to the baseline, verified by sha256 per line rather than by the anchor check alone.
-  - [ ] **AC5:** WHEN the change is complete both mirror pairs SHALL still be byte-identical, verified by sha256.
-  - [ ] **AC6:** THE SYSTEM SHALL state the convention in `CONTRIBUTING.md` in one sentence naming what it applies to and why.
-  - [ ] **AC7:** WHEN shipped paths change THE SYSTEM SHALL carry a version bump in both manifests, agreeing, so `check-version-bump.py` and `check-manifests.py` both pass.
+  - [x] **AC1:** WHEN the change is complete THE SYSTEM SHALL be a fixed point of the transform — applying it again changes no file — verified by running it over every tracked Markdown file and reporting the count that would change, which must be zero. _Amended 2026-08-30, before T3 was committed — see clarification 3._
+  - [x] **AC2:** THE SYSTEM SHALL render identically before and after, demonstrated per file by comparing both sides with intra-block newlines collapsed to single spaces and reporting the count of files compared — not asserted by inspection.
+  - [x] **AC3:** WHEN the change is complete all eight `- Validators:` commands SHALL exit 0 at their recorded baseline values: `check-steering-anchors.sh` 5 of 5, `check-skill-contracts.py` 9 contracts, `check-templates.py` 10 task lines across 3 templates, `check-receipt-schema.py` 7 fields across 3 copies, `check-locks.py` a nonzero pinned count, `test-gates.sh` 52 passed 0 failed.
+  - [x] **AC4:** WHEN the change is complete `.steering/tech.md` and `.steering/product.md` SHALL still carry each machine-read line on one physical line, byte-identical to the baseline, verified by sha256 per line rather than by the anchor check alone.
+  - [x] **AC5:** WHEN the change is complete both mirror pairs SHALL still be byte-identical, verified by sha256.
+  - [x] **AC6:** THE SYSTEM SHALL state the convention in `CONTRIBUTING.md` in one sentence naming what it applies to and why.
+  - [x] **AC7:** WHEN shipped paths change THE SYSTEM SHALL carry a version bump in both manifests, agreeing, so `check-version-bump.py` and `check-manifests.py` both pass.
 
 - Out of scope:
   - Adding a formatter, an `.editorconfig`, or a lint rule. The convention is "do not hand-wrap", which needs no tool and gains a dependency if it gets one.
@@ -63,4 +63,4 @@ Resolved 2026-08-30.
 - [x] T2: write the transform and the normalised-equivalence check, and prove the check catches a real difference before trusting it — feed it a file with a word deleted and confirm it reports a mismatch. A verifier that cannot fail is the guard this repo exists to reject.
 - [x] T3: apply the transform to all 54 files; assert AC1 (detector reports zero) and AC2 (every file normalises identically), with the compared count recorded.
 - [x] T4: assert AC4 and AC5 — every machine-read line byte-identical by sha256, both mirror pairs byte-identical — then re-pin the rulebook locks with `./assets/check-locks.py --update` and assert AC3's eight validators at their baseline values.
-- [ ] T5: bump both manifests to 0.4.1 and add the convention sentence to `CONTRIBUTING.md`; assert AC6, AC7, `check-manifests.py`, and `check-version-bump.py` against the merge base.
+- [x] T5: bump both manifests to 0.4.1 and add the convention sentence to `CONTRIBUTING.md`; assert AC6, AC7, `check-manifests.py`, and `check-version-bump.py` against the merge base.

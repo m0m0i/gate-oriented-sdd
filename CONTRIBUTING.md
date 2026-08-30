@@ -34,6 +34,14 @@ Editing `docs/`, `evals/`, `scripts/`, CI, or the READMEs does not require a rel
 claude plugin tag        # creates {name}--v{version}, validating manifest against marketplace entry
 ```
 
+## Markdown is not hand-wrapped
+
+A paragraph is one line, and the reader's app decides the width. This applies to every Markdown file in the repository — skills, rulebooks, steering, specs, work logs, documents. Do not break prose at a column, and do not "fix" a long line you find.
+
+It is written down because nothing enforces it and it was already inferred wrongly once: a reviewer twice cited "repo convention" for a wrap width it had taken from the file it was reading, which had been written minutes earlier in the same session. A convention nothing states gets enforced from whatever happens to be nearby.
+
+Fenced code, tables, and YAML front matter keep their line breaks — those are structure, not wrapping. So do the machine-read `- Validators:` / `- Reviewer:` / `- Source globs:` / `- Docs:` / `- Owns:` lines in `.steering/`, which the gates read with `sed … | head -1` and which must each stay on one physical line for a different reason.
+
 ## Before you open a PR
 
 ```bash
