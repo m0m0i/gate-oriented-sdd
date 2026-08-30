@@ -5,7 +5,7 @@
 
 ## 1. Requirements (WHAT / WHY)
 
-- What changes: join every hand-wrapped block in the 54 tracked Markdown files that contain one, so a paragraph and a list item are each one physical line and the reader's app decides the width. Add one sentence to `CONTRIBUTING.md` stating the convention, so it stops being inferred from whatever file is nearby.
+- What changes: join every hand-wrapped block in the tracked Markdown files that contain one — 50 files as it turned out, 49 of them reflow-only, against a survey of 54 by a deliberately loose detector — so a paragraph and a list item are each one physical line and the reader's app decides the width. Add one sentence to `CONTRIBUTING.md` stating the convention, so it stops being inferred from whatever file is nearby.
 
 - **What must NOT change:**
   - **Rendered output.** Joining a wrapped paragraph's lines produces identical HTML. A file whose rendering changes has had its structure altered, not its wrapping — that is the invariant this chore is defined by, and without it a reflow and a rewrite are the same diff.
@@ -46,11 +46,11 @@ Resolved 2026-08-30.
 
 - **The one-way hazard, and why the rule above is written as it is.** A machine-read steering line is a list item. If the join rule were "join every consecutive pair", `- Validators: a, b, c` would absorb the following `- Reviewer: …` line and both values would be destroyed while `sed … | head -1` kept returning something that looked plausible. Refusing to join across a list marker is what makes that impossible, and AC4 checks the result per line rather than trusting the rule.
 
-- **Verification is the deliverable, not the diff.** AC2 compares each file before and after with every intra-block newline collapsed to a single space. Two files that normalise identically render identically, so the check is exact rather than a spot inspection, and it runs over all 54 files rather than a sample.
+- **Verification is the deliverable, not the diff.** AC2 compares each file before and after under `canon.py`, which parses independently of the transform. It runs over all 83 Markdown files present on `main`, not only the ones that changed — broader than the survey, so a file the survey missed cannot slip through.
 
 - **Order of operations.** The baseline (T1) must precede the transform, because AC3 and AC4 are comparisons and there is nothing to compare against otherwise — the lesson #55 recorded. The version bump lands with the shipped-path change, not after it, because `check-version-bump.py` evaluates the PR as a whole.
 
-- **Affected files.** 54 Markdown files across `.specs/`, `.work_logs/`, `evals/`, `docs/`, `.claude/agents/`, `.github/ISSUE_TEMPLATE/`, `.steering/`, `agents/`, `assets/issue-templates/`, `skills/`, and `AGENTS.md`; plus `CONTRIBUTING.md` for the convention, and both manifests for the bump.
+- **Affected files.** 50 Markdown files across `.specs/`, `.work_logs/`, `evals/`, `docs/`, `.claude/agents/`, `.steering/`, `agents/`, `skills/`, and `AGENTS.md`; plus `CONTRIBUTING.md` for the convention, and both manifests for the bump. `.github/ISSUE_TEMPLATE/` and `assets/issue-templates/` were in the survey but come out byte-unchanged — their front matter and bare list markers are all structure.
 
 - **Coverage gap.** Nothing in this repo asserts that the two issue-template mirrors are byte-identical — `check-receipt-schema.py` covers the reviewer-contract pair only. They are identical today by habit. AC5 checks both pairs here, but after this branch the issue-template pair remains unguarded; that is a finding to record, not to fix under this spec.
 
@@ -61,6 +61,6 @@ Resolved 2026-08-30.
 
 - [x] T1: capture the baseline — the eight validator results, `test-gates.sh`, a sha256 per machine-read steering line, a sha256 per mirror-pair member, and the hard-wrapped-block count per file — into the branch. This is the before-side of AC1, AC3, AC4 and AC5.
 - [x] T2: write the transform and the normalised-equivalence check, and prove the check catches a real difference before trusting it — feed it a file with a word deleted and confirm it reports a mismatch. A verifier that cannot fail is the guard this repo exists to reject.
-- [x] T3: apply the transform to all 54 files; assert AC1 (detector reports zero) and AC2 (every file normalises identically), with the compared count recorded.
+- [x] T3: apply the transform to every tracked Markdown file; assert AC1 (a second pass changes no file) and AC2 (every file compares identically under `canon.py`), with the compared count recorded.
 - [x] T4: assert AC4 and AC5 — every machine-read line byte-identical by sha256, both mirror pairs byte-identical — then re-pin the rulebook locks with `./assets/check-locks.py --update` and assert AC3's eight validators at their baseline values.
 - [x] T5: bump both manifests to 0.4.1 and add the convention sentence to `CONTRIBUTING.md`; assert AC6, AC7, `check-manifests.py`, and `check-version-bump.py` against the merge base.

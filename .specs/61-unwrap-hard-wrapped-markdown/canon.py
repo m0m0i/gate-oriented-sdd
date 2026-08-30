@@ -24,6 +24,9 @@ import re
 HEADING = re.compile(r"^\s*#{1,6}(?:\s|$)")
 TABLE = re.compile(r"^\s*\|")
 ITEM = re.compile(r"^\s*(?:[-*+](?:\s|$)|\d+[.)](?:\s|$)|>)")
+#: A standalone substitution slot is its own structural unit, so folding one into the
+#: sentence above it is visible here rather than only after the template is rendered.
+SLOT = re.compile(r"^\s*\{\{[A-Z_]+\}\}\s*$")
 
 
 def canon(text: str):
@@ -66,6 +69,10 @@ def canon(text: str):
         if TABLE.match(ln):
             close()
             tables.append(s)
+            continue
+        if SLOT.match(ln):
+            close()
+            heads.append(s)
             continue
         if ITEM.match(ln):
             close()

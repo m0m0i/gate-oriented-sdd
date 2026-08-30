@@ -20,6 +20,12 @@ import sys
 # A marker may be bare: an issue template's "1." on its own line is a list item with no
 # content yet, and treating it as prose merged it with the "2." beneath it.
 NEW_BLOCK = re.compile(r"^\s*(?:[-*+](?:\s|$)|\d+[.)](?:\s|$)|>|#{1,6}(?:\s|$)|\|)")
+# A line that is only a substitution slot is structure, not prose. `agents/_template/`
+# pastes a multi-line bullet list into `{{VALIDATOR_LIST}}`, so folding the slot into the
+# sentence above it turns the first pasted validator into a stray nested list once the
+# template is rendered. The template's own HTML is unchanged, which is why canon.py cannot
+# see it: the damage is invisible until substitution.
+SLOT = re.compile(r"^\s*\{\{[A-Z_]+\}\}\s*$")
 STRUCTURAL = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|\|)")
 
 
@@ -58,7 +64,7 @@ def unwrap(text: str) -> str:
             flush()
             out.append(ln)
             continue
-        if STRUCTURAL.match(ln):
+        if STRUCTURAL.match(ln) or SLOT.match(ln):
             flush()
             out.append(ln.rstrip())
             continue

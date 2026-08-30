@@ -36,3 +36,17 @@ It stays as the survey tool that produced the scope, and it is deliberately loos
 `verify.py` compares every tracked Markdown file against `main` and reported one change: `CONTRIBUTING.md`, which gained the convention section AC6 asks for. That is intentional new content, not a reflow defect, but "the checker flagged it and I decided it was fine" is exactly the reasoning this branch exists to distrust.
 
 So it was checked instead. Comparing the canonical forms element by element: headings +1, tokens +3, **nothing removed or altered in any of the five categories.** The change is purely additive. Excluding that one file, the remaining **82 files compare identically** against `main`.
+
+## Review — a shipped template broke in a way canon.py could not see
+
+The reviewer found it: `agents/_template/reviewer.md`. On `main` the substitution slot stood alone at column 0, directly under the bullet that introduces it. The reflow folded it up into the sentence.
+
+The file's own rendering is unchanged — a placeholder alone on a line is a lazy continuation of the bullet above it, so `canon.py` saw an identical token stream and reported nothing. **The damage is invisible until substitution.** `init` pastes a multi-line indented bullet list into that slot, so the rendered reviewer would have read `- these validators, and no others:   - ./scripts/check-leakage.sh`, turning the first validator into part of the sentence and the rest into a stray nested list. `agents/` is a shipped path, so every project generated from the template would have inherited it.
+
+Two things worth keeping from this.
+
+**The blind spot was structural, not accidental.** `canon.py` was written to be independent of `unwrap.py`, and it is — but both were written by someone thinking about Markdown, and neither was thinking about a template that is not yet Markdown. A canonical form can only compare what it parses, and it parsed the pre-substitution file correctly.
+
+**The durable fix is a rule, not an edit.** A line that is only a `{{PLACEHOLDER}}` is now structural in both files: `unwrap.py` never joins one, and `canon.py` treats it as its own unit so a future fold is visible rather than silent. Verified both ways — the transform now leaves `agents/_template/reviewer.md` unchanged, and `canon` reports a difference between the correct and folded forms. Restoring the line by hand without the rule would have left the next run to break it again.
+
+`{{RULEBOOK_TABLE}}` is the only other standalone slot in the repository. It survived because a blank line preceded it.

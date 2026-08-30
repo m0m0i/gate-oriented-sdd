@@ -16,7 +16,8 @@ model: inherit
 Evidence gathering only:
 
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
-- these validators, and no others: {{VALIDATOR_LIST}}
+- these validators, and no others:
+{{VALIDATOR_LIST}}
 - the package manager's list command, to check an installed version before claiming an API is wrong
 
 Nothing else. You do not edit, commit, or push.
