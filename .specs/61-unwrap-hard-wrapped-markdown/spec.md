@@ -32,10 +32,35 @@
   - Tagging the release. #62 owns the tag, and the untagged-0.4.0 problem it describes exists independently of this change.
 
 ### Clarifications
-<pending — `clarify` has not run>
+Resolved 2026-08-30.
+
+1. **Q: This branch touches shipped paths, so `check-version-bump.py` forces a bump — but 0.4.0 is already in both manifests and was never tagged. What does this PR bump to?**
+   **A: 0.4.1.** 0.4.0 becomes a version that existed only in the manifests, and consumers move 0.3.9 → 0.4.1 carrying both #52's flow change and this reflow. Rejected: retroactively tagging 0.4.0 from today's `main`, because that tag would point at a tree containing #55's documents rather than at where 0.4.0 was set, which is honest about the number and dishonest about its contents. Also rejected: 0.5.0, since a reflow changes no meaning and #52 already had its bump.
+   Consequence for #62: it is no longer "tag the version that exists" but "tag 0.4.1, and add the guard that would have caught a bumped-but-untagged version" — the check-version-bump/tag gap it describes is unchanged by this decision.
+
+2. Nothing else was genuinely ambiguous. Two candidates were discarded because both readings lead to the same design: whether a reflow of shipped skill text is patch or minor (it changes no meaning a model reads, so patch), and whether `evals/` needs a bump (it is not in `check-version-bump.py`'s `SHIPPED` tuple, and `.steering/structure.md` records it as not shipped).
 
 ## 2. Design (HOW)
-<not yet written — Requirements first, per `spec` step 3>
+
+- **The transform.** Within a block, join line *n+1* into line *n* unless *n+1* starts a new construct — a list marker (`- `, `* `, `N. `), a heading, a table row, a blockquote marker, or a fence. Blank lines, fenced code, tables, headings, and front matter pass through untouched. Nesting is preserved by keeping the first line's indentation and discarding the continuation's.
+
+- **The one-way hazard, and why the rule above is written as it is.** A machine-read steering line is a list item. If the join rule were "join every consecutive pair", `- Validators: a, b, c` would absorb the following `- Reviewer: …` line and both values would be destroyed while `sed … | head -1` kept returning something that looked plausible. Refusing to join across a list marker is what makes that impossible, and AC4 checks the result per line rather than trusting the rule.
+
+- **Verification is the deliverable, not the diff.** AC2 compares each file before and after with every intra-block newline collapsed to a single space. Two files that normalise identically render identically, so the check is exact rather than a spot inspection, and it runs over all 54 files rather than a sample.
+
+- **Order of operations.** The baseline (T1) must precede the transform, because AC3 and AC4 are comparisons and there is nothing to compare against otherwise — the lesson #55 recorded. The version bump lands with the shipped-path change, not after it, because `check-version-bump.py` evaluates the PR as a whole.
+
+- **Affected files.** 54 Markdown files across `.specs/`, `.work_logs/`, `evals/`, `docs/`, `.claude/agents/`, `.github/ISSUE_TEMPLATE/`, `.steering/`, `agents/`, `assets/issue-templates/`, `skills/`, and `AGENTS.md`; plus `CONTRIBUTING.md` for the convention, and both manifests for the bump.
+
+- **Coverage gap.** Nothing in this repo asserts that the two issue-template mirrors are byte-identical — `check-receipt-schema.py` covers the reviewer-contract pair only. They are identical today by habit. AC5 checks both pairs here, but after this branch the issue-template pair remains unguarded; that is a finding to record, not to fix under this spec.
+
+- **Rollback.** `git revert`, then `./assets/check-locks.py --update`.
 
 ## 3. Tasks (TDD-ordered)
-<not yet written>
+> One task is one complete Red-Green-Refactor cycle, so one green commit.
+
+- [ ] T1: capture the baseline — the eight validator results, `test-gates.sh`, a sha256 per machine-read steering line, a sha256 per mirror-pair member, and the hard-wrapped-block count per file — into the branch. This is the before-side of AC1, AC3, AC4 and AC5.
+- [ ] T2: write the transform and the normalised-equivalence check, and prove the check catches a real difference before trusting it — feed it a file with a word deleted and confirm it reports a mismatch. A verifier that cannot fail is the guard this repo exists to reject.
+- [ ] T3: apply the transform to all 54 files; assert AC1 (detector reports zero) and AC2 (every file normalises identically), with the compared count recorded.
+- [ ] T4: assert AC4 and AC5 — every machine-read line byte-identical by sha256, both mirror pairs byte-identical — then re-pin the rulebook locks with `./assets/check-locks.py --update` and assert AC3's eight validators at their baseline values.
+- [ ] T5: bump both manifests to 0.4.1 and add the convention sentence to `CONTRIBUTING.md`; assert AC6, AC7, `check-manifests.py`, and `check-version-bump.py` against the merge base.
