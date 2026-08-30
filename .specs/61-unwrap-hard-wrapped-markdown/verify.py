@@ -40,5 +40,12 @@ if __name__ == "__main__":
         if canon(old.stdout) != canon(open(f).read()):
             bad += 1
             print(f"  STRUCTURE OR CONTENT CHANGED: {f}", file=sys.stderr)
-    print(f"verify: {checked} file(s) compared against {ref}, {bad} change(s)")
+    skipped = len(files) - checked
+    print(f"verify: {checked} file(s) compared against {ref}, {skipped} absent there, {bad} change(s)")
+    if checked == 0:
+        # An empty work-set must not report success. A bad ref made every `git show` fail and
+        # every file skip, and "verified everything" and "compared nothing" shared exit 0 —
+        # the shape of #16 and #39, in the tool written to police exactly that.
+        print(f"verify FAILED — nothing was compared; is {ref} a valid ref?", file=sys.stderr)
+        sys.exit(1)
     sys.exit(1 if bad else 0)
