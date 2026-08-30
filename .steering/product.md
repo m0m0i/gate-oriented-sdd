@@ -18,6 +18,25 @@ Developers running an agent against their own codebase who want the review step 
 mechanical gate rather than a request the model can decline. Secondarily, people reading it as a
 reference implementation of hook-enforced process.
 
+## Capabilities
+
+Summarised from `docs/PRD.md`, which holds the full statement of each — the lever it serves,
+its observable "done when", and what would falsify it. Ids are immutable; wording is not.
+
+| Id | Capability | Serves |
+| :-- | :-- | :-- |
+| CAP-1 | Review that cannot be declined | LV-1 |
+| CAP-2 | Enforcement the project defines, not the hook | LV-1, LV-4 |
+| CAP-3 | Judgment that is independent, and says when it was not | LV-3 |
+| CAP-4 | Installation into a repository that already has opinions | LV-4 |
+| CAP-5 | Fixes that reach the people running it | LV-5 |
+| CAP-6 | Planning that terminates in something the harness reads | LV-4 |
+| CAP-7 | A gate people leave switched on | LV-2 |
+
+`LV-*` are the levers in `docs/NORTH_STAR.md`. **Nothing cites these ids yet** — no spec is
+required to name a capability, and no check verifies one exists. Recorded rather than implied;
+see #22.
+
 ## What it deliberately is not
 
 - **Not a document generator.** Every skill has to terminate in something the harness mechanically
