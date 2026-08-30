@@ -38,9 +38,7 @@ Resolved 2026-08-30.
 
 2. Nothing else was genuinely ambiguous. Two candidates were discarded because both readings lead to the same design: whether a reflow of shipped skill text is patch or minor (it changes no meaning a model reads, so patch), and whether `evals/` needs a bump (it is not in `check-version-bump.py`'s `SHIPPED` tuple, and `.steering/structure.md` records it as not shipped).
 
-3. **Q: AC1 said "verified by the same detector that produced the scope, reporting zero". That detector counts any block of consecutive short lines, which includes YAML front matter and a list of five short items — both legitimately multi-line. It cannot reach zero.**
-   **A: Restate AC1 as a fixed point.** The exact question is whether the transform would still change anything, so AC1 now asserts that applying it again changes no file. Raised after T2's tooling was corrected and before T3's application was committed, so the amendment precedes the artifact it judges — the convention #59 exists to write down, and which #55 got wrong once.
-   `detect.py` stays in the branch as the survey tool that produced the scope. It is deliberately loose, and its remaining count of 30 across 23 files is front matter and short-item lists, not work left undone.
+3. **Q: AC1 said "verified by the same detector that produced the scope, reporting zero". That detector counts any block of consecutive short lines, which includes YAML front matter and a list of five short items — both legitimately multi-line. It cannot reach zero.** **A: Restate AC1 as a fixed point.** The exact question is whether the transform would still change anything, so AC1 now asserts that applying it again changes no file. Raised after T2's tooling was corrected and before T3's application was committed, so the amendment precedes the artifact it judges — the convention #59 exists to write down, and which #55 got wrong once. `detect.py` stays in the branch as the survey tool that produced the scope. It is deliberately loose, and its remaining count of 30 across 23 files is front matter and short-item lists, not work left undone.
 
 ## 2. Design (HOW)
 
@@ -63,6 +61,6 @@ Resolved 2026-08-30.
 
 - [x] T1: capture the baseline — the eight validator results, `test-gates.sh`, a sha256 per machine-read steering line, a sha256 per mirror-pair member, and the hard-wrapped-block count per file — into the branch. This is the before-side of AC1, AC3, AC4 and AC5.
 - [x] T2: write the transform and the normalised-equivalence check, and prove the check catches a real difference before trusting it — feed it a file with a word deleted and confirm it reports a mismatch. A verifier that cannot fail is the guard this repo exists to reject.
-- [ ] T3: apply the transform to all 54 files; assert AC1 (detector reports zero) and AC2 (every file normalises identically), with the compared count recorded.
-- [ ] T4: assert AC4 and AC5 — every machine-read line byte-identical by sha256, both mirror pairs byte-identical — then re-pin the rulebook locks with `./assets/check-locks.py --update` and assert AC3's eight validators at their baseline values.
+- [x] T3: apply the transform to all 54 files; assert AC1 (detector reports zero) and AC2 (every file normalises identically), with the compared count recorded.
+- [x] T4: assert AC4 and AC5 — every machine-read line byte-identical by sha256, both mirror pairs byte-identical — then re-pin the rulebook locks with `./assets/check-locks.py --update` and assert AC3's eight validators at their baseline values.
 - [ ] T5: bump both manifests to 0.4.1 and add the convention sentence to `CONTRIBUTING.md`; assert AC6, AC7, `check-manifests.py`, and `check-version-bump.py` against the merge base.

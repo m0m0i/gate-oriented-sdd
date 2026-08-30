@@ -7,9 +7,7 @@ model: inherit
 
 # {{REVIEWER_NAME}}
 
-<!-- The frontmatter placeholders are quoted deliberately: bare {{...}} is a flow
-     mapping in YAML, so an unquoted placeholder parses as an object and fails
-     validation before it is ever substituted. Keep the quotes. -->
+<!-- The frontmatter placeholders are quoted deliberately: bare {{...}} is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before it is ever substituted. Keep the quotes. -->
 
 **Read `_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to {{LANGUAGE}} and to this project.
 
@@ -18,8 +16,7 @@ model: inherit
 Evidence gathering only:
 
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
-- these validators, and no others:
-{{VALIDATOR_LIST}}
+- these validators, and no others: {{VALIDATOR_LIST}}
 - the package manager's list command, to check an installed version before claiming an API is wrong
 
 Nothing else. You do not edit, commit, or push.

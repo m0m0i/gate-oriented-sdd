@@ -2,16 +2,9 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-08-30 — this field records the most recent addition, not a re-run of
-every row. Each section carries its own provenance; the Antigravity rows below still date from
-2026-08-21 and have not been re-checked.
+Last **updated**: 2026-08-30 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
 
-**The version table below was not re-run for the 2026-08-30 addition.** The inception-chain
-section exercised skills, which are Markdown read by the harness rather than an integration with
-it, so it produced no evidence about the Claude Code or Antigravity versions named here. It
-records its own provenance instead: gate-sdd 0.4.0, this repository. Re-dating the table on the
-strength of a run that did not test it is the failure this file exists to prevent — see #48,
-which asks that question directly and still needs an answer from a run that does.
+**The version table below was not re-run for the 2026-08-30 addition.** The inception-chain section exercised skills, which are Markdown read by the harness rather than an integration with it, so it produced no evidence about the Claude Code or Antigravity versions named here. It records its own provenance instead: gate-sdd 0.4.0, this repository. Re-dating the table on the strength of a run that did not test it is the failure this file exists to prevent — see #48, which asks that question directly and still needs an answer from a run that does.
 
 ## Versions tested against
 
@@ -26,15 +19,7 @@ which asks that question directly and still needs an answer from a run that does
 
 **Subagent invocation is asynchronous, and a turn can still wait for it.** Claude Code 2.1.238.
 
-**The provenance of these rows differs and that matters.** Rows 1 and 2 were observed while
-implementing #27. Row 3 was *not* — it was written into this file as observed before it had been
-done, which is the exact failure this document exists to prevent, caught in review. It was
-confirmed afterwards, on 2026-08-25: a turn held open across twelve read-only tool calls while a
-spawned reviewer ran, emitting no final message until its result arrived, and the `Stop` gate did
-not fire. The reviewer confirmed the same from its side. **Row 4 was observed in that same run** — completion
-arrived as an unrequested notification, and the running-agent listing was polled repeatedly while
-waiting. It is called out separately because it was added in the same commit as this paragraph and
-the paragraph did not originally mention it, which is the omission this accounting exists to stop.
+**The provenance of these rows differs and that matters.** Rows 1 and 2 were observed while implementing #27. Row 3 was *not* — it was written into this file as observed before it had been done, which is the exact failure this document exists to prevent, caught in review. It was confirmed afterwards, on 2026-08-25: a turn held open across twelve read-only tool calls while a spawned reviewer ran, emitting no final message until its result arrived, and the `Stop` gate did not fire. The reviewer confirmed the same from its side. **Row 4 was observed in that same run** — completion arrived as an unrequested notification, and the running-agent listing was polled repeatedly while waiting. It is called out separately because it was added in the same commit as this paragraph and the paragraph did not originally mention it, which is the omission this accounting exists to stop.
 
 | Question | Observed |
 | :-- | :-- |
@@ -43,11 +28,7 @@ the paragraph did not originally mention it, which is the omission this accounti
 | Can a turn stay open until the result lands? | **yes** — a turn ends on a final message with no tool call, so continuing to issue read-only calls keeps it open |
 | How does the caller learn it finished? | completion arrives as a notification without being asked for; the agent listing reports `running` until then, so it can also be polled |
 
-The third row is the one that matters, and it was asserted false in #27's first draft before being
-checked. `review-gate.sh` fires on `Stop`; a turn that has not ended does not reach it. So a spawned
-review *can* be waited for without tripping the gate — the mistake that produced the twenty-five
-turn loop was emitting a short "still waiting" message between checks, each of which ended the turn
-and re-armed the gate.
+The third row is the one that matters, and it was asserted false in #27's first draft before being checked. `review-gate.sh` fires on `Stop`; a turn that has not ended does not reach it. So a spawned review *can* be waited for without tripping the gate — the mistake that produced the twenty-five turn loop was emitting a short "still waiting" message between checks, each of which ended the turn and re-armed the gate.
 
 ## Antigravity hooks
 
@@ -113,15 +94,9 @@ One gate script can serve both: emit the JSON on stdout **and** exit 2. Each har
 
 ## The inception chain — northstar, prd, epics
 
-**Run on 2026-08-29/30, gate-sdd 0.4.0, against this repository.** Not a cold start: the harness was
-already installed, `.steering/` populated, and 16 issues already open. That shapes what these rows
-can claim — `init` was not run, the cold interview was not exercised, and the `- Docs:` path was
-left at its default rather than probed. Those belong on a throwaway repo and are still unobserved.
+**Run on 2026-08-29/30, gate-sdd 0.4.0, against this repository.** Not a cold start: the harness was already installed, `.steering/` populated, and 16 issues already open. That shapes what these rows can claim — `init` was not run, the cold interview was not exercised, and the `- Docs:` path was left at its default rather than probed. Those belong on a throwaway repo and are still unobserved.
 
-Every row below was produced by running the skill and reading the result. Where a row says a seam
-was **not exercised**, that is the observation — it is recorded because the run set out to test it
-and could not, and a table showing only what worked would be the failure this file exists to
-prevent.
+Every row below was produced by running the skill and reading the result. Where a row says a seam was **not exercised**, that is the observation — it is recorded because the run set out to test it and could not, and a table showing only what worked would be the failure this file exists to prevent.
 
 Full working record: `.specs/55-run-northstar-prd-epics/observations.md`. Spec: #55.
 
@@ -142,30 +117,16 @@ Full working record: `.specs/55-run-northstar-prd-epics/observations.md`. Spec: 
 
 ### Two consequences the run created and did not notice
 
-Both were found by the reviewer, not by the run. That is worth recording as plainly as the
-findings themselves: the section above argues that citation seams are only ever checked forward,
-and this section is the same defect in the run's own record — AC7 required "any seam that did not
-join" and the run recorded only the seams it went looking for.
+Both were found by the reviewer, not by the run. That is worth recording as plainly as the findings themselves: the section above argues that citation seams are only ever checked forward, and this section is the same defect in the run's own record — AC7 required "any seam that did not join" and the run recorded only the seams it went looking for.
 
-- **#58** — `docs/BACKLOG.md`'s preamble is now false by construction. The file was correctly not
-  edited; the run's job was to say so, and it did not.
-- **#57** — the `CAP-` ids this run established collide with `check-leakage.sh`'s tier-2 pattern.
-  The run took deliberate care choosing `LV-` because it appeared nowhere in the repository, and
-  applied none of that care to `CAP-`, which appears in a guard.
+- **#58** — `docs/BACKLOG.md`'s preamble is now false by construction. The file was correctly not edited; the run's job was to say so, and it did not.
+- **#57** — the `CAP-` ids this run established collide with `check-leakage.sh`'s tier-2 pattern. The run took deliberate care choosing `LV-` because it appeared nowhere in the repository, and applied none of that care to `CAP-`, which appears in a guard.
 
 ### What this run does not support
 
-**The interviews are untested.** The spec chose propose-then-correct: drafts derived from the
-repository, put to the author for correction. Counting every point at which the run stopped and put
-a question to the author, there were **four pauses carrying six questions** — four product
-decisions (the metric, the non-negotiable, CAP-6's falsifier, the third user) and two spec
-amendments (AC8, AC5). **All six were accepted as recommended.** That cannot distinguish "the drafts were right because
-the repository already encodes these decisions" from "a plausible answer was accepted because it
-arrived first with a recommendation" — which is precisely what `northstar`'s own last rule warns
-about: *"ask the user, and record their answer rather than a plausible one."*
+**The interviews are untested.** The spec chose propose-then-correct: drafts derived from the repository, put to the author for correction. Counting every point at which the run stopped and put a question to the author, there were **four pauses carrying six questions** — four product decisions (the metric, the non-negotiable, CAP-6's falsifier, the third user) and two spec amendments (AC8, AC5). **All six were accepted as recommended.** That cannot distinguish "the drafts were right because the repository already encodes these decisions" from "a plausible answer was accepted because it arrived first with a recommendation" — which is precisely what `northstar`'s own last rule warns about: *"ask the user, and record their answer rather than a plausible one."*
 
-So: this run tests the skills' mechanics and the seams between them. It says nothing about whether
-they elicit good product decisions from someone who does not already have the answers.
+So: this run tests the skills' mechanics and the seams between them. It says nothing about whether they elicit good product decisions from someone who does not already have the answers.
 
 ## Still to verify
 

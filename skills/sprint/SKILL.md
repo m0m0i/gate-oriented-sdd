@@ -19,13 +19,11 @@ If the iteration is worth a retrospective, that belongs in `.work_logs/` via `wo
 
 ## Steps
 
-1. Read the product backlog and the epics. **Take from the top.** The order already encodes value, risk, cost, and dependency; an iteration assembled by picking interesting items from further down silently overrides a decision someone already made.
-   If the top item is genuinely wrong to start now, that is not a reason to skip it — it is a reason to re-groom. Go and change the order in `backlog`, with the reasoning recorded, then come back and take from the top. Reordering by selection leaves the document saying one thing while the team does another.
+1. Read the product backlog and the epics. **Take from the top.** The order already encodes value, risk, cost, and dependency; an iteration assembled by picking interesting items from further down silently overrides a decision someone already made. If the top item is genuinely wrong to start now, that is not a reason to skip it — it is a reason to re-groom. Go and change the order in `backlog`, with the reasoning recorded, then come back and take from the top. Reordering by selection leaves the document saying one thing while the team does another.
 2. **Decompose each item into issues.** Split until each one is genuinely *one branch's worth of work* — one spec, one PR, one review. The usual seams:
    - the change itself
    - test coverage the change turns out to need but that does not exist yet
-   - a migration, rename, or dependency bump the change forces
-   These are different issue *types*, which is the point: they get differently shaped specs.
+   - a migration, rename, or dependency bump the change forces These are different issue *types*, which is the point: they get differently shaped specs.
 3. **Type each issue as you create it** — `feature`, `bug`, or `chore` — from the matching template in `.github/ISSUE_TEMPLATE/`, with the matching label. The type is decided here, at decomposition, not earlier: one backlog item routinely yields a feature and a chore, so it never had a single type to inherit.
 4. **Create the issues for this iteration only.** Everything else stays in the backlog, where it costs nothing. An issue nobody will touch for two months is noise in every future search, and it ages into a decision nobody remembers making.
 5. **Say what is deliberately left out**, and why. This is what stops the same argument recurring mid-iteration.

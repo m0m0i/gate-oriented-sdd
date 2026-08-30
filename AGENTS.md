@@ -62,22 +62,14 @@ Run all nine before every commit — CI runs the same nine:
 
 ## This repo runs its own harness
 
-`.steering/`, `.specs/`, `.work_logs/`, and `.claude/` are this repository dogfooding the plugin it
-ships. None of it is shipped — consumers get `skills/`, `agents/`, `hooks/`, and `assets/`.
+`.steering/`, `.specs/`, `.work_logs/`, and `.claude/` are this repository dogfooding the plugin it ships. None of it is shipped — consumers get `skills/`, `agents/`, `hooks/`, and `assets/`.
 
 Two things are deliberately unlike a normal install, and both would look like mistakes:
 
-- **The hooks are not copied.** `.claude/settings.json` points at the repository's own `hooks/*.sh`.
-  Every other project copies them, because a gate must run with the project as its working
-  directory — here the project *is* the source, so a copy would only create drift, and a drifted
-  copy means this repo tests a stale version of its own enforcement.
-- **`.claude/agents/gate-sdd-reviewer/` has no `rules-lock.json`.** Adding one makes
-  `assets/check-locks.py` discover `.claude/agents/` instead of `agents/` and silently stop
-  verifying the six shipped rulebooks while reporting `0 pinned file(s)` as success. That is #16.
-  The rulebook stays unpinned until #16 is fixed.
+- **The hooks are not copied.** `.claude/settings.json` points at the repository's own `hooks/*.sh`. Every other project copies them, because a gate must run with the project as its working directory — here the project *is* the source, so a copy would only create drift, and a drifted copy means this repo tests a stale version of its own enforcement.
+- **`.claude/agents/gate-sdd-reviewer/` has no `rules-lock.json`.** Adding one makes `assets/check-locks.py` discover `.claude/agents/` instead of `agents/` and silently stop verifying the six shipped rulebooks while reporting `0 pinned file(s)` as success. That is #16. The rulebook stays unpinned until #16 is fixed.
 
-The project reviewer is `gate-sdd-reviewer` and is unrelated to the three reference reviewers in
-`agents/`, which are the product. Its anchor is **gates never fail open**.
+The project reviewer is `gate-sdd-reviewer` and is unrelated to the three reference reviewers in `agents/`, which are the product. Its anchor is **gates never fail open**.
 
 ## Status
 

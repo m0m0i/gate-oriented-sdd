@@ -1,7 +1,6 @@
 # Baseline — captured before the first inception skill ran
 
-Task T1 of `.specs/55-run-northstar-prd-epics/spec.md`. Every value here is the
-before-side of AC1, AC2 and AC8. Re-verified in T6.
+Task T1 of `.specs/55-run-northstar-prd-epics/spec.md`. Every value here is the before-side of AC1, AC2 and AC8. Re-verified in T6.
 
 - Captured: 2026-08-29T12:07:48Z
 - HEAD: a6f8ca933a036e65a943750ecf457ab2a7478511
@@ -54,14 +53,8 @@ $ grep -rl 'LV-' --include='*.md' --include='*.py' --include='*.sh' . \
 (no matches)
 ```
 
-Outside this spec's own directory: **0 matches.** The two files that do contain `LV-` are
-`spec.md` and this file, both of which name the prefix while describing the probe.
+Outside this spec's own directory: **0 matches.** The two files that do contain `LV-` are `spec.md` and this file, both of which name the prefix while describing the probe.
 
-So any `LV-` appearing in `docs/PRD.md` or `docs/EPICS.md` after the run came from `northstar`,
-not from the repository. That is AC6's mechanism.
+So any `LV-` appearing in `docs/PRD.md` or `docs/EPICS.md` after the run came from `northstar`, not from the repository. That is AC6's mechanism.
 
-*Recorded correction:* the first version of this section ran the filter as `^\./\.specs/55-`,
-which matched nothing because `grep -rl` emitted paths without the `./` prefix — so it printed
-its own two files directly beneath a sentence claiming no matches. Caught and fixed before the
-first skill ran. Noted here rather than silently overwritten, because a baseline whose
-corrections are invisible is not a baseline.
+*Recorded correction:* the first version of this section ran the filter as `^\./\.specs/55-`, which matched nothing because `grep -rl` emitted paths without the `./` prefix — so it printed its own two files directly beneath a sentence claiming no matches. Caught and fixed before the first skill ran. Noted here rather than silently overwritten, because a baseline whose corrections are invisible is not a baseline.

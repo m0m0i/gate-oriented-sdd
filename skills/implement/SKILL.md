@@ -26,10 +26,7 @@ For each task in the spec's Tasks list, in order:
 When every task is committed and the validators pass:
 
 1. Run the full validator set from `.steering/tech.md`. Set the spec `Status: done`.
-2. **Invoke the reviewer subagent** named in `.steering/tech.md`, asking it to review the branch diff against the default branch, and against `.specs/<slug>/spec.md`.
-   **Invoke it and wait for its result in the same turn. Do not spawn it and carry on.** The review gate runs on turn end, so it assumes the review finished inside the turn.
-   **If your harness returns from the invocation immediately and notifies you later, waiting means keeping the turn open** — keep issuing read-only calls until the result arrives, and emit no final message before it does. Completion normally arrives as a notification without being asked for; if your harness lists running agents, that listing can be polled instead. A turn that has not ended cannot trip a gate that fires on turn end. Announcing that you are waiting *is* ending the turn, and it re-arms the gate every time — that mistake cost twenty-five turns in the repository this harness was built in.
-   Nothing useful can happen during a review anyway, because touching the files it is reading is exactly what must not happen. If the reviewer genuinely cannot be invoked at all — not registered, added mid-session and needing a restart, or the harness has no subagents — run its procedure yourself from its agent file and record `reviewed_by=inline`.
+2. **Invoke the reviewer subagent** named in `.steering/tech.md`, asking it to review the branch diff against the default branch, and against `.specs/<slug>/spec.md`. **Invoke it and wait for its result in the same turn. Do not spawn it and carry on.** The review gate runs on turn end, so it assumes the review finished inside the turn. **If your harness returns from the invocation immediately and notifies you later, waiting means keeping the turn open** — keep issuing read-only calls until the result arrives, and emit no final message before it does. Completion normally arrives as a notification without being asked for; if your harness lists running agents, that listing can be polled instead. A turn that has not ended cannot trip a gate that fires on turn end. Announcing that you are waiting *is* ending the turn, and it re-arms the gate every time — that mistake cost twenty-five turns in the repository this harness was built in. Nothing useful can happen during a review anyway, because touching the files it is reading is exactly what must not happen. If the reviewer genuinely cannot be invoked at all — not registered, added mid-session and needing a restart, or the harness has no subagents — run its procedure yourself from its agent file and record `reviewed_by=inline`.
 3. Address every **BLOCKER** and **HIGH** through the TDD loop: a failing test, then the fix. Re-run the reviewer until none remain. Triage MEDIUM/LOW/INFO explicitly — fixed, or recorded with a reason.
 4. **Write the receipt.** The reviewer is read-only, so you record its result at `.specs/<slug>/.review-receipt`, copying its Receipt block verbatim:
 
@@ -43,39 +40,20 @@ When every task is committed and the validators pass:
    reviewed_by=subagent|inline
    ```
 
-   `reviewed_by` records **how** the review was obtained, not who ran it. `subagent` means
-   the reviewer ran as its own agent, outside this session's context, which is the
-   independence the whole layer exists to provide. `inline` means step 2's fallback was
-   taken and the author of the diff ran the reviewer's procedure themselves — still useful,
-   since it finds real defects, but not independent, and a reader of the receipt cannot tell
-   the difference unless you write it down. **Never record `subagent` for a review you ran
-   inline.** It is the same lie as a receipt for a review that did not happen, one step
-   quieter.
+   `reviewed_by` records **how** the review was obtained, not who ran it. `subagent` means the reviewer ran as its own agent, outside this session's context, which is the independence the whole layer exists to provide. `inline` means step 2's fallback was taken and the author of the diff ran the reviewer's procedure themselves — still useful, since it finds real defects, but not independent, and a reader of the receipt cannot tell the difference unless you write it down. **Never record `subagent` for a review you ran inline.** It is the same lie as a receipt for a review that did not happen, one step quieter.
 
    The review gate reads this file and refuses to end a turn when a spec whose tasks are all ticked has no receipt, a non-CLEAN one, or one whose `reviewed_sha` predates a later source change.
 
    **Never write a receipt for a review that did not run.** The gate catches omission and staleness; a fabricated receipt defeats the only mechanical check in the flow, and it defeats it silently.
-5. Run `worklog`. The entry is committed on this branch, so it ships inside this issue's single
-   pull request rather than in one of its own. Then summarize the diff and propose that PR,
-   closing its issue.
+5. Run `worklog`. The entry is committed on this branch, so it ships inside this issue's single pull request rather than in one of its own. Then summarize the diff and propose that PR, closing its issue.
 
-   **That PR is the last step. Do not propose archiving, and do not open a follow-up pull
-   request for it.** Moving a shipped spec into `.specs/_archive/` is a sweep run on request,
-   whenever `.specs/` has grown noisy enough to be worth a minute — a `git mv` is not a change
-   that earns a branch, a review and a merge of its own. Nothing downstream is waiting on it
-   either: the review gate reads `.specs/<current branch>/spec.md` and cannot see a shipped
-   spec still sitting in `.specs/`.
+   **That PR is the last step. Do not propose archiving, and do not open a follow-up pull request for it.** Moving a shipped spec into `.specs/_archive/` is a sweep run on request, whenever `.specs/` has grown noisy enough to be worth a minute — a `git mv` is not a change that earns a branch, a review and a merge of its own. Nothing downstream is waiting on it either: the review gate reads `.specs/<current branch>/spec.md` and cannot see a shipped spec still sitting in `.specs/`.
 
 ## Rules
 
 - **Never write implementation code before its failing test exists.**
 - One task, one commit. No batching, no half-tasks.
-- **A task is one COMPLETE Red-Green-Refactor cycle, so a task ends green and is one commit.**
-  Red and green are not separate tasks. The quality gate runs the project's validators on turn
-  end, so a task that is only the red half cannot be committed without ending the turn red —
-  the harness would be blocking its own prescribed workflow. If you are holding a spec whose
-  tasks still split the pair, fold them as you go and say so; the templates were fixed in #10
-  but a spec written before that keeps the split it was authored with.
+- **A task is one COMPLETE Red-Green-Refactor cycle, so a task ends green and is one commit.** Red and green are not separate tasks. The quality gate runs the project's validators on turn end, so a task that is only the red half cannot be committed without ending the turn red — the harness would be blocking its own prescribed workflow. If you are holding a spec whose tasks still split the pair, fold them as you go and say so; the templates were fixed in #10 but a spec written before that keeps the split it was authored with.
 - **If a task proves the spec wrong, stop.** Amend `.specs/<slug>/spec.md`, say what changed and why, and get agreement before resuming. Do not code around a spec you no longer believe.
 - Match the surrounding code. `.steering/structure.md` says where code belongs.
 - Do not open a PR before the reviewer pass is clean of BLOCKER/HIGH.
