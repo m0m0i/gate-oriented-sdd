@@ -1,11 +1,18 @@
 #!/usr/bin/env python3
 """AC4 and AC6 against the base revision, with a check that can fail.
 
-Deliberately independent of `scripts/check-markdown-fences.py`. That guard asks whether the
-tree satisfies a property NOW; this asks whether the change did only what it was meant to do,
-by comparing against `3df25b0`. Sharing a predicate between the two would make the second a
-restatement of the first — which is exactly how #61's verifier came to compare
-`unwrap(unwrap(x))` against `unwrap(x)` and report success on a destructive diff.
+It shares no CONTINUATION predicate with `scripts/check-markdown-fences.py`, which is the
+part that would matter. That guard asks whether the tree satisfies a property NOW; this asks
+whether the change did only what it was meant to do, by comparing against `3df25b0`. Sharing
+the continuation rule would make the second a restatement of the first — which is exactly how
+#61's verifier came to compare `unwrap(unwrap(x))` against `unwrap(x)` and report success on a
+destructive diff. This file never asks whether a line is a continuation; it compares words.
+
+What it does share, stated because an unstated sharing is the one that bites: `FENCE`,
+`MARKDOWN_FENCE_LINE`, and the fence-close expression are copied from that guard, so a
+fence-parsing bug is common to both. Review found the first version of this file inheriting
+exactly such a bug — the 4-backtick blind spot — which is why the coverage invariant below is
+here as well as there.
 
 AC6 was amended before this ran, and the reason is worth keeping here. It first asked for
 rendering equivalence. A fenced block's content is literal, so joining two lines inside one

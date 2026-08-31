@@ -48,7 +48,7 @@ If ordering is the question, it is `docs/BACKLOG.md`'s job, and EPIC-1 leads it.
 - Issues:
   - #14 — `Source globs` duplicates the shipped-path definition by hand, and the copy fails open
   - #18 — the review gate is unsatisfiable without a `Source globs` line
-  - #49 — the reviewer's Bash allow-list names six validators; the `Validators:` line names eight
+  - #49 — the reviewer's Bash allow-list names six validators; the `Validators:` line names eight — **resolved on #64's branch**, which brought the allow-list into agreement; the issue is open until that merges
 - Depends on: EPIC-2 — #18's fix is a fail-closed path, and #39 decides how a guard reports having nothing to check.
 - Not included: making `.steering/tech.md` a general configuration format. Two consumers agreeing on one line is the goal; a schema for the file is the failure mode `init` warns about.
 

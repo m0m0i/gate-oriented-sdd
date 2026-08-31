@@ -23,11 +23,19 @@ CLOSE a block, and the line itself OPENS no construct.
 
 Two properties of stating it this way, and both are answers to what #61 cost.
 
-It shares NO code with `.specs/61-.../unwrap.py`. That branch's first verifier compared
+It does not ask what the transform would do. That branch's first verifier compared
 `unwrap(unwrap(x))` against `unwrap(x)` — true by construction for any idempotent transform,
 destructive ones included — and reported "0 changes" on a diff that broke three issue
 templates. A guard that asks "would the transform join this?" inherits every bug the
-transform has. This one parses independently and asserts a property of the text.
+transform has. This one asserts a property of the text instead.
+
+The honest scope of that, because the first version of this paragraph claimed it shared NO
+code and review was right to call that overstated: `OPENER`'s first five alternatives are the
+same five constructs `.specs/61-.../unwrap.py`'s `NEW_BLOCK` recognises, written out again in
+a different order. A mistake about what counts as a list marker or a heading WOULD be shared.
+What is not shared is the decision procedure — and the three alternatives that decide the
+cases this guard exists for, the thematic break, `{{SLOT}}`, and the `<` that clears
+`skills/contract/SKILL.md:47-48`, have no counterpart in `NEW_BLOCK` at all.
 
 And it clears `skills/contract/SKILL.md:47-48` for a REASON rather than by exception. Those
 are two separate instructions to the skill, one per line, and `unwrap.py` folds them into

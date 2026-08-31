@@ -1,6 +1,7 @@
 # Spec: The fence carve-out is stated by delimiter when the thing that matters is content
-- Slug: 64-fence-carve-out-by-delimiter   Issue: 64   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-08-31
+
+- Slug: 64-fence-carve-out-by-delimiter Issue: 64 Type: bug Status: approved
+- Author: m0m0i Date: 2026-08-31
 
 ## 1. Requirements (WHAT / WHY)
 
@@ -25,18 +26,18 @@ $ grep -n -A1 'Ordered, not prioritized' skills/backlog/SKILL.md
 
 The issue's own count does not reproduce, and the spec is written against the re-run.
 
-| | issue #64 says | re-run on `3df25b0` |
-| :-- | --: | --: |
-| hand-wrapped blocks inside ` ```markdown ` fences | 42 | **7** |
-| shipped files holding them | 8 | **2** |
+|                                                   | issue #64 says | re-run on `3df25b0` |
+| :------------------------------------------------ | -------------: | ------------------: |
+| hand-wrapped blocks inside ` ```markdown ` fences |             42 |               **7** |
+| shipped files holding them                        |              8 |               **2** |
 
 There are 10 ` ```markdown ` fences across 8 files, which is the likely origin of "eight files". Six of them — `contract`, `design-doc`, `epics`, `northstar`, `prd`, `worklog` — hold no hand-wrapped prose at all; every line in those bodies already starts its own construct. The seven live blocks are:
 
-| File | Blocks | Lines |
-| :-- | --: | :-- |
-| `skills/backlog/SKILL.md` | 2 | 41–42, 50–52 |
-| `skills/spec/templates.md` (bug) | 2 | 56–57, 70–71 |
-| `skills/spec/templates.md` (chore) | 3 | 96–97, 98–99, 108–110 |
+| File                               | Blocks | Lines                 |
+| :--------------------------------- | -----: | :-------------------- |
+| `skills/backlog/SKILL.md`          |      2 | 41–42, 50–52          |
+| `skills/spec/templates.md` (bug)   |      2 | 56–57, 70–71          |
+| `skills/spec/templates.md` (chore) |      3 | 96–97, 98–99, 108–110 |
 
 Both tables above are reproduced from the tree by `scripts/check-markdown-fences.py --list`, delivered in T1, so a reader can re-derive the numbers rather than trust them.
 
@@ -52,14 +53,15 @@ Both tables above are reproduced from the tree by `scripts/check-markdown-fences
 `unwrap.py` folds them into one. They are not a hand wrap — they are two instructions to the skill. So the issue's "unlike most proposed guards this one has an unambiguous, mechanical test" is **false as stated**: a guard asking "would `unwrap.py` join this line?" produces a false accusation on a shipped file today. Any guard this spec ships has to be keyed on a predicate that clears those two lines for a stated reason, not by exception.
 
 - Acceptance criteria:
-  - [x] **AC1:** WHEN a reader applies `CONTRIBUTING.md`'s Markdown convention to a ` ```markdown ` fence THE SYSTEM SHALL scope the carve-out by content — fences holding literal code, output, or a line-sensitive format — and state that a ` ```markdown ` fence holds Markdown and follows the convention.
-  - [x] **AC2:** the regression test fails before the fix and passes after — it reports the seven blocks on `3df25b0` and none after, and it clears `skills/contract/SKILL.md:47-48` in both states.
-  - [x] **AC3:** no line inside a ` ```markdown ` fence in a tracked file is a continuation of the line above it.
-  - [x] **AC4:** the fences holding a line-sensitive format are byte-identical to `3df25b0`: `skills/implement/SKILL.md`'s `reviewed_sha=` receipt block, and the `[SEVERITY] <file>:<line>` finding format in **both** `agents/_shared/reviewer-contract.md` and `.claude/agents/_shared/reviewer-contract.md`.
-  - [x] **AC5:** the existing validators hold their baseline values — `check-receipt-schema` 7 fields across 3 copies, `check-templates` 10 task lines across 3 templates, `check-steering-anchors` 5 of 5, `check-locks` 6 pinned files, and the other three clean — and `test-gates.sh` reports 54 passed / 0 failed: the 52 on `3df25b0` plus the two new cases named in T3.
-  - [x] **AC6:** in `skills/backlog/SKILL.md` and `skills/spec/templates.md` — the only files whose fence bodies change — each ` ```markdown ` fence body holds the same word stream as on `3df25b0`, word for word and in order, and every byte outside those fences is unchanged.
+  - [ ] **AC1:** WHEN a reader applies `CONTRIBUTING.md`'s Markdown convention to a ` ```markdown ` fence THE SYSTEM SHALL scope the carve-out by content — fences holding literal code, output, or a line-sensitive format — and state that a ` ```markdown ` fence holds Markdown and follows the convention.
+  - [ ] **AC2:** the regression test fails before the fix and passes after — it reports the seven blocks on `3df25b0` and none after, and it clears `skills/contract/SKILL.md:47-48` in both states.
+  - [ ] **AC3:** no line inside a ` ```markdown ` fence in a tracked file is a continuation of the line above it.
+  - [ ] **AC4:** the fences holding a line-sensitive format are byte-identical to `3df25b0`: `skills/implement/SKILL.md`'s `reviewed_sha=` receipt block, and the `[SEVERITY] <file>:<line>` finding format in **both** `agents/_shared/reviewer-contract.md` and `.claude/agents/_shared/reviewer-contract.md`.
+  - [ ] **AC5:** the existing validators hold their baseline values — `check-receipt-schema` 7 fields across 3 copies, `check-templates` 10 task lines across 3 templates, `check-steering-anchors` 5 of 5, `check-locks` 6 pinned files, and the other three clean — and `test-gates.sh` reports 54 passed / 0 failed: the 52 on `3df25b0` plus the two new cases named in T3.
+  - [ ] **AC6:** in `skills/backlog/SKILL.md` and `skills/spec/templates.md` — the only files whose fence bodies change — each ` ```markdown ` fence body holds the same word stream as on `3df25b0`, word for word and in order, and every byte outside those fences is unchanged.
 
 > **AC6 amended, 2026-08-31, in its own commit ahead of the task it judges (#59).** It first read "every modified file renders identically to `3df25b0`". The work falsifies that: a fenced block's content is literal, so joining two lines inside one genuinely changes what the fence renders — that is the entire point of T1, and the criterion would have had to be waived on the files it most needed to judge. `.specs/61-.../observations.md` already says what a rendering-equivalence check is worth here: "it proves the HTML is unchanged, and the HTML was never the thing at risk." The property that actually matters for a join is that no word was added, dropped, or reordered, and that the edit stayed inside the fence. AC6 now asks that instead.
+
 - Out of scope: the six ` ```markdown ` fences with nothing wrong in them; the 23 hand-wrapped blocks inside untagged fences, which are output, trees, and line-sensitive formats and are correctly exempt; #58's re-grooming of `docs/BACKLOG.md`, which this unblocks but does not do.
 
 ### Clarifications
@@ -67,7 +69,7 @@ Both tables above are reproduced from the tree by `scripts/check-markdown-fences
 From `clarify`, 2026-08-31. Three questions, all answered as recommended.
 
 - **Does a mechanical guard ship, and at which enforcement layer?** A new validator, `scripts/check-markdown-fences.py`, on `.steering/tech.md`'s `- Validators:` line. Rejected: keeping it spec-local like #61's `verify.py`, which satisfies AC2 and then gates nothing — the convention regressed silently once already, inside the branch that wrote it down, so leaving it to memory has been tried. Also rejected: folding it into `check-templates.py`, whose docstring commits it to one file and one question and which has no business reading `skills/backlog/SKILL.md`.
-- **What paths does the rule cover?** Every tracked `.md`. Scoping enforcement to shipped paths only would restate the rule by *path* — the same category of mistake as stating it by *delimiter*, which is the bug. All 10 ` ```markdown ` fences are under `skills/` today, so the two answers scan the same set now and differ only when a spec or work log grows one.
+- **What paths does the rule cover?** Every tracked `.md`. Scoping enforcement to shipped paths only would restate the rule by _path_ — the same category of mistake as stating it by _delimiter_, which is the bug. All 10 ` ```markdown ` fences are under `skills/` today, so the two answers scan the same set now and differ only when a spec or work log grows one.
 - **Does the rule travel to consumers through the skills?** No. The templates come out unwrapped and consumers do as they like. `.steering/product.md` draws the line at "not a document generator" and "not a language abstraction"; a prose-style instruction added to shipped skills is the harness taking a position on how consumers write, which #64 did not ask for.
 
 ## 2. Design (HOW)
@@ -76,7 +78,7 @@ From `clarify`, 2026-08-31. Three questions, all answered as recommended.
 
 Three parts, and only the second is the root cause.
 
-1. **`CONTRIBUTING.md`, restated by content.** The carve-out becomes "fences holding literal code, output, or a line-sensitive format", and says a ` ```markdown ` fence holds Markdown and follows the convention. This is the half that lasts: without it the next person restores the wrapping *correctly*, by reading the rule.
+1. **`CONTRIBUTING.md`, restated by content.** The carve-out becomes "fences holding literal code, output, or a line-sensitive format", and says a ` ```markdown ` fence holds Markdown and follows the convention. This is the half that lasts: without it the next person restores the wrapping _correctly_, by reading the rule.
 2. **The 7 blocks unwrapped**, in `skills/backlog/SKILL.md` and `skills/spec/templates.md`. Mechanical, and 9 physical lines.
 3. **`scripts/check-markdown-fences.py`**, so part 1 is enforced rather than remembered.
 
@@ -90,9 +92,11 @@ A line is a **continuation** when it is non-blank, the line above it is non-blan
 
 Two properties of this predicate matter, and both are answers to what #61 cost.
 
-**It shares no code with `unwrap.py`.** `.specs/61-.../observations.md` records a verifier whose `normalise` was `unwrap(unwrap(x))` compared against `unwrap(x)` — true by construction for any idempotent transform — reporting `0 changes` on a diff that broke three issue templates. A guard that asks "would the transform join this?" inherits every bug the transform has. This one parses independently and states a property of the text.
+**It does not ask what the transform would do.** `.specs/61-.../observations.md` records a verifier whose `normalise` was `unwrap(unwrap(x))` compared against `unwrap(x)` — true by construction for any idempotent transform — reporting `0 changes` on a diff that broke three issue templates. A guard that asks "would the transform join this?" inherits every bug the transform has. This one states a property of the text instead.
 
-**It is stated positively, which is why `skills/contract/SKILL.md:47-48` clears it.** Those two lines both begin `<`, so both open a construct and neither is a continuation. That is a *reason*, not an exception carved to make the count come out right — which is the trap `observations.md` names as "a self-test proves the checker catches the class of defect its author imagined." The line beginning `<` is a template slot: the notation these fences use for "the author writes this here."
+Stated at its real scope, after review found the first version claiming it shared *no code*: `OPENER`'s first five alternatives are `unwrap.py`'s `NEW_BLOCK` reordered, so an error in the construct vocabulary would be common to both. The decision procedure is not shared, and neither are the three alternatives that decide this guard's actual cases.
+
+**It is stated positively, which is why `skills/contract/SKILL.md:47-48` clears it.** Those two lines both begin `<`, so both open a construct and neither is a continuation. That is a _reason_, not an exception carved to make the count come out right — which is the trap `observations.md` names as "a self-test proves the checker catches the class of defect its author imagined." The line beginning `<` is a template slot: the notation these fences use for "the author writes this here."
 
 Its stated limit: a hand wrap whose continuation line happens to begin with `<` is invisible to it. Contrived, not present in the tree, and recorded rather than papered over.
 
@@ -100,25 +104,27 @@ Its stated limit: a hand wrap whose continuation line happens to begin with `<` 
 
 - Affected files:
 
-| File | Change |
-| :-- | :-- |
-| `CONTRIBUTING.md` | the carve-out restated by content; the new validator added to the pre-PR list |
-| `skills/backlog/SKILL.md` | 2 blocks unwrapped, inside the ` ```markdown ` fence at :37 |
-| `skills/spec/templates.md` | 5 blocks unwrapped, inside the fences at :46 and :86 |
-| `scripts/check-markdown-fences.py` | new |
-| `.steering/tech.md` | the new validator on the `- Validators:` line |
-| `AGENTS.md` | "Run all nine" becomes ten, and the listing gains a row |
-| `scripts/test-gates.sh` | two cases for the guard |
-| `.claude-plugin/plugin.json`, `plugin.json` | 0.4.1 → 0.4.2 |
+| File                                        | Change                                                                        |
+| :------------------------------------------ | :---------------------------------------------------------------------------- |
+| `CONTRIBUTING.md`                           | the carve-out restated by content; the new validator added to the pre-PR list |
+| `skills/backlog/SKILL.md`                   | 2 blocks unwrapped, inside the ` ```markdown ` fence at :37                   |
+| `skills/spec/templates.md`                  | 5 blocks unwrapped, inside the fences at :46 and :86                          |
+| `scripts/check-markdown-fences.py`          | new                                                                           |
+| `.steering/tech.md`                         | the new validator on the `- Validators:` line                                 |
+| `AGENTS.md`                                 | "Run all nine" becomes ten, and the listing gains a row                       |
+| `scripts/test-gates.sh`                     | two cases for the guard                                                       |
+| `.claude-plugin/plugin.json`, `plugin.json` | 0.4.1 → 0.4.2                                                                 |
 
-- **Blast radius:** `skills/spec/templates.md` is parsed by `check-templates.py`, which locates Tasks blocks by heading rather than by line number, so unwrapping shifts line numbers and must leave its count at 10 task lines across 3 templates. `.steering/tech.md`'s `- Validators:` line is read by `quality-gate.sh` with `sed … | head -1` and must stay one physical line; `check-steering-anchors.sh` counts anchor *keys*, so it stays at 5 of 5. `Source globs` already covers `skills/**/*.md` and `scripts/**/*.py`, so the new validator runs on exactly the turns that touch its subject. `skills/` is a shipped path, so `check-version-bump.py` requires the bump. The untagged fences holding line-sensitive formats are not touched — AC4 pins them byte-for-byte, and `check-receipt-schema.py` independently guards the receipt block across its 3 copies.
+- **Blast radius:** `skills/spec/templates.md` is parsed by `check-templates.py`, which locates Tasks blocks by heading rather than by line number, so unwrapping shifts line numbers and must leave its count at 10 task lines across 3 templates. `.steering/tech.md`'s `- Validators:` line is read by `quality-gate.sh` with `sed … | head -1` and must stay one physical line; `check-steering-anchors.sh` counts anchor _keys_, so it stays at 5 of 5. `Source globs` already covers `skills/**/*.md` and `scripts/**/*.py`, so the new validator runs on exactly the turns that touch its subject. `skills/` is a shipped path, so `check-version-bump.py` requires the bump. The untagged fences holding line-sensitive formats are not touched — AC4 pins them byte-for-byte, and `check-receipt-schema.py` independently guards the receipt block across its 3 copies.
 
 - **Why this cannot recur:** the rule that let it happen was stated by delimiter, and prose stated by the wrong property fails silently — nobody hits an error, the documents simply come out wrapped. Restating it by content fixes the reading; the validator makes the reading unnecessary. The class closes because the guard tests the property directly rather than testing whether someone remembered it.
 
 ## 3. Tasks (TDD-ordered)
+
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
+
 - [x] T1: `scripts/check-markdown-fences.py` with a self-test that fails for the right reason — it reports 7 blocks over 9 lines on `3df25b0` and clears `skills/contract/SKILL.md:47-48` — then the unwrap of those 9 lines in the two files, which makes it pass
 - [x] T2: the root cause — `CONTRIBUTING.md`'s carve-out restated by content, the validator wired onto `.steering/tech.md`'s `- Validators:` line, and `AGENTS.md` and the pre-PR list brought into agreement
 - [x] T3: check the blast radius — two `test-gates.sh` cases for the guard's fail-closed paths (zero fences found, and an unclassifiable nested fence), plus a negative control proving it fails on a deliberately re-wrapped fence
 - [x] T4: AC4 and AC6 — byte-identity of the three line-sensitive fences against `3df25b0`, and element-by-element rendering equivalence for every modified file
-- [x] T5: version bump 0.4.1 → 0.4.2 in both manifests; refactor
+- [ ] T5: version bump 0.4.1 → 0.4.2 in both manifests; refactor
