@@ -1,5 +1,5 @@
 # Spec: The fence carve-out is stated by delimiter when the thing that matters is content
-- Slug: 64-fence-carve-out-by-delimiter   Issue: 64   Type: bug   Status: approved
+- Slug: 64-fence-carve-out-by-delimiter   Issue: 64   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-08-31
 
 ## 1. Requirements (WHAT / WHY)
@@ -52,12 +52,12 @@ Both tables above are reproduced from the tree by `scripts/check-markdown-fences
 `unwrap.py` folds them into one. They are not a hand wrap — they are two instructions to the skill. So the issue's "unlike most proposed guards this one has an unambiguous, mechanical test" is **false as stated**: a guard asking "would `unwrap.py` join this line?" produces a false accusation on a shipped file today. Any guard this spec ships has to be keyed on a predicate that clears those two lines for a stated reason, not by exception.
 
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN a reader applies `CONTRIBUTING.md`'s Markdown convention to a ` ```markdown ` fence THE SYSTEM SHALL scope the carve-out by content — fences holding literal code, output, or a line-sensitive format — and state that a ` ```markdown ` fence holds Markdown and follows the convention.
-  - [ ] **AC2:** the regression test fails before the fix and passes after — it reports the seven blocks on `3df25b0` and none after, and it clears `skills/contract/SKILL.md:47-48` in both states.
-  - [ ] **AC3:** no line inside a ` ```markdown ` fence in a tracked file is a continuation of the line above it.
-  - [ ] **AC4:** the fences holding a line-sensitive format are byte-identical to `3df25b0`: `skills/implement/SKILL.md`'s `reviewed_sha=` receipt block, and the `[SEVERITY] <file>:<line>` finding format in **both** `agents/_shared/reviewer-contract.md` and `.claude/agents/_shared/reviewer-contract.md`.
-  - [ ] **AC5:** the existing validators hold their baseline values — `check-receipt-schema` 7 fields across 3 copies, `check-templates` 10 task lines across 3 templates, `check-steering-anchors` 5 of 5, `check-locks` 6 pinned files, and the other three clean — and `test-gates.sh` reports 54 passed / 0 failed: the 52 on `3df25b0` plus the two new cases named in T3.
-  - [ ] **AC6:** in `skills/backlog/SKILL.md` and `skills/spec/templates.md` — the only files whose fence bodies change — each ` ```markdown ` fence body holds the same word stream as on `3df25b0`, word for word and in order, and every byte outside those fences is unchanged.
+  - [x] **AC1:** WHEN a reader applies `CONTRIBUTING.md`'s Markdown convention to a ` ```markdown ` fence THE SYSTEM SHALL scope the carve-out by content — fences holding literal code, output, or a line-sensitive format — and state that a ` ```markdown ` fence holds Markdown and follows the convention.
+  - [x] **AC2:** the regression test fails before the fix and passes after — it reports the seven blocks on `3df25b0` and none after, and it clears `skills/contract/SKILL.md:47-48` in both states.
+  - [x] **AC3:** no line inside a ` ```markdown ` fence in a tracked file is a continuation of the line above it.
+  - [x] **AC4:** the fences holding a line-sensitive format are byte-identical to `3df25b0`: `skills/implement/SKILL.md`'s `reviewed_sha=` receipt block, and the `[SEVERITY] <file>:<line>` finding format in **both** `agents/_shared/reviewer-contract.md` and `.claude/agents/_shared/reviewer-contract.md`.
+  - [x] **AC5:** the existing validators hold their baseline values — `check-receipt-schema` 7 fields across 3 copies, `check-templates` 10 task lines across 3 templates, `check-steering-anchors` 5 of 5, `check-locks` 6 pinned files, and the other three clean — and `test-gates.sh` reports 54 passed / 0 failed: the 52 on `3df25b0` plus the two new cases named in T3.
+  - [x] **AC6:** in `skills/backlog/SKILL.md` and `skills/spec/templates.md` — the only files whose fence bodies change — each ` ```markdown ` fence body holds the same word stream as on `3df25b0`, word for word and in order, and every byte outside those fences is unchanged.
 
 > **AC6 amended, 2026-08-31, in its own commit ahead of the task it judges (#59).** It first read "every modified file renders identically to `3df25b0`". The work falsifies that: a fenced block's content is literal, so joining two lines inside one genuinely changes what the fence renders — that is the entire point of T1, and the criterion would have had to be waived on the files it most needed to judge. `.specs/61-.../observations.md` already says what a rendering-equivalence check is worth here: "it proves the HTML is unchanged, and the HTML was never the thing at risk." The property that actually matters for a join is that no word was added, dropped, or reordered, and that the edit stayed inside the fence. AC6 now asks that instead.
 - Out of scope: the six ` ```markdown ` fences with nothing wrong in them; the 23 hand-wrapped blocks inside untagged fences, which are output, trees, and line-sensitive formats and are correctly exempt; #58's re-grooming of `docs/BACKLOG.md`, which this unblocks but does not do.
