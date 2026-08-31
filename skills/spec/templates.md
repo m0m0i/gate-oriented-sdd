@@ -1,16 +1,10 @@
 # Spec templates by issue type
 
-Read only the one matching the issue's type. A bug pushed through feature-shaped
-scaffolding produces acceptance criteria that are fiction, because there is no
-user story — there is a thing that is broken.
+Read only the one matching the issue's type. A bug pushed through feature-shaped scaffolding produces acceptance criteria that are fiction, because there is no user story — there is a thing that is broken.
 
-All three share the same front matter and the same TDD-ordered Tasks section.
-What differs is section 1, which is where the type actually matters.
+All three share the same front matter and the same TDD-ordered Tasks section. What differs is section 1, which is where the type actually matters.
 
-**One task is one complete Red-Green-Refactor cycle**, so a task ends green and is one
-commit. The red and green halves are deliberately not separate tasks: `quality-gate.sh` runs
-the project's validators on turn end, so a task that is only the red half cannot be committed
-without ending the turn red. `scripts/check-templates.py` fails if that split returns. See #10.
+**One task is one complete Red-Green-Refactor cycle**, so a task ends green and is one commit. The red and green halves are deliberately not separate tasks: `quality-gate.sh` runs the project's validators on turn end, so a task that is only the red half cannot be committed without ending the turn red. `scripts/check-templates.py` fails if that split returns. See #10.
 
 ---
 
@@ -47,9 +41,7 @@ without ending the turn red. `scripts/check-templates.py` fails if that split re
 
 ## Bug
 
-The first task is always a test that reproduces the bug. If you cannot write
-that test, you do not yet understand the bug well enough to fix it — and a fix
-without it will be reverted by the next person who touches the file.
+The first task is always a test that reproduces the bug. If you cannot write that test, you do not yet understand the bug well enough to fix it — and a fix without it will be reverted by the next person who touches the file.
 
 ```markdown
 # Spec: <title>
@@ -89,9 +81,7 @@ without it will be reverted by the next person who touches the file.
 
 ## Chore
 
-The controlling line is **what must not change.** A chore is defined by its
-invariant; without one stated, a refactor and a rewrite are the same diff and
-the reviewer has no way to tell them apart.
+The controlling line is **what must not change.** A chore is defined by its invariant; without one stated, a refactor and a rewrite are the same diff and the reviewer has no way to tell them apart.
 
 ```markdown
 # Spec: <title>

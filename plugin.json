@@ -1,5 +1,5 @@
 {
   "name": "gate-sdd",
   "description": "Gate-oriented spec-driven development: spec -> clarify -> implement -> reviewer -> worklog, one pull request per issue, with the review gate enforced by a hook rather than requested by prose.",
-  "version": "0.4.0"
+  "version": "0.4.1"
 }

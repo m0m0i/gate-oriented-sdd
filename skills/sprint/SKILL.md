@@ -19,8 +19,7 @@ If the iteration is worth a retrospective, that belongs in `.work_logs/` via `wo
 
 ## Steps
 
-1. Read the product backlog and the epics. **Take from the top.** The order already encodes value, risk, cost, and dependency; an iteration assembled by picking interesting items from further down silently overrides a decision someone already made.
-   If the top item is genuinely wrong to start now, that is not a reason to skip it — it is a reason to re-groom. Go and change the order in `backlog`, with the reasoning recorded, then come back and take from the top. Reordering by selection leaves the document saying one thing while the team does another.
+1. Read the product backlog and the epics. **Take from the top.** The order already encodes value, risk, cost, and dependency; an iteration assembled by picking interesting items from further down silently overrides a decision someone already made. If the top item is genuinely wrong to start now, that is not a reason to skip it — it is a reason to re-groom. Go and change the order in `backlog`, with the reasoning recorded, then come back and take from the top. Reordering by selection leaves the document saying one thing while the team does another.
 2. **Decompose each item into issues.** Split until each one is genuinely *one branch's worth of work* — one spec, one PR, one review. The usual seams:
    - the change itself
    - test coverage the change turns out to need but that does not exist yet

@@ -22,11 +22,7 @@ Writing rules that survive contact with real diffs:
 
 - One property per rule, with an id that can be cited in a commit message.
 - Severity is anchored to the quality property this project owns, not to taste.
-- If the linter already catches it, delete the rule. Duplicated enforcement
-  produces double findings and teaches people to skim the report.
-- Prefer rules with an observable check. "Be careful with concurrency" is not a
-  rule; "shared mutable state across tasks names its lock, queue, or
-  immutability" is.
-- Six to ten rules per file. A rulebook nobody finishes is a rulebook nobody
-  applies.
+- If the linter already catches it, delete the rule. Duplicated enforcement produces double findings and teaches people to skim the report.
+- Prefer rules with an observable check. "Be careful with concurrency" is not a rule; "shared mutable state across tasks names its lock, queue, or immutability" is.
+- Six to ten rules per file. A rulebook nobody finishes is a rulebook nobody applies.
 -->
