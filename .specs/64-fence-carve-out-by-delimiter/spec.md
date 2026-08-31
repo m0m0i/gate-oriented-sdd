@@ -121,4 +121,4 @@ Its stated limit: a hand wrap whose continuation line happens to begin with `<` 
 - [x] T2: the root cause — `CONTRIBUTING.md`'s carve-out restated by content, the validator wired onto `.steering/tech.md`'s `- Validators:` line, and `AGENTS.md` and the pre-PR list brought into agreement
 - [x] T3: check the blast radius — two `test-gates.sh` cases for the guard's fail-closed paths (zero fences found, and an unclassifiable nested fence), plus a negative control proving it fails on a deliberately re-wrapped fence
 - [x] T4: AC4 and AC6 — byte-identity of the three line-sensitive fences against `3df25b0`, and element-by-element rendering equivalence for every modified file
-- [ ] T5: version bump 0.4.1 → 0.4.2 in both manifests; refactor
+- [x] T5: version bump 0.4.1 → 0.4.2 in both manifests; refactor
