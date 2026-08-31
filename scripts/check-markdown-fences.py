@@ -33,9 +33,12 @@ The honest scope of that, because the first version of this paragraph claimed it
 code and review was right to call that overstated: `OPENER`'s first five alternatives are the
 same five constructs `.specs/61-.../unwrap.py`'s `NEW_BLOCK` recognises, written out again in
 a different order. A mistake about what counts as a list marker or a heading WOULD be shared.
-What is not shared is the decision procedure — and the three alternatives that decide the
-cases this guard exists for, the thematic break, `{{SLOT}}`, and the `<` that clears
-`skills/contract/SKILL.md:47-48`, have no counterpart in `NEW_BLOCK` at all.
+Of the three remaining alternatives, only the bare `<` that clears
+`skills/contract/SKILL.md:47-48` has no counterpart anywhere in `unwrap.py`. The thematic
+break and `{{SLOT}}` both do — `unwrap.py:70` and its `SLOT` at `:30` — outside `NEW_BLOCK`,
+so saying they were unshared was the same overstatement one scope smaller. What is genuinely
+not shared is the decision procedure: this asks what a line IS, not what the transform would
+do to it.
 
 And it clears `skills/contract/SKILL.md:47-48` for a REASON rather than by exception. Those
 are two separate instructions to the skill, one per line, and `unwrap.py` folds them into
@@ -44,8 +47,11 @@ begin `<`, which opens a template slot, so neither is a continuation. `observati
 the trap this avoids: a self-test proves the checker catches the class of defect its author
 imagined, and an exception carved to make a count come out right is that trap wearing a hat.
 
-Its limit, recorded rather than papered over: a hand wrap whose continuation happens to begin
-`<` is invisible to it. Not present in the tree, and contrived to produce.
+Its limits, recorded rather than papered over: a hand wrap is invisible to it whenever the
+continuation line happens to open ANY construct — a list marker, a table row, a heading, a
+block quote, a thematic break, a slot, or `<` — and likewise when it follows a heading, table
+row or thematic break, which reset the block. `<` is the plausible one in these templates; the
+rest are contrived. None is present in the tree.
 
 WHAT IT DOES NOT CHECK: whether the Markdown inside a fence is any good, or how long a line
 is. A guard on prose has to stay narrow or the prose stops being editable, and prose that
@@ -68,9 +74,19 @@ MARKDOWN_TAGS = ("markdown", "md")
 #: other one is exactly the case this must refuse to guess about.
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})\s*(\S*)")
 
-#: A line that OPENS a Markdown-tagged fence, counted independently of the scan so that a
-#: fence the scan never reached is visible. See the coverage invariant in markdown_fences.
-MARKDOWN_FENCE_LINE = re.compile(r"^\s*(?:`{3,}|~{3,})\s*(?:markdown|md)\s*$", re.I)
+
+def is_markdown_fence_line(line: str) -> bool:
+    r"""Does this line, read on its own, OPEN a Markdown-tagged fence?
+
+    Counted line by line, with no nesting awareness, so a fence the scan never reached stays
+    visible. It deliberately reuses the scan's own tag extraction rather than a second regex:
+    the first version matched `(?:markdown|md)\s*$`, which classified ```markdown title="x"
+    differently from the scan and tripped the invariant with the self-contradictory message
+    "0 present but 1 scanned". Two counters that disagree about what they are counting produce
+    a false block with a false diagnosis, and that is how a guard gets switched off.
+    """
+    m = FENCE.match(line)
+    return bool(m) and m.group(3).lower() in MARKDOWN_TAGS
 
 #: A line that OPENS a construct, and so cannot be a continuation of the line above it.
 OPENER = re.compile(
@@ -147,7 +163,7 @@ def markdown_fences(text: str):
         if tag in MARKDOWN_TAGS:
             found.append((opened_at, body))
 
-    scanned, present = len(found), sum(1 for ln in lines if MARKDOWN_FENCE_LINE.match(ln))
+    scanned, present = len(found), sum(1 for ln in lines if is_markdown_fence_line(ln))
     if scanned != present:
         raise Unclassifiable(
             f"{present} Markdown-tagged fence line(s) present but {scanned} scanned — at least "
@@ -259,6 +275,13 @@ if __name__ == "__main__":
         path = ROOT / rel
         try:
             text = path.read_text()
+        except FileNotFoundError:
+            # The work-set comes from the index, so a file deleted from the worktree and not
+            # yet staged is listed. Failing is right — it could not do its job — but saying
+            # "cannot be read" sends the reader to check permissions on a file that is gone.
+            print(f"check-markdown-fences: {rel} is tracked but missing from the worktree; "
+                  "stage the deletion or restore it", file=sys.stderr)
+            sys.exit(1)
         except OSError as exc:
             # Existence is not readability. A guard that cannot read its subject must fail
             # rather than report success about a file it never opened. See #16.

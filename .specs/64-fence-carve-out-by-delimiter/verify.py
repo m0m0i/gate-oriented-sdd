@@ -8,11 +8,19 @@ the continuation rule would make the second a restatement of the first — which
 #61's verifier came to compare `unwrap(unwrap(x))` against `unwrap(x)` and report success on a
 destructive diff. This file never asks whether a line is a continuation; it compares words.
 
-What it does share, stated because an unstated sharing is the one that bites: `FENCE`,
-`MARKDOWN_FENCE_LINE`, and the fence-close expression are copied from that guard, so a
-fence-parsing bug is common to both. Review found the first version of this file inheriting
-exactly such a bug — the 4-backtick blind spot — which is why the coverage invariant below is
-here as well as there.
+What it does share, stated because an unstated sharing is the one that bites: `FENCE`, the
+tag extraction, and the fence-close expression are copied from that guard, so a fence-parsing
+bug is common to both. Review found the first version of this file inheriting exactly such a
+bug — the 4-backtick blind spot — which is why the coverage invariant below is here as well as
+there.
+
+What is deliberately NOT shared, and is a known gap: the guard rejects an UNCLOSED fence and
+this does not. An unclosed ```markdown fence would run the inner loop to EOF, leaving
+`present == len(bodies)` satisfied while everything after the opener is compared as fence body
+rather than as outside text. It is unreachable while `check-markdown-fences.py` runs over the
+same tree and rejects that shape first, and this file is spec-local and gates nothing — so it
+is recorded here rather than fixed, because an undisclosed dependency on a sibling's check is
+worse than a disclosed one.
 
 AC6 was amended before this ran, and the reason is worth keeping here. It first asked for
 rendering equivalence. A fenced block's content is literal, so joining two lines inside one
@@ -29,10 +37,20 @@ import sys
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "3df25b0"
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})\s*(\S*)")
-#: Counted independently of the scan, so a fence the scan never reached is visible. Review
-#: found this file inheriting `check-markdown-fences.py`'s 4-backtick blind spot verbatim:
-#: a ```markdown fence quoted inside a LONGER fence was folded into `outside` in silence.
-MARKDOWN_FENCE_LINE = re.compile(r"^\s*(?:`{3,}|~{3,})\s*(?:markdown|md)\s*$", re.I)
+MARKDOWN_TAGS = ("markdown", "md")
+
+
+def is_markdown_fence_line(line):
+    """Does this line, on its own, open a Markdown-tagged fence?
+
+    Counted with no nesting awareness, so a fence the split never reached stays visible.
+    Review found this file inheriting `check-markdown-fences.py`'s 4-backtick blind spot
+    verbatim: a ```markdown fence quoted inside a LONGER fence was folded into `outside` in
+    silence. It shares that guard's tag extraction on purpose — two counters that disagree
+    about what they count produce a false failure with a false diagnosis.
+    """
+    m = FENCE.match(line)
+    return bool(m) and m.group(3).lower() in MARKDOWN_TAGS
 
 #: Untagged fences holding a format where a line break is meaningful. Unwrapping any of these
 #: would destroy the format, so they are pinned byte-for-byte rather than merely unmodified by
@@ -85,7 +103,7 @@ def split_fences(text):
             outside.append(lines[i])
             i += 1
 
-    present = sum(1 for ln in lines if MARKDOWN_FENCE_LINE.match(ln))
+    present = sum(1 for ln in lines if is_markdown_fence_line(ln))
     if present != len(bodies):
         # Neither side may be compared on a parse this file knows it got wrong. Silently
         # folding an unreached fence into `outside` would make byte identity there a claim

@@ -1191,7 +1191,10 @@ python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "scripts", "check-markdown-fences.py")
 t = p.read_text()
-p.write_text(t.replace('r"|<"                      # a template placeholder', 'r"|<<<NEVER>>>"          # a template placeholder'))
+new = t.replace('r"|<"                      # a template placeholder', 'r"|<<<NEVER>>>"          # a template placeholder')
+if new == t:
+    raise SystemExit("sabotage matched nothing; this case would run an unmodified guard")
+p.write_text(new)
 PYEOF
 out=$(run_fences "$r"); err=$(cat "$TMP/ferr")
 [ "$out" = "1" ] && c7=ok || c7=no
@@ -1249,9 +1252,12 @@ python3 - "$r2" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "scripts", "check-markdown-fences.py")
 t = p.read_text()
-p.write_text(t.replace(
+new = t.replace(
     "if c and (tag in MARKDOWN_TAGS or c.group(3).lower() in MARKDOWN_TAGS):",
-    "if c and tag in MARKDOWN_TAGS:"))
+    "if c and tag in MARKDOWN_TAGS:")
+if new == t:
+    raise SystemExit("sabotage matched nothing; this case would run an unmodified guard")
+p.write_text(new)
 PYEOF
 out=$(run_fences "$r2"); err=$(cat "$TMP/ferr")
 [ "$out" = "1" ] && c13=ok || c13=no

@@ -1,7 +1,7 @@
 # Spec: The fence carve-out is stated by delimiter when the thing that matters is content
 
-- Slug: 64-fence-carve-out-by-delimiter Issue: 64 Type: bug Status: approved
-- Author: m0m0i Date: 2026-08-31
+- Slug: 64-fence-carve-out-by-delimiter   Issue: 64   Type: bug   Status: done
+- Author: m0m0i   Date: 2026-08-31
 
 ## 1. Requirements (WHAT / WHY)
 
@@ -31,7 +31,7 @@ The issue's own count does not reproduce, and the spec is written against the re
 | hand-wrapped blocks inside ` ```markdown ` fences |             42 |               **7** |
 | shipped files holding them                        |              8 |               **2** |
 
-There are 10 ` ```markdown ` fences across 8 files, which is the likely origin of "eight files". Six of them — `contract`, `design-doc`, `epics`, `northstar`, `prd`, `worklog` — hold no hand-wrapped prose at all; every line in those bodies already starts its own construct. The seven live blocks are:
+There are 10 ` ```markdown ` fences across 8 files, which is the likely origin of "eight files". Seven of them hold no hand-wrapped prose at all — `contract`, `design-doc`, `epics`, `northstar`, `prd`, `worklog`, and `skills/spec/templates.md`'s feature template at `:13` — because every line in those bodies already starts its own construct. The seven live blocks sit in the remaining three fences:
 
 | File                               | Blocks | Lines                 |
 | :--------------------------------- | -----: | :-------------------- |
@@ -39,7 +39,7 @@ There are 10 ` ```markdown ` fences across 8 files, which is the likely origin o
 | `skills/spec/templates.md` (bug)   |      2 | 56–57, 70–71          |
 | `skills/spec/templates.md` (chore) |      3 | 96–97, 98–99, 108–110 |
 
-Both tables above are reproduced from the tree by `scripts/check-markdown-fences.py --list`, delivered in T1, so a reader can re-derive the numbers rather than trust them.
+Both tables are derived from `scripts/check-markdown-fences.py --list`, delivered in T1. `--list` prints each continuation line; the ranges here are the blocks those lines sit in, so a reader can re-derive every figure rather than trust it.
 
 ### One counter-example the issue did not have
 
@@ -53,16 +53,16 @@ Both tables above are reproduced from the tree by `scripts/check-markdown-fences
 `unwrap.py` folds them into one. They are not a hand wrap — they are two instructions to the skill. So the issue's "unlike most proposed guards this one has an unambiguous, mechanical test" is **false as stated**: a guard asking "would `unwrap.py` join this line?" produces a false accusation on a shipped file today. Any guard this spec ships has to be keyed on a predicate that clears those two lines for a stated reason, not by exception.
 
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN a reader applies `CONTRIBUTING.md`'s Markdown convention to a ` ```markdown ` fence THE SYSTEM SHALL scope the carve-out by content — fences holding literal code, output, or a line-sensitive format — and state that a ` ```markdown ` fence holds Markdown and follows the convention.
-  - [ ] **AC2:** the regression test fails before the fix and passes after — it reports the seven blocks on `3df25b0` and none after, and it clears `skills/contract/SKILL.md:47-48` in both states.
-  - [ ] **AC3:** no line inside a ` ```markdown ` fence in a tracked file is a continuation of the line above it.
-  - [ ] **AC4:** the fences holding a line-sensitive format are byte-identical to `3df25b0`: `skills/implement/SKILL.md`'s `reviewed_sha=` receipt block, and the `[SEVERITY] <file>:<line>` finding format in **both** `agents/_shared/reviewer-contract.md` and `.claude/agents/_shared/reviewer-contract.md`.
-  - [ ] **AC5:** the existing validators hold their baseline values — `check-receipt-schema` 7 fields across 3 copies, `check-templates` 10 task lines across 3 templates, `check-steering-anchors` 5 of 5, `check-locks` 6 pinned files, and the other three clean — and `test-gates.sh` reports 54 passed / 0 failed: the 52 on `3df25b0` plus the two new cases named in T3.
-  - [ ] **AC6:** in `skills/backlog/SKILL.md` and `skills/spec/templates.md` — the only files whose fence bodies change — each ` ```markdown ` fence body holds the same word stream as on `3df25b0`, word for word and in order, and every byte outside those fences is unchanged.
+  - [x] **AC1:** WHEN a reader applies `CONTRIBUTING.md`'s Markdown convention to a ` ```markdown ` fence THE SYSTEM SHALL scope the carve-out by content — fences holding literal code, output, or a line-sensitive format — and state that a ` ```markdown ` fence holds Markdown and follows the convention.
+  - [x] **AC2:** the regression test fails before the fix and passes after — it reports the seven blocks on `3df25b0` and none after, and it clears `skills/contract/SKILL.md:47-48` in both states.
+  - [x] **AC3:** no line inside a ` ```markdown ` fence in a tracked file is a continuation of the line above it.
+  - [x] **AC4:** the fences holding a line-sensitive format are byte-identical to `3df25b0`: `skills/implement/SKILL.md`'s `reviewed_sha=` receipt block, and the `[SEVERITY] <file>:<line>` finding format in **both** `agents/_shared/reviewer-contract.md` and `.claude/agents/_shared/reviewer-contract.md`.
+  - [x] **AC5:** the existing validators hold their baseline values — `check-receipt-schema` 7 fields across 3 copies, `check-templates` 10 task lines across 3 templates, `check-steering-anchors` 5 of 5, `check-locks` 6 pinned files, and the other three clean — and `test-gates.sh` reports 54 passed / 0 failed: the 52 on `3df25b0` plus the two new cases named in T3.
+  - [x] **AC6:** in `skills/backlog/SKILL.md` and `skills/spec/templates.md` — the only files whose fence bodies change — each ` ```markdown ` fence body holds the same word stream as on `3df25b0`, word for word and in order, and every byte outside those fences is unchanged.
 
 > **AC6 amended, 2026-08-31, in its own commit ahead of the task it judges (#59).** It first read "every modified file renders identically to `3df25b0`". The work falsifies that: a fenced block's content is literal, so joining two lines inside one genuinely changes what the fence renders — that is the entire point of T1, and the criterion would have had to be waived on the files it most needed to judge. `.specs/61-.../observations.md` already says what a rendering-equivalence check is worth here: "it proves the HTML is unchanged, and the HTML was never the thing at risk." The property that actually matters for a join is that no word was added, dropped, or reordered, and that the edit stayed inside the fence. AC6 now asks that instead.
 
-- Out of scope: the six ` ```markdown ` fences with nothing wrong in them; the 23 hand-wrapped blocks inside untagged fences, which are output, trees, and line-sensitive formats and are correctly exempt; #58's re-grooming of `docs/BACKLOG.md`, which this unblocks but does not do.
+- Out of scope: the seven ` ```markdown ` fences with nothing wrong in them; the hand-wrapped blocks inside untagged fences — directory trees, command output, and line-sensitive formats — which are correctly exempt. No count is given for those: the issue's 6 and a survey's 23 are two different predicates over the same set, and neither is the one this guard applies, so any figure here would be a number nobody can re-derive. #58's re-grooming of `docs/BACKLOG.md`, which this unblocks but does not do.
 
 ### Clarifications
 
@@ -94,7 +94,7 @@ Two properties of this predicate matter, and both are answers to what #61 cost.
 
 **It does not ask what the transform would do.** `.specs/61-.../observations.md` records a verifier whose `normalise` was `unwrap(unwrap(x))` compared against `unwrap(x)` — true by construction for any idempotent transform — reporting `0 changes` on a diff that broke three issue templates. A guard that asks "would the transform join this?" inherits every bug the transform has. This one states a property of the text instead.
 
-Stated at its real scope, after review found the first version claiming it shared *no code*: `OPENER`'s first five alternatives are `unwrap.py`'s `NEW_BLOCK` reordered, so an error in the construct vocabulary would be common to both. The decision procedure is not shared, and neither are the three alternatives that decide this guard's actual cases.
+Stated at its real scope, after two rounds of review narrowed it: `OPENER`'s first five alternatives are `unwrap.py`'s `NEW_BLOCK` reordered, so an error in the construct vocabulary would be common to both. Of the three remaining alternatives, only the bare `<` that clears `skills/contract/SKILL.md:47-48` has no counterpart anywhere in `unwrap.py` — the thematic break and `{{SLOT}}` both do, at `unwrap.py:70` and `:30`, outside `NEW_BLOCK`. What is genuinely not shared is the decision procedure.
 
 **It is stated positively, which is why `skills/contract/SKILL.md:47-48` clears it.** Those two lines both begin `<`, so both open a construct and neither is a continuation. That is a _reason_, not an exception carved to make the count come out right — which is the trap `observations.md` names as "a self-test proves the checker catches the class of defect its author imagined." The line beginning `<` is a template slot: the notation these fences use for "the author writes this here."
 
@@ -114,6 +114,11 @@ Its stated limit: a hand wrap whose continuation line happens to begin with `<` 
 | `AGENTS.md`                                 | "Run all nine" becomes ten, and the listing gains a row                       |
 | `scripts/test-gates.sh`                     | two cases for the guard                                                       |
 | `.claude-plugin/plugin.json`, `plugin.json` | 0.4.1 → 0.4.2                                                                 |
+| `.github/workflows/ci.yml` | the new validator as a CI step |
+| `.steering/structure.md`, `README.md`, `README.ja.md` | the `test-gates.sh` count, which this branch moves |
+| `.claude/agents/gate-sdd-reviewer.md` | the new validator on the Bash whitelist — **this resolves #49**, which is open until this merges |
+| `.specs/64-.../verify.py` | new; AC4 and AC6 against the base revision |
+| `docs/EPICS.md` | #49's line, which this branch falsifies |
 
 - **Blast radius:** `skills/spec/templates.md` is parsed by `check-templates.py`, which locates Tasks blocks by heading rather than by line number, so unwrapping shifts line numbers and must leave its count at 10 task lines across 3 templates. `.steering/tech.md`'s `- Validators:` line is read by `quality-gate.sh` with `sed … | head -1` and must stay one physical line; `check-steering-anchors.sh` counts anchor _keys_, so it stays at 5 of 5. `Source globs` already covers `skills/**/*.md` and `scripts/**/*.py`, so the new validator runs on exactly the turns that touch its subject. `skills/` is a shipped path, so `check-version-bump.py` requires the bump. The untagged fences holding line-sensitive formats are not touched — AC4 pins them byte-for-byte, and `check-receipt-schema.py` independently guards the receipt block across its 3 copies.
 
@@ -126,5 +131,5 @@ Its stated limit: a hand wrap whose continuation line happens to begin with `<` 
 - [x] T1: `scripts/check-markdown-fences.py` with a self-test that fails for the right reason — it reports 7 blocks over 9 lines on `3df25b0` and clears `skills/contract/SKILL.md:47-48` — then the unwrap of those 9 lines in the two files, which makes it pass
 - [x] T2: the root cause — `CONTRIBUTING.md`'s carve-out restated by content, the validator wired onto `.steering/tech.md`'s `- Validators:` line, and `AGENTS.md` and the pre-PR list brought into agreement
 - [x] T3: check the blast radius — two `test-gates.sh` cases for the guard's fail-closed paths (zero fences found, and an unclassifiable nested fence), plus a negative control proving it fails on a deliberately re-wrapped fence
-- [x] T4: AC4 and AC6 — byte-identity of the three line-sensitive fences against `3df25b0`, and element-by-element rendering equivalence for every modified file
-- [ ] T5: version bump 0.4.1 → 0.4.2 in both manifests; refactor
+- [x] T4: AC4 and AC6 — byte-identity of the three line-sensitive fences against `3df25b0`, and, per the amended AC6, word-stream identity inside the changed fences with byte identity everywhere outside them
+- [x] T5: version bump 0.4.1 → 0.4.2 in both manifests; refactor
