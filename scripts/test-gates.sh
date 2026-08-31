@@ -1048,5 +1048,159 @@ case "$sweep" in *"on request"*) c3=ok ;; *) c3=no ;; esac
   || report "the digest names the chain and keeps archive out of it" no \
      "chain=$c1 no-archive=$c2 sweep-on-request=$c3 clean-stderr=$c4"
 
+# --- guards: scripts/check-markdown-fences.py ---------------------------------------
+#
+# #64. The no-hand-wrap convention carved out "fenced code", which states the exemption by
+# DELIMITER when the property that decides it is CONTENT — so the skills that generate this
+# repo's own documents kept emitting the wrapping the convention had just removed, and the
+# rule read correctly put it back. The guard keys on the language tag instead. These cases
+# pin it, because .steering/structure.md makes this file the project's whole notion of test
+# coverage and a guard with no case here is a guard nothing checks.
+#
+# Unlike check-templates.py this guard finds its work-set with `git ls-files`, so a fixture
+# has to be a real repository with the file committed — a loose file on disk is invisible to
+# it, and a fixture the guard cannot see would pass every case by finding nothing.
+
+# $1 = name. Returns a git repo with the guard installed and one Markdown file, whose content
+# the caller writes next.
+fences_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts"
+  cp "$ROOT/scripts/check-markdown-fences.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-markdown-fences.py"
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t ) >/dev/null 2>&1
+  echo "$r"
+}
+
+# python3, not a shell heredoc: every fixture here is made of backticks, and escaping those
+# through sh is how a fixture quietly stops being the shape it claims to be.
+write_fenced() {
+  python3 - "$1" "$2" <<'PYEOF'
+import pathlib, sys
+pathlib.Path(sys.argv[1], "doc.md").write_text(sys.argv[2])
+PYEOF
+  ( cd "$1" && git add -A ) >/dev/null 2>&1
+}
+
+run_fences() { ( cd "$1" && python3 scripts/check-markdown-fences.py >/dev/null 2>"$TMP/ferr"; printf '%s' "$?" ) }
+
+# 41. A wrapped ```markdown fence fails, a clean one passes, and the language tag is what
+# decides — an untagged fence holding the very same wrapped prose stays exempt.
+#
+# The reported name says "markdown-tagged" rather than showing the fence: `report` takes a
+# double-quoted string, so a backtick in one is command substitution, and the first version of
+# this case ran `markdown` as a command and failed on a label while every assertion passed.
+#
+# The control runs FIRST. A guard that failed on every input satisfies the accusing half of
+# this case by itself, and "flags the thing we broke" is not evidence until "passes the thing
+# we did not" stands beside it.
+#
+# The sibling-placeholder assertion is the other half of the same argument, and it is the one
+# that separates this guard from the transform it replaces: skills/contract/SKILL.md:47-48 is
+# two separate instructions, one per line, and .specs/61-.../unwrap.py folds them into one.
+# A guard that asked "would the transform join this?" would false-accuse a shipped file. If
+# that assertion ever goes green-by-deletion, the guard has learned "looks like prose".
+r=$(fences_repo mdf-basic)
+write_fenced "$r" '```markdown
+- Ordered, not prioritized. Position reflects value, risk, cost, and dependency together.
+```
+'
+out=$(run_fences "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+write_fenced "$r" '```markdown
+- Ordered, not prioritized. Position reflects value, risk, cost, and dependency
+  together. There is no separate priority field.
+```
+'
+out=$(run_fences "$r"); err=$(cat "$TMP/ferr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"doc.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *":3"*) c3=ok ;; *) c3=no ;; esac   # the continuation line, not the fence
+
+# The same wrapped prose, untagged. This is implement's receipt block and the reviewer
+# contract's [SEVERITY] format: a line break there is meaningful, and unwrapping one would
+# destroy a format. A tagged fence must be needed for the guard to look at all.
+write_fenced "$r" '```
+- Ordered, not prioritized. Position reflects value, risk, cost, and dependency
+  together. There is no separate priority field.
+```
+
+```markdown
+- a clean item
+```
+'
+out=$(run_fences "$r"); [ "$out" = "0" ] && c4=ok || c4=no
+
+# Two sibling placeholder lines: NOT a hand wrap, and the counter-example #64 was filed
+# without. Both open a template slot, so neither is a continuation.
+write_fenced "$r" '```markdown
+## Style
+<what the formatter owns — say "the formatter decides" rather than restating it>
+<what it does not own: naming, file organisation, module boundaries>
+```
+'
+out=$(run_fences "$r"); [ "$out" = "0" ] && c5=ok || c5=no
+
+[ "$c0$c1$c2$c3$c4$c5" = "okokokokokok" ] && report "a wrapped markdown-tagged fence fails, a clean one passes, an untagged one is exempt" ok \
+  || report "a wrapped markdown-tagged fence fails, a clean one passes, an untagged one is exempt" no \
+     "clean-passes=$c0 wrapped-fails=$c1 names-file=$c2 names-line=$c3 untagged-exempt=$c4 siblings-not-accused=$c5"
+
+# 42. An empty work-set must fail, and a fence the guard cannot classify must fail rather
+# than be guessed at.
+#
+# Both are #16 in this guard. Zero fences read is not zero defects found — that is the exact
+# sentence #61's own verifier shipped, exiting 0 on a ref that did not resolve after having
+# compared nothing. And a nested or unclosed fence makes a body's structure a guess; a guard
+# that guesses is a guard that fails open on the input it guessed wrong about.
+r=$(fences_repo mdf-closed)
+write_fenced "$r" '# A document with no markdown-tagged fence at all
+
+```python
+x = 1
+```
+'
+out=$(run_fences "$r"); err=$(cat "$TMP/ferr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"read nothing"*) c2=ok ;; *) c2=no ;; esac
+
+write_fenced "$r" '```markdown
+- an item
+```python
+x = 1
+```
+```
+'
+out=$(run_fences "$r"); err=$(cat "$TMP/ferr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *"cannot be determined"*) c4=ok ;; *) c4=no ;; esac
+
+write_fenced "$r" '```markdown
+- an item that never closes its fence
+'
+out=$(run_fences "$r"); err=$(cat "$TMP/ferr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *"never closed"*) c6=ok ;; *) c6=no ;; esac
+
+# The self-test must be able to FAIL, or it is decoration. Break the rule that makes a
+# placeholder line open a slot, and the sibling-placeholder fixture must start false-accusing.
+r=$(fences_repo mdf-selftest)
+write_fenced "$r" '```markdown
+- a clean item
+```
+'
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-markdown-fences.py")
+t = p.read_text()
+p.write_text(t.replace('r"|<"                      # a template placeholder', 'r"|<<<NEVER>>>"          # a template placeholder'))
+PYEOF
+out=$(run_fences "$r"); err=$(cat "$TMP/ferr")
+[ "$out" = "1" ] && c7=ok || c7=no
+case "$err" in *"SELFTEST FAILED"*) c8=ok ;; *) c8=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokok" ] && report "an empty work-set, an unclassifiable fence and a broken self-test all fail" ok \
+  || report "an empty work-set, an unclassifiable fence and a broken self-test all fail" no \
+     "empty-exit=$c1 empty-msg=$c2 nested-exit=$c3 nested-msg=$c4 unclosed-exit=$c5 unclosed-msg=$c6 selftest-exit=$c7 selftest-msg=$c8"
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
