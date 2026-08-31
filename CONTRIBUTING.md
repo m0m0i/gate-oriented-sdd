@@ -51,10 +51,10 @@ Stating the carve-out by delimiter instead is what #64 cost: the skills that gen
 ```bash
 ./scripts/check-leakage.sh          # no private context
 ./scripts/check-manifests.py        # both manifests agree; hook shapes correct
+./scripts/check-markdown-fences.py  # no ```markdown fence hand-wraps the Markdown it quotes
 ./scripts/check-receipt-schema.py   # the receipt schema agrees across its copies
 ./scripts/check-skill-contracts.py  # skills still carry their load-bearing instructions
 ./scripts/check-templates.py        # no spec template splits a red step from its green step
-./scripts/check-markdown-fences.py  # no ```markdown fence hand-wraps the Markdown it quotes
 ./assets/check-steering-anchors.sh  # steering's machine-read lines still parse
 ./assets/check-locks.py             # rulebooks match their locks (--update to re-pin)
 ./scripts/test-gates.sh             # the gates still behave

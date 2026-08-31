@@ -98,9 +98,11 @@ Stated at its real scope, after two rounds of review narrowed it: `OPENER`'s fir
 
 **It is stated positively, which is why `skills/contract/SKILL.md:47-48` clears it.** Those two lines both begin `<`, so both open a construct and neither is a continuation. That is a _reason_, not an exception carved to make the count come out right — which is the trap `observations.md` names as "a self-test proves the checker catches the class of defect its author imagined." The line beginning `<` is a template slot: the notation these fences use for "the author writes this here."
 
-Its stated limit: a hand wrap whose continuation line happens to begin with `<` is invisible to it. Contrived, not present in the tree, and recorded rather than papered over.
+Its stated limits, kept in one place — `scripts/check-markdown-fences.py`'s own docstring — rather than restated here where the two can drift apart: a hand wrap is invisible to it whenever the continuation line opens any construct, and likewise when it follows a heading, table row or thematic break. `<` is the plausible one in these templates; the rest are contrived, and none is present in the tree.
 
-- **The guard fails closed, three ways.** Finding zero ` ```markdown ` fences is a failure, not a pass — "verified everything" and "compared nothing" must not share an exit code, which is #16, #39, and the fourth fail-open `verify.py` shipped. A fence it cannot classify — a nested fence inside a ` ```markdown ` body, which no file has today — is a failure rather than a guess. A file that exists but cannot be read is a failure, matching `check-templates.py`.
+- **The guard fails closed, and the list grew during review.** Finding zero ` ```markdown ` fences is a failure, not a pass — "verified everything" and "read nothing" must not share an exit code, which is #16, #39, and the fourth fail-open `verify.py` shipped. Beyond that it refuses to guess three ways, each raising `Unclassifiable`: a nested fence where either side is Markdown-tagged, a fence left open at end of file, and the scan-coverage invariant — a Markdown-tagged fence line the scan never reached. It also fails on a `git ls-files` that will not run, on a tracked file missing from the worktree, on a file that exists but cannot be read, and on its own self-test. `test-gates.sh` pins the unclosed, invariant and unreadable paths as separate assertions.
+
+  The nested-fence and invariant paths were added mid-review. The first version skipped a ` ```markdown ` fence quoted inside a longer untagged fence and exited 0, because its nested-fence test fired only when the *outer* fence was Markdown-tagged. Recorded rather than smoothed over, because the shape of the miss is the part worth remembering: it refused to guess when it could see in, and guessed "skip" when it could not.
 
 - Affected files:
 
@@ -130,6 +132,6 @@ Its stated limit: a hand wrap whose continuation line happens to begin with `<` 
 
 - [x] T1: `scripts/check-markdown-fences.py` with a self-test that fails for the right reason — it reports 7 blocks over 9 lines on `3df25b0` and clears `skills/contract/SKILL.md:47-48` — then the unwrap of those 9 lines in the two files, which makes it pass
 - [x] T2: the root cause — `CONTRIBUTING.md`'s carve-out restated by content, the validator wired onto `.steering/tech.md`'s `- Validators:` line, and `AGENTS.md` and the pre-PR list brought into agreement
-- [x] T3: check the blast radius — two `test-gates.sh` cases for the guard's fail-closed paths (zero fences found, and an unclassifiable nested fence), plus a negative control proving it fails on a deliberately re-wrapped fence
+- [x] T3: check the blast radius — two `test-gates.sh` cases, one behavioural (a wrapped fence fails, a clean one passes, an untagged one is exempt, sibling placeholders are not accused) and one covering the fail-closed paths, plus negative controls proving each can fail
 - [x] T4: AC4 and AC6 — byte-identity of the three line-sensitive fences against `3df25b0`, and, per the amended AC6, word-stream identity inside the changed fences with byte identity everywhere outside them
 - [x] T5: version bump 0.4.1 → 0.4.2 in both manifests; refactor
