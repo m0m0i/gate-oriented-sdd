@@ -1,5 +1,5 @@
 # Spec: The fence carve-out is stated by delimiter when the thing that matters is content
-- Slug: 64-fence-carve-out-by-delimiter   Issue: 64   Type: bug   Status: draft
+- Slug: 64-fence-carve-out-by-delimiter   Issue: 64   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-08-31
 
 ## 1. Requirements (WHAT / WHY)
