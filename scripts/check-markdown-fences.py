@@ -60,6 +60,10 @@ MARKDOWN_TAGS = ("markdown", "md")
 #: other one is exactly the case this must refuse to guess about.
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})\s*(\S*)")
 
+#: A line that OPENS a Markdown-tagged fence, counted independently of the scan so that a
+#: fence the scan never reached is visible. See the coverage invariant in markdown_fences.
+MARKDOWN_FENCE_LINE = re.compile(r"^\s*(?:`{3,}|~{3,})\s*(?:markdown|md)\s*$", re.I)
+
 #: A line that OPENS a construct, and so cannot be a continuation of the line above it.
 OPENER = re.compile(
     r"^\s*(?:"
@@ -85,13 +89,27 @@ class Unclassifiable(Exception):
 
 
 def markdown_fences(text: str):
-    """Yield (open_line_1based, [body lines]) for every ```markdown fence.
+    """[(open_line_1based, [body lines])] for every ```markdown fence.
 
-    Raises Unclassifiable for a nested fence inside a Markdown body or a fence left open at
-    end of file. Neither exists in the tree today; both would make the body's structure a
-    guess, and a guard that guesses is a guard that fails open.
+    Raises Unclassifiable three ways, none of which exists in the tree today: a nested fence,
+    a fence left open at end of file, and a Markdown-tagged fence line the scan never reached.
+    Each would make a body's structure a guess, and a guard that guesses fails open.
+
+    The third is a COVERAGE INVARIANT rather than a parse rule, and it is here because the
+    parse rules missed a case. A ```markdown fence quoted inside a LONGER untagged fence —
+    four backticks, the canonical CommonMark way to quote a fence — was silently skipped: the
+    inner line failed the close test (3 >= 4 is false) and failed the nested-fence test,
+    because that only fired when the OUTER fence was Markdown-tagged. So the doctrine was
+    applied asymmetrically: refuse to guess when it can see in, guess "skip" when it cannot.
+    Counting the tagged fence lines and requiring the scan to have reached all of them closes
+    the class rather than the instance, and it does not depend on getting the nesting rules
+    right.
+
+    Returns a list, not a generator: an invariant that runs after the scan cannot be enforced
+    by something the caller may stop consuming early.
     """
     lines = text.split("\n")
+    found = []
     i = 0
     while i < len(lines):
         m = FENCE.match(lines[i])
@@ -108,17 +126,26 @@ def markdown_fences(text: str):
                 closed = True
                 i += 1
                 break
-            if c and tag in MARKDOWN_TAGS:
+            if c and (tag in MARKDOWN_TAGS or c.group(3).lower() in MARKDOWN_TAGS):
                 raise Unclassifiable(
-                    f"line {i + 1}: a fence opens inside the ```{tag} fence at line {opened_at}. "
-                    "Its body's structure cannot be determined without guessing."
+                    f"line {i + 1}: a fence opens inside the fence at line {opened_at}, and one "
+                    "of the two is Markdown-tagged. Its body's structure cannot be determined "
+                    "without guessing."
                 )
             body.append(lines[i])
             i += 1
         if not closed:
             raise Unclassifiable(f"line {opened_at}: fence is never closed")
         if tag in MARKDOWN_TAGS:
-            yield opened_at, body
+            found.append((opened_at, body))
+
+    scanned, present = len(found), sum(1 for ln in lines if MARKDOWN_FENCE_LINE.match(ln))
+    if scanned != present:
+        raise Unclassifiable(
+            f"{present} Markdown-tagged fence line(s) present but {scanned} scanned — at least "
+            "one is quoted inside another fence, so its structure cannot be determined."
+        )
+    return found
 
 
 def continuations(body, first_line):

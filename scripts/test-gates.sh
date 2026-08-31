@@ -1197,9 +1197,91 @@ out=$(run_fences "$r"); err=$(cat "$TMP/ferr")
 [ "$out" = "1" ] && c7=ok || c7=no
 case "$err" in *"SELFTEST FAILED"*) c8=ok ;; *) c8=no ;; esac
 
-[ "$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokok" ] && report "an empty work-set, an unclassifiable fence and a broken self-test all fail" ok \
+# A markdown fence quoted inside a LONGER untagged fence. Four backticks is the canonical
+# CommonMark way to quote a fence, so this is the shape documentation naturally takes. The
+# first version skipped it in silence: the inner line failed the close test (3 >= 4 is false)
+# and failed the raise test (the OUTER tag was not markdown), so it was appended to the body
+# as inert text and the fence was never scanned. A clean fence sits alongside it deliberately
+# — the empty-work-set guard cannot catch this, because the other fence keeps the count above
+# zero. The doctrine was being applied asymmetrically: refuse to guess when it can see in,
+# guess "skip" when it cannot.
+#
+# Its OWN repo, and a diagnosis-specific assertion. The first version of this reused $r from
+# the sabotaged-self-test fixture above, so the guard exited 1 for the wrong reason and a
+# `*markdown*` stderr match was satisfied by the string "check-markdown-fences SELFTEST
+# FAILED". It reported ok against a guard that still had the hole.
+r=$(fences_repo mdf-quoted)
+write_fenced "$r" '````
+```markdown
+- Ordered, not prioritized. Position reflects value
+  together. There is no separate priority field.
+```
+````
+
+```markdown
+- a clean item
+```
+'
+out=$(run_fences "$r"); err=$(cat "$TMP/ferr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *"one of the two is Markdown-tagged"*) c10=ok ;; *) c10=no ;; esac
+
+# ...and the SAME fixture, against a guard whose nested-fence rule has been reverted to the
+# holed version that only looked at the outer fence's tag. The scan-coverage invariant is a
+# backstop for exactly this: a nesting shape the parse rules do not recognise. Every shape
+# reachable today trips a parse rule first, so the invariant has no natural fixture — sabotage
+# is the only way to reach it, and an unreachable backstop is one nobody knows is broken.
+# The self-test still passes under this sabotage (its nested fixture has a Markdown-tagged
+# OUTER fence), so a failure here is the invariant firing and not the self-test.
+r2=$(fences_repo mdf-invariant)
+write_fenced "$r2" '````
+```markdown
+- Ordered, not prioritized. Position reflects value
+  together. There is no separate priority field.
+```
+````
+
+```markdown
+- a clean item
+```
+'
+python3 - "$r2" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-markdown-fences.py")
+t = p.read_text()
+p.write_text(t.replace(
+    "if c and (tag in MARKDOWN_TAGS or c.group(3).lower() in MARKDOWN_TAGS):",
+    "if c and tag in MARKDOWN_TAGS:"))
+PYEOF
+out=$(run_fences "$r2"); err=$(cat "$TMP/ferr")
+[ "$out" = "1" ] && c13=ok || c13=no
+case "$err" in *"quoted inside another fence"*) c14=ok ;; *) c14=no ;; esac
+case "$err" in *"SELFTEST FAILED"*) c15=no ;; *) c15=ok ;; esac   # must be the invariant, not the self-test
+
+# A file that exists but cannot be read. Existence is not readability, and the spec's Design
+# promises this as one of three fail-closed ways. The suite already pins the same path for
+# check-templates.py, the reviewer directory, and a steering file.
+r=$(fences_repo mdf-unreadable)
+write_fenced "$r" '```markdown
+- a clean item
+```
+'
+chmod 000 "$r/doc.md" 2>/dev/null
+# Skipped where chmod does not actually deny access (root, or a filesystem without POSIX
+# permissions). A case that cannot fail is worse than no case.
+if cat "$r/doc.md" >/dev/null 2>&1; then
+  chmod 644 "$r/doc.md" 2>/dev/null
+  c11=ok; c12=ok
+else
+  out=$(run_fences "$r"); err=$(cat "$TMP/ferr")
+  chmod 644 "$r/doc.md" 2>/dev/null
+  [ "$out" = "1" ] && c11=ok || c11=no
+  case "$err" in *"cannot be read"*) c12=ok ;; *) c12=no ;; esac
+fi
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15" = "okokokokokokokokokokokokokokok" ] && report "an empty work-set, an unclassifiable fence and a broken self-test all fail" ok \
   || report "an empty work-set, an unclassifiable fence and a broken self-test all fail" no \
-     "empty-exit=$c1 empty-msg=$c2 nested-exit=$c3 nested-msg=$c4 unclosed-exit=$c5 unclosed-msg=$c6 selftest-exit=$c7 selftest-msg=$c8"
+     "empty-exit=$c1 empty-msg=$c2 nested-exit=$c3 nested-msg=$c4 unclosed-exit=$c5 unclosed-msg=$c6 selftest-exit=$c7 selftest-msg=$c8 quoted-exit=$c9 quoted-msg=$c10 unreadable-exit=$c11 unreadable-msg=$c12 invariant-exit=$c13 invariant-msg=$c14 invariant-not-selftest=$c15"
 
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"

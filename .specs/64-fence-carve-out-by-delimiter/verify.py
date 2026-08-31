@@ -22,6 +22,10 @@ import sys
 
 BASE = sys.argv[1] if len(sys.argv) > 1 else "3df25b0"
 FENCE = re.compile(r"^(\s*)(`{3,}|~{3,})\s*(\S*)")
+#: Counted independently of the scan, so a fence the scan never reached is visible. Review
+#: found this file inheriting `check-markdown-fences.py`'s 4-backtick blind spot verbatim:
+#: a ```markdown fence quoted inside a LONGER fence was folded into `outside` in silence.
+MARKDOWN_FENCE_LINE = re.compile(r"^\s*(?:`{3,}|~{3,})\s*(?:markdown|md)\s*$", re.I)
 
 #: Untagged fences holding a format where a line break is meaningful. Unwrapping any of these
 #: would destroy the format, so they are pinned byte-for-byte rather than merely unmodified by
@@ -73,6 +77,14 @@ def split_fences(text):
         if i < len(lines):
             outside.append(lines[i])
             i += 1
+
+    present = sum(1 for ln in lines if MARKDOWN_FENCE_LINE.match(ln))
+    if present != len(bodies):
+        # Neither side may be compared on a parse this file knows it got wrong. Silently
+        # folding an unreached fence into `outside` would make byte identity there a claim
+        # about text this function mis-classified.
+        sys.exit(f"verify FAILED — {present} Markdown-tagged fence line(s) present but "
+                 f"{len(bodies)} parsed; the split cannot be trusted")
     return outside, bodies
 
 
