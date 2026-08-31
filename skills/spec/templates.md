@@ -53,8 +53,7 @@ The first task is always a test that reproduces the bug. If you cannot write tha
 - Expected: <what should happen, and what says so>
 - Actual: <what happens instead>
 - Impact: <who hits this, how often, what it costs — this is what justified the priority>
-- **Root cause:** <the actual mechanism, once found. Not "a null check was missing"
-  but why the value was null on a path nobody expected.>
+- **Root cause:** <the actual mechanism, once found. Not "a null check was missing" but why the value was null on a path nobody expected.>
 - Acceptance criteria:
   - [ ] **AC1:** WHEN <the reproduction> THE SYSTEM SHALL <the correct behavior>.
   - [ ] **AC2:** the regression test fails before the fix and passes after.
@@ -67,8 +66,7 @@ The first task is always a test that reproduces the bug. If you cannot write tha
 - Fix approach, and why this rather than the narrower or wider fix:
 - Affected files:
 - **Blast radius:** <what else uses this code path and could change behavior>
-- Why this cannot recur: <the guard, type, or test that makes the class of bug
-  impossible rather than just this instance fixed>
+- Why this cannot recur: <the guard, type, or test that makes the class of bug impossible rather than just this instance fixed>
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
@@ -93,10 +91,8 @@ The controlling line is **what must not change.** A chore is defined by its inva
 - **What must NOT change:** <the observable behavior this work preserves>
 - Why now: <what it unblocks, or the cost of deferring>
 - Acceptance criteria:
-  - [ ] **AC1:** THE SYSTEM SHALL behave identically for <the preserved behavior>,
-    demonstrated by <the tests that already cover it>.
-  - [ ] **AC2:** <the mechanical outcome — the dependency is on version X, the
-    module no longer imports Y>.
+  - [ ] **AC1:** THE SYSTEM SHALL behave identically for <the preserved behavior>, demonstrated by <the tests that already cover it>.
+  - [ ] **AC2:** <the mechanical outcome — the dependency is on version X, the module no longer imports Y>.
 - Out of scope: <the tempting adjacent cleanup>
 
 ### Clarifications
@@ -105,9 +101,7 @@ The controlling line is **what must not change.** A chore is defined by its inva
 ## 2. Design (HOW)
 - Approach, and the order of operations if it must land in steps:
 - Affected files:
-- **Coverage gap:** <behavior that must be preserved but has no test today.
-  Those tests are written FIRST, before the change — otherwise "nothing broke"
-  is an assertion, not an observation.>
+- **Coverage gap:** <behavior that must be preserved but has no test today. Those tests are written FIRST, before the change — otherwise "nothing broke" is an assertion, not an observation.>
 - Rollback: <how to undo this>
 
 ## 3. Tasks (TDD-ordered)

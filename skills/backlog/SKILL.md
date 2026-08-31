@@ -38,8 +38,7 @@ Ordering is the entire value. A list of everything that must be built is not a b
 # Product backlog
 
 - Last groomed: <YYYY-MM-DD>
-- Ordered, not prioritized. Position reflects value, risk, cost, and dependency
-  together. There is no separate priority field, and adding one would contradict this.
+- Ordered, not prioritized. Position reflects value, risk, cost, and dependency together. There is no separate priority field, and adding one would contradict this.
 
 | # | Item | Epic | Blocks | Rough size | Why here |
 | :-- | :-- | :-- | :-- | :-- | :-- |
@@ -47,9 +46,7 @@ Ordering is the entire value. A list of everything that must be built is not a b
 | 2 | <item> | EPIC-n | — | <~n issues> | <why above #3 specifically> |
 
 ## Unshaped
-Items that cannot be ordered yet because nobody knows what they are. This is a
-queue to empty, not a tier — anything sitting here is undecided work, and it
-does not get built while it stays here.
+Items that cannot be ordered yet because nobody knows what they are. This is a queue to empty, not a tier — anything sitting here is undecided work, and it does not get built while it stays here.
 
 - <item> — <what has to be answered before it can take a position>
 ```
