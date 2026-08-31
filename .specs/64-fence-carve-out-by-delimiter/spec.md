@@ -120,5 +120,5 @@ Its stated limit: a hand wrap whose continuation line happens to begin with `<` 
 - [x] T1: `scripts/check-markdown-fences.py` with a self-test that fails for the right reason — it reports 7 blocks over 9 lines on `3df25b0` and clears `skills/contract/SKILL.md:47-48` — then the unwrap of those 9 lines in the two files, which makes it pass
 - [x] T2: the root cause — `CONTRIBUTING.md`'s carve-out restated by content, the validator wired onto `.steering/tech.md`'s `- Validators:` line, and `AGENTS.md` and the pre-PR list brought into agreement
 - [x] T3: check the blast radius — two `test-gates.sh` cases for the guard's fail-closed paths (zero fences found, and an unclassifiable nested fence), plus a negative control proving it fails on a deliberately re-wrapped fence
-- [ ] T4: AC4 and AC6 — byte-identity of the three line-sensitive fences against `3df25b0`, and element-by-element rendering equivalence for every modified file
+- [x] T4: AC4 and AC6 — byte-identity of the three line-sensitive fences against `3df25b0`, and element-by-element rendering equivalence for every modified file
 - [ ] T5: version bump 0.4.1 → 0.4.2 in both manifests; refactor
