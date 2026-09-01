@@ -1,5 +1,5 @@
 # Spec: Pin format-on-save off for Markdown in the workspace
-- Slug: 66-pin-format-on-save-off-for-markdown   Issue: 66   Type: chore   Status: draft
+- Slug: 66-pin-format-on-save-off-for-markdown   Issue: 66   Type: chore   Status: approved
 - Author: m0m0i   Date: 2026-09-01
 
 ## 1. Requirements (WHAT / WHY)
@@ -40,5 +40,5 @@ Scoped to the `[markdown]` language rather than set globally, so the setting sup
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
-- [ ] T1: a check that the settings file exists, parses, and carries only the Markdown scope — failing first because the file does not exist — then the file that satisfies it
+- [x] T1: a check that the settings file exists, parses, and carries only the Markdown scope — failing first because the file does not exist — then the file that satisfies it
 - [ ] T2: confirm the invariant — every other tracked file byte-identical to `main`, validators at their values, `test-gates.sh` 52/0
