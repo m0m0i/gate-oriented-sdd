@@ -25,6 +25,12 @@ jobs:
       - name: Both plugin manifests agree
         run: ./scripts/check-manifests.py
 
+      # The no-hand-wrap convention used to exempt fences by delimiter, so the skills that
+      # generate this repo's own documents kept emitting the wrapping it had just removed.
+      # The language tag is what separates prose from a line-sensitive format mechanically.
+      - name: No ```markdown fence hand-wraps the Markdown it quotes
+        run: ./scripts/check-markdown-fences.py
+
       # A rulebook that has drifted from its lock is worse than an unpinned one:
       # the reviewer keeps citing rule ids as though they were the agreed text.
       - name: Rulebooks match their locks

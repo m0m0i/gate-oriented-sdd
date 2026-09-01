@@ -13,7 +13,7 @@ The repository root is simultaneously a Claude Code plugin, a Claude Code market
 | `docs/` | fidelity, layout, verified behaviour | no |
 | `evals/` | authored, unrun | no |
 
-**Tests live in `scripts/test-gates.sh`**, not beside the code. There is no test framework: the gates are shell, so their tests are shell, and each case builds a throwaway git repository in a temp directory. A new gate behaviour needs a new case there — that is the project's whole notion of test coverage, and 51 paths are currently pinned.
+**Tests live in `scripts/test-gates.sh`**, not beside the code. There is no test framework: the gates are shell, so their tests are shell, and each case builds a throwaway git repository in a temp directory. A new gate behaviour needs a new case there — that is the project's whole notion of test coverage, and 54 paths are currently pinned.
 
 `agents/*/rules/*.md` deliberately carry **no frontmatter**. They are reference material the reviewer loads on demand, not agents; giving them frontmatter risks registering them as subagents.
 

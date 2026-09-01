@@ -37,11 +37,12 @@ Antigravity has five hook events: `PreToolUse`, `PostToolUse`, `PreInvocation`, 
 
 ## Working on this repo
 
-Run all nine before every commit — CI runs the same nine:
+Run all ten before every commit — CI runs the same ten:
 
 ```bash
 ./scripts/check-leakage.sh          # no private context
 ./scripts/check-manifests.py        # both manifests agree; hook shapes correct
+./scripts/check-markdown-fences.py  # no ```markdown fence hand-wraps the Markdown it quotes
 ./scripts/check-receipt-schema.py   # the receipt schema agrees across its copies
 ./scripts/check-skill-contracts.py  # skills still carry their load-bearing instructions
 ./scripts/check-templates.py        # no spec template splits a red step from its green step
