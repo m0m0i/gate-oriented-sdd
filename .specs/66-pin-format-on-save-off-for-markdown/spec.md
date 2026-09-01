@@ -5,12 +5,14 @@
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: add `.vscode/settings.json` containing a `[markdown]` block that sets `editor.formatOnSave` to `false`, committed so it applies to every clone. Both Claude Code's VS Code extension and Antigravity read workspace settings from that path.
-- **What must NOT change:** the rendered output and the bytes of every existing file; the eight validators at their current values, with `test-gates.sh` at 54 passed / 0 failed; `check-markdown-fences.py` still reporting 10 fences and no hand-wrapped prose. This adds an editor setting and edits no content. Nothing shipped moves — `.vscode/` is in neither `Source globs` nor `check-version-bump.py`'s `SHIPPED`, so no version bump is required and none is made.
+- **What must NOT change:** the rendered output and the bytes of every existing file, and the eight validators on this branch's `- Validators:` line at their current values, with `test-gates.sh` at 52 passed / 0 failed. This adds an editor setting and edits no content. Nothing shipped moves — `.vscode/` is in neither `Source globs` nor `check-version-bump.py`'s `SHIPPED`, so no version bump is required and none is made.
 - Why now: it already cost a review round on #64, and the damage was not cosmetic. A formatter wrote a stale buffer over `.specs/64-.../spec.md` between two commits, flipping `Status: done` back to `approved`, unticking six acceptance criteria and T5, and destroying four uncommitted edits. `hooks/review-gate.sh` passes silently when a spec has any open task, so the branch was one step from a pull request with the review gate never firing — on a branch about gates that fail open. It happened twice, because the first time it was reverted by hand and no guard was put in place.
 - Acceptance criteria:
   - [ ] **AC1:** WHEN the repository is opened in an editor that reads workspace settings THE SYSTEM SHALL have `editor.formatOnSave` false for the `[markdown]` language, stated in a tracked `.vscode/settings.json`.
   - [ ] **AC2:** the file parses as the JSON-with-comments an editor will accept, and contains no key other than the Markdown scope — verified by parsing it, not by reading it.
-  - [ ] **AC3:** every tracked file other than the new one and this spec is byte-identical to `main`, and the eight validators hold their values with `test-gates.sh` at 54 passed / 0 failed.
+  - [ ] **AC3:** every tracked file other than the new one and this spec is byte-identical to `main`, and the eight validators hold their values with `test-gates.sh` at 52 passed / 0 failed.
+
+> **Invariant and AC3 corrected, 2026-09-01, in their own commit ahead of the work they judge (#59).** Both first named `test-gates.sh` at 54 and `check-markdown-fences.py`'s output. Those are #64's numbers, and #64 is unmerged — this branch is cut from `main` at `3df25b0`, where the `- Validators:` line carries eight entries, that guard does not exist, and the suite is 52/0. Measured on this branch rather than carried over from the session that preceded it. If #64 merges first, a rebase moves the baseline to 54 and this note is the record of why the number changed.
 - Out of scope: changing the user's own Antigravity settings, which are theirs to edit; a `.prettierignore`, rejected because it only works if the formatter is Prettier while disabling `formatOnSave` for the language is formatter-agnostic; and any second opinion about how Markdown should be written, which is `CONTRIBUTING.md`'s and `check-markdown-fences.py`'s job.
 
 ### Clarifications
@@ -39,4 +41,4 @@ Scoped to the `[markdown]` language rather than set globally, so the setting sup
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 - [ ] T1: a check that the settings file exists, parses, and carries only the Markdown scope — failing first because the file does not exist — then the file that satisfies it
-- [ ] T2: confirm the invariant — every other tracked file byte-identical to `main`, validators at their values, `test-gates.sh` 54/0
+- [ ] T2: confirm the invariant — every other tracked file byte-identical to `main`, validators at their values, `test-gates.sh` 52/0
