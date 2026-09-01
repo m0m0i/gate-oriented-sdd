@@ -1,0 +1,11 @@
+{
+  // Prettier-on-save reverted a spec twice during #64: it flipped `Status: done` back to
+  // `approved` and unticked the tasks, and review-gate.sh passes silently on a spec with an
+  // open task — so the branch was one step from a PR with the gate never firing. See #66 and
+  // .work_logs/2026-08-31.md. Scoped to Markdown: this repo's deliverable is prose, and
+  // formatOnSave is the trigger every formatter hangs off, so disabling it here is
+  // formatter-agnostic. Your own settings for every other language are untouched.
+  "[markdown]": {
+    "editor.formatOnSave": false
+  }
+}
