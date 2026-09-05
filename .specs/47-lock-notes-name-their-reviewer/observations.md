@@ -35,3 +35,9 @@
 - `claude plugin validate . --strict` → exit 0 — `✔ Validation passed`
 
 **Correction.** The `check-version-bump.py` line above ran before the T2 commit existed, so it compared `main` to the same tree and reported no shipped file changed. At the commit: exit 0 — `check-version-bump: 4 shipped file(s) changed, version 0.4.2 -> 0.4.3`.
+
+## Consequences to existing documents
+
+- `README.md:152` and `README.ja.md:153` said `v0.4.2`, rewritten under #48 this morning, and would have been false the moment this bump merged — the third bump in a row to leave that line behind, and the reason #48 existed. AC4 was widened in its own commit and both tokens move here. Nothing else states the version outside the manifests and `docs/verified.md`'s dated notes.
+
+**Review triage.** MEDIUM — no consequences section, and a real consequence: this one. INFO accepted: the bump sits inside the reviewed diff, which `tech.md` describes as landing after review; AC3 put it in T2 so the reviewer could see it, and C-6 prefers that direction.
