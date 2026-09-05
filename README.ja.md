@@ -150,13 +150,13 @@ agy plugin install ./gate-oriented-sdd
 
 ## ステータス
 
-**v0.2.3、pre-release です。** 検証済みバージョンの一覧を伴う reference implementation であって、サポート付きのプロダクトではありません。[eval スイート](./evals/) は書いてありますが、一度も走らせていません。`claude plugin eval` が early access で、これを作ったアカウントでは有効になっていないためです。走らせたことのないスイートを「グリーンです」と言うのは、このハーネスが防ごうとしている未検証の主張そのものになってしまいます。
+**v0.4.2、pre-release です。** 検証済みバージョンの一覧を伴う reference implementation であって、サポート付きのプロダクトではありません。[eval スイート](./evals/) は書いてありますが、まだ走らせていません。2026-09-05 時点で、このアカウントの `claude plugin eval` はヘルプこそ表示するものの、どう呼び出しても「in early access」と出力して exit 0 で終わり、ケースを1つも実行しません。走らせたことのないスイートを「グリーンです」と言うのは、このハーネスが防ごうとしている未検証の主張そのものであり、その exit 0 を合格と読むのも同じことです。
 
-検証環境: Claude Code 2.1.238 · Antigravity CLI 1.1.17 · Antigravity IDE 2.3.1 · macOS。
+検証環境: Claude Code 2.1.252（2026-09-05）· Antigravity CLI 1.1.17 と IDE 2.3.1（最終確認 2026-08-21、以後再実行なし）· macOS。
 
-**検証できていること:** ゲートとガードの54通りの挙動を、モデルを介さず決定的にテストしています（[`scripts/test-gates.sh`](./scripts/test-gates.sh)）。Antigravity の `Stop` フックが実際にブロックすることも、ドキュメントを読んだのではなく動かして確認しました（[`docs/verified.md`](./docs/verified.md)）。2つのプラグインマニフェスト、ルールブックのハッシュ、機密混入チェックは、すべて CI で実行しています。
+**検証できていること:** ゲートとガードの54通りの挙動を、モデルを介さず決定的にテストしています（[`scripts/test-gates.sh`](./scripts/test-gates.sh)）。Antigravity の `Stop` フックが実際にブロックすることも、ドキュメントを読んだのではなく動かして確認しました（[`docs/verified.md`](./docs/verified.md)）。2つのプラグインマニフェスト、ルールブックのハッシュ、機密混入チェックは、すべて CI で実行しています。すべての skill を少なくとも一度は実行しました。inception の連鎖と `init` はこのリポジトリ自身、または実プロジェクトの使い捨てクローンに対して、`spec`・`clarify`・`implement`・`worklog` は #17 以降のすべての Issue で走らせており、各実行で見つかったことは [`docs/verified.md`](./docs/verified.md) に記録し、Issue として起票しています。reviewer は #17 以降のすべての pull request をサブエージェントとしてレビューしており、その receipt は `.specs/` の下にあります。
 
-**検証できていないこと:** skill 自体を通しで実行したことはなく、reviewer がすべての diff をレビューしたことはまだありません。
+**検証できていないこと:** それらの実行で作者に投げた質問はすべて推奨案どおりに答えられたため、skill が動くことは示せても、答えを持たない人から判断を引き出せるかは示せていません。eval スイート、`init` の greenfield とアップグレードの経路、そして 2026-08-21 以降の Antigravity の行も未検証です。
 
 ## ライセンス
 

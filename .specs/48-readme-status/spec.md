@@ -1,6 +1,6 @@
 # Spec: The README Status section describes a repository that no longer exists
 
-- Slug: 48-readme-status Issue: 48 Type: bug Status: approved
+- Slug: 48-readme-status Issue: 48 Type: bug Status: done
 - Author: m0m0i Date: 2026-09-05
 
 ## 1. Requirements (WHAT / WHY)
@@ -10,12 +10,12 @@
 - Actual: the section was written at 0.2.3 and every sentence in it aged. The skills have each run at least once (#55, #56, #58, #77, #76; `docs/verified.md`), the reviewer has reviewed every pull request since #17 as a subagent, and `claude plugin eval` now exists on the account and exits 0 without running.
 - **Root cause:** `check-version-bump.py` exempts the READMEs by design (its docstring), nothing compares a README claim against anything, and the Status section states facts in prose that only a run can refresh. #23's shape on four more facts.
 - Acceptance criteria:
-  - [ ] **AC1:** Both READMEs' Status sections carry the version `plugin.json` carries, demonstrated by grep.
-  - [ ] **AC2:** The "what is not verified" sentence in both READMEs states only what `docs/verified.md` does not support — the interviews' independence, the eval suite, `init`'s greenfield and upgrade paths, the Antigravity rows since 2026-08-21 — and the "what is verified" sentence gains the skill runs and the reviewer's receipts; the Japanese section says the same as the English (C-3), and the mistranslation is gone.
-  - [ ] **AC3:** The matrix reads Claude Code 2.1.252 dated 2026-09-05 and keeps Antigravity CLI 1.1.17 and IDE 2.3.1 as last verified 2026-08-21 and not re-run since, in both READMEs and in `docs/verified.md`'s table — clarification 1.
-  - [ ] **AC4:** `docs/layout.md`'s harness-repository picture lists what `docs/` holds at HEAD.
-  - [ ] **AC5:** The eval sentence states the observed behaviour — the command exists, prints "in early access", exits 0 without running a case — and still refuses to read that as a pass.
-  - [ ] **AC6:** `git diff --name-only main` is confined to `README.md`, `README.ja.md`, `docs/layout.md`, `docs/verified.md` and this directory; every `- Validators:` command at exit 0, run after the last write; `check-version-bump.py` reports no shipped file changed.
+  - [x] **AC1:** Both READMEs' Status sections carry the version `plugin.json` carries, demonstrated by grep.
+  - [x] **AC2:** The "what is not verified" sentence in both READMEs states only what `docs/verified.md` does not support — the interviews' independence, the eval suite, `init`'s greenfield and upgrade paths, the Antigravity rows since 2026-08-21 — and the "what is verified" sentence gains the skill runs and the reviewer's receipts; the Japanese section says the same as the English (C-3), and the mistranslation is gone.
+  - [x] **AC3:** The matrix reads Claude Code 2.1.252 dated 2026-09-05 and keeps Antigravity CLI 1.1.17 and IDE 2.3.1 as last verified 2026-08-21 and not re-run since, in both READMEs and in `docs/verified.md`'s table — clarification 1.
+  - [x] **AC4:** `docs/layout.md`'s harness-repository picture lists what `docs/` holds at HEAD.
+  - [x] **AC5:** The eval sentence states the observed behaviour — the command exists, prints "in early access", exits 0 without running a case — and still refuses to read that as a pass.
+  - [x] **AC6:** `git diff --name-only main` is confined to `README.md`, `README.ja.md`, `docs/layout.md`, `docs/verified.md` and this directory; every `- Validators:` command at exit 0, run after the last write; `check-version-bump.py` reports no shipped file changed.
 - Out of scope: a guard comparing the READMEs' version to the manifests, which #48 raises and says may belong with #23; any README section other than Status; `docs/fidelity.md`.
 
 ### Clarifications
@@ -36,4 +36,4 @@ Resolved 2026-09-05.
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
 - [x] T1: record the greps red — the stale version, the two false claims, the mistranslation, the old Claude Code version, the stale `docs/` line — and the checksums.
-- [ ] T2: rewrite; confirm the greps clear and AC1–AC6 hold with the validators run after the last write.
+- [x] T2: rewrite; confirm the greps clear and AC1–AC6 hold with the validators run after the last write.

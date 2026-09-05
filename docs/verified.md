@@ -10,9 +10,9 @@ Last **updated**: 2026-09-05 — this field records the most recent addition, no
 
 | Component | Version |
 | :-- | :-- |
-| Claude Code | 2.1.238 |
-| Antigravity CLI (`agy`) | 1.1.17 |
-| Antigravity IDE | 2.3.1 |
+| Claude Code | 2.1.252 — the 2026-09-05 sections below; the 2026-08-21 rows were run at 2.1.238 |
+| Antigravity CLI (`agy`) | 1.1.17 — verified 2026-08-21, not re-run since |
+| Antigravity IDE | 2.3.1 — verified 2026-08-21, not re-run since |
 | Platform | macOS (darwin, arm64) |
 
 ## Claude Code subagent invocation
