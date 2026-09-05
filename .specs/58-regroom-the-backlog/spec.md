@@ -1,6 +1,6 @@
 # Spec: Run backlog on this repo, re-grooming BACKLOG.md against the tracker and the epics
 
-- Slug: 58-regroom-the-backlog Issue: 58 Type: chore Status: approved
+- Slug: 58-regroom-the-backlog Issue: 58 Type: chore Status: done
 - Author: m0m0i Date: 2026-09-05
 
 ## 1. Requirements (WHAT / WHY)
@@ -17,14 +17,14 @@
 - Why now: #56 is merged, so `EPICS.md` and `DESIGN.md`'s risk list exist to groom against for the first time; the preamble has been false since #55 (#58); ten of the twenty open issues are ordered nowhere and two ordered rows are closed; and `sprint` is next in the queue and reads the top of this list.
 
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN the grooming completes, the sorted set of issue numbers in the table's Item column equals the sorted set from `gh issue list --state open`, each appearing exactly once — except #58 itself, the grooming in flight, which is named in "What changed" rather than ordered — demonstrated by a recorded diff of the two lists; and every row carrying no issue number says so in its Item cell, with those rows listed in `observations.md` for `sprint` to take from. _Amended 2026-09-05, ahead of T2: a backlog row telling the reader to do the grooming they are reading is noise, and a grouped row may carry more than one issue._
-  - [ ] **AC2:** Every row's `Why here` is non-empty and states why the item sits above the row below it or what it unblocks; the `#` column runs 1…N with no gap and no tie.
-  - [ ] **AC3:** The file carries one ordering: no priority column, no tier heading, no second list of the same items. Demonstrated by grep for `priority`, `P0`–`P3`, `critical` as a heading or column, all zero.
-  - [ ] **AC4:** The table has the template's `Epic` column; each cell is an `EPIC-n` that appears verbatim in `docs/EPICS.md`, or `—` for an issue filed after `epics` ran, with those issues listed in `observations.md`.
-  - [ ] **AC5:** The preamble states what is true at HEAD — which inception documents exist, that `epics` has run — and keeps naming the inversion: the tracker held the plan before the backlog did.
-  - [ ] **AC6:** `git diff --stat main` confined to the three paths above; validators at exit 0; open-issue count unchanged, both recorded.
-  - [ ] **AC7:** `observations.md` records what step 1 — *"Start from the walking skeleton — it is always first"* — did against an `EPICS.md` that says no epic is one, and records the two sections the skill's rules and red flags name that its template does not define, "Next up" and "Not ready".
-  - [ ] **AC8:** `docs/verified.md` gains rows for this run, including every seam not exercised and every statement the run falsified — starting with `EPICS.md:4` and `verified.md`'s existing row, both of which say nothing cites the epic ids, which the `Epic` column will.
+  - [x] **AC1:** WHEN the grooming completes, the sorted set of issue numbers in the table's Item column equals the sorted set from `gh issue list --state open`, each appearing exactly once — except #58 itself, the grooming in flight, which is named in "What changed" rather than ordered — demonstrated by a recorded diff of the two lists; and every row carrying no issue number says so in its Item cell, with those rows listed in `observations.md` for `sprint` to take from. _Amended 2026-09-05, ahead of T2: a backlog row telling the reader to do the grooming they are reading is noise, and a grouped row may carry more than one issue._
+  - [x] **AC2:** Every row's `Why here` is non-empty and states why the item sits above the row below it or what it unblocks; the `#` column runs 1…N with no gap and no tie.
+  - [x] **AC3:** The file carries one ordering: no priority column, no tier heading, no second list of the same items. Demonstrated by grep for `priority`, `P0`–`P3`, `critical` as a heading or column, all zero.
+  - [x] **AC4:** The table has the template's `Epic` column; each cell is an `EPIC-n` that appears verbatim in `docs/EPICS.md`, or `—` for an issue filed after `epics` ran, with those issues listed in `observations.md`.
+  - [x] **AC5:** The preamble states what is true at HEAD — which inception documents exist, that `epics` has run — and keeps naming the inversion: the tracker held the plan before the backlog did.
+  - [x] **AC6:** `git diff --stat main` confined to the three paths above; validators at exit 0; open-issue count unchanged, both recorded.
+  - [x] **AC7:** `observations.md` records what step 1 — *"Start from the walking skeleton — it is always first"* — did against an `EPICS.md` that says no epic is one, and records the two sections the skill's rules and red flags name that its template does not define, "Next up" and "Not ready".
+  - [x] **AC8:** `docs/verified.md` gains rows for this run, including every seam not exercised and every statement the run falsified — starting with `EPICS.md:4` and `verified.md`'s existing row, both of which say nothing cites the epic ids, which the `Epic` column will.
 
 - Out of scope: creating issues (`sprint`, next); editing `EPICS.md` (`epics`); fixing anything found in the skill; the README.
 
@@ -54,4 +54,4 @@ Resolved 2026-09-05.
 - [x] T2: run `backlog`; put the draft order to the author; assert AC1–AC5 and AC7; record.
 - [x] T3: reread `EPICS.md:4`, `verified.md`'s "nothing cites" row, `README*`, `docs/layout.md` and `.steering/product.md` for statements the run falsified; record each.
 - [x] T4: write the `docs/verified.md` rows (AC8).
-- [ ] T5: re-verify the baseline; assert AC6; list the defects found and file them.
+- [x] T5: re-verify the baseline; assert AC6; list the defects found and file them.

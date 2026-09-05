@@ -104,3 +104,11 @@ Run through the Skill tool. **One pause, the whole order, accepted as drafted wi
 | `README.md:56-58`, `README.ja.md:73-75` | `backlog` creates nothing; one item usually becomes several issues | still true — no issue created; rows 1, 2, 4 and 8 are multi-issue | nothing |
 | `docs/layout.md:16` | *"product backlog, ordered, coarse"* | truer than before — five rows group issues; twelve of fourteen are still issue-shaped | nothing |
 | `skills/backlog/SKILL.md:41` | #61's LOW: this sentence would re-introduce hand-wrapped prose at the next grooming | did not fire — no prose line in the new file is broken at a column | nothing; recorded because the LOW predicted it |
+
+## T5 — re-verification
+
+`baseline.sh` re-run unchanged at the final tree.
+
+**AC6 verified.** Nine validators at exit 0 with the same lines as T1; `test-gates.sh` 54/0. Open issues 20, the same twenty numbers as T1 — the skill created none. `git diff --name-only main` is confined to `docs/BACKLOG.md`, `docs/verified.md`, and `.specs/58-regroom-the-backlog/`. Checksums: every file in the baseline list unchanged except `BACKLOG.md` and `verified.md`.
+
+**Filed after the run, by the operator, so the open count moved 20 → 21 after AC6 was recorded:** #74 — `backlog` names a walking skeleton that may not exist, two sections its template does not define, and a `Blocks` form that collides with issue numbers (AC7's three observations). Not filed: `EPICS.md:4` belongs to row 13's `epics` re-run, which `sprint` will make an issue.
