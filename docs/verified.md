@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-08-30 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
+Last **updated**: 2026-09-05 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
 
 **The version table below was not re-run for the 2026-08-30 addition.** The inception-chain section exercised skills, which are Markdown read by the harness rather than an integration with it, so it produced no evidence about the Claude Code or Antigravity versions named here. It records its own provenance instead: gate-sdd 0.4.0, this repository. Re-dating the table on the strength of a run that did not test it is the failure this file exists to prevent — see #48, which asks that question directly and still needs an answer from a run that does.
 
@@ -158,6 +158,23 @@ The row above reading *"Nothing cites a capability or epic id"* is half false af
 
 Neither skill paused. `contract` derives everything from the repository, and `design-doc`'s one open judgment — which decisions were contested — was made by the operator and is corrected at pull-request review, not in an interview. So this half says nothing about eliciting decisions, and the caveat above stands unchanged.
 
+## The inception chain, third — backlog
+
+**Run on 2026-09-05, gate-sdd 0.4.2, Claude Code 2.1.252, against this repository**, the first grooming with epics to read. One pause — the whole order — accepted as drafted with zero changes, so the interview caveat stands as for the two halves above.
+
+Full working record: `.specs/58-regroom-the-backlog/observations.md`. Spec: #58.
+
+| Question | Observed |
+| :-- | :-- |
+| What does "start from the walking skeleton — it is always first" do when there is none? | **binds nothing.** `EPICS.md` records that no epic is one and names EPIC-1 to lead; the grooming led with the test-queue runs instead, by decision. The skill has no instruction for this case. |
+| Do "Next up" and "Not ready" exist? | **not in the template.** The rules and red flags name both; the template defines neither, so a consumer following it cannot trip those red flags. |
+| Does the `Blocks` column's `#3, #7` form survive a repository whose items are issues? | **no.** It reads as issue numbers. Written as `row n`. |
+| Can the backlog carry work that is not an issue yet? | **yes, two rows** — the `sprint` and `init` runs, and the `epics` re-run. The other twelve rows are issues or pairs of issues; the inversion the file's preamble names is reduced, not undone. |
+| Did the epics reach the backlog? | **yes.** Every row cites an `EPIC-n` or `—`; seven issues postdate `epics` and two of them sit in rows under an epic that does not list them, recorded for the re-run. |
+| Did running the skill falsify anything already written down? | **yes.** `EPICS.md:4` and the row above reading *"Nothing cites a capability or epic id"* — the `Epic` column cites epics, as `DESIGN.md` cites capabilities. Still in prose, still no check. |
+| Did #61's predicted regression fire? | **no.** The template sentence at `skills/backlog/SKILL.md:41` did not re-introduce a hand-wrapped line. |
+| Did the gates and guards survive the run? | **yes.** Nine validators at exit 0 and 54/0 before and after; nothing but `BACKLOG.md`, this file and the spec directory changed; no issue created. |
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
@@ -172,3 +189,4 @@ Neither skill paused. `contract` derives everything from the repository, and `de
 - [ ] `--update` on a reviewer that has a lock and a changed rulebook — the shipped rulebooks were untouched, so only the unchanged path ran.
 - [ ] `contract` and `design-doc` on a second run, against a `CONTRACT.md` and a `structure.md` that already exist and disagree with the repository.
 - [ ] Whether a reviewer reaches `docs/decisions/` through `structure.md` when its rulebook and the repository conflict.
+- [ ] `backlog` on a project with a walking skeleton to start from, and a grooming that reorders against the author's stated preference — every call here was accepted.
