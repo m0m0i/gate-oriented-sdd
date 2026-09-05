@@ -128,6 +128,36 @@ Both were found by the reviewer, not by the run. That is worth recording as plai
 
 So: this run tests the skills' mechanics and the seams between them. It says nothing about whether they elicit good product decisions from someone who does not already have the answers.
 
+## The inception chain, second half — contract, design-doc
+
+**Run on 2026-09-05, gate-sdd 0.4.2, Claude Code 2.1.252, against this repository.** Second half of the run above, same protocol, and the same shaping fact: not a cold start. What this half could test that the first could not is each skill meeting state it did not write — a hand-authored rulebook of sixteen rules, and a live `structure.md`. Neither skill put a single question to the author; both are derivation from the repository, so the interview caveat below is not weakened by this run, it is simply absent from it.
+
+Full working record: `.specs/56-run-contract-design-doc/observations.md`. Spec: #56.
+
+| Question | Observed |
+| :-- | :-- |
+| Does `contract` read the rulebook it will write into? | **not by instruction.** Step 1 lists `tech.md`, linter and formatter config, the code, the last fifty commits and review comments; the existing rulebook is not on the list. It was read anyway, and the result was a merge by appending — but the merge came from the operator, as `northstar`'s `product.md` merge did above. |
+| What does step 4 do to a rulebook it did not author? | **appended two rules, changed nothing.** All sixteen ids at their severities, `+3/−0` lines. The two new rules continued the existing `C-` series; the template's `PFX-001` form was not adopted and the skill gives no rule for which wins. |
+| What does "re-pin the lock" do on a reviewer with no lock? | **prints success and exits 0.** `./assets/check-locks.py --update`, run after the rulebook edit: `check-locks: 6 pinned file(s) match their locks in .claude/agents, agents`, exit 0, no lock created, the edited rulebook never hashed. #19 live — and since #16 the message names `.claude/agents` as a directory it verified, which it did not. A consumer following the step gets a green line and an unpinned rulebook. |
+| Would step 6's sentence have been true? | **no.** *"Record… that the rulebook is generated from"* the contract. Here the contract was compiled from the rulebook. Written the true way round, deviation recorded; this was decided before the run (spec clarification 2), not during it. |
+| Does the tier table fit a project with no linter? | **partly.** The Mechanical tier's stated home is "linter, formatter, type checker config"; here it is nine validators, CI, a `PostToolUse` hook and a test case. Tiered as Mechanical with the real enforcer named. Step 5 had nothing to move. |
+| Can three tiers express this repo's third layer? | **no.** Process enforced by a skill has no tier but Narrative, whose definition is "nothing enforces it". |
+| Does the contract's table create a fact stated twice? | **yes.** Every Judgment row indexes a rulebook rule; the lock pins the rulebook, not `CONTRACT.md`, and nothing compares them. |
+| Does `design-doc` say what to do with a `structure.md` that exists? | **no.** Step 5 says "write". It was reconciled, `+5/−2`, and the reconciliation found the `docs/` row had been false since #55 through two runs and a review. |
+| Does the reviewer's reconciliation clause escalate to an ADR? | **no.** `grep ADR` is 0 across the reviewer file, the shared contract and the rulebook. The clause says "a written decision". The reviewer can now reach `docs/decisions/` through `structure.md`, which its load order reads first; whether it does is unobserved. |
+| Does the ADR template fit a decision recorded after it was taken? | **no.** One `Date:` field; every ADR here carries two. Greenfield does not have this problem, as with `epics`' walking skeleton. |
+| Did either skill create a second id vocabulary? | **one did.** `contract`'s table forced `M-`/`N-` ids on Mechanical and Narrative rows nothing cites. `design-doc`'s seam ids are conditional on multi-repo and were not created. |
+| Did running the chain falsify anything already written down? | **yes, and found five things already false.** `DESIGN.md` cites every capability id, so `product.md` and `PRD.md` no longer truly say nothing does; and the reread found both READMEs claiming no reviewer has reviewed a real diff, the Japanese README mistranslating that line, two files citing closed #16 as the reason the dogfood lock is absent, and `layout.md`'s picture of `docs/`. Table with owners: `observations.md`, T4. |
+| Did the gates and guards survive the run? | **yes.** Nine validators at exit 0 and `test-gates.sh` at 54/0 before and after; all five anchor lines byte-identical; the three shipped locks byte-identical; nothing under a shipped path changed, so no version bump. |
+
+### What the first half's record gets wrong now
+
+The row above reading *"Nothing cites a capability or epic id"* is half false after this run: `DESIGN.md` cites the capabilities in prose. *No mechanical consumer* is still the true statement, for both.
+
+### What this run does not support
+
+Neither skill paused. `contract` derives everything from the repository, and `design-doc`'s one open judgment — which decisions were contested — was made by the operator and is corrected at pull-request review, not in an interview. So this half says nothing about eliciting decisions, and the caveat above stands unchanged.
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
@@ -139,3 +169,6 @@ So: this run tests the skills' mechanics and the seams between them. It says not
 - [ ] The cold interview: `northstar`, `prd`, `epics` answered by someone without the repository's context.
 - [ ] `init` on a greenfield repo, including detection and the five-question interview.
 - [ ] Whether a non-default `- Docs:` path reaches every inception skill, or any of them hardcode `docs/`.
+- [ ] `--update` on a reviewer that has a lock and a changed rulebook — the shipped rulebooks were untouched, so only the unchanged path ran.
+- [ ] `contract` and `design-doc` on a second run, against a `CONTRACT.md` and a `structure.md` that already exist and disagree with the repository.
+- [ ] Whether a reviewer reaches `docs/decisions/` through `structure.md` when its rulebook and the repository conflict.
