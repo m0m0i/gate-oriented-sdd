@@ -5,7 +5,7 @@
 
 ## 1. Requirements (WHAT / WHY)
 
-- What changes: three sentences are restated so each says what is true at HEAD — `.steering/product.md:27`, `docs/PRD.md:6`, `docs/EPICS.md:4`. `DESIGN.md` cites every `CAP-n` in its Serves column and `BACKLOG.md` cites every `EPIC-n` in its Epic column, both in prose; no check requires either id to exist. The fourth place the issue names, the `docs/verified.md` row at `:114`, is already corrected by two later sections (`:155`, `:174`) and is left alone: that file corrects by a later note, and the notes exist.
+- What changes: three sentences are restated so each says what is true at HEAD — `.steering/product.md:27`, `docs/PRD.md:6`, `docs/EPICS.md:4`. `DESIGN.md` cites every capability id in its Serves column and `BACKLOG.md` cites every epic id in its Epic column, both in prose; no check requires either id to exist. The fourth place the issue names, the `docs/verified.md` row at `:114`, is already corrected by two later sections (`:155`, `:174`) and is left alone: that file corrects by a later note, and the notes exist.
 
 - **What must NOT change:**
   - `- Owns:` in `product.md` and the four machine-read lines in `tech.md`; `check-steering-anchors.sh` at 5 of 5.
