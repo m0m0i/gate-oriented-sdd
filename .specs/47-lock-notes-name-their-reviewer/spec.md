@@ -1,6 +1,6 @@
 # Spec: Each reviewer's lock note names the reviewer it grounds
 
-- Slug: 47-lock-notes-name-their-reviewer Issue: 47 Type: bug Status: approved
+- Slug: 47-lock-notes-name-their-reviewer Issue: 47 Type: bug Status: done
 - Author: m0m0i Date: 2026-09-05
 
 ## 1. Requirements (WHAT / WHY)
@@ -10,10 +10,10 @@
 - Actual: two notes were copied from the TypeScript lock and the name was never changed. `check-locks.py` does not read `note`, so nothing noticed.
 - **Root cause:** the locks were authored by copying, and the one field that differs per reviewer is free text no guard inspects.
 - Acceptance criteria:
-  - [ ] **AC1:** The grep gives `python-reviewer`, `ts-reviewer`, `dart-flutter-reviewer`, each once, in its own lock.
-  - [ ] **AC2:** `check-locks.py` still reports 6 pinned files matching; the `vendored`, `derived`, `policy` and `version` fields of all three locks are byte-identical to `main`'s — only `note` changes.
-  - [ ] **AC3:** Both manifests move 0.4.2 → 0.4.3 and agree; `check-version-bump.py` against `main` passes; every other `- Validators:` command at exit 0 after the last write.
-  - [ ] **AC4:** `git diff --name-only main` is confined to the two locks, the two manifests, and this directory.
+  - [x] **AC1:** The grep gives `python-reviewer`, `ts-reviewer`, `dart-flutter-reviewer`, each once, in its own lock.
+  - [x] **AC2:** `check-locks.py` still reports 6 pinned files matching; the `vendored`, `derived`, `policy` and `version` fields of all three locks are byte-identical to `main`'s — only `note` changes.
+  - [x] **AC3:** Both manifests move 0.4.2 → 0.4.3 and agree; `check-version-bump.py` against `main` passes; every other `- Validators:` command at exit 0 after the last write.
+  - [x] **AC4:** `git diff --name-only main` is confined to the two locks, the two manifests, and this directory.
 - Out of scope: a guard that reads `note` (`rules-lock.json` notes are prose; #23's family); the `generatedAt` field, left as it is because nothing regenerated the lock.
 
 ### Clarifications
@@ -32,4 +32,4 @@ None needed — requirements were unambiguous.
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
 - [x] T1: record the grep red and the locks' checksums.
-- [ ] T2: fix the two notes, bump both manifests, assert AC1–AC4 with the validators run last.
+- [x] T2: fix the two notes, bump both manifests, assert AC1–AC4 with the validators run last.

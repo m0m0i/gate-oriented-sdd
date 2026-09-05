@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "note": "Grounding for ts-reviewer. Two kinds, deliberately not conflated. 'vendored' files are upstream text reproduced byte-for-byte: their hash must equal upstream's, and a mismatch means drift. 'derived' files are rules written for this harness that cite first-party sources: their hash pins OUR text, and the sources are pinned by version or checked-on date. Upstream moving does not make a derived rule wrong \u2014 it makes it unverified. Hashing live documentation HTML was considered and rejected: it changes for navigation and analytics edits, and an alarm that fires for non-reasons gets switched off.",
+  "note": "Grounding for python-reviewer. Two kinds, deliberately not conflated. 'vendored' files are upstream text reproduced byte-for-byte: their hash must equal upstream's, and a mismatch means drift. 'derived' files are rules written for this harness that cite first-party sources: their hash pins OUR text, and the sources are pinned by version or checked-on date. Upstream moving does not make a derived rule wrong \u2014 it makes it unverified. Hashing live documentation HTML was considered and rejected: it changes for navigation and analytics edits, and an alarm that fires for non-reasons gets switched off.",
   "vendored": {},
   "derived": {
     "types-and-style": {
