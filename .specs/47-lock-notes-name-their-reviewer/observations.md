@@ -33,3 +33,5 @@
 - `./scripts/test-gates.sh` → exit 0 — `test-gates: 54 passed, 0 failed`
 - `check-version-bump.py <main>` → exit 0 — `check-version-bump: no shipped file changed`
 - `claude plugin validate . --strict` → exit 0 — `✔ Validation passed`
+
+**Correction.** The `check-version-bump.py` line above ran before the T2 commit existed, so it compared `main` to the same tree and reported no shipped file changed. At the commit: exit 0 — `check-version-bump: 4 shipped file(s) changed, version 0.4.2 -> 0.4.3`.
