@@ -4,15 +4,15 @@ Both target harnesses move fast, so nothing in this repo is designed against doc
 
 Last **updated**: 2026-09-05 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
 
-**The version table below was not re-run for the 2026-08-30 addition.** The inception-chain section exercised skills, which are Markdown read by the harness rather than an integration with it, so it produced no evidence about the Claude Code or Antigravity versions named here. It records its own provenance instead: gate-sdd 0.4.0, this repository. Re-dating the table on the strength of a run that did not test it is the failure this file exists to prevent — see #48, which asks that question directly and still needs an answer from a run that does.
+The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The two Antigravity rows were not re-run and say so. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
 ## Versions tested against
 
 | Component | Version |
 | :-- | :-- |
-| Claude Code | 2.1.238 |
-| Antigravity CLI (`agy`) | 1.1.17 |
-| Antigravity IDE | 2.3.1 |
+| Claude Code | 2.1.252 — the 2026-09-05 sections below; the 2026-08-21 rows were run at 2.1.238 |
+| Antigravity CLI (`agy`) | 1.1.17 — verified 2026-08-21, not re-run since |
+| Antigravity IDE | 2.3.1 — verified 2026-08-21, not re-run since |
 | Platform | macOS (darwin, arm64) |
 
 ## Claude Code subagent invocation

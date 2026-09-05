@@ -96,5 +96,7 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
 ├── assets/issue-templates/        ← copied into the project's .github/
 ├── scripts/                       ← the CI guards
 ├── evals/                         ← authored, not yet run
-└── docs/                          ← verified.md, fidelity.md, skill-anatomy.md, layout.md
+└── docs/                          ← verified.md, fidelity.md, skill-anatomy.md, layout.md,
+                                     and the inception documents this repo wrote about itself:
+                                     NORTH_STAR, PRD, EPICS, BACKLOG, CONTRACT, DESIGN, decisions/
 ```
