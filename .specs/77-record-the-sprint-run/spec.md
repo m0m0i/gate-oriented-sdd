@@ -37,6 +37,6 @@ None needed — requirements were unambiguous. The notes were taken during the r
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: commit the run notes as `observations.md`, verbatim, with the before and after tracker state.
+- [x] T1: commit the run notes as `observations.md`, verbatim, with the before and after tracker state.
 - [ ] T2: write the `docs/verified.md` section (AC1, AC2).
 - [ ] T3: check AC3; file the AC4 issue; record its number.
