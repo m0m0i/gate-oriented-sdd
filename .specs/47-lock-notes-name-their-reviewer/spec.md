@@ -31,5 +31,5 @@ None needed — requirements were unambiguous.
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: record the grep red and the locks' checksums.
+- [x] T1: record the grep red and the locks' checksums.
 - [ ] T2: fix the two notes, bump both manifests, assert AC1–AC4 with the validators run last.
