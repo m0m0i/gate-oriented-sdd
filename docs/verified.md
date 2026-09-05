@@ -175,6 +175,29 @@ Full working record: `.specs/58-regroom-the-backlog/observations.md`. Spec: #58.
 | Did #61's predicted regression fire? | **no.** The template sentence at `skills/backlog/SKILL.md:41` did not re-introduce a hand-wrapped line. |
 | Did the gates and guards survive the run? | **yes.** Nine validators at exit 0 and 54/0 before and after; nothing but `BACKLOG.md`, this file and the spec directory changed; no issue created. |
 
+## The inception chain, fourth — sprint
+
+**Run on 2026-09-05, gate-sdd 0.4.2, Claude Code 2.1.252, against `docs/BACKLOG.md` rows 1 and 2**, the first `sprint` run on this repository. `sprint` writes no file, so this section is its only record; the notes are `.specs/77-record-the-sprint-run/observations.md`. Spec: #77.
+
+Two decisions were the author's, made before the run: `sprint` ran directly rather than through an issue of its own, because issues are what it produces; and the iteration was rows 1 and 2, with row 13 left in the backlog because taking it skips rows 3–12.
+
+| Question | Observed |
+| :-- | :-- |
+| What did "take from the top" do when the top row is the sprint run itself? | **decomposed its own row.** Row 1 became #77 (record this run) and #76 (the `init` run). The skill has no sentence for the self-reference, and nothing broke. |
+| How did rows 1 and 2 decompose? | **two new, one new plus three re-scoped.** Row 1 (~2 issues) → #76, #77. Row 2 (~3 issues) → #78 new, and #48, #72, #47 already one-PR sized, so the work there was scoping by comment rather than splitting. Open issues 20 → 23; the before list is the twenty numbers at the top of `observations.md`, kept there rather than here because a list in a cell is noise and the after list is this row. |
+| Can the tracker apply an issue template non-interactively? | **no.** `gh issue create` cannot combine a template's body with `--body-file`; the chore shape was reproduced by hand from `.github/ISSUE_TEMPLATE/chore.md`. A CLI-driven `sprint` does the same or produces an untemplated body. |
+| Do the type and label vocabularies agree? | **no.** Types are `feature`, `bug`, `chore`; labels are `enhancement`, `bug`, `task`. The mapping lives only in each template's `labels:` line, and `spec` has read `task` as `chore` on #55, #56, #58 by convention with no sentence stating it. |
+| What did step 6's milestone amount to? | **a label with a description.** GitHub has no sprint container; milestone 1 was created by API and six issues assigned one at a time. Nothing hangs off it, as the skill says. |
+| What was left out, and was it said? | **row 13 and rows 3–12, and yes.** Row 3 (#26) is displaced again by the grooming's decision, not by selection here. The README-version guard #48 raises belongs with #23, row 10. |
+| Did a red flag fire? | **one, inverted.** "Every issue is a feature" — every issue was a chore, because the iteration is observation work. Not a defect. |
+| Did running the skill falsify anything already written down? | **yes, by construction.** `BACKLOG.md` row 1 says *no issue yet* for work that is now #76 and #77, and row 2 omits #78. `sprint` writes no file and `backlog` grooms occasionally, so the backlog is stale from the moment `sprint` runs until the next grooming, and neither skill says so. Filed after this record landed as #79. |
+| Did `BACKLOG.md`'s own `sprint` trigger fire? | **partly.** Row 1 was a plan and decomposed into two issues; row 2 was three existing issues and was scoped, not split. The next grooming's fired-triggers section takes it from here. |
+| Did the gates and guards survive the run? | **yes.** Nine validators at exit 0 and 54/0; nothing but this file and the spec directory changed in the repository, while the tracker gained three issues, one scope comment and one milestone. |
+
+### What this run does not support
+
+A backlog item that decomposes into different types, "take from the top" against an author who wants a lower row, and unplanned work labelled mid-iteration — none arose.
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
@@ -190,3 +213,4 @@ Full working record: `.specs/58-regroom-the-backlog/observations.md`. Spec: #58.
 - [ ] `contract` and `design-doc` on a second run, against a `CONTRACT.md` and a `structure.md` that already exist and disagree with the repository.
 - [ ] Whether a reviewer reaches `docs/decisions/` through `structure.md` when its rulebook and the repository conflict.
 - [ ] `backlog` on a project with a walking skeleton to start from, and a grooming that reorders against the author's stated preference — every call here was accepted.
+- [ ] `sprint` on a backlog item that decomposes into a feature and a chore, and on an iteration with unplanned work to label.
