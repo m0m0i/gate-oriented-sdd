@@ -127,3 +127,30 @@ Run through the Skill tool, plugin 0.4.2, Claude Code 2.1.252. **Zero questions 
 
 - `--update` on a reviewer that **has** a lock and a changed rulebook. The shipped rulebooks were not touched, so the rewrite path ran against unchanged files and left them byte-identical — a useful observation, but not the re-pin path.
 - What `contract` does on a second run, against a `CONTRACT.md` that already exists. The skill has no vocabulary for that either.
+
+## T3 — `design-doc`
+
+Run through the Skill tool. **Zero questions were put to the author** here too. The one judgment the skill leaves open — which decisions were genuinely contested — was the operator's, and it is corrected at PR review rather than in an interview, which is the weaker of the two.
+
+**AC6 verified.** `docs/DESIGN.md`, and six ADRs under `docs/decisions/`, each with `Status:` and the four sections, numbered 1–6. Zero `ADR-` references on any remote branch and no open pull requests at the time of numbering.
+
+**AC7: none.** `grep -c ADR` is 0 in `gate-sdd-reviewer.md`, `reviewer-contract.md`, and the rulebook. The skill says *"the reviewer's reconciliation clause escalates to an ADR"*; the shipped clause escalates to HIGH and says the resolution *"belongs in a written decision"* — the word ADR never appears, and no path names `docs/decisions/`. After this run the reviewer can reach the ADRs through `.steering/structure.md`, which its load order reads first and which now points there. Whether it does is unobserved.
+
+**AC8 verified.** `structure.md` +5/−2: the `docs/` row's contents cell corrected, a `docs/decisions/` row added, a pointer to `DESIGN.md` and a pointer to ADR-6 added. Every baseline heading and row path present; anchors 5 of 5, all five lines byte-identical.
+
+### Seams that did not join
+
+- **Step 5's verb is "write".** *"Write `.steering/structure.md` from the result."* A literal follower regenerates. What happened was a reconciliation, and the reconciliation found the `docs/` row had been false since #55 added five documents to a directory the row said held three things. Two runs and one review passed over it. The skill has no instruction for a `structure.md` that already exists, which is the same gap `northstar` and `prd` have for `product.md`.
+- **The ADR template has one date, and a decision recorded weeks after it was taken has two.** Every ADR here carries `Date: <decision> — recorded <today>`. Not a defect in the template for a greenfield project, where the two coincide; a defect for the mature project the skill is now being run on, like `epics`' walking skeleton (#55).
+- **Step 2 says draw; the outputs are tables.** The red flag "boxes but no arrows" is answered by a producer → consumer column, not an arrow. The skill's own template has no slot for a diagram, so a table was the honest form; recorded because a consumer reading "draw" may spend effort on a picture nothing consumes.
+- **The seam-id rule is conditional on multi-repo, and this run followed it.** No `SEAM-n` vocabulary was created. `contract`'s template forced `M-`/`N-` ids on rows nothing cites; `design-doc`'s did not. Two skills, two answers to the same question.
+- **Which decisions are contested cannot be checked.** Six ADRs from roughly twelve candidates in `tech.md`, `AGENTS.md`, `CONTRIBUTING.md` and the PRD's out-of-scope list, kept where a rejected alternative and a disliked consequence were both on record. The reviewer can check an ADR's sections; it cannot check that the set is the contested ones and not notes.
+
+### Consequences this run created
+
+- **`.steering/product.md` and `docs/PRD.md` both say nothing cites the capability ids.** `DESIGN.md`'s `Serves` column now cites every one of `CAP-1`…`CAP-7`. That is a citation in prose with no check behind it, so *no mechanical consumer* stays true and *nothing cites* does not. Both files are on this run's must-not-change list; recorded for T4 rather than edited.
+
+### Not exercised
+
+- `design-doc` against a `structure.md` that **contradicts** the design. This one was stale, not wrong.
+- A non-default `- Docs:` path, and ADR supersession — both need a second run or a throwaway.
