@@ -163,7 +163,7 @@ Reread after T3, as its own step. Each row says where the fix belongs; none is f
 | :-- | :-- | :-- | :-- |
 | `docs/BACKLOG.md:12` | *"`docs/` holds none of the inception documents except this one"* | false since #55; now three more documents and a directory | #58 |
 | `README.md:152`, `README.ja.md:153` | *"v0.2.3"* | plugin is 0.4.2 | #48 |
-| `README.md:158`, `README.ja.md:159` | *"the skills themselves have never been executed end to end"* | false since #55 for three skills; five after this run, plus the five the per-issue flow runs on every issue | the README update |
+| `README.md:158`, `README.ja.md:159` | *"the skills themselves have never been executed end to end"* | false since #55 for three skills; five after this run, plus the four the per-issue chain runs on every issue | the README update |
 | `README.md:158` | *"no reviewer has yet reviewed a real diff"* | false since #17; `gate-sdd-reviewer` has reviewed every pull request since, with receipts under `.specs/` | the README update |
 | `README.ja.md:159` | *"reviewer がすべての diff をレビューしたことはまだありません"* | mistranslates the line above as "has not yet reviewed **every** diff" — a different, weaker claim; C-3 | the README update |
 | `.claude/agents/gate-sdd-reviewer.md:43`, `AGENTS.md:71` | the lock is absent because a lock under `.claude/agents/` would stop `check-locks.py` verifying `agents/` — *"That is #16"* | #16 is closed and `check-locks.py` reports `.claude/agents, agents` together (T1); the live reason is #19, which cannot create the lock; ADR-6 records the correct reason | an issue, filed in T6 |
@@ -174,6 +174,12 @@ Reread after T3, as its own step. Each row says where the fix belongs; none is f
 | `CONTRIBUTING.md`, "Six to ten rules per file" | — | still true — `claims-and-prose.md` is at 9 after C-8 and C-9, `gates-and-guards.md` at 9 | nothing |
 
 What the reread was worth: five of the eleven rows are things this run neither created nor set out to observe, and two of those — the reviewer claim and the mistranslation — sit in the sentence that sells the project's honesty.
+
+**Found by the reviewer, not by the reread:** `AGENTS.md`'s dual-target table names the hook wiring as `hooks/hooks.json` and `hooks.json`. Neither file exists; the two real files are `hooks/templates/claude-code.settings.json` and `hooks/templates/antigravity.hooks.json`, as `check-manifests.py` reads them. `DESIGN.md` copied the claim and the reviewer caught it there (MEDIUM, fixed); the source is `AGENTS.md`, outside this run's paths — noted on #72, which already owns a stale paragraph in that file.
+
+## T5 — `docs/verified.md`
+
+**AC9 verified.** Section inserted before "Still to verify", thirteen questions with outcomes including *not exercised* and *unknown*, a subsection for what the first half's record now gets wrong, and the five places AC9 names covered by T4's rows. "Still to verify" gained three items.
 
 ## T6 — re-verification
 
@@ -192,3 +198,50 @@ What the reread was worth: five of the eleven rows are things this run neither c
 - Comments on #22 (capability ids are now cited in prose, still not mechanically) and #58 (the preamble is further from true, and there is a risk list to groom against).
 
 Not filed: the README rows in T4 belong to the README update that follows this branch, and #48 already owns the version.
+
+### T6 capture, verbatim
+
+### Validators (each command on the `- Validators:` line, last output line and exit code)
+
+- `./scripts/check-leakage.sh` → exit 0 — `check-leakage: clean`
+- `./scripts/check-manifests.py` → exit 0 — `check-manifests: both manifests agree`
+- `./scripts/check-markdown-fences.py` → exit 0 — `check-markdown-fences: 10 ```markdown fence(s), no hand-wrapped prose`
+- `./scripts/check-receipt-schema.py` → exit 0 — `check-receipt-schema: 7 field(s) agree across 3 copies`
+- `./scripts/check-skill-contracts.py` → exit 0 — `check-skill-contracts: 9 skill contract(s) present`
+- `./scripts/check-templates.py` → exit 0 — `check-templates: 10 task line(s) across 3 template(s), no split red steps`
+- `./assets/check-steering-anchors.sh` → exit 0 — `check-steering-anchors: 5 of 5 anchor(s) resolved, none unreadable`
+- `./assets/check-locks.py` → exit 0 — `check-locks: 6 pinned file(s) match their locks in .claude/agents, agents`
+- `./scripts/test-gates.sh` → exit 0 — `test-gates: 54 passed, 0 failed`
+
+### Anchors and locks
+
+- `./assets/check-steering-anchors.sh`: check-steering-anchors: 5 of 5 anchor(s) resolved, none unreadable
+- `./assets/check-locks.py`: check-locks: 6 pinned file(s) match their locks in .claude/agents, agents
+- Dogfood lock present: no
+
+### Rule ids and severities
+
+Command: `grep -hE '^- \*\*[GC]-[0-9]+' .claude/agents/gate-sdd-reviewer/rules/*.md | sed -E 's/^- \*\*([GC]-[0-9]+).*(BLOCKER|HIGH|MEDIUM|LOW|INFO)[^A-Z]*$/\1 \2/'`
+
+    C-1 HIGH
+    C-2 MEDIUM
+    C-3 MEDIUM
+    C-4 HIGH
+    C-5 HIGH
+    C-6 HIGH
+    C-7 BLOCKER
+    C-8 MEDIUM
+    C-9 MEDIUM
+    G-1 BLOCKER
+    G-2 BLOCKER
+    G-3 BLOCKER
+    G-4 HIGH
+    G-5 HIGH
+    G-6 HIGH
+    G-7 MEDIUM
+    G-8 HIGH
+    G-9 HIGH
+
+- Count: 18
+
+**Review triage.** MEDIUM: `DESIGN.md` named `hooks/hooks.json` and `hooks.json`, which do not exist — fixed, and the source of the claim recorded above. LOW ×3 — T6 recorded as a summary, no T5 section, "five" for the per-issue chain — all fixed in this section, the one above, and T4. INFO ×2 accepted as recorded: C-8's severity-word reorder before commit is already in T2, and the work-log entry `implement` commits after review lands outside AC10's list by convention, as #55's did.

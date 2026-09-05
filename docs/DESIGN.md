@@ -14,7 +14,7 @@ Three layers, chosen by how much each can be talked out of (`AGENTS.md`): determ
 | Reviewer — agent file, rulebook, lock, shared contract | judgment | `agents/<name>.md`, `agents/<name>/`, `agents/_shared/` | CAP-3 |
 | Skills — one copy read by both harnesses | process | `skills/` | CAP-4, CAP-6 |
 | Steering — three files, five machine-read lines | bridge | `.steering/` in a project | every capability; it is what the layers agree through |
-| Manifests and hook wiring — two of each | packaging | `.claude-plugin/`, `plugin.json`, `hooks/hooks.json`, `hooks.json` | CAP-5 |
+| Manifests and hook wiring — two of each | packaging | `.claude-plugin/plugin.json`, `plugin.json`, `hooks/templates/claude-code.settings.json`, `hooks/templates/antigravity.hooks.json` | CAP-5 |
 | Tracker — issues typed feature, bug, chore | external | the project's tracker, via templates `init` installs | CAP-6 |
 | `evals/` | none yet | `evals/` | no capability. Authored and unrun; kept because CAP-1's claim needs it to run one day |
 
