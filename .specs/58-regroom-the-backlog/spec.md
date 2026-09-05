@@ -50,7 +50,7 @@ Resolved 2026-09-05.
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: capture the baseline and confirm it green.
+- [x] T1: capture the baseline and confirm it green.
 - [ ] T2: run `backlog`; put the draft order to the author; assert AC1–AC5 and AC7; record.
 - [ ] T3: reread `EPICS.md:4`, `verified.md`'s "nothing cites" row, `README*`, `docs/layout.md` and `.steering/product.md` for statements the run falsified; record each.
 - [ ] T4: write the `docs/verified.md` rows (AC8).
