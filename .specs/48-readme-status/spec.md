@@ -35,5 +35,5 @@ Resolved 2026-09-05.
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: record the greps red — the stale version, the two false claims, the mistranslation, the old Claude Code version, the stale `docs/` line — and the checksums.
+- [x] T1: record the greps red — the stale version, the two false claims, the mistranslation, the old Claude Code version, the stale `docs/` line — and the checksums.
 - [ ] T2: rewrite; confirm the greps clear and AC1–AC6 hold with the validators run after the last write.
