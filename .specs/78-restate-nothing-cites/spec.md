@@ -36,5 +36,5 @@ None needed — requirements were unambiguous. Two calls were mine and are recor
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: capture the baseline — anchors, checksums, the grep at three hits.
+- [x] T1: capture the baseline — anchors, checksums, the grep at three hits.
 - [ ] T2: restate the three sentences; assert AC1–AC3.
