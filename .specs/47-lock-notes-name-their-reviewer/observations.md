@@ -38,6 +38,8 @@
 
 ## Consequences to existing documents
 
-- `README.md:152` and `README.ja.md:153` said `v0.4.2`, rewritten under #48 this morning, and would have been false the moment this bump merged — the third bump in a row to leave that line behind, and the reason #48 existed. AC4 was widened in its own commit and both tokens move here. Nothing else states the version outside the manifests and `docs/verified.md`'s dated notes.
+- `README.md:152` and `README.ja.md:153` said `v0.4.2`, rewritten under #48 earlier today, and would have been false the moment this bump merged — the third bump in a row to leave that line behind, and the reason #48 existed. AC4 was widened in its own commit and both tokens move here. Nothing else states the version outside the manifests, `docs/verified.md`'s dated notes, and `docs/DESIGN.md:4`'s "what ships at 0.4.2", which is a dated statement and stays true.
 
 **Review triage.** MEDIUM — no consequences section, and a real consequence: this one. INFO accepted: the bump sits inside the reviewed diff, which `tech.md` describes as landing after review; AC3 put it in T2 so the reviewer could see it, and C-6 prefers that direction.
+
+**Re-run at `fa4dfe4`, after the README tokens moved:** the nine validators again at exit 0, identical output. LOW accepted by applying its one-line fixes here, after the review; the fix touches the record only, not anything reviewed.
