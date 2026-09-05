@@ -13,7 +13,7 @@
   - [x] **AC1:** The grep gives `python-reviewer`, `ts-reviewer`, `dart-flutter-reviewer`, each once, in its own lock.
   - [x] **AC2:** `check-locks.py` still reports 6 pinned files matching; the `vendored`, `derived`, `policy` and `version` fields of all three locks are byte-identical to `main`'s — only `note` changes.
   - [x] **AC3:** Both manifests move 0.4.2 → 0.4.3 and agree; `check-version-bump.py` against `main` passes; every other `- Validators:` command at exit 0 after the last write.
-  - [x] **AC4:** `git diff --name-only main` is confined to the two locks, the two manifests, and this directory.
+  - [ ] **AC4:** `git diff --name-only main` is confined to the two locks, the two manifests, this directory, and the one version token in each README's Status line, which moves with the manifests so the section rewritten under #48 does not lag on the same day. _Amended 2026-09-05, ahead of the fix, on the reviewer's MEDIUM: two earlier bumps left that line behind and #48 was the cost._
 - Out of scope: a guard that reads `note` (`rules-lock.json` notes are prose; #23's family); the `generatedAt` field, left as it is because nothing regenerated the lock.
 
 ### Clarifications
