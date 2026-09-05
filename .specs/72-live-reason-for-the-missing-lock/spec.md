@@ -1,6 +1,6 @@
 # Spec: Give the live reason the dogfood reviewer has no lock, and name the hook files that exist
 
-- Slug: 72-live-reason-for-the-missing-lock Issue: 72 Type: chore Status: approved
+- Slug: 72-live-reason-for-the-missing-lock Issue: 72 Type: chore Status: done
 - Author: m0m0i Date: 2026-09-05
 
 ## 1. Requirements (WHAT / WHY)
@@ -15,9 +15,9 @@
 - Why now: #56's reread found both paragraphs citing a closed issue as a live reason, and its reviewer found the hook paths; sprint put this in the iteration (row 2, milestone 1). A reader who follows the stated reason today finds it false in one command.
 
 - Acceptance criteria:
-  - [ ] **AC1:** `grep -n "That is #16" .claude/agents/gate-sdd-reviewer.md AGENTS.md` returns nothing; both paragraphs name #19 as the reason, say #16 is closed, and point at ADR-6.
-  - [ ] **AC2:** `AGENTS.md`'s Hooks row names `hooks/templates/claude-code.settings.json` and `hooks/templates/antigravity.hooks.json`, the files `check-manifests.py` reads; `grep -c "hooks/hooks.json" AGENTS.md` is 0.
-  - [ ] **AC3:** `git diff --name-only main` is confined to the two files and this directory; validators at exit 0 after the last write; `check-version-bump.py` reports no shipped file changed.
+  - [x] **AC1:** `grep -n "That is #16" .claude/agents/gate-sdd-reviewer.md AGENTS.md` returns nothing; both paragraphs name #19 as the reason, say #16 is closed, and point at ADR-6.
+  - [x] **AC2:** `AGENTS.md`'s Hooks row names `hooks/templates/claude-code.settings.json` and `hooks/templates/antigravity.hooks.json`, the files `check-manifests.py` reads; `grep -c "hooks/hooks.json" AGENTS.md` is 0.
+  - [x] **AC3:** `git diff --name-only main` is confined to the two files and this directory; validators at exit 0 after the last write; `check-version-bump.py` reports no shipped file changed.
 
 - Out of scope: creating the lock (#19); `docs/layout.md`'s placement of the reviewer contract (#82).
 
@@ -37,4 +37,4 @@ None needed — requirements were unambiguous.
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
 - [x] T1: record the greps red.
-- [ ] T2: rewrite; assert AC1–AC3 with the validators run last.
+- [x] T2: rewrite; assert AC1–AC3 with the validators run last.
