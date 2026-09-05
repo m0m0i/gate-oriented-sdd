@@ -175,6 +175,31 @@ Full working record: `.specs/58-regroom-the-backlog/observations.md`. Spec: #58.
 | Did #61's predicted regression fire? | **no.** The template sentence at `skills/backlog/SKILL.md:41` did not re-introduce a hand-wrapped line. |
 | Did the gates and guards survive the run? | **yes.** Nine validators at exit 0 and 54/0 before and after; nothing but `BACKLOG.md`, this file and the spec directory changed; no issue created. |
 
+## `init` on a scratch clone of a real project, and `northstar` after it
+
+**Run on 2026-09-05, gate-sdd 0.4.2, Claude Code 2.1.252**, inside a local clone of a real, unrelated Python project of the maintainer's — `uv`, `ruff`, `mypy`, `pytest`, a `src/` layout — with the harness state it already carried stripped and its own `AGENTS.md`, templates and tool configuration kept. The last skill in the queue that had never run. Nothing was pushed; the clone was discarded. The target is described by toolchain and counts only.
+
+Full working record: `.specs/76-run-init-on-a-scratch-clone/observations.md`. Spec: #76.
+
+| Question | Observed |
+| :-- | :-- |
+| Does `init` run each candidate validator before adopting it? | **yes, when the operator does.** Four commands from the CI workflow, each run on the clean clone, all at exit 0 — the suite is offline by design and passed in seven seconds. The known-failing path at step 1 was not exercised. |
+| Does it detect what is already installed? | **yes, and met a shadow.** The kept `AGENTS.md` still pointed at the stripped `.steering/` and hooks, and at a surviving `docs/CONTRACT.md` citing fifteen rule ids whose rulebook was gone. Detection saw an earlier install, not a blank project. |
+| How many questions, and how were they answered? | **five, all as recommended.** The recommendations came from the project's own kept files, so this was not the cold interview; the record says so. Step 3's separate offer of the optional set was taken up for `northstar`. |
+| Did step 3 merge rather than replace? | **yes, trivially.** The four issue templates were byte-identical to the plugin's assets; `AGENTS.md` was already canonical and needed no diff. Neither merge path was really exercised. |
+| Did `init` arm the gate on a green tree? | **no.** `quality-gate.sh` exited 2 on the tree step 3 had just written: `ruff format --check`, then `ruff check`, named one file — `scripts/check-locks.py`, the copy `init` installs from `assets/`. Import order, a `datetime.UTC` alias, a 101-column line, and formatting. CAP-4's falsifier, produced by the harness's own file; the project's earlier copy of the same script was clean. Fixed in the clone per the author's answer; an issue here. |
+| Do both gates then behave? | **yes.** Quality gate exit 0 on the clean tree; review gate silent on `main`; a probe with an unused import made the fast check exit 1 and the quality gate exit 2 with `F401` on stderr and the JSON line on stdout; the revert returned both to 0. |
+| Is the reviewer spawnable after `init`? | **no, as the skill says.** The reviewer written into the clone is not registered in this session; a first `implement` there would review inline until a restart. The skill's instruction to say so is right, and the operator said so. |
+| Does the shipped reviewer find its contract? | **not by its own text.** `python-reviewer.md` says to read `agents/_shared/reviewer-contract.md`, a path that exists only in the plugin repository; the skill says "next to it", the earlier install had it beside the reviewer, `docs/layout.md` draws it there, and this run put it under `.claude/agents/_shared/` and edited the line. Three placements for one sentence, and a reviewer that cannot find its contract is told by that contract to stop. |
+| Can the stripped path restore a project's compiled rulebook? | **no.** `docs/CONTRACT.md` cites fifteen `MEAS-`/`PRV-`/`ADK-` ids; the reference rulebook carries none, and `init` has no step that reads an existing contract. After this install the contract points at rules the reviewer does not have. The upgrade path, out of scope here, is the one that would have kept them. |
+| Where do the three READMEs come from? | **nowhere the consumer has.** `.specs/README.md`, `.specs/_archive/README.md` and `.work_logs/README.md` are "each stating its contract" with no template in the plugin; they were copied from this repository's own dogfood files. |
+| `northstar` after `init`: did the `Owns:` write-back meet a line it disagrees with? | **no, again.** The derivation from the laws produced the value `init` had written from the interview's first answer minutes earlier; `product.md` byte-identical before and after. On this skill order the write-back can never be the first write, so the collision needs a value the author changes between the two — still unobserved. |
+| Did the gates and guards here survive the run? | **yes.** Nine validators at exit 0 and 54/0 before and after; the branch touches this file and the spec directory only. |
+
+### What this run does not support
+
+The greenfield path — a project with no `AGENTS.md`, no templates and no earlier install — was not run; this target had all three, by the author's choice, because merge is the path consumers hit. The interview was answered by someone who wrote the project, from drafts derived from its files. The upgrade path, `init` on the unstripped clone, is the next thing to run and is named as a candidate for the next sprint.
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
@@ -184,9 +209,11 @@ Full working record: `.specs/58-regroom-the-backlog/observations.md`. Spec: #58.
 - [ ] Antigravity subagent invocation contract, for the reviewer.
 - [ ] `northstar` meeting an `Owns:` line it disagrees with — the collision path #55 could not reach.
 - [ ] The cold interview: `northstar`, `prd`, `epics` answered by someone without the repository's context.
-- [ ] `init` on a greenfield repo, including detection and the five-question interview.
+- [ ] `init` on a greenfield repo — no `AGENTS.md`, no templates, no earlier install. Detection and the five-question interview ran on #76 against a real project with all three; the greenfield path did not.
 - [ ] Whether a non-default `- Docs:` path reaches every inception skill, or any of them hardcode `docs/`.
 - [ ] `--update` on a reviewer that has a lock and a changed rulebook — the shipped rulebooks were untouched, so only the unchanged path ran.
 - [ ] `contract` and `design-doc` on a second run, against a `CONTRACT.md` and a `structure.md` that already exist and disagree with the repository.
 - [ ] Whether a reviewer reaches `docs/decisions/` through `structure.md` when its rulebook and the repository conflict.
 - [ ] `backlog` on a project with a walking skeleton to start from, and a grooming that reorders against the author's stated preference — every call here was accepted.
+- [ ] `init` on a project that already has a harness install — the diff-and-upgrade path — including an existing `CONTRACT.md` whose compiled rules the installed rulebook must keep.
+- [ ] The known-failing validator path at `init` step 1, and the omit and record-as-known-failing answers at step 4.
