@@ -92,3 +92,15 @@ Run through the Skill tool. **One pause, the whole order, accepted as drafted wi
 
 - A grooming that reorders against the author's stated preference. Every call was accepted.
 - `backlog` on a project with a walking skeleton to start from, or with epics that are not already partly built.
+
+## T3 — statements this run falsified, or checked
+
+| Where | Statement | Status | Belongs to |
+| :-- | :-- | :-- | :-- |
+| `docs/EPICS.md:4` | *"nothing cites these ids"* | false — the `Epic` column cites `EPIC-1`…`EPIC-4`. In prose, with no check, so *no mechanical consumer* stays true | row 13's `epics` re-run, which owns that status line; `EPICS.md` is must-not-change here |
+| `docs/verified.md:114` | *"Nothing cites a capability or epic id"* | false for both halves now — `DESIGN.md` cites capabilities, `BACKLOG.md` cites epics | T4's section supersedes it; the row stays, append-only |
+| `docs/verified.md:155` | the citation half is *"half false"* | wholly false now | same |
+| `docs/verified.md:115`, `:122` | `BACKLOG.md`'s preamble is false; #58 records it | true until this branch merges | nothing — historical record |
+| `README.md:56-58`, `README.ja.md:73-75` | `backlog` creates nothing; one item usually becomes several issues | still true — no issue created; rows 1, 2, 4 and 8 are multi-issue | nothing |
+| `docs/layout.md:16` | *"product backlog, ordered, coarse"* | truer than before — five rows group issues; twelve of fourteen are still issue-shaped | nothing |
+| `skills/backlog/SKILL.md:41` | #61's LOW: this sentence would re-introduce hand-wrapped prose at the next grooming | did not fire — no prose line in the new file is broken at a column | nothing; recorded because the LOW predicted it |
