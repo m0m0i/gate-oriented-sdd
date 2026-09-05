@@ -73,3 +73,16 @@ Run through the Skill tool. Four questions to the author — the metric, the lev
 **Step 6, the collision path — not exercised, for the same reason as #55.** The derivation from the laws produced *measurement integrity*, the value `init` had written into `.steering/product.md` minutes earlier from the interview's first answer. Equal, so nothing was written and `product.md` is byte-identical before and after. The path where `northstar` disagrees with an existing `Owns:` line is still unobserved, and this run shows why it is hard to reach: both values come from the same author in the same session, and the skill has no instruction for the case anyway.
 
 Not exercised: `northstar` on a project whose `product.md` has no `Owns:` line at all — `init` always writes one first, so on this skill order the write-back at step 6 can only ever agree, disagree, or be redundant; it is never the first write.
+
+## T4 — re-verification, and what was filed
+
+**AC7 verified.** Nine validators at exit 0, `test-gates.sh` 54/0; `git diff --name-only main` confined to `docs/verified.md` and this directory; `check-leakage.sh` and the private redaction check clean on every commit. The clone was deleted after T3.
+
+**Filed after the run:**
+
+- #81 — `init` arms the gate red with its own file: `assets/check-locks.py` fails `ruff` under a common configuration, and this repository's CI never lints `assets/`.
+- #82 — the shipped reviewers name a contract path that exists only in this repository, and three documents place the contract three ways.
+- #83 — `init` step 3 lists three READMEs the plugin ships no source for.
+- #84 — `init` installs a reference rulebook over a project whose `CONTRACT.md` cites rules it does not carry.
+
+Not filed: the upgrade path on the unstripped clone, which is work rather than a defect and is a candidate for the next sprint; and `AGENTS.md`'s pre-#30 flow line in the target, which only that path could correct.

@@ -1,6 +1,6 @@
 # Spec: Run init on a scratch clone of a real project, and record what it detected, asked, wrote and armed
 
-- Slug: 76-run-init-on-a-scratch-clone Issue: 76 Type: chore Status: approved
+- Slug: 76-run-init-on-a-scratch-clone Issue: 76 Type: chore Status: done
 - Author: m0m0i Date: 2026-09-05
 
 ## 1. Requirements (WHAT / WHY)
@@ -16,14 +16,14 @@
 - Why now: CAP-4's falsifier — a first turn blocked by a failure that predates the user — has never been observed; `init` has run once here as a migration (#17) and never with detection or the interview; and #48's README rewrite waits on this run to say every skill has executed.
 
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN the clone is prepared, `observations.md` SHALL list what was removed and what was kept, with the rule for each; and the clone SHALL have no `.steering/`, `.specs/`, `.work_logs/`, harness hooks or agents, while keeping the project's own `AGENTS.md`, `CLAUDE.md`, issue templates, and tool configuration.
-  - [ ] **AC2:** WHEN step 1 completes, the record SHALL show, per candidate validator the skill proposed, the command, whether the skill ran it before adopting it, its exit code on the clean clone, and what the skill did with a failure — fix, omit, or record as known-failing.
-  - [ ] **AC3:** WHEN step 2 completes, the record SHALL hold every question asked, its recommended answer, the author's answer, and whether the two differed — with the count of questions, which the skill caps at five.
-  - [ ] **AC4:** WHEN step 3 completes, the five machine-read lines SHALL exist in the clone's `.steering/` and `check-steering-anchors.sh` SHALL resolve 5 of 5 there; the record SHALL say which files the skill created, which it merged into, and whether it showed a diff before touching `AGENTS.md` or an existing template.
-  - [ ] **AC5:** WHEN step 4 completes, the record SHALL show `quality-gate.sh` and `review-gate.sh` each run in the clone with exit codes: both silent on the clean tree, the quality gate firing on an introduced lint violation and silent after the revert, and what the skill reported about the reviewer being spawnable.
-  - [ ] **AC6:** THE SYSTEM SHALL record every seam that did not join and every seam not exercised, and whether the skill declared success before or after step 4's proof.
-  - [ ] **AC7:** `git diff --stat main` here SHALL be confined to `docs/verified.md` and this directory; validators at exit 0; `check-leakage.sh` clean on every commit.
-  - [ ] **AC8:** WHEN the run completes, `docs/verified.md` SHALL gain a section for it and its "Still to verify" list SHALL drop the `init` items it now covers and add what this run could not reach.
+  - [x] **AC1:** WHEN the clone is prepared, `observations.md` SHALL list what was removed and what was kept, with the rule for each; and the clone SHALL have no `.steering/`, `.specs/`, `.work_logs/`, harness hooks or agents, while keeping the project's own `AGENTS.md`, `CLAUDE.md`, issue templates, and tool configuration.
+  - [x] **AC2:** WHEN step 1 completes, the record SHALL show, per candidate validator the skill proposed, the command, whether the skill ran it before adopting it, its exit code on the clean clone, and what the skill did with a failure — fix, omit, or record as known-failing.
+  - [x] **AC3:** WHEN step 2 completes, the record SHALL hold every question asked, its recommended answer, the author's answer, and whether the two differed — with the count of questions, which the skill caps at five.
+  - [x] **AC4:** WHEN step 3 completes, the five machine-read lines SHALL exist in the clone's `.steering/` and `check-steering-anchors.sh` SHALL resolve 5 of 5 there; the record SHALL say which files the skill created, which it merged into, and whether it showed a diff before touching `AGENTS.md` or an existing template.
+  - [x] **AC5:** WHEN step 4 completes, the record SHALL show `quality-gate.sh` and `review-gate.sh` each run in the clone with exit codes: both silent on the clean tree, the quality gate firing on an introduced lint violation and silent after the revert, and what the skill reported about the reviewer being spawnable.
+  - [x] **AC6:** THE SYSTEM SHALL record every seam that did not join and every seam not exercised, and whether the skill declared success before or after step 4's proof.
+  - [x] **AC7:** `git diff --stat main` here SHALL be confined to `docs/verified.md` and this directory; validators at exit 0; `check-leakage.sh` clean on every commit.
+  - [x] **AC8:** WHEN the run completes, `docs/verified.md` SHALL gain a section for it and its "Still to verify" list SHALL drop the `init` items it now covers and add what this run could not reach.
 
 - Out of scope: the upgrade path — `init` on the unstripped clone, "diff and upgrade rather than reinstalling" — which is what every existing consumer hits and is a candidate for the next sprint; fixing anything found; pushing the clone anywhere; the README (#48).
 
@@ -51,4 +51,4 @@ Resolved 2026-09-05.
 - [x] T1: clone, strip per clarification 1, and record what was removed and kept with the rule for each (AC1).
 - [x] T2: run `init` in the clone, steps 1–4, recording as it goes; assert AC2–AC6.
 - [x] T3: write the `docs/verified.md` section and update "Still to verify" (AC8).
-- [ ] T4: re-verify this repository (AC7), discard the clone, list the defects found and file them.
+- [x] T4: re-verify this repository (AC7), discard the clone, list the defects found and file them.
