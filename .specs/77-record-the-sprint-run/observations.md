@@ -19,3 +19,5 @@ Notes taken as the skill ran on 2026-09-05, verbatim, with the tracker state bef
 ## T3 — after the record
 
 AC3: the diff is confined to `docs/verified.md` and this directory; nine validators at exit 0, `test-gates.sh` 54/0. AC4: filed #79 — `sprint` makes the backlog stale the moment it runs, and neither skill says who corrects it. Open issues now 24.
+
+**Review triage.** MEDIUM — the section pointed at this file for the issue number; it now says #79. LOW ×3 — a gates-survived row and a row answering `BACKLOG.md`'s own `sprint` trigger added; the before list stays here and the section says why. INFO accepted: three facts (#79's existence, the Claude Code version, `gh`'s template behaviour) are outside the reviewer's allow-list and rest on this record.
