@@ -24,7 +24,7 @@ Summarised from `docs/PRD.md`, which holds the full statement of each — the le
 | CAP-6 | Planning that terminates in something the harness reads | LV-4 |
 | CAP-7 | A gate people leave switched on | LV-2 |
 
-`LV-*` are the levers in `docs/NORTH_STAR.md`. **Nothing cites these ids yet** — no spec is required to name a capability, and no check verifies one exists. Recorded rather than implied; see #22.
+`LV-*` are the levers in `docs/NORTH_STAR.md`. **`docs/DESIGN.md` and `docs/EPICS.md` cite every capability in prose, and nothing consumes them mechanically** — no spec is required to name one, and no check verifies that a cited id exists. Recorded rather than implied; see #22.
 
 ## What it deliberately is not
 
