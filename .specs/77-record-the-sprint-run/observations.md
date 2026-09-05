@@ -15,3 +15,7 @@ Notes taken as the skill ran on 2026-09-05, verbatim, with the tracker state bef
 - Step 6, milestone: GitHub has no sprint container; a milestone created via the API, with a description saying it is a grouping label only. `gh issue edit --milestone` works per issue; no bulk form.
 - Not exercised: a backlog item that decomposes into different types (feature + chore); "take from the top" against an author who wants a lower row; unplanned-work labelling mid-iteration.
 - Consequence: docs/BACKLOG.md row 1 now says "no issue yet" for work that has issues #76 and #77, and row 2 omits #78. The next grooming corrects both; the backlog is not edited by sprint (it writes no file), so the file is stale by construction the moment sprint runs — the same shape as #58's preamble after #55. Candidate issue for the backlog/sprint seam.
+
+## T3 — after the record
+
+AC3: the diff is confined to `docs/verified.md` and this directory; nine validators at exit 0, `test-gates.sh` 54/0. AC4: filed #79 — `sprint` makes the backlog stale the moment it runs, and neither skill says who corrects it. Open issues now 24.

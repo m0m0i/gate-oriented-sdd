@@ -1,6 +1,6 @@
 # Spec: Record what sprint did on the groomed backlog
 
-- Slug: 77-record-the-sprint-run Issue: 77 Type: chore Status: approved
+- Slug: 77-record-the-sprint-run Issue: 77 Type: chore Status: done
 - Author: m0m0i Date: 2026-09-05
 
 ## 1. Requirements (WHAT / WHY)
@@ -15,10 +15,10 @@
 - Why now: the observations exist only in a session transcript, and #48's README rewrite cites `verified.md` for every skill.
 
 - Acceptance criteria:
-  - [ ] **AC1:** `docs/verified.md` gains a section for the run with, at least, rows for: what "take from the top" did with a row that is the sprint run itself; the decomposition of rows 1 and 2 with the before and after open-issue lists; whether the tracker could apply an issue template non-interactively; the type-label vocabulary mismatch; what step 6's milestone amounted to; and what was left out and why.
-  - [ ] **AC2:** The section records every seam not exercised, and every statement the run falsified — starting with `BACKLOG.md` rows 1 and 2, which the run made stale by construction.
-  - [ ] **AC3:** `git diff --stat main` is confined to `docs/verified.md` and `.specs/77-record-the-sprint-run/`; validators at exit 0.
-  - [ ] **AC4:** The defect the run found — `sprint` makes the backlog stale the moment it runs, and neither skill says who corrects it — is filed as an issue after the record lands, and the section names it.
+  - [x] **AC1:** `docs/verified.md` gains a section for the run with, at least, rows for: what "take from the top" did with a row that is the sprint run itself; the decomposition of rows 1 and 2 with the before and after open-issue lists; whether the tracker could apply an issue template non-interactively; the type-label vocabulary mismatch; what step 6's milestone amounted to; and what was left out and why.
+  - [x] **AC2:** The section records every seam not exercised, and every statement the run falsified — starting with `BACKLOG.md` rows 1 and 2, which the run made stale by construction.
+  - [x] **AC3:** `git diff --stat main` is confined to `docs/verified.md` and `.specs/77-record-the-sprint-run/`; validators at exit 0.
+  - [x] **AC4:** The defect the run found — `sprint` makes the backlog stale the moment it runs, and neither skill says who corrects it — is filed as an issue after the record lands, and the section names it.
 
 - Out of scope: editing `BACKLOG.md`; re-running `sprint`; the `init` run (#76).
 
@@ -39,4 +39,4 @@ None needed — requirements were unambiguous. The notes were taken during the r
 
 - [x] T1: commit the run notes as `observations.md`, verbatim, with the before and after tracker state.
 - [x] T2: write the `docs/verified.md` section (AC1, AC2).
-- [ ] T3: check AC3; file the AC4 issue; record its number.
+- [x] T3: check AC3; file the AC4 issue; record its number.
