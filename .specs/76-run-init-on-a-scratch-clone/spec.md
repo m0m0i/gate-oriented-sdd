@@ -49,6 +49,6 @@ Resolved 2026-09-05.
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
 - [x] T1: clone, strip per clarification 1, and record what was removed and kept with the rule for each (AC1).
-- [ ] T2: run `init` in the clone, steps 1–4, recording as it goes; assert AC2–AC6.
+- [x] T2: run `init` in the clone, steps 1–4, recording as it goes; assert AC2–AC6.
 - [ ] T3: write the `docs/verified.md` section and update "Still to verify" (AC8).
 - [ ] T4: re-verify this repository (AC7), discard the clone, list the defects found and file them.
