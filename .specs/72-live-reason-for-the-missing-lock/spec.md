@@ -36,5 +36,5 @@ None needed — requirements were unambiguous.
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: record the greps red.
+- [x] T1: record the greps red.
 - [ ] T2: rewrite; assert AC1–AC3 with the validators run last.
