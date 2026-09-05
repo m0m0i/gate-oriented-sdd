@@ -20,7 +20,7 @@ A refactor that loads the rulebook into normal sessions, or turns an enforced ga
 | Artifact | Claude Code | Antigravity |
 | :-- | :-- | :-- |
 | Manifest | `.claude-plugin/plugin.json` | `plugin.json` |
-| Hooks | `hooks/hooks.json` | `hooks.json` (plugin-name envelope, `enabled` flag) |
+| Hooks | `hooks/templates/claude-code.settings.json`, rendered into the project by `init` | `hooks/templates/antigravity.hooks.json`, rendered the same way (plugin-name envelope, `enabled` flag) |
 | Skills | `skills/<name>/SKILL.md` | same path, same format |
 | Subagents | `agents/<name>.md` | `agents/` |
 | Distribution | `.claude-plugin/marketplace.json`, git-native | `agy plugin install <local path>` |
@@ -68,7 +68,7 @@ Run all ten before every commit — CI runs the same ten:
 Two things are deliberately unlike a normal install, and both would look like mistakes:
 
 - **The hooks are not copied.** `.claude/settings.json` points at the repository's own `hooks/*.sh`. Every other project copies them, because a gate must run with the project as its working directory — here the project *is* the source, so a copy would only create drift, and a drifted copy means this repo tests a stale version of its own enforcement.
-- **`.claude/agents/gate-sdd-reviewer/` has no `rules-lock.json`.** Adding one makes `assets/check-locks.py` discover `.claude/agents/` instead of `agents/` and silently stop verifying the six shipped rulebooks while reporting `0 pinned file(s)` as success. That is #16. The rulebook stays unpinned until #16 is fixed.
+- **`.claude/agents/gate-sdd-reviewer/` has no `rules-lock.json`.** `assets/check-locks.py --update` can refresh a lock but cannot create one (#19). The older reason — a lock here would make the guard discover `.claude/agents/` instead of `agents/` and verify nothing — was #16, which is closed; the guard now discovers both directories. The rulebook stays unpinned until #19 ships a bootstrap, and `docs/decisions/ADR-6` records why.
 
 The project reviewer is `gate-sdd-reviewer` and is unrelated to the three reference reviewers in `agents/`, which are the product. Its anchor is **gates never fail open**.
 
