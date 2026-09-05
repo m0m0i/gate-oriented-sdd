@@ -19,7 +19,7 @@ echo "- numbers: $open"
 echo
 echo "### BACKLOG.md table"
 echo
-rows=$(grep -E '^\| [0-9]+ \|' docs/BACKLOG.md | sed -E 's/^\| ([0-9]+) \| \*\*#([0-9]+)\*\*.*/\1 #\2/')
+rows=$(grep -E '^\| [0-9]+ \|' docs/BACKLOG.md | awk -F'|' '{ n=$2; gsub(/ /,"",n); item=$3; out=""; while (match(item, /#[0-9]+/)) { out=out " " substr(item, RSTART, RLENGTH); item=substr(item, RSTART+RLENGTH) } if (out=="") out=" (no issue)"; print n out }')
 echo "- rows: $(printf '%s\n' "$rows" | wc -l | tr -d ' ')"
 printf '%s\n' "$rows" | sed 's/^/    /'
 tabled=$(printf '%s\n' "$rows" | grep -oE '#[0-9]+' | tr -d '#' | sort -n)
