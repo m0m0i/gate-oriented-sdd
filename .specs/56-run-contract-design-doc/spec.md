@@ -53,7 +53,7 @@ Resolved 2026-09-05.
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: capture the baseline and confirm it green.
+- [x] T1: capture the baseline and confirm it green.
 - [ ] T2: run `contract`; assert AC2–AC5 and AC11; record.
 - [ ] T3: run `design-doc`; assert AC6–AC8; record.
 - [ ] T4: reread the five places AC9 names for falsified statements; record each.
