@@ -32,3 +32,7 @@ Conventional commits — `feat:`, `fix:`, `docs:`, `chore:` — subject in the i
 ## Gates
 
 Both hooks run from the repository's own `hooks/` directory rather than from a copy under `.claude/`. This repo is the source of those scripts, and a second copy would drift — which would mean the repo tests a stale version of its own enforcement. It is the one project where pointing at the source is correct; every other install copies.
+
+## Where the contract lives
+
+`docs/CONTRACT.md` is the development contract. It was compiled **from** the reviewer's rulebook at `.claude/agents/gate-sdd-reviewer/rules/`, not the reverse: the rulebook was hand-authored one rule per incident, and the contract indexes it and tiers what sits around it. A new Judgment rule is added to the rulebook first and then to the contract's table, and nothing checks that the two agree.
