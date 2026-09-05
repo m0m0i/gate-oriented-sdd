@@ -1,6 +1,6 @@
 # Spec: Run contract and design-doc on this repo and record what was observed
 
-- Slug: 56-run-contract-design-doc Issue: 56 Type: chore Status: approved
+- Slug: 56-run-contract-design-doc Issue: 56 Type: chore Status: done
 - Author: m0m0i Date: 2026-09-05
 
 ## 1. Requirements (WHAT / WHY)
@@ -58,4 +58,4 @@ Resolved 2026-09-05.
 - [x] T3: run `design-doc`; assert AC6–AC8; record.
 - [x] T4: reread the five places AC9 names for falsified statements; record each.
 - [x] T5: write the `docs/verified.md` section (AC9).
-- [ ] T6: re-run the baseline; assert AC1 and AC10; list the defects found, one issue each, and file them.
+- [x] T6: re-run the baseline; assert AC1 and AC10; list the defects found, one issue each, and file them.

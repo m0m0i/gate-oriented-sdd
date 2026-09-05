@@ -174,3 +174,21 @@ Reread after T3, as its own step. Each row says where the fix belongs; none is f
 | `CONTRIBUTING.md`, "Six to ten rules per file" | — | still true — `claims-and-prose.md` is at 9 after C-8 and C-9, `gates-and-guards.md` at 9 | nothing |
 
 What the reread was worth: five of the eleven rows are things this run neither created nor set out to observe, and two of those — the reviewer claim and the mistranslation — sit in the sentence that sells the project's honesty.
+
+## T6 — re-verification
+
+`baseline.sh` re-run unchanged at the final tree.
+
+**AC1 verified.** Every validator at exit 0 with the same output line as T1; `test-gates.sh` at 54 passed, 0 failed, both ends. Anchors 5 of 5, all five lines byte-identical. `check-locks.py` at 6 matching. The rule-id list differs from T1's by `C-8 MEDIUM` and `C-9 MEDIUM` only.
+
+**AC10 verified.** `git diff --name-only main` is 15 files, every one under `docs/`, `.specs/56-run-contract-design-doc/`, `.steering/tech.md`, `.steering/structure.md`, or `.claude/agents/gate-sdd-reviewer/rules/`. Checksums moved for exactly `tech.md`, `structure.md` and `claims-and-prose.md`; `product.md`, `CONTRIBUTING.md`, the four upstream documents, and the three shipped locks are byte-identical to T1. Nothing under a shipped path changed, so no version bump.
+
+**Filed after the run:**
+
+- #69 — `check-locks.py --update` prints a success line naming a directory it verified nothing in (AC4's observation; the message half of #19).
+- #70 — `contract` has no instruction for a rulebook that already exists, and step 6 writes a provenance claim that can be false (T2's seams).
+- #71 — `design-doc` regenerates a live `structure.md` by instruction, and names a reviewer clause that does not cite ADRs (T3's seams).
+- #72 — two paragraphs give closed #16 as the reason the dogfood reviewer has no lock; the live reason is #19 (T4's reread).
+- Comments on #22 (capability ids are now cited in prose, still not mechanically) and #58 (the preamble is further from true, and there is a risk list to groom against).
+
+Not filed: the README rows in T4 belong to the README update that follows this branch, and #48 already owns the version.
