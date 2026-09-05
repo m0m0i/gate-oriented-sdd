@@ -6,7 +6,7 @@ Recorded as each task ran. `docs/verified.md`'s section is written from this fil
 
 **The target.** A real, unrelated Python project of the maintainer's, and the plugin's first consumer. Python 3.12, `uv` with a lockfile, `ruff`, `mypy` and `pytest` configured in `pyproject.toml` (six `[tool.*]` sections), a `src/` layout, 14 test files, one CI workflow, 38 of the last 50 commit subjects carrying a conventional prefix. Cloned locally from the working checkout, default branch `main`, into this session's scratch directory. Nothing is pushed; the clone is discarded in T4.
 
-**Removed — harness state, per clarification 1**, 19 files plus one key:
+**Removed — harness state, per clarification 1**, 20 uncommitted changes: 19 file deletions and one edit:
 
 | Removed | Rule |
 | :-- | :-- |
@@ -17,7 +17,7 @@ Recorded as each task ran. `docs/verified.md`'s section is written from this fil
 
 **Kept — the project's own, which `init` must merge into**, per clarification 1: `AGENTS.md` (six harness mentions, from the earlier install) and `CLAUDE.md`; `.github/ISSUE_TEMPLATE/` with the four files; every `[tool.*]` section; the CI workflow; the tests. The earlier install's `check-steering-anchors.sh` was not present under `scripts/`, so that copy was never made — a first observation about the earlier install, recorded and not acted on.
 
-**State entering T2.** The clone is on `main` with 20 uncommitted deletions and `uv sync` completed at exit 0, so the candidate validators can run. `.env` is git-ignored and absent from the clone; tests that need it will fail on the clean tree, which is the path `init` step 1 says to surface rather than adopt.
+**State entering T2.** The clone is on `main` with 20 uncommitted changes (19 deletions, one edit) and `uv sync` completed at exit 0, so the candidate validators can run. `.env` is git-ignored and absent from the clone; tests that need it will fail on the clean tree, which is the path `init` step 1 says to surface rather than adopt.
 
 ## T2 — `init`, steps 1–4
 
@@ -74,6 +74,10 @@ Run through the Skill tool. Four questions to the author — the metric, the lev
 
 Not exercised: `northstar` on a project whose `product.md` has no `Owns:` line at all — `init` always writes one first, so on this skill order the write-back at step 6 can only ever agree, disagree, or be redundant; it is never the first write.
 
+## T3 — `docs/verified.md`
+
+**AC8 verified, after review.** Section inserted; "Still to verify" has the greenfield item rewritten to what this run did not cover, and gains the upgrade path, the known-failing path, and — added on the reviewer's HIGH — the two merge paths with something to merge, which T2 listed as not exercised and the list had not carried. A "what earlier records get wrong now" subsection names the first half's "still unobserved" clause and `BACKLOG.md`'s fired `init` trigger, each with its owner.
+
 ## T4 — re-verification, and what was filed
 
 **AC7 verified.** Nine validators at exit 0, `test-gates.sh` 54/0; `git diff --name-only main` confined to `docs/verified.md` and this directory; `check-leakage.sh` and the private redaction check clean on every commit. The clone was deleted after T3.
@@ -86,3 +90,5 @@ Not exercised: `northstar` on a project whose `product.md` has no `Owns:` line a
 - #84 — `init` installs a reference rulebook over a project whose `CONTRACT.md` cites rules it does not carry.
 
 Not filed: the upgrade path on the unstripped clone, which is work rather than a defect and is a candidate for the next sprint; and `AGENTS.md`'s pre-#30 flow line in the target, which only that path could correct.
+
+**Review triage.** HIGH — a not-exercised seam missing from "Still to verify": added. MEDIUM — no section for statements the run falsified: added to the `verified.md` section, superseding rather than editing the first half's clause, per #56's precedent; `BACKLOG.md`'s fired trigger named with the next grooming as owner. LOW — three counts reconciled between the two records: 20 changes as 19 deletions and one edit, 6.28 seconds, five commands run and four adopted.

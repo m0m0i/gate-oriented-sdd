@@ -183,7 +183,7 @@ Full working record: `.specs/76-run-init-on-a-scratch-clone/observations.md`. Sp
 
 | Question | Observed |
 | :-- | :-- |
-| Does `init` run each candidate validator before adopting it? | **yes, when the operator does.** Four commands from the CI workflow, each run on the clean clone, all at exit 0 — the suite is offline by design and passed in seven seconds. The known-failing path at step 1 was not exercised. |
+| Does `init` run each candidate validator before adopting it? | **yes, when the operator does.** Five commands from the CI workflow run on the clean clone, all at exit 0, four adopted — the suite is offline by design and passed in 6.28 seconds. The known-failing path at step 1 was not exercised. |
 | Does it detect what is already installed? | **yes, and met a shadow.** The kept `AGENTS.md` still pointed at the stripped `.steering/` and hooks, and at a surviving `docs/CONTRACT.md` citing fifteen rule ids whose rulebook was gone. Detection saw an earlier install, not a blank project. |
 | How many questions, and how were they answered? | **five, all as recommended.** The recommendations came from the project's own kept files, so this was not the cold interview; the record says so. Step 3's separate offer of the optional set was taken up for `northstar`. |
 | Did step 3 merge rather than replace? | **yes, trivially.** The four issue templates were byte-identical to the plugin's assets; `AGENTS.md` was already canonical and needed no diff. Neither merge path was really exercised. |
@@ -195,6 +195,11 @@ Full working record: `.specs/76-run-init-on-a-scratch-clone/observations.md`. Sp
 | Where do the three READMEs come from? | **nowhere the consumer has.** `.specs/README.md`, `.specs/_archive/README.md` and `.work_logs/README.md` are "each stating its contract" with no template in the plugin; they were copied from this repository's own dogfood files. |
 | `northstar` after `init`: did the `Owns:` write-back meet a line it disagrees with? | **no, again.** The derivation from the laws produced the value `init` had written from the interview's first answer minutes earlier; `product.md` byte-identical before and after. On this skill order the write-back can never be the first write, so the collision needs a value the author changes between the two — still unobserved. |
 | Did the gates and guards here survive the run? | **yes.** Nine validators at exit 0 and 54/0 before and after; the branch touches this file and the spec directory only. |
+
+### What earlier records get wrong now
+
+- The first half's opening paragraph above says `init` "belong[s] on a throwaway repo and [is] still unobserved". It has now run on one; the cold interview and the `- Docs:` probe are still unobserved. Left as written, superseded here, as #56's section did for the row before it.
+- `docs/BACKLOG.md`'s "What would change this order" pre-registered *"`init` blocking a first turn on the scratch clone"* as a trigger. It fired — the quality gate exited 2 on the tree `init` armed, #81 — and row 1 of that list is now half done. The file is rightly untouched by this branch; the next grooming records the trigger as fired and moves what #81 is.
 
 ### What this run does not support
 
@@ -217,3 +222,4 @@ The greenfield path — a project with no `AGENTS.md`, no templates and no earli
 - [ ] `backlog` on a project with a walking skeleton to start from, and a grooming that reorders against the author's stated preference — every call here was accepted.
 - [ ] `init` on a project that already has a harness install — the diff-and-upgrade path — including an existing `CONTRACT.md` whose compiled rules the installed rulebook must keep.
 - [ ] The known-failing validator path at `init` step 1, and the omit and record-as-known-failing answers at step 4.
+- [ ] `init` step 3's merge paths with something to merge: issue templates that differ from the plugin's, and an `AGENTS.md` that needs a diff shown before it is touched. On #76 both were byte-identical or already canonical, so neither path ran.
