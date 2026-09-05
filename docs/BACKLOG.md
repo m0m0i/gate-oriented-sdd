@@ -1,54 +1,59 @@
 # Product backlog
 
-- Last groomed: 2026-08-25 (third grooming — see **What changed** below)
+- Last groomed: 2026-09-05 (fourth grooming — see **What changed** below)
 - Ordered, not prioritized. Position reflects value, risk, cost, and dependency together. There is no separate priority field, and adding one would contradict this.
 
 ## A note on how this list was built
 
-`backlog` expects to read epics and hand shaped items to `sprint`, which then creates the issues. That is not what happened. Every item below already exists as a tracker issue, filed as it was discovered while using the harness on itself, so this document imposes an order on work that was already committed. The inversion is worth naming rather than hiding: it means the tracker was the plan for a week.
+`backlog` expects to read epics and hand shaped items to `sprint`, which then creates the issues. For the first three groomings that is not what happened: every item already existed as a tracker issue, filed as it was discovered while using the harness on itself, and this document imposed an order on work that was already committed. That inversion is still true of most rows and is worth naming rather than hiding — the tracker was the plan for a week.
 
-The `Rough size` column therefore estimates how many issues each item will *turn out* to need, which for several is more than the one that already exists.
-
-There are still no epics. `epics` has never run, and `docs/` holds none of the inception documents except this one — see #22, itself on this list.
+This grooming is the first with epics to read (`docs/EPICS.md`, from #55) and the first to carry rows that are not issues yet. Those rows are marked, and `sprint` decomposes them. The `Rough size` column estimates how many issues an item will turn out to need, which for several is more than the one that already exists.
 
 ## What changed at this grooming
 
-- **#34 shipped and is closed.** It was item 1. Four review rounds; three HIGH findings, one of which was #14's recorded hazard firing live on that branch.
-- **#39 arrived**, collecting six guards that can report success having checked nothing — the residue of #34's review rounds plus pre-existing instances nobody had gathered.
-- **#26 is unchanged at the top of the remaining work, and has been through two branches without being started.** It was used four times this week as the only way out of a stuck turn. Now that #27 has shipped the instruction that removes the need for it, closing the bypass is safe — which was the stated condition.
-- **#28 is promoted to second** for a reason that is not severity: it is the small, self-contained one, and it is the task chosen for the fresh-session test.
+- **Every inception document now exists.** `NORTH_STAR.md`, `PRD.md`, `EPICS.md` (#55), `CONTRACT.md`, `DESIGN.md` and six ADRs (#56). The "inception documents" item leaves Unshaped; the decision it was blocked on was taken by running the skills.
+- **Shipped and closed since the last grooming:** #10, #28 (the fresh-session task), #34, #45, #49 (with #64), #52, #55, #56, #59, #61, #62, #64, #66.
+- **Arrived:** #47, #48, #54 before the runs; #57, #58 from #55; #68 from #62; #69, #70, #71, #72 from #56. Seven of them postdate `epics` and belong to no epic, so their `Epic` cell is `—`; homing them is row 13.
+- **#58 is this grooming**, in flight, and is not ordered.
+- **The `Epic` column is new**, from the template; earlier groomings had no epics to cite.
+- **#26 is displaced from first a third time, and this time by decision.** The skills were untested and the runs are finding a defect a day; the user chose to finish the test queue first. Its row says so.
+- **#26 and #36 are one row.** Three groomings said whoever specs one must adopt, fold, or reject the other; a row that holds both makes that the first task rather than a note.
 
-| # | Item | Blocks | Rough size | Why here |
-| :-- | :-- | :-- | :-- | :-- |
-| 1 | **#26** — the gate is silenced by `git checkout` | #25 | ~1–2 issues | The only deliberate bypass of the only enforced rule, and silent: a skipped review and a clean repo produce identical output. Its stated precondition is now met — #27 shipped the instruction that removes the reason to reach for it, and it was still reached for four times this week while that instruction did not exist. It has led this list through two branches without being started, which is itself an argument for taking it before something else displaces it again. |
-| 2 | **#28** — a strippable `assert` guards the path that keeps a check from checking nothing | — | ~1 issue | Second **not on severity** — it is unreachable today, since nothing runs with `-O`. It is here because it is small, self-contained, has its replacement supplied verbatim, and is the task chosen to test whether a cold session can carry `spec` → `implement` → reviewer without help. A first task should be one where a failure is legible as a harness problem rather than a hard problem. |
-| 3 | **#39** — six guards can report success having checked nothing | — | ~2–3 issues | The generalisation of #16, #34 and half of this week's review findings, now that they are gathered in one place. Its first item — `report` has no `skip` state, so `45 passed` can mean 44 verified plus one skipped — probably retires the whole family. Above #4 because it includes a regression #34 shipped: routing the quality gate's read through the shared function suppressed the only signal that an unreadable `tech.md` was being read as an absent one. |
-| 4 | **#36** — enforce at `git push` / `gh pr create` rather than at turn end | — | ~1 issue, or 0 | Still adjacent to #26 and still possibly its answer rather than a separate item. Whoever specs #26 must adopt, fold, or reject it in writing. Below #3 now because #39 contains a live regression and this does not. |
-| 5 | **#35** — a review by ref produces a `reviewed_sha` of the working tree | — | ~1 issue | Can clear the gate on a review of *different code* — the fail-open direction. It stays mid-list because #27 removed the reason to review by ref at all: the parked working tree existed to escape the deadlock, and the deadlock is gone. A real hazard whose likelihood two shipped items have now reduced. |
-| 6 | **#25** — the gate should refuse CLEAN on a self-review | — | ~1 issue | Its prerequisite shipped with #9, and the reviewer is now genuinely independent — so this is the difference between independence being available and being required. Below #1 because enforcing independence through a gate that can be stepped around enforces nothing. |
-| 7 | **#19** — `--update` cannot create a lock, so a new rulebook can never be pinned | — | ~1 issue | `AGENTS.md` names the hash-pinned rulebook as one of the two ideas this repo exists for, and the dogfooded instance still ships **unpinned**. A core claim false in the reference implementation. |
-| 8 | **#14** — `Source globs` duplicates the shipped-path definition by hand | #18 | ~2 issues | **Promoted in evidence, not in position.** #34's review caught this firing for real: a new `.sh` under `assets/` was invisible to both gates while `check-version-bump.py`'s prefix list counted it. It is no longer hypothetical. Still below the fail-opens above it, but the next person who argues it is theoretical has a counter-example. |
-| 9 | **#18** — the review gate is unsatisfiable without a `Source globs` line | — | ~1 issue | Fails *closed*, so a loud failure can wait behind the decision at #8 that shapes its fix. |
-| 10 | **#23** — rule C-2 enumerates the files that state a fact | — | ~1–2 issues | Bitten four more times this week, all inside review rounds. Damages credibility rather than behaviour: no gate fails open, a number is merely untrue. |
-| 11 | **#10** — "one task, one commit" contradicts the quality gate | — | ~1 issue | A spec is written and merged. Eleventh because practice adopted the decision a week ago — every spec since folds red and green into one task. Documentation catching up. |
-| 12 | **#22** — the mandatory document set is declared but never verified | — | ~2–3 issues | Widest blast radius: it would run in every project the harness installs into, including ones mid-setup. Its central question — what the opt-out is — is still unanswered. |
+| # | Item | Epic | Blocks | Rough size | Why here |
+| :-- | :-- | :-- | :-- | :-- | :-- |
+| 1 | The remaining test-queue runs: `sprint` on this list, then `init` on a scratch clone of a real, unrelated project — *no issue yet* | — | row 2 | ~2 issues | In flight by decision, and the two runs most likely to change this list: `sprint` is the first thing that will ever read it, and `init` on a real toolchain is CAP-4's live test. Each run so far has filed three or four defects; the ones these find go above everything below. |
+| 2 | The READMEs and steering say things that are false — **#48**, **#72**, **#47**, and the rows #56's reread found | EPIC-4 | — | ~3 issues | Waits on row 1 because it states what the runs proved. Above the gate work because the Status section is the sentence that sells the project's honesty, and it currently claims no reviewer has reviewed a real diff. |
+| 3 | The gate is one command from off — **#26**, with **#36** as its candidate fix | EPIC-1 | row 6 | ~1–2 issues | The product's live falsifier, and displaced from first a third time — this time by decision: the runs above are cheap and finding defects daily. Whoever specs #26 adopts, folds, or rejects #36 in writing; that is why they are one row. |
+| 4 | Guards that report success they did not earn — **#39** | EPIC-2 | rows 5, 7 | ~2–3 issues | Decides how a guard says "I checked nothing", which rows 5 and 7 both need before they can be specced. Above 5 for that reason alone. |
+| 5 | A new rulebook can be pinned, and `--update` says what it did — **#19**, **#69** | EPIC-2 | — | ~2 issues | The reference implementation's own reviewer is unpinned (ADR-6), and every `contract` run tells consumers to run a command that prints success over an unpinned rulebook. A core claim false at home. Below 4 because its message half is 4's family. |
+| 6 | The receipt says what was reviewed and by whom — **#35**, **#25** | EPIC-1 | — | ~2 issues | #35 can clear the gate on a review of different code, the fail-open direction; #25 makes independence required rather than available. Below 3 because a gate that can be stepped around enforces neither. |
+| 7 | The shipped-path definition has one home — **#14**, **#18** | EPIC-3 | — | ~2 issues | #14 has fired for real once, on #34's branch. Below 4 because #18's fix is a fail-closed path whose shape 4 decides. |
+| 8 | The skills have no vocabulary for a project that already has state — **#70**, **#71**, and the `northstar`/`prd`/`epics` equivalents #55 recorded without filing | — | row 9 | ~3 issues | Every consumer hits this on its second run. Cheap prose fixes with a version bump; above 9 because 9 pins skill sentences and should pin the corrected ones. |
+| 9 | Nine skills carry no check — **#54** | EPIC-4 | — | ~1–2 issues | Now has the incident it was waiting for: `contract`'s re-pin sentence, observed in #56. After 8 so the needles pin text 8 has already changed. |
+| 10 | Facts stated twice drift — **#23**, and `CONTRACT.md`'s index of the rulebook, which nothing compares | EPIC-4 | — | ~1–2 issues | Damages credibility, not behaviour, and every review round finds one. The `CONTRACT.md` half arrived with #56 and has no issue. |
+| 11 | `check-leakage`'s `CAP-` pattern guards a form the repository does not use — **#57** | — | — | ~1 issue | An accusing pattern that misses the live form is the fail-open shape (G-9), but the identifiers it guards are not the ones now in the tree. Low likelihood, small fix, and its own issue says the obvious correction breaks CI. |
+| 12 | Nothing proves a tag followed a bump — **#68** | — | — | ~1 issue | Happened once, to 0.4.0. Same family as 10; below it because the bump half is enforced and a consumer notices an untagged version within a day. |
+| 13 | Re-run `epics` to home the issues filed since it ran — *no issue yet* | — | — | ~1 issue | Seven rows above carry `—`. Cheap, and it makes the next grooming's `Epic` column complete; below everything with a falsifier. |
+| 14 | The mandatory document set is declared but never verified — **#22** | EPIC-4 | — | ~2–3 issues | Widest blast radius: it runs in every installed project. Last because its opt-out question is still unanswered — and, now that every document exists here, answerable by observation rather than argument. |
 
 ## Unshaped
 
 Items that cannot be ordered yet because nobody knows what they are. This is a queue to empty, not a tier — anything sitting here is undecided work, and it does not get built while it stays here.
 
-- **The inception documents** — `PRD.md`, `DESIGN.md`, `NORTH_STAR.md`, `EPICS.md`, `CONTRACT.md`. `init` calls three of them mandatory and this repo has one: this file. Every one of their *mechanical* outputs already exists — and #34 is the discovery that one of them, the `Owns` anchor, has never actually been read. **Blocked on:** a decision, not information. #34 may change the answer, since it makes the case that these outputs are load bearing rather than ceremonial.
-- **Running the eval suite** — four suites authored, never executed, because `claude plugin eval` is early access and was not enabled on this account. **Blocked on:** access. Until then nobody knows whether the suites are green, red, or malformed. This matters more after #27, whose central acceptance criterion is presence-checked only and which an eval is the only thing that could really verify.
+- **Running the eval suite** — four cases authored, never executed. As of 2026-09-05 `claude plugin eval` renders its full help and then any invocation prints "in early access" and exits 0, running nothing. **Blocked on:** access. It matters more with every skill run, since the harness's own claims about skill behaviour are presence-checked only.
 - **Antigravity has no `SessionStart`** — the steering digest has no equivalent, and `PreInvocation` is the candidate substitute but needs a once-per-session guard. **Blocked on:** whether the guard is achievable at all, which nobody has tried.
 
 ## What would change this order
 
-- **The fresh-session test failing at #27's wait instruction.** #27's AC1 is presence-checked only; a cold agent that reads "keep the turn open" and still says "Holding." means the fix did not work, and #36 — enforcing at the push boundary instead of turn end — stops being fourth.
-- **#36 turning out to be the right fix for #26.** Then they are one item and everything below shifts up.
-- **Anyone other than the author using this.** Every item was found by dogfooding, which finds what the author's own habits reach. A second user would reorder this within a day — which is precisely what the fresh-session test is for.
+- **`sprint` finding nothing to decompose at the top.** Rows 1 and 13 are the only ones that are not already issues. If `sprint`'s run shows the top of this list is a tracker query rather than a plan, the inversion has not been undone and rows should be coarser.
+- **`init` blocking a first turn on the scratch clone.** That is CAP-4's falsifier, and it would move whatever it finds to row 1.
+- **#36 turning out to be the right fix for #26.** Then row 3 is one issue and the pair stays one row.
+- **Anyone other than the author using this.** Every item was found by dogfooding, which finds what the author's own habits reach.
 
 ### Triggers that have already fired
 
 - **2026-08-25 — "#34's fix revealing other unparsed anchors."** Fired sideways. No other anchor was unparsed, but the fix revealed that the new guard itself was outside `Source globs` — the *shipped-path* definition drifting rather than the *anchor* one. #14 moved in evidence rather than in position; see its row.
 
 - **2026-08-25 — "#27 turning out to be a harness limitation rather than a plugin bug."** Fired, and the order held. #27's spec conceded that a blocking `Stop` hook cannot coexist with an async subagent; the review of that spec then established the concession was wrong. A turn *can* wait by staying open (`docs/verified.md`), so #27 was a plugin bug after all and was fixed as one. The trigger's own consequence — that `git checkout` is the only escape — was retracted with it; it is the only *bypass*, never the only *exit*.
+
+- **2026-09-05 — "The inception documents" leaving Unshaped.** It was blocked on a decision, not information. The decision was to run the skills and record what they did (#55, #56), and every document now exists. What it found is rows 5, 8 and 10.
