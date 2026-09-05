@@ -1,6 +1,6 @@
 # Spec: Restate the places that say nothing cites the capability or epic ids
 
-- Slug: 78-restate-nothing-cites Issue: 78 Type: chore Status: approved
+- Slug: 78-restate-nothing-cites Issue: 78 Type: chore Status: done
 - Author: m0m0i Date: 2026-09-05
 
 ## 1. Requirements (WHAT / WHY)
@@ -15,9 +15,9 @@
 - Why now: #56 and #58 each falsified one of these and recorded rather than fixed, because the files were on their must-not-change lists. A steering file every session reads says something untrue, and sprint put this in the iteration (row 2, milestone 1).
 
 - Acceptance criteria:
-  - [ ] **AC1:** `grep -rn "othing cites" .steering docs/PRD.md docs/EPICS.md` returns nothing; the restated sentences name `DESIGN.md` and `BACKLOG.md` as the citing documents and keep "no check" and "no mechanical consumer".
-  - [ ] **AC2:** `check-steering-anchors.sh` resolves 5 of 5 and the five anchor lines are byte-identical to baseline.
-  - [ ] **AC3:** `git diff --numstat main` shows exactly one line changed in each of the three files and nothing else; `docs/verified.md` unchanged; every `- Validators:` command at exit 0.
+  - [x] **AC1:** `grep -rn "othing cites" .steering docs/PRD.md docs/EPICS.md` returns nothing; the restated sentences name `DESIGN.md` and `BACKLOG.md` as the citing documents and keep "no check" and "no mechanical consumer".
+  - [x] **AC2:** `check-steering-anchors.sh` resolves 5 of 5 and the five anchor lines are byte-identical to baseline.
+  - [x] **AC3:** `git diff --numstat main` shows exactly one line changed in each of the three files and nothing else; `docs/verified.md` unchanged; every `- Validators:` command at exit 0.
 
 - Out of scope: giving the ids a mechanical consumer (#22); editing `verified.md`; re-homing the post-`epics` issues (backlog row 13).
 
@@ -37,4 +37,4 @@ None needed — requirements were unambiguous. Two calls were mine and are recor
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
 - [x] T1: capture the baseline — anchors, checksums, the grep at three hits.
-- [ ] T2: restate the three sentences; assert AC1–AC3.
+- [x] T2: restate the three sentences; assert AC1–AC3.

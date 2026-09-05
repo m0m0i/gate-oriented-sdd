@@ -3,7 +3,7 @@
 - Serves: verified-merge rate — the share of merged changes carrying a fresh CLEAN receipt obtained independently (`docs/NORTH_STAR.md`)
 - Status: draft
 
-Nothing cites the capability ids below yet. That is recorded deliberately rather than left to be discovered — see `docs/verified.md` and #22.
+`docs/DESIGN.md` cites the capability ids below in prose; nothing consumes them mechanically, and no check requires one to exist. That is recorded deliberately rather than left to be discovered — see `docs/verified.md` and #22.
 
 ## Users
 

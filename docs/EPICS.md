@@ -1,7 +1,7 @@
 # Epics
 
 - Covers the capabilities in `docs/PRD.md`. The per-epic `- Serves:` lines below carry the citations; this line deliberately carries none, so a mechanical reader is not handed an elision to resolve.
-- Status: draft — nothing cites these ids; see `docs/verified.md`.
+- Status: draft — `docs/BACKLOG.md` cites these ids in its Epic column, in prose, and nothing consumes them mechanically; see `docs/verified.md`.
 
 Cut from the **remaining** work. Every capability in the PRD is already partly built, so these are not the epics that produced the product — they are what is left before each capability stops having a live falsifier. Where an epic closes a falsifier, the entry says which.
 
