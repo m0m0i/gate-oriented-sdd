@@ -75,7 +75,7 @@ Run through the Skill tool. **One pause, the whole order, accepted as drafted wi
 
 **AC3 verified.** No priority or tier heading or column; one table.
 
-**AC4 verified, with a note.** `Epic` column present; cells are `EPIC-1`…`EPIC-4`, each a heading in `EPICS.md`, or `—`. The seven issues filed after `epics` ran: #57, #58, #68, #69, #70, #71, #72. Five sit in `—` rows. **#69 sits in row 5 under `EPIC-2` beside #19, and #72 in row 2 under `EPIC-4` beside #48 and #47** — grouped by the work they belong to rather than by the epic that lists them, because the alternative was a row per issue, which the skill red-flags. Recorded so the `epics` re-run (row 13) knows where they went.
+**AC4 verified, with a note.** `Epic` column present; cells are `EPIC-1`…`EPIC-4`, each a heading in `EPICS.md`, or `—`. The seven issues filed after `epics` ran: #57, #58, #68, #69, #70, #71, #72. Four sit in `—` rows; #58 is in none. **#69 sits in row 5 under `EPIC-2` beside #19, and #72 in row 2 under `EPIC-4` beside #48 and #47** — grouped by the work they belong to rather than by the epic that lists them, because the alternative was a row per issue, which the skill red-flags. Recorded so the `epics` re-run (row 13) knows where they went.
 
 **AC5 verified.** The preamble names every inception document, that `epics` has run, and the inversion — still true of twelve of fourteen rows.
 
@@ -112,3 +112,28 @@ Run through the Skill tool. **One pause, the whole order, accepted as drafted wi
 **AC6 verified.** Nine validators at exit 0 with the same lines as T1; `test-gates.sh` 54/0. Open issues 20, the same twenty numbers as T1 — the skill created none. `git diff --name-only main` is confined to `docs/BACKLOG.md`, `docs/verified.md`, and `.specs/58-regroom-the-backlog/`. Checksums: every file in the baseline list unchanged except `BACKLOG.md` and `verified.md`.
 
 **Filed after the run, by the operator, so the open count moved 20 → 21 after AC6 was recorded:** #74 — `backlog` names a walking skeleton that may not exist, two sections its template does not define, and a `Blocks` form that collides with issue numbers (AC7's three observations). Not filed: `EPICS.md:4` belongs to row 13's `epics` re-run, which `sprint` will make an issue.
+
+### T5 capture, table block verbatim
+
+### BACKLOG.md table
+
+- rows: 14
+    1 (no issue)
+    2 #48 #72 #47
+    3 #26 #36
+    4 #39
+    5 #19 #69
+    6 #35 #25
+    7 #14 #18
+    8 #70 #71
+    9 #54
+    10 #23
+    11 #57
+    12 #68
+    13 (no issue)
+    14 #22
+- closed but tabled: 
+- open but untabled: #58 
+- Epic column present: yes
+
+**Review triage.** MEDIUM ×2 — row 13 said seven `—` rows where there are four (the seven are post-`epics` issues), fixed in `BACKLOG.md` and above; and `verified.md`'s "did the gates survive" row was committed in T4, one commit before T5 observed what it reports — true at T5's re-run, recorded here as provenance, and next time that row lands in the re-verification commit. LOW ×3 — this block, `verified.md`'s `Last updated`, and the fired-trigger sentence now naming rows 2, 5, 8, 10 and 11 — fixed. INFO ×2 accepted: AC4 names one reason for `—` and rows 1 and 13 have another, covered by the amended AC1; and `baseline.sh`'s parser was tuned in the T2 commit beside the artifact it measures, checked backward against `main`'s file and failing in the loud direction.

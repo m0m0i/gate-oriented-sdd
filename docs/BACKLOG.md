@@ -33,7 +33,7 @@ This grooming is the first with epics to read (`docs/EPICS.md`, from #55) and th
 | 10 | Facts stated twice drift — **#23**, and `CONTRACT.md`'s index of the rulebook, which nothing compares | EPIC-4 | — | ~1–2 issues | Damages credibility, not behaviour, and every review round finds one. The `CONTRACT.md` half arrived with #56 and has no issue. |
 | 11 | `check-leakage`'s `CAP-` pattern guards a form the repository does not use — **#57** | — | — | ~1 issue | An accusing pattern that misses the live form is the fail-open shape (G-9), but the identifiers it guards are not the ones now in the tree. Low likelihood, small fix, and its own issue says the obvious correction breaks CI. |
 | 12 | Nothing proves a tag followed a bump — **#68** | — | — | ~1 issue | Happened once, to 0.4.0. Same family as 10; below it because the bump half is enforced and a consumer notices an untagged version within a day. |
-| 13 | Re-run `epics` to home the issues filed since it ran — *no issue yet* | — | — | ~1 issue | Seven rows above carry `—`. Cheap, and it makes the next grooming's `Epic` column complete; below everything with a falsifier. |
+| 13 | Re-run `epics` to home the issues filed since it ran — *no issue yet* | — | — | ~1 issue | Four rows above carry `—`, and seven issues are homed nowhere. Cheap, and it makes the next grooming's `Epic` column complete; below everything with a falsifier. |
 | 14 | The mandatory document set is declared but never verified — **#22** | EPIC-4 | — | ~2–3 issues | Widest blast radius: it runs in every installed project. Last because its opt-out question is still unanswered — and, now that every document exists here, answerable by observation rather than argument. |
 
 ## Unshaped
@@ -56,4 +56,4 @@ Items that cannot be ordered yet because nobody knows what they are. This is a q
 
 - **2026-08-25 — "#27 turning out to be a harness limitation rather than a plugin bug."** Fired, and the order held. #27's spec conceded that a blocking `Stop` hook cannot coexist with an async subagent; the review of that spec then established the concession was wrong. A turn *can* wait by staying open (`docs/verified.md`), so #27 was a plugin bug after all and was fixed as one. The trigger's own consequence — that `git checkout` is the only escape — was retracted with it; it is the only *bypass*, never the only *exit*.
 
-- **2026-09-05 — "The inception documents" leaving Unshaped.** It was blocked on a decision, not information. The decision was to run the skills and record what they did (#55, #56), and every document now exists. What it found is rows 5, 8 and 10.
+- **2026-09-05 — "The inception documents" leaving Unshaped.** It was blocked on a decision, not information. The decision was to run the skills and record what they did (#55, #56), and every document now exists. What it found is rows 2, 5, 8, 10 and 11.

@@ -25,6 +25,7 @@ printf '%s\n' "$rows" | sed 's/^/    /'
 tabled=$(printf '%s\n' "$rows" | grep -oE '#[0-9]+' | tr -d '#' | sort -n)
 echo "- closed but tabled: $(for n in $tabled; do echo " $open " | grep -q " $n " || printf '#%s ' "$n"; done)"
 echo "- open but untabled: $(for n in $open; do printf '%s\n' "$tabled" | grep -qx "$n" || printf '#%s ' "$n"; done)"
+echo "- duplicated ids: $(printf '%s\n' "$tabled" | uniq -d | tr '\n' ' ')"
 echo "- Epic column present: $(grep -q '^| # | Item | Epic |' docs/BACKLOG.md && echo yes || echo no)"
 echo
 echo "### Checksums (sha256, first 12)"

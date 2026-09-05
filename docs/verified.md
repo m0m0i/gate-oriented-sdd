@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-08-30 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
+Last **updated**: 2026-09-05 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
 
 **The version table below was not re-run for the 2026-08-30 addition.** The inception-chain section exercised skills, which are Markdown read by the harness rather than an integration with it, so it produced no evidence about the Claude Code or Antigravity versions named here. It records its own provenance instead: gate-sdd 0.4.0, this repository. Re-dating the table on the strength of a run that did not test it is the failure this file exists to prevent — see #48, which asks that question directly and still needs an answer from a run that does.
 
