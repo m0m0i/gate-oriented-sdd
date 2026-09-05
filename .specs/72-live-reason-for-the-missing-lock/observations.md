@@ -26,3 +26,5 @@
 - `./assets/check-locks.py` → exit 0 — `check-locks: 6 pinned file(s) match their locks in .claude/agents, agents`
 - `./scripts/test-gates.sh` → exit 0 — `test-gates: 54 passed, 0 failed`
 - `check-version-bump.py <main>` → check-version-bump: no shipped file changed
+
+**Review triage.** CLEAN on the first pass. INFO accepted: no consequences section, and the reviewer did the reread — neither corrected claim is restated anywhere outside the records, and ADR-6 and `structure.md` stay true.
