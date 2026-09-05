@@ -154,3 +154,23 @@ Run through the Skill tool. **Zero questions were put to the author** here too. 
 
 - `design-doc` against a `structure.md` that **contradicts** the design. This one was stale, not wrong.
 - A non-default `- Docs:` path, and ADR supersession — both need a second run or a throwaway.
+
+## T4 — statements this run falsified, or found already false
+
+Reread after T3, as its own step. Each row says where the fix belongs; none is fixed here.
+
+| Where | Statement | Status | Belongs to |
+| :-- | :-- | :-- | :-- |
+| `docs/BACKLOG.md:12` | *"`docs/` holds none of the inception documents except this one"* | false since #55; now three more documents and a directory | #58 |
+| `README.md:152`, `README.ja.md:153` | *"v0.2.3"* | plugin is 0.4.2 | #48 |
+| `README.md:158`, `README.ja.md:159` | *"the skills themselves have never been executed end to end"* | false since #55 for three skills; five after this run, plus the five the per-issue flow runs on every issue | the README update |
+| `README.md:158` | *"no reviewer has yet reviewed a real diff"* | false since #17; `gate-sdd-reviewer` has reviewed every pull request since, with receipts under `.specs/` | the README update |
+| `README.ja.md:159` | *"reviewer がすべての diff をレビューしたことはまだありません"* | mistranslates the line above as "has not yet reviewed **every** diff" — a different, weaker claim; C-3 | the README update |
+| `.claude/agents/gate-sdd-reviewer.md:43`, `AGENTS.md:71` | the lock is absent because a lock under `.claude/agents/` would stop `check-locks.py` verifying `agents/` — *"That is #16"* | #16 is closed and `check-locks.py` reports `.claude/agents, agents` together (T1); the live reason is #19, which cannot create the lock; ADR-6 records the correct reason | an issue, filed in T6 |
+| `.steering/product.md:27`, `docs/PRD.md:6` | *"Nothing cites these ids yet"* / *"Nothing cites the capability ids below yet"* | `docs/DESIGN.md`'s `Serves` column cites `CAP-1`…`CAP-7`; the citation is prose with no check behind it, so *no mechanical consumer* stays true | a comment on #22, and the README update for `product.md` |
+| `docs/verified.md:114` | *"Nothing cites a capability or epic id"* | half false — capabilities are cited, epics are not | T5's section supersedes the row rather than editing it |
+| `docs/layout.md:80-93` | the harness-repository picture lists `docs/` as *"verified.md, fidelity.md, skill-anatomy.md, layout.md"* | false since #55; now also `CONTRACT.md`, `DESIGN.md`, `decisions/` | the README update, which already owns the stale layout claims |
+| `.steering/structure.md:15` | `evals/` *"authored, unrun"* | still true — `claude plugin eval` on this account prints "in early access" and exits 0 without running (observed 2026-09-05 on Claude Code 2.1.252) | nothing |
+| `CONTRIBUTING.md`, "Six to ten rules per file" | — | still true — `claims-and-prose.md` is at 9 after C-8 and C-9, `gates-and-guards.md` at 9 | nothing |
+
+What the reread was worth: five of the eleven rows are things this run neither created nor set out to observe, and two of those — the reviewer claim and the mistranslation — sit in the sentence that sells the project's honesty.

@@ -56,6 +56,6 @@ Resolved 2026-09-05.
 - [x] T1: capture the baseline and confirm it green.
 - [x] T2: run `contract`; assert AC2–AC5 and AC11; record.
 - [x] T3: run `design-doc`; assert AC6–AC8; record.
-- [ ] T4: reread the five places AC9 names for falsified statements; record each.
+- [x] T4: reread the five places AC9 names for falsified statements; record each.
 - [ ] T5: write the `docs/verified.md` section (AC9).
 - [ ] T6: re-run the baseline; assert AC1 and AC10; list the defects found, one issue each, and file them.
