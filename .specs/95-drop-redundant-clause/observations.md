@@ -23,3 +23,5 @@
 - `./assets/check-steering-anchors.sh` → exit 0 — `check-steering-anchors: 5 of 5 anchor(s) resolved, none unreadable`
 - `./assets/check-locks.py` → exit 0 — `check-locks: 6 pinned file(s) match their locks in .claude/agents, agents`
 - `./scripts/test-gates.sh` → exit 0 — `test-gates: 54 passed, 0 failed`
+
+**Review triage.** CLEAN on the first pass. INFO accepted: no consequences section, and the reviewer checked that there were none — the fact survives twice in each language.
