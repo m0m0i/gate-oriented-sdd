@@ -16,7 +16,7 @@
 - Acceptance criteria:
   - [x] **AC1:** `grep -rn "not yet run\|authored, unrun\|has still not run\|authored but unrun"` over the six files returns nothing, and each carries "under development" (開発中 in the Japanese).
   - [x] **AC2:** Each of the six still states that no case has run; the READMEs' "what is not verified" sentences still name the suite; the Japanese Status section says the same as the English (C-3).
-  - [ ] **AC3:** `git diff --name-only main` is confined to the six files, this directory, and one line each in `docs/NORTH_STAR.md` and `docs/DESIGN.md` that quote or restate the old label; `check-steering-anchors.sh` 5 of 5; every `- Validators:` command at exit 0 after the last write. _Amended 2026-09-06, ahead of the fix, on the reviewer's MEDIUM: the two lines were made false by the rename and a quote of a heading that no longer exists is worse than the rename._
+  - [x] **AC3:** `git diff --name-only main` is confined to the six files, this directory, and one line each in `docs/NORTH_STAR.md` and `docs/DESIGN.md` that quote or restate the old label; `check-steering-anchors.sh` 5 of 5; every `- Validators:` command at exit 0 after the last write. _Amended 2026-09-06, ahead of the fix, on the reviewer's MEDIUM: the two lines were made false by the rename and a quote of a heading that no longer exists is worse than the rename._
 
 - Out of scope: `docs/BACKLOG.md`'s Unshaped item, which describes the block rather than the suite; `docs/verified.md`'s dated observations.
 

@@ -37,6 +37,25 @@
 - `./assets/check-locks.py` → exit 0 — `check-locks: 6 pinned file(s) match their locks in .claude/agents, agents`
 - `./scripts/test-gates.sh` → exit 0 — `test-gates: 54 passed, 0 failed`
 
-### Refactor under green
+### Second commit — AC1 was red under T2's first commit
 
 AC1's grep still matched the three lines that kept "not yet run" or "unrun" after the new phrase, while AC2 keeps the fact. The fact is now carried as "no case has run" in `layout.md`, `structure.md`, `evals/README.md` and `AGENTS.md`, so AC1's grep returns nothing and every file still says it. Old phrasings per file after this: 0 0 0 0 0 0.
+
+## The run behind the date
+
+The READMEs' sentence moves from 2026-09-05 to 2026-09-06 because the command was run again on 2026-09-06, in the session that produced this branch, before the wording change was asked for:
+
+    $ claude --version
+    2.1.263 (Claude Code)
+    $ claude plugin eval . --case 'review-gate*' --runs 1 --max-cost-usd 3 --allow-tools Bash --no-publish --json <scratch>/eval-smoke-2.json
+    `plugin eval` is currently in early access
+    $ echo $?
+    1
+
+No results directory, no JSON, no cost. Two things changed since 2026-09-05: the CLI is 2.1.263, and the gated invocation exits **1** where it exited 0. That is why the sentence now says "exits without running a case" rather than "exits 0", and why the clause about refusing to read that exit code as a pass was dropped: at exit 1 there is no exit code that could be read as one. The refusal that remains — a green suite that never ran is the unverified assertion this harness exists to prevent — is the one that still has an object. Recorded here as deliberate; the reviewer's MEDIUM was right that it had been silent.
+
+## Consequences to existing documents
+
+- `docs/NORTH_STAR.md:37` quoted the old `evals/README.md` heading verbatim; `docs/DESIGN.md:19` restated "Authored and unrun". Both would have been false after the rename. AC3 was widened in its own commit and both lines now carry the new label with the run fact. `docs/BACKLOG.md`'s Unshaped item describes the block, not the label, and stays; `docs/verified.md`'s observations are dated and stay.
+
+**Review triage.** HIGH — the re-date had no run on the branch: the run is above. MEDIUM — no consequences section, two lines made false: widened and fixed. MEDIUM — "exits 0" and the refusal clause dropped silently: recorded as deliberate, with the reason. LOW — `evals/README.md:31` pointed at the label rather than the fact: now quotes "no case has run". INFO ×3 accepted: this is the edit `NORTH_STAR.md` calls the most tempting, and the fact is kept in every file; the second commit's heading now says AC1 was red under the first; `Status: done` before review is `implement`'s own order.

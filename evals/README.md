@@ -28,4 +28,4 @@ The baseline arm is the point: it reports the score delta between running with t
 
 ## When these pass, say so here
 
-Replace this section with the versions tested against, the date, and the observed deltas. Until then this file says "under development", because that is what is true.
+Replace this section with the versions tested against, the date, and the observed deltas. Until then this file says "no case has run", because that is what is true.
