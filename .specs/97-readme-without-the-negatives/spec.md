@@ -24,5 +24,5 @@ Three sentences per language; the greps are the test.
 
 ## 3. Tasks (TDD-ordered)
 
-- [ ] T1: record the greps red and the "What is verified" checksums.
+- [x] T1: record the greps red and the "What is verified" checksums.
 - [ ] T2: rewrite; assert AC1–AC3, validators last.
