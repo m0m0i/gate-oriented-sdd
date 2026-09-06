@@ -155,7 +155,7 @@ Tested against: Claude Code 2.1.252 (2026-09-05) · Antigravity CLI 1.1.17 and I
 
 What *is* verified: the gates' and guards' 54 behaviours, tested deterministically with no model in the loop ([`scripts/test-gates.sh`](./scripts/test-gates.sh)); Antigravity's `Stop` hook genuinely blocking, run rather than read from documentation ([`docs/verified.md`](./docs/verified.md)); both plugin manifests, the rulebook hashes, and the leakage guard, all in CI; every one of the thirteen skills executed at least once — the inception chain and `init` against this repository or a scratch clone of a real project, `spec`, `clarify`, `implement` and `worklog` on every spec since #17, and `archive` as four sweeps — with what the inception and `init` runs found recorded in [`docs/verified.md`](./docs/verified.md) and filed as issues; and a review receipt on every spec since #17, under `.specs/`, from a spawned reviewer on all but two, which were reviewed inline and whose receipts say so.
 
-What remains open is tracked in [`docs/verified.md`](./docs/verified.md)'s "Still to verify" list and in the issues.
+What remains open is tracked in [`docs/verified.md`](./docs/verified.md) and in the issues.
 
 ## License
 

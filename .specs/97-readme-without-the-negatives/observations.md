@@ -24,3 +24,11 @@
 - `./assets/check-steering-anchors.sh` → exit 0 — `check-steering-anchors: 5 of 5 anchor(s) resolved, none unreadable`
 - `./assets/check-locks.py` → exit 0 — `check-locks: 6 pinned file(s) match their locks in .claude/agents, agents`
 - `./scripts/test-gates.sh` → exit 0 — `test-gates: 54 passed, 0 failed`
+
+## Consequences to existing documents
+
+- `docs/NORTH_STAR.md:37`, the worked example under the non-negotiable, said the README's status line repeats `evals/README.md`'s run fact. After this branch it does not; the clause now says what the status line says — under development, early access. AC3 was widened in its own commit to allow the one clause. Nothing else describes the README's status line: `docs/verified.md`, `evals/README.md`, `AGENTS.md` and `.steering/structure.md` describe `evals/` itself and keep their run facts.
+
+**AC2, C-3.** Read pair by pair after the fix: the version sentence, the eval sentence, the matrix line, the pointer — each carries the same claims, dates and references in both languages.
+
+**Review triage.** MEDIUM — no consequences section and one sentence made false: the section above, and the clause fixed under the amended AC3. LOW — the pointer named "Still to verify" while two of the removed items live elsewhere in `verified.md`: softened to the file and the issues, both languages. INFO: none.

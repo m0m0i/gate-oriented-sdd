@@ -11,7 +11,7 @@
 - Acceptance criteria:
   - [x] **AC1:** `grep -cE "What is not|not re-run|never ran|no case has run" README.md` and `grep -cE "検証できていないこと|再実行していません|走らせたことのない" README.ja.md` are 0.
   - [x] **AC2:** The "What is verified" paragraphs are byte-identical to `main`'s; the new pointer sentence names `docs/verified.md` in both; the matrix line still carries both dates; the two sections say the same thing (C-3).
-  - [ ] **AC3:** `git diff --name-only main` is confined to the two READMEs, this directory, and one clause in `docs/NORTH_STAR.md` that describes the README's status line; validators at exit 0 after the last write. _Amended 2026-09-06, ahead of the fix, on the reviewer's MEDIUM: the worked example under the non-negotiable described a status line this branch removes._
+  - [x] **AC3:** `git diff --name-only main` is confined to the two READMEs, this directory, and one clause in `docs/NORTH_STAR.md` that describes the README's status line; validators at exit 0 after the last write. _Amended 2026-09-06, ahead of the fix, on the reviewer's MEDIUM: the worked example under the non-negotiable described a status line this branch removes._
 - Out of scope: "pre-release" and "not a supported product", which are a support statement, not a verification one; `docs/verified.md`, `evals/README.md`, `AGENTS.md`, which are maintainer documents and keep their run facts.
 
 ### Clarifications

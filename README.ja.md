@@ -156,7 +156,7 @@ agy plugin install ./gate-oriented-sdd
 
 **検証できていること。** まず、ゲートとガードの54通りの挙動です。モデルを介さず、決定的にテストしています（[`scripts/test-gates.sh`](./scripts/test-gates.sh)）。Antigravity の `Stop` フックが実際にブロックすることも、ドキュメントを読んで済ませたのではなく、動かして確かめました（[`docs/verified.md`](./docs/verified.md)）。2つのプラグインマニフェスト、ルールブックのハッシュ、機密混入チェックは、CI で毎回実行しています。skill は13個すべてが、少なくとも一度は実際に動いています。inception の一連の skill と `init` はこのリポジトリ自身か、実在するプロジェクトの使い捨てクローンに対して実行し、`spec`・`clarify`・`implement`・`worklog` は #17 以降のすべての spec で使い、`archive` は4回のスイープとして走らせました。inception と `init` の実行で見つかったことは [`docs/verified.md`](./docs/verified.md) に記録し、Issue として起票してあります。そして #17 以降のすべての spec には、`.specs/` の下に review receipt があります。2件を除いてサブエージェントとして起動した reviewer によるレビューで、その2件は inline でレビューしたことが receipt 自体に記録されています。
 
-これから確かめる項目は、[`docs/verified.md`](./docs/verified.md) の「Still to verify」と Issue に載せています。
+これから確かめる項目は、[`docs/verified.md`](./docs/verified.md) と Issue に載せています。
 
 ## ライセンス
 
