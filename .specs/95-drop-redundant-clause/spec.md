@@ -22,5 +22,5 @@ One substring removed per file; the greps are the test.
 
 ## 3. Tasks (TDD-ordered)
 
-- [ ] T1: record the greps red.
+- [x] T1: record the greps red.
 - [ ] T2: remove; assert AC1–AC2, validators last.
