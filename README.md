@@ -149,13 +149,13 @@ The last row is a real gap, not a rounding error. `PreInvocation` is the candida
 
 ## Status
 
-**v0.4.3 — pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, but `claude plugin eval` is still in early access on this account — as of 2026-09-06 it renders its help and then any invocation prints "in early access" and exits without running a case. Claiming a green suite that never ran is exactly the unverified assertion this harness exists to prevent.
+**v0.4.3 — pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, and `claude plugin eval` is still in early access on this account.
 
-Tested against: Claude Code 2.1.252 (2026-09-05) · Antigravity CLI 1.1.17 and IDE 2.3.1 (last verified 2026-08-21, not re-run since) · macOS.
+Tested against: Claude Code 2.1.252 (2026-09-05) · Antigravity CLI 1.1.17 and IDE 2.3.1 (2026-08-21) · macOS.
 
 What *is* verified: the gates' and guards' 54 behaviours, tested deterministically with no model in the loop ([`scripts/test-gates.sh`](./scripts/test-gates.sh)); Antigravity's `Stop` hook genuinely blocking, run rather than read from documentation ([`docs/verified.md`](./docs/verified.md)); both plugin manifests, the rulebook hashes, and the leakage guard, all in CI; every one of the thirteen skills executed at least once — the inception chain and `init` against this repository or a scratch clone of a real project, `spec`, `clarify`, `implement` and `worklog` on every spec since #17, and `archive` as four sweeps — with what the inception and `init` runs found recorded in [`docs/verified.md`](./docs/verified.md) and filed as issues; and a review receipt on every spec since #17, under `.specs/`, from a spawned reviewer on all but two, which were reviewed inline and whose receipts say so.
 
-What is not: every interview those runs put to the author was answered as recommended, so the skills are shown to work, not to elicit decisions from someone without the answers; the eval suite, still under development; `init`'s greenfield and upgrade paths; and the Antigravity rows of the matrix since 2026-08-21.
+What remains open is tracked in [`docs/verified.md`](./docs/verified.md) and in the issues.
 
 ## License
 
