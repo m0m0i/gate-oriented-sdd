@@ -36,5 +36,5 @@ None needed — requirements were unambiguous.
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: record the current section and the English claims.
+- [x] T1: record the current section and the English claims.
 - [ ] T2: rewrite; map every claim; assert AC1–AC3 with the validators run last.
