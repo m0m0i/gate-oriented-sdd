@@ -1,6 +1,6 @@
 # Spec: Rewrite the Japanese README's Status section as Japanese
 
-- Slug: 90-ja-status-in-natural-japanese Issue: 90 Type: chore Status: approved
+- Slug: 90-ja-status-in-natural-japanese Issue: 90 Type: chore Status: done
 - Author: m0m0i Date: 2026-09-06
 
 ## 1. Requirements (WHAT / WHY)
@@ -15,9 +15,9 @@
 - Why now: the author asked, after reading #48's merge: the mirror was clause by clause and reads as one. Unplanned work entered out loud.
 
 - Acceptance criteria:
-  - [ ] **AC1:** `observations.md` lists each claim of the English section and quotes the Japanese sentence that carries it; none is missing and none is added.
-  - [ ] **AC2:** The section matches the file's register — ですます調 throughout, no line beginning with `- `, the same bold labels the section had.
-  - [ ] **AC3:** `git diff --name-only main` is confined to `README.ja.md` and this directory; the diff touches only the lines between `## ステータス` and `## ライセンス`; every `- Validators:` command at exit 0 after the last write.
+  - [x] **AC1:** `observations.md` lists each claim of the English section and quotes the Japanese sentence that carries it; none is missing and none is added.
+  - [x] **AC2:** The section matches the file's register — ですます調 throughout, no line beginning with `- `, the same bold labels the section had.
+  - [x] **AC3:** `git diff --name-only main` is confined to `README.ja.md` and this directory; the diff touches only the lines between `## ステータス` and `## ライセンス`; every `- Validators:` command at exit 0 after the last write.
 
 - Out of scope: the other sections of `README.ja.md`, which the original author wrote in Japanese to begin with.
 
@@ -37,4 +37,4 @@ None needed — requirements were unambiguous.
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
 - [x] T1: record the current section and the English claims.
-- [ ] T2: rewrite; map every claim; assert AC1–AC3 with the validators run last.
+- [x] T2: rewrite; map every claim; assert AC1–AC3 with the validators run last.

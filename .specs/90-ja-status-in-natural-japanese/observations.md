@@ -32,3 +32,37 @@ English claims to carry, one per line:
 13. Not verified: the eval suite.
 14. Not verified: `init`'s greenfield and upgrade paths.
 15. Not verified: the Antigravity rows of the matrix since 2026-08-21.
+
+## T2 — after, and the claim map
+
+Each English claim, and the Japanese sentence that carries it:
+
+1. 「**v0.4.3、pre-release です。** 検証済みバージョンの一覧を添えた reference implementation であって、サポート付きのプロダクトではありません。」
+2. 「eval スイート は書いてありますが、まだ一度も走らせていません。」
+3. 「2026-09-05 の時点で、このアカウントでも `claude plugin eval` というコマンド自体は存在し、ヘルプも表示されます。ところが実際に呼び出すと「in early access」と出力して exit 0 で終わり、ケースは1つも実行されません。」
+4. 「走らせたことのないスイートを「グリーンです」と言うのは、このハーネスが防ごうとしている未検証の主張そのものです。この exit 0 を合格と読んでしまうのも、それと変わりません。」
+5. 「検証環境: Claude Code 2.1.252（2026-09-05）· Antigravity CLI 1.1.17 / IDE 2.3.1（最終確認は 2026-08-21。それ以降は再実行していません）· macOS」
+6. 「まず、ゲートとガードの54通りの挙動です。モデルを介さず、決定的にテストしています（scripts/test-gates.sh）。」
+7. 「Antigravity の `Stop` フックが実際にブロックすることも、ドキュメントを読んで済ませたのではなく、動かして確かめました（docs/verified.md）。」
+8. 「2つのプラグインマニフェスト、ルールブックのハッシュ、機密混入チェックは、CI で毎回実行しています。」
+9. 「skill は13個すべてが、少なくとも一度は実際に動いています。inception の一連の skill と `init` は…使い捨てクローンに対して実行し、`spec`・`clarify`・`implement`・`worklog` は #17 以降のすべての spec で使い、`archive` は4回のスイープとして走らせました。」
+10. 「inception と `init` の実行で見つかったことは docs/verified.md に記録し、Issue として起票してあります。」
+11. 「#17 以降のすべての spec には、`.specs/` の下に review receipt があります。2件を除いてサブエージェントとして起動した reviewer によるレビューで、その2件は inline でレビューしたことが receipt 自体に記録されています。」
+12. 「skill が、答えをまだ持っていない人から判断を引き出せるかどうかです。これまでの実行で作者に投げた質問は、すべて推奨案どおりに答えられました。skill が動くことは示せましたが、それ以上のことは示せていません。」
+13. 「eval スイートも未検証です。」
+14. 「`init` については、何もないリポジトリへの導入と、既存インストールのアップグレードという2つの経路をまだ試していません。」
+15. 「検証環境の Antigravity の行も、2026-08-21 以降は確認していません。」
+
+Nothing added beyond the fifteen. Register: ですます調 throughout; zero bullet lines in the file, as before; the two bold labels kept, now as sentence openers rather than colon labels, which is how the file's other emphatic openers read.
+
+### Validators, after the last write, stopping on failure
+
+- `./scripts/check-leakage.sh` → exit 0 — `check-leakage: clean`
+- `./scripts/check-manifests.py` → exit 0 — `check-manifests: both manifests agree`
+- `./scripts/check-markdown-fences.py` → exit 0 — `check-markdown-fences: 10 ```markdown fence(s), no hand-wrapped prose`
+- `./scripts/check-receipt-schema.py` → exit 0 — `check-receipt-schema: 7 field(s) agree across 3 copies`
+- `./scripts/check-skill-contracts.py` → exit 0 — `check-skill-contracts: 9 skill contract(s) present`
+- `./scripts/check-templates.py` → exit 0 — `check-templates: 10 task line(s) across 3 template(s), no split red steps`
+- `./assets/check-steering-anchors.sh` → exit 0 — `check-steering-anchors: 5 of 5 anchor(s) resolved, none unreadable`
+- `./assets/check-locks.py` → exit 0 — `check-locks: 6 pinned file(s) match their locks in .claude/agents, agents`
+- `./scripts/test-gates.sh` → exit 0 — `test-gates: 54 passed, 0 failed`
