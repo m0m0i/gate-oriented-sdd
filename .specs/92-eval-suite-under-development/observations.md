@@ -36,3 +36,7 @@
 - `./assets/check-steering-anchors.sh` → exit 0 — `check-steering-anchors: 5 of 5 anchor(s) resolved, none unreadable`
 - `./assets/check-locks.py` → exit 0 — `check-locks: 6 pinned file(s) match their locks in .claude/agents, agents`
 - `./scripts/test-gates.sh` → exit 0 — `test-gates: 54 passed, 0 failed`
+
+### Refactor under green
+
+AC1's grep still matched the three lines that kept "not yet run" or "unrun" after the new phrase, while AC2 keeps the fact. The fact is now carried as "no case has run" in `layout.md`, `structure.md`, `evals/README.md` and `AGENTS.md`, so AC1's grep returns nothing and every file still says it. Old phrasings per file after this: 0 0 0 0 0 0.

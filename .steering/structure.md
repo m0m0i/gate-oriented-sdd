@@ -12,7 +12,7 @@ The repository root is simultaneously a Claude Code plugin, a Claude Code market
 | `scripts/` | this repo's own guards, run by CI | no |
 | `docs/` | the inception documents — north star, PRD, epics, backlog, contract, design — and fidelity, layout, verified behaviour | no |
 | `docs/decisions/ADR-<n>-<slug>.md` | one contested decision each, append-only | no |
-| `evals/` | under development — authored, unrun | no |
+| `evals/` | under development — authored, no case has run | no |
 
 The seams between these — what crosses each, who produces and consumes it, and which guard makes a disagreement loud — are `docs/DESIGN.md`. The decisions behind the layout, with the alternatives they rejected, are `docs/decisions/`.
 
