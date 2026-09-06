@@ -11,7 +11,7 @@ A harness whose thesis is *enforcement* cannot ship unverified. These cases exis
 
 `review-gate-blocks` is the important one. It exercises `hooks/review-gate.sh` directly — a shell script with a spec fixture — so it passes or fails on mechanism rather than on model behaviour, and it is the case that distinguishes this harness from a folder of instructions.
 
-## Status: authored, not yet run
+## Status: under development — authored, no case has run
 
 `claude plugin eval` is in early access and was not enabled on the account these were written on, so **these cases have never been executed.** They are written to the documented bare shape (`prompt.md` plus `graders/*.md`) and should be treated as a specification of intent until someone runs them.
 
@@ -28,4 +28,4 @@ The baseline arm is the point: it reports the score delta between running with t
 
 ## When these pass, say so here
 
-Replace this section with the versions tested against, the date, and the observed deltas. Until then this file says "unrun", because that is what is true.
+Replace this section with the versions tested against, the date, and the observed deltas. Until then this file says "no case has run", because that is what is true.

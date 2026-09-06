@@ -34,7 +34,7 @@ The contrast is `check-locks.py`, which used to pass when it found no locks at a
 
 **No check is ever reported as having run when it did not.**
 
-The live instance: `evals/` holds four authored cases that have never executed, because `claude plugin eval` was not enabled on the account they were written on. `evals/README.md` says "Status: authored, not yet run" and the README's status line repeats it, in the same sentence that would otherwise read as maturity. One line would make this project look a release further along than it is, nobody would check it, and it is the single most tempting edit in the repository.
+The live instance: `evals/` holds four authored cases that have never executed, because `claude plugin eval` was not enabled on the account they were written on. `evals/README.md` says "Status: under development — authored, no case has run" and the README's status line repeats it, in the same sentence that would otherwise read as maturity. One line would make this project look a release further along than it is, nobody would check it, and it is the single most tempting edit in the repository.
 
 What it costs: the project reads as less finished than a competitor willing to write "tested".
 
