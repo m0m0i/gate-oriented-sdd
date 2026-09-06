@@ -1,6 +1,6 @@
 # Spec: Say the eval suite is under development
 
-- Slug: 92-eval-suite-under-development Issue: 92 Type: chore Status: approved
+- Slug: 92-eval-suite-under-development Issue: 92 Type: chore Status: done
 - Author: m0m0i Date: 2026-09-06
 
 ## 1. Requirements (WHAT / WHY)
@@ -14,9 +14,9 @@
 - Why now: the author's preference, stated 2026-09-06. Unplanned work, entered out loud.
 
 - Acceptance criteria:
-  - [ ] **AC1:** `grep -rn "not yet run\|authored, unrun\|has still not run\|authored but unrun"` over the six files returns nothing, and each carries "under development" (開発中 in the Japanese).
-  - [ ] **AC2:** Each of the six still states that no case has run; the READMEs' "what is not verified" sentences still name the suite; the Japanese Status section says the same as the English (C-3).
-  - [ ] **AC3:** `git diff --name-only main` is confined to the six files and this directory; `check-steering-anchors.sh` 5 of 5; every `- Validators:` command at exit 0 after the last write.
+  - [x] **AC1:** `grep -rn "not yet run\|authored, unrun\|has still not run\|authored but unrun"` over the six files returns nothing, and each carries "under development" (開発中 in the Japanese).
+  - [x] **AC2:** Each of the six still states that no case has run; the READMEs' "what is not verified" sentences still name the suite; the Japanese Status section says the same as the English (C-3).
+  - [x] **AC3:** `git diff --name-only main` is confined to the six files and this directory; `check-steering-anchors.sh` 5 of 5; every `- Validators:` command at exit 0 after the last write.
 
 - Out of scope: `docs/BACKLOG.md`'s Unshaped item, which describes the block rather than the suite; `docs/verified.md`'s dated observations.
 
@@ -35,4 +35,4 @@ None needed — requirements were unambiguous. The English wording is "under dev
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
 - [x] T1: record the greps red.
-- [ ] T2: rewrite; assert AC1–AC3 with the validators run last.
+- [x] T2: rewrite; assert AC1–AC3 with the validators run last.
