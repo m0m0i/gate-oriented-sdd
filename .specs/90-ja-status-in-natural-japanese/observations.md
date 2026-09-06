@@ -50,7 +50,7 @@ Each English claim, and the Japanese sentence that carries it:
 11. 「#17 以降のすべての spec には、`.specs/` の下に review receipt があります。2件を除いてサブエージェントとして起動した reviewer によるレビューで、その2件は inline でレビューしたことが receipt 自体に記録されています。」
 12. 「skill が、答えをまだ持っていない人から判断を引き出せるかどうかです。これまでの実行で作者に投げた質問は、すべて推奨案どおりに答えられました。skill が動くことは示せましたが、それ以上のことは示せていません。」
 13. 「eval スイートも未検証です。」
-14. 「`init` については、まだ何も導入していないリポジトリへの導入と、既存インストールのアップグレードという2つの経路をまだ試していません。」
+14. 「`init` については、まだ何も導入していないリポジトリへの導入と、既存インストールのアップグレードという2つの経路を試していません。」
 15. 「検証環境の Antigravity の行も、2026-08-21 以降は確認していません。」
 
 Nothing added beyond the fifteen. Register: ですます調 throughout; zero bullet lines in the file, as before; the two bold labels kept, now as sentence openers rather than colon labels, which is how the file's other emphatic openers read.
@@ -70,3 +70,5 @@ Nothing added beyond the fifteen. Register: ですます調 throughout; zero bul
 **AC3, observed.** `git diff --name-only main` → `README.ja.md`, `.specs/90-ja-status-in-natural-japanese/spec.md`, `.specs/90-ja-status-in-natural-japanese/observations.md`; the README hunk sits between `## ステータス` and `## ライセンス`.
 
 **Review triage.** LOW — 何もないリポジトリ read as an empty repository where the repo means one with no harness footprint (`docs/verified.md`'s definition); now まだ何も導入していないリポジトリ. LOW — AC3's three observations were ticked with one recorded; the line above. INFO accepted: the bold labels moved from colon labels to sentence openers, the file's dominant pattern.
+
+**After the second review.** The reviewer noted まだ twice in one sentence as polish, not a finding; the second is dropped here, after the receipt's sha, as the ordinary post-review docs edit.
