@@ -23,5 +23,5 @@ Thirteen exact substring replacements, each asserted to match once; the greps ar
 
 ## 3. Tasks (TDD-ordered)
 
-- [ ] T1: record the greps red.
+- [x] T1: record the greps red.
 - [ ] T2: replace; assert AC1–AC3, validators last.
