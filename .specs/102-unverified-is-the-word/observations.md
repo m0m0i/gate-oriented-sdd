@@ -42,3 +42,7 @@
 - `check-version-bump.py <main>` → check-version-bump: no shipped file changed
 
 **AC1, the two lines that stay.** `docs/verified.md:115` quotes `docs/BACKLOG.md`'s old preamble — "`epics` has never run…" — as the thing #55 found false, and `:202` says `init` was the last skill in the queue that had never run, dated 2026-09-05. Both are observation rows; rewording them would rewrite what was recorded. AC1 was amended ahead of this commit to say so, and the T2 commit was re-made behind the amendment so the tick reads as an independent check.
+
+**AC2 for `docs/verified.md`** is met by its lines 5 and 7 — the rows carry the date they were verified, and the preamble says so — not by the word; the count of `0` above is the word count, not the outcome.
+
+**Review triage.** CLEAN on the first pass. LOW ×2 — the spec said "thirteen" where no count of the diff yields it, and the record showed `verified.md: 0` under a ticked AC2 without saying why: both fixed here, after the review, in the record only.
