@@ -19,3 +19,31 @@ The Japanese sentences before, by line:
     59: そして、このチェーンの核心は本プラグインの発明ではありません。**GitHub のもの**です。Issue、ブランチ、Pull Request、そして PR が Issue を閉じる仕組み。これらはペアプログラミング規模から大きなチームまで、ちゃんと機能します。30人のチームでなければ使えない、という話ではありません。
     87: Issue、ブランチ、spec ディレクトリ、PR は同じ slug を共有し、PR が Issue を閉じます。ルールは **Issue なくして spec なし**。`spec` は Issue がなければ黙って作ることをせず、そこで停止して尋ねます。Issue のない spec とは、誰も選んでいない作業が始まっているということだからです。ゲートはこれを機械的に検査します。slug は `<
     91: **チェーンは PR 1本で終わります。** spec はその PR の最初のコミットであって、spec 自体の PR はありません。work log は最後のほうのコミットで、マージがおしまいです。続く PR はありません。`archive` がチェーンの傍らにあるのはそのためです。`git mv` 1回にブランチとレビューとマージを1式与えるほどの中身はなく、機械的に待っているものもありません
+
+## T2 — after: each sentence and the English it carries
+
+1. 「たいていはうまくいきます。うまくいかなくなるまでは。」 — "That works until it doesn't."
+2. 「スキップできます。ガイダンスだからです。」 / 「スキップできます。だから、実行されたかどうかを receipt に残します。」 — the process and judgment rows of the layer table; fragments made sentences.
+3. 「設計上の仕事は、その層に置く価値のあるルールを見極めることと、ゲートが煩わしくならない程度に一覧を短く保つことです。」 — the design work is deciding which rules deserve the bottom layer and keeping the list short enough that the gate is not annoying. うっとおしい → 煩わしい, here and in the pinning paragraph.
+4. 「`claude plugin details gate-sdd` によれば、…常時消費するのは約1,300トークンです。」 — "`claude plugin details gate-sdd` reports ~1,300 tokens always-on"; the command is now the source, not the subject.
+5. 「ただし、上流工程の6つの skill は、…約450トークンを占めます。実際に呼ばれるのはプロジェクトにつき一度程度でしょうから、この節で述べた原則にそのまま反するコストです。今の大きさなら受け入れられますが、…2つ目のプラグインに分けるべきです。」 — "~450 of that always-on total while firing perhaps once per project — a real cost against the same principle this section argues … should split into a second plugin". **Claim correction:** 数回 ("a few times") said more than the English's "perhaps once".
+6. 「そう読んでしまうのが、これを over-engineering だと切り捨てる最短コースです。」 — "reading it that way is the fastest route to dismissing this as over-engineering". **Claim correction:** the old sentence said preparing all thirteen for every project size tends to over-engineering, which the English does not say.
+7. 「存在しないユーザーストーリーと、作り話でしかない受け入れ条件を持った spec です。」 — "a user story that does not exist and acceptance criteria that are fiction"; できちゃうかもしれません dropped, since the English states it, not hedges it.
+8. 「ペアプログラミングの規模から上はどこでも機能しますし、30人のチームでなければ使えない、という話でもありません。」 — "They work from pair-programming scale upward; a team of thirty is not the threshold."
+9. 「`spec` は Issue がなければ、黙って作ったりせずにそこで止まって尋ねます。」 — "`spec` refuses to start without one rather than quietly creating it".
+10. 「work log は最後のほうのコミットで、マージで終わりです。」 and 「`git mv` 1回のために、ブランチとレビューとマージを一式用意するほどの中身はありませんし、機械的に待っているものもありません。」 — the chain ends at the merge; a single `git mv` does not earn a branch, a review and a merge, and nothing mechanical is waiting.
+11. 「`archive` は5回のスイープとして走らせました」 — "`archive` as five sweeps", the count fixed in both languages.
+
+Register after: ですます調 throughout; zero lines beginning with `- `; zero occurrences of うっとおし. The Status section is untouched except the count.
+
+### Validators, after the last write, stopping on failure
+
+- `./scripts/check-leakage.sh` → exit 0 — `check-leakage: clean`
+- `./scripts/check-manifests.py` → exit 0 — `check-manifests: both manifests agree`
+- `./scripts/check-markdown-fences.py` → exit 0 — `check-markdown-fences: 10 ```markdown fence(s), no hand-wrapped prose`
+- `./scripts/check-receipt-schema.py` → exit 0 — `check-receipt-schema: 7 field(s) agree across 3 copies`
+- `./scripts/check-skill-contracts.py` → exit 0 — `check-skill-contracts: 9 skill contract(s) present`
+- `./scripts/check-templates.py` → exit 0 — `check-templates: 10 task line(s) across 3 template(s), no split red steps`
+- `./assets/check-steering-anchors.sh` → exit 0 — `check-steering-anchors: 5 of 5 anchor(s) resolved, none unreadable`
+- `./assets/check-locks.py` → exit 0 — `check-locks: 6 pinned file(s) match their locks in .claude/agents, agents`
+- `./scripts/test-gates.sh` → exit 0 — `test-gates: 54 passed, 0 failed`
