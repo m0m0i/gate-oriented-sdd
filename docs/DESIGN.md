@@ -16,7 +16,7 @@ Three layers, chosen by how much each can be talked out of (`AGENTS.md`): determ
 | Steering — three files, five machine-read lines | bridge | `.steering/` in a project | every capability; it is what the layers agree through |
 | Manifests and hook wiring — two of each | packaging | `.claude-plugin/plugin.json`, `plugin.json`, `hooks/templates/claude-code.settings.json`, `hooks/templates/antigravity.hooks.json` | CAP-5 |
 | Tracker — issues typed feature, bug, chore | external | the project's tracker, via templates `init` installs | CAP-6 |
-| `evals/` | none yet | `evals/` | no capability. Under development — authored, no case has run; kept because CAP-1's claim needs it to run one day |
+| `evals/` | none yet | `evals/` | no capability. Under development — authored, unverified; kept because CAP-1's claim needs it to run one day |
 
 The PRD's third user, the reference-implementation reader, is served by `README*` and `docs/`. No component exists for them, as the PRD says.
 

@@ -48,4 +48,4 @@ Load only what the diff calls for.
 - A gate that exits 0 on a path where it could not do its job is the single worst defect available here. It is indistinguishable from correct behaviour, which is how it survives.
 - `agents/*/rules/*.md` carry no frontmatter **on purpose**. Never flag that.
 - `agents/_template/reviewer.md` quotes its `{{...}}` frontmatter placeholders **on purpose** — unquoted, they parse as a YAML flow mapping and fail validation. Never flag that.
-- `evals/` is authored but has never been run. Never treat it as passing evidence.
+- `evals/` is authored but unverified. Never treat it as passing evidence.
