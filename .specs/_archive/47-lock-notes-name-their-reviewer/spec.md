@@ -1,8 +1,7 @@
 # Spec: Each reviewer's lock note names the reviewer it grounds
 
-- Slug: 47-lock-notes-name-their-reviewer Issue: 47 Type: bug Status: done
-- Author: m0m0i Date: 2026-09-05
-
+- Slug: 47-lock-notes-name-their-reviewer Issue: 47 Type: bug Status: archived
+- Author: m0m0i Date: 2026-09-05   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - Reproduction: `grep -o '"note": "Grounding for [a-z-]*' agents/*/rules-lock.json` gives `ts-reviewer` three times — for `python-reviewer` and `dart-flutter-reviewer` too.

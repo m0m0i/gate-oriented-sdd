@@ -1,8 +1,7 @@
 # Spec: Run northstar, prd, and epics on this repo and record what was observed
 
-- Slug: 55-run-northstar-prd-epics Issue: 55 Type: chore Status: done
-- Author: m0m0i Date: 2026-08-29
-
+- Slug: 55-run-northstar-prd-epics Issue: 55 Type: chore Status: archived
+- Author: m0m0i Date: 2026-08-29   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: run `northstar`, then `prd`, then `epics` against this repository, in that order, keeping `docs/NORTH_STAR.md`, `docs/PRD.md`, and `docs/EPICS.md`, plus a section in `docs/verified.md` recording what was **observed** at each handoff. The documents are the by-product; the observations are the deliverable.

@@ -1,8 +1,7 @@
 # Spec: The fence carve-out is stated by delimiter when the thing that matters is content
 
-- Slug: 64-fence-carve-out-by-delimiter   Issue: 64   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-08-31
-
+- Slug: 64-fence-carve-out-by-delimiter   Issue: 64   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-08-31   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - Reproduction: the same sentence, in the document and in the template that regenerates it, after #61 unwrapped only the first.

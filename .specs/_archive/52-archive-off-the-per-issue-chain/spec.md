@@ -1,7 +1,6 @@
 # Spec: Archive leaves the per-issue chain, and the chain stops describing a PR that is gone
-- Slug: 52-archive-off-the-per-issue-chain   Issue: 52   Type: feature   Status: done
-- Author: m0m0i   Date: 2026-08-29
-
+- Slug: 52-archive-off-the-per-issue-chain   Issue: 52   Type: feature   Status: archived
+- Author: m0m0i   Date: 2026-08-29   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - User story: As someone shipping an issue through this harness, I want the whole issue to cost **one** pull request and archiving to be a sweep I run when I choose, so that finishing work costs one merge rather than two and the documented chain matches the one I actually run.
