@@ -23,5 +23,5 @@ Exact substring replacements, each asserted to match once; the sentence pairs ar
 
 ## 3. Tasks (TDD-ordered)
 
-- [ ] T1: record the count red and the sentences before.
+- [x] T1: record the count red and the sentences before.
 - [ ] T2: rewrite; assert AC1–AC3, validators last.
