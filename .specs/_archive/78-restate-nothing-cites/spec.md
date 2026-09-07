@@ -1,8 +1,7 @@
 # Spec: Restate the places that say nothing cites the capability or epic ids
 
-- Slug: 78-restate-nothing-cites Issue: 78 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-05
-
+- Slug: 78-restate-nothing-cites Issue: 78 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-05   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: three sentences are restated so each says what is true at HEAD — `.steering/product.md:27`, `docs/PRD.md:6`, `docs/EPICS.md:4`. `DESIGN.md` cites every capability id in its Serves column and `BACKLOG.md` cites every epic id in its Epic column, both in prose; no check requires either id to exist. The fourth place the issue names, the `docs/verified.md` row at `:114`, is already corrected by two later sections (`:155`, `:174`) and is left alone: that file corrects by a later note, and the notes exist.

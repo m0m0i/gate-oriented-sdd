@@ -1,8 +1,7 @@
 # Spec: Record what sprint did on the groomed backlog
 
-- Slug: 77-record-the-sprint-run Issue: 77 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-05
-
+- Slug: 77-record-the-sprint-run Issue: 77 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-05   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: a `docs/verified.md` section for the `sprint` run of 2026-09-05 against `docs/BACKLOG.md` rows 1 and 2, written from the notes taken as it ran, plus `observations.md` beside this spec holding those notes verbatim. `sprint` writes no file by design; this branch is its record. Fourth skill in the test queue.
