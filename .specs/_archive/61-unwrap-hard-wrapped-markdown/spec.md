@@ -1,8 +1,7 @@
 # Spec: Unwrap hard-wrapped Markdown and write the convention down
 
-- Slug: 61-unwrap-hard-wrapped-markdown Issue: 61 Type: chore Status: done
-- Author: m0m0i Date: 2026-08-30
-
+- Slug: 61-unwrap-hard-wrapped-markdown Issue: 61 Type: chore Status: archived
+- Author: m0m0i Date: 2026-08-30   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: join every hand-wrapped block in the tracked Markdown files that contain one — 50 files as it turned out, 49 of them reflow-only, against a survey of 54 by a deliberately loose detector — so a paragraph and a list item are each one physical line and the reader's app decides the width. Add one sentence to `CONTRIBUTING.md` stating the convention, so it stops being inferred from whatever file is nearby.

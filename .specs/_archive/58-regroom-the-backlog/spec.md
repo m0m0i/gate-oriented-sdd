@@ -1,8 +1,7 @@
 # Spec: Run backlog on this repo, re-grooming BACKLOG.md against the tracker and the epics
 
-- Slug: 58-regroom-the-backlog Issue: 58 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-05
-
+- Slug: 58-regroom-the-backlog Issue: 58 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-05   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: run `backlog` against this repository, grooming `docs/BACKLOG.md` in place — the preamble made true at HEAD, every open issue in the table exactly once, closed ones out, the known work that has no issue yet added as rows (clarification 1), the `Epic` column the template has and the file lacks, and a "What changed" record — plus `observations.md` beside this spec and rows in `docs/verified.md`. Third skill in the test queue after #55 and #56, and the first grooming with epics to read.

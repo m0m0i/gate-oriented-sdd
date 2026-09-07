@@ -1,8 +1,7 @@
 # Spec: The README Status section describes a repository that no longer exists
 
-- Slug: 48-readme-status Issue: 48 Type: bug Status: done
-- Author: m0m0i Date: 2026-09-05
-
+- Slug: 48-readme-status Issue: 48 Type: bug Status: archived
+- Author: m0m0i Date: 2026-09-05   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - Reproduction: `grep -n "v0\.2\.3" README.md README.ja.md` matches once in each while `plugin.json` says 0.4.2; `README.md:158` says the skills have never been executed end to end and no reviewer has yet reviewed a real diff; `README.ja.md:159` renders the second claim as "has not yet reviewed every diff"; `README.md:154` and `docs/verified.md:13` give Claude Code 2.1.238 while this session's runs were under 2.1.252; `docs/layout.md:93` lists four files under `docs/` where there are ten and a directory.

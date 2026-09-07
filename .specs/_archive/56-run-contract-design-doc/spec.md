@@ -1,8 +1,7 @@
 # Spec: Run contract and design-doc on this repo and record what was observed
 
-- Slug: 56-run-contract-design-doc Issue: 56 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-05
-
+- Slug: 56-run-contract-design-doc Issue: 56 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-05   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: run `contract`, then `design-doc`, against this repository, keeping what they write — `docs/CONTRACT.md`; `docs/DESIGN.md` and `docs/decisions/ADR-<n>-<slug>.md`; `.steering/structure.md` reconciled; the line `contract` step 6 adds to `.steering/tech.md`; whatever step 4 does to `.claude/agents/gate-sdd-reviewer/rules/` — plus `observations.md` beside this spec and a `docs/verified.md` section written from it. Second half of #55; as there, the observations are the deliverable.
