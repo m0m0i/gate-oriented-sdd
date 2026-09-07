@@ -23,9 +23,9 @@ The Japanese sentences before, by line:
 ## T2 — after: each sentence and the English it carries
 
 1. 「たいていはうまくいきます。うまくいかなくなるまでは。」 — "That works until it doesn't."
-2. 「スキップできます。ガイダンスだからです。」 / 「スキップできます。だから、実行されたかどうかを receipt に残します。」 — the process and judgment rows of the layer table; fragments made sentences.
-3. 「設計上の仕事は、その層に置く価値のあるルールを見極めることと、ゲートが煩わしくならない程度に一覧を短く保つことです。」 — the design work is deciding which rules deserve the bottom layer and keeping the list short enough that the gate is not annoying. うっとおしい → 煩わしい, here and in the pinning paragraph.
-4. 「`claude plugin details gate-sdd` によれば、…常時消費するのは約1,300トークンです。」 — "`claude plugin details gate-sdd` reports ~1,300 tokens always-on"; the command is now the source, not the subject.
+2. 「スキップできます。ガイダンスなので、それで構いません。」 / 「スキップできます。だから、実行されたかどうかを receipt に残します。」 — the process and judgment rows of the layer table: "Skippable — it is guidance, and that is appropriate" and the judgment row; fragments made sentences, and the process cell now carries "and that is appropriate", which the old cell had dropped (reviewer's INFO).
+3. 「設計上の仕事は、その層に置く価値のあるルールを見極めることと、ゲートが煩わしくならない程度に一覧を短く保つことです。」 — the design work is deciding which rules deserve the bottom layer and keeping the list short enough that the gate is not annoying. うっとおしい → 煩わしい here; in the pinning paragraph the sentence now carries the English's consequence — 「意味のない理由で鳴るアラームは、いずれ切られます。」 for "an alarm that fires for meaningless reasons gets switched off" — rather than only the annoyance (reviewer's INFO).
+4. 「これは主張ではなく、測定した数字です。`claude plugin details gate-sdd` によれば、…常時消費するのは約1,300トークンです。」 — "That is measurable rather than asserted. `claude plugin details gate-sdd` reports ~1,300 tokens always-on"; the command is now the source, not the subject, and the opening sentence, absent from the Japanese before this branch, is carried (reviewer's INFO).
 5. 「ただし、上流工程の6つの skill は、…約450トークンを占めます。実際に呼ばれるのはプロジェクトにつき一度程度でしょうから、この節で述べた原則にそのまま反するコストです。今の大きさなら受け入れられますが、…2つ目のプラグインに分けるべきです。」 — "~450 of that always-on total while firing perhaps once per project — a real cost against the same principle this section argues … should split into a second plugin". **Claim correction:** 数回 ("a few times") said more than the English's "perhaps once".
 6. 「そう読んでしまうのが、これを over-engineering だと切り捨てる最短コースです。」 — "reading it that way is the fastest route to dismissing this as over-engineering". **Claim correction:** the old sentence said preparing all thirteen for every project size tends to over-engineering, which the English does not say.
 7. 「存在しないユーザーストーリーと、作り話でしかない受け入れ条件を持った spec です。」 — "a user story that does not exist and acceptance criteria that are fiction"; できちゃうかもしれません dropped, since the English states it, not hedges it.
@@ -47,3 +47,7 @@ Register after: ですます調 throughout; zero lines beginning with `- `; zero
 - `./assets/check-steering-anchors.sh` → exit 0 — `check-steering-anchors: 5 of 5 anchor(s) resolved, none unreadable`
 - `./assets/check-locks.py` → exit 0 — `check-locks: 6 pinned file(s) match their locks in .claude/agents, agents`
 - `./scripts/test-gates.sh` → exit 0 — `test-gates: 54 passed, 0 failed`
+
+**AC3, observed.** `git diff --name-only main` → `README.md`, `README.ja.md`, and the two files in this directory; `git diff --numstat main -- README.md` → 1 1. Consequences to existing documents: none — the old count lives otherwise only in #48's and #90's dated observations, which are records and stay; `docs/verified.md` states no sweep count.
+
+**Review triage.** LOW — the process row's closing pipe drifted four columns: re-padded to the header's width. LOW — AC3's first two clauses ticked without a record: the line above. INFO ×3 — three C-3 gaps older than this branch on lines it touched, all taken since the author asked for the Japanese to be right: 「それで構いません」, 「これは主張ではなく、測定した数字です。」, 「いずれ切られます」. INFO — the reviewer's allow-list has no clock for `reviewed_at`: filed as an issue.
