@@ -1,8 +1,7 @@
 # Spec: Give the live reason the dogfood reviewer has no lock, and name the hook files that exist
 
-- Slug: 72-live-reason-for-the-missing-lock Issue: 72 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-05
-
+- Slug: 72-live-reason-for-the-missing-lock Issue: 72 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-05   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: the two paragraphs that explain why `.claude/agents/gate-sdd-reviewer/` has no `rules-lock.json` — `.claude/agents/gate-sdd-reviewer.md:43` and `AGENTS.md:71` — give the reason that is true now: `check-locks.py --update` cannot create a lock (#19), #16 is closed and the guard discovers both directories, and ADR-6 records the deviation. `AGENTS.md:23`'s Hooks row names the two template files that exist instead of two that do not.

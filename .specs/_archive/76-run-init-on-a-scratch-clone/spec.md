@@ -1,8 +1,7 @@
 # Spec: Run init on a scratch clone of a real project, and record what it detected, asked, wrote and armed
 
-- Slug: 76-run-init-on-a-scratch-clone Issue: 76 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-05
-
+- Slug: 76-run-init-on-a-scratch-clone Issue: 76 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-05   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: run `init` (plugin 0.4.2, identical to `skills/`) inside a scratch clone of a real, unrelated Python project of the maintainer's — `uv`, `ruff`, `mypy`, `pytest`, a `src/` layout — after stripping the harness install it already carries, and record what was observed at each of the skill's four steps: what detection found and which candidate validators it ran before adopting; what the interview asked and what the author answered; what was written, and what was merged into rather than overwritten; and what step 4 proved, including whether the reviewer was spawnable. The record is `observations.md` beside this spec and a `docs/verified.md` section. The clone is discarded. Fifth and last skill in the test queue.

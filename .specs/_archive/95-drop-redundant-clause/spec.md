@@ -1,8 +1,7 @@
 # Spec: Drop the redundant clause from the eval sentence
 
-- Slug: 95-drop-redundant-clause Issue: 95 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-06
-
+- Slug: 95-drop-redundant-clause Issue: 95 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-06   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: "— so none has run yet" leaves `README.md:152`; 「そのため、まだ一度も走っていません。」 leaves `README.ja.md:153`. Nothing else.

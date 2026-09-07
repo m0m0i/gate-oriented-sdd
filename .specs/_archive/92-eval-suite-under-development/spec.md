@@ -1,8 +1,7 @@
 # Spec: Say the eval suite is under development
 
-- Slug: 92-eval-suite-under-development Issue: 92 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-06
-
+- Slug: 92-eval-suite-under-development Issue: 92 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-06   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: six files stop describing `evals/` as merely "not yet run" and say it is under development, with the run fact kept: the cases are authored, the command is in early access here, none has run. `README.md`, `README.ja.md`, `docs/layout.md`, `.steering/structure.md`, `evals/README.md`, `AGENTS.md`.

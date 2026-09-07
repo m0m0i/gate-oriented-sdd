@@ -1,7 +1,6 @@
 # Spec: Pin format-on-save off for Markdown in the workspace
-- Slug: 66-pin-format-on-save-off-for-markdown   Issue: 66   Type: chore   Status: done
-- Author: m0m0i   Date: 2026-09-01
-
+- Slug: 66-pin-format-on-save-off-for-markdown   Issue: 66   Type: chore   Status: archived
+- Author: m0m0i   Date: 2026-09-01   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: add `.vscode/settings.json` containing a `[markdown]` block that sets `editor.formatOnSave` to `false`, committed so it applies to every clone. Both Claude Code's VS Code extension and Antigravity read workspace settings from that path.

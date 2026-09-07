@@ -1,8 +1,7 @@
 # Spec: Rewrite the Japanese README's Status section as Japanese
 
-- Slug: 90-ja-status-in-natural-japanese Issue: 90 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-06
-
+- Slug: 90-ja-status-in-natural-japanese Issue: 90 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-06   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: the ステータス section of `README.ja.md` is recomposed in natural Japanese — ですます調, paragraphs, no bullet lists, as the rest of the file is written — carrying every claim the English section makes.

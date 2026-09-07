@@ -1,8 +1,7 @@
 # Spec: The README Status section without the negatives
 
-- Slug: 97-readme-without-the-negatives Issue: 97 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-06
-
+- Slug: 97-readme-without-the-negatives Issue: 97 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-06   Archived: 2026-09-07
 ## 1. Requirements (WHAT / WHY)
 
 - What changes: in both READMEs' Status sections, the "What is not" paragraph is removed and replaced by a one-line pointer to `docs/verified.md`'s "Still to verify" list and the tracker; the matrix line keeps versions and dates and drops "not re-run since"; the eval sentence ends at "in early access on this account". "What is verified" is untouched.
