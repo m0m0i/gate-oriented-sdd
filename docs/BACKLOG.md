@@ -40,7 +40,7 @@ This grooming is the first with epics to read (`docs/EPICS.md`, from #55) and th
 
 Items that cannot be ordered yet because nobody knows what they are. This is a queue to empty, not a tier — anything sitting here is undecided work, and it does not get built while it stays here.
 
-- **Running the eval suite** — four cases authored, never executed. As of 2026-09-05 `claude plugin eval` renders its full help and then any invocation prints "in early access" and exits 0, running nothing. **Blocked on:** access. It matters more with every skill run, since the harness's own claims about skill behaviour are presence-checked only.
+- **Running the eval suite** — four cases authored, unverified. As of 2026-09-05 `claude plugin eval` renders its full help and then any invocation prints "in early access" and exits 0, running nothing. **Blocked on:** access. It matters more with every skill run, since the harness's own claims about skill behaviour are presence-checked only.
 - **Antigravity has no `SessionStart`** — the steering digest has no equivalent, and `PreInvocation` is the candidate substitute but needs a once-per-session guard. **Blocked on:** whether the guard is achievable at all, which nobody has tried.
 
 ## What would change this order

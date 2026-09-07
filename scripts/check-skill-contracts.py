@@ -7,7 +7,7 @@ is edited away, because prose has no compiler.
 
 This is a PRESENCE check and it is worth being clear about what that means: it asserts the
 instruction is written down, not that a model follows it. Only an eval can check the second,
-and `evals/` has never been run. A presence check is the weaker claim, and stating that
+and `evals/` is unverified. A presence check is the weaker claim, and stating that
 plainly is better than implying the stronger one.
 
 Keep the list short. A check that grows to police every sentence becomes an obstacle to
