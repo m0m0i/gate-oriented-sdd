@@ -1553,5 +1553,33 @@ else
 fi
 
 
+# 50. A producer LEAVING an allow-list must fail, not only a field arriving without one.
+#
+# The other half of #105's recurrence claim. Case 48 catches a new field with no producer;
+# nothing caught an existing field's producer being deleted from a reviewer, which is #105's
+# own mechanism running the other way. `reviewed_sha` is the second field with a command
+# behind it, so it is the one that shows the gap.
+r=$(receipt_repo receipt-sha-producer-gone)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "agents", "ts-reviewer.md")
+src = p.read_text()
+if "git rev-parse HEAD" not in src:
+    sys.exit(3)
+p.write_text(src.replace("`git log --oneline <base>...HEAD`, `git rev-parse HEAD`",
+                         "`git log --oneline <base>...HEAD`", 1))
+PYEOF
+if [ $? -ne 0 ]; then
+  report "a producer deleted from an allow-list fails" no \
+    "fixture could not be built: the git rev-parse bullet this case removes was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/perr"; printf '%s' "$?" )
+  c1=$(clock_branch_fails "$out" "$TMP/perr" "agents/ts-reviewer.md")
+  c2=$(clock_branch_fails "$out" "$TMP/perr" "reviewed_sha")
+  [ "$c1$c2" = "okok" ] && report "a producer deleted from an allow-list fails" ok \
+    || report "a producer deleted from an allow-list fails" no "names-file=$c1 names-field=$c2"
+fi
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

@@ -71,7 +71,11 @@ def bash_policy(path: pathlib.Path) -> str | None:
             continue
         if inside:
             body.append(line)
-    return "\n".join(body) if inside or body else None
+    # `inside` alone: `body` is appended to only while `inside` is true, and `inside` never
+    # goes back to false once set — the `## ` branch breaks first. So `or body` could never
+    # decide the return, and a second condition that cannot decide anything reads as though
+    # it does.
+    return "\n".join(body) if inside else None
 
 
 def fields(path: pathlib.Path) -> list[str]:
@@ -202,6 +206,13 @@ REVIEWERS = (
     ".claude/agents/gate-sdd-reviewer.md",
 )
 
+#: The needle is the FULL format string, not a bare `date -u`. The contract requires
+#: `reviewed_at=<YYYY-MM-DDTHH:MM:SSZ>`, and `date -u` alone also spells
+#: `2026-09-09 09:04:55 UTC`, which is not that shape — so the loose needle would pass a
+#: reviewer that cannot actually produce what is asked for. Exact matching is affordable here
+#: because `scripts/` never ships: this guard only ever reads the five files in this
+#: repository, so an equivalent spelling in somebody else's fork is not its problem.
+#:
 #: The work-set, stated in full so it can never be silently empty — the failure #16 and #39
 #: are both about. Every field in the agreed schema appears here exactly once, and the
 #: `None` entries are a claim, not a gap: those values are known to the reviewer from its own
@@ -209,13 +220,27 @@ REVIEWERS = (
 #: here fails the completeness check below rather than reaching a reviewer that cannot
 #: produce it.
 PRODUCERS = {
-    "reviewed_sha": None,   # `git rev-parse HEAD`, on every allow-list already
+    # Two fields need a command, and both are enforced. `reviewed_sha` was first written here
+    # as a `None` with a comment saying the command was "on every allow-list already" — true
+    # when written, and a comment about an allow-list going unchecked is the whole root cause
+    # of #105. Enforced, the guard also catches a producer LEAVING a list, not only a field
+    # arriving without one.
+    "reviewed_sha": ("git rev-parse HEAD", "names no way to read the current commit",
+                     "git rev-parse HEAD"),
+    "reviewed_at": ("date -u +%Y-%m-%dT%H:%M:%SZ", "names no clock",
+                    "date -u +%Y-%m-%dT%H:%M:%SZ"),
+    # The rest need none. Four are the reviewer's own findings and its own name; the fifth is
+    # environmental.
     "reviewer": None,       # its own name
     "verdict": None,        # its own findings
     "blockers": None,       # its own findings
     "high": None,           # its own findings
-    "reviewed_at": ("date -u", "names no clock", "date -u +%Y-%m-%dT%H:%M:%SZ"),
-    "reviewed_by": None,    # whether it was spawned, which only it knows
+    # NOT "known from its own run". The contract says the opposite twelve lines under the
+    # Receipt block — "the one field you may not know the answer to from inside your own run" —
+    # and no command produces it, which is why the contract makes an absent value mean
+    # "unknown" rather than defaulting it. Listed with no needle because there is nothing to
+    # demand, not because the question was retired.
+    "reviewed_by": None,
 }
 
 # The same guard SOURCES gets fifty lines below, for the same reason and citing the same
