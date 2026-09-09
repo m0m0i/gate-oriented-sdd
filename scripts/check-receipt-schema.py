@@ -218,11 +218,11 @@ REVIEWERS = (
 #: `None` entries are a claim, not a gap, and there are exactly two kinds: the value is known
 #: to the reviewer from its own run, or no command produces it at all and the contract says
 #: what an absent one means. A field a COMMAND produces does not belong here — give it a
-#: needle, so the guard catches the producer leaving an allow-list. That third category was
-#: offered here once, as "comes from a command already on every list", which is verbatim the
-#: reasoning `reviewed_sha` carried until it became the root cause of #105. A field added to
-#: the contract with no entry here fails the completeness check below rather than reaching a
-#: reviewer that cannot produce it.
+#: needle, so the guard catches the producer leaving an allow-list. The tempting third kind,
+#: "the command is already on every allow-list", is refused: that is the reasoning
+#: `reviewed_sha` carried here, and a claim about an allow-list that nothing checks is how
+#: #105 happened. A field added to the contract with no entry here fails the completeness
+#: check below rather than reaching a reviewer that cannot produce it.
 PRODUCERS = {
     # Two fields need a command, and both are enforced. `reviewed_sha` was first written here
     # as a `None` with a comment saying the command was "on every allow-list already" — true
