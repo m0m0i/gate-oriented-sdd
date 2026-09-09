@@ -1436,5 +1436,86 @@ else
 fi
 
 
+# 46, 47, 48. The three hard-exit branches of the #105 pairing check.
+#
+# Cases 43-45 pin the branch that COLLECTS failures. These pin the three that exit on the
+# spot, and they are here because a guard's fail-closed paths are exactly the ones nobody
+# exercises by accident — case 7 passed for three releases while the gate did nothing.
+#
+# 48 carries the most weight of the three. The spec's claim that this is a class fix rather
+# than an instance fix rests entirely on it: a field added to the contract with no producer
+# entry must fail HERE, rather than reaching a reviewer that cannot produce it, which is the
+# omission #105 itself was.
+clock_branch_fails() { # clock_branch_fails <exit> <stderr-file> <needle> -> ok|no
+  [ "$1" = "1" ] || { echo no; return; }
+  serr=$(cat "$2" 2>/dev/null)
+  case "$serr" in *Traceback*) echo no; return ;; esac
+  case "$serr" in *"$3"*) echo ok ;; *) echo no ;; esac
+}
+
+# 46. A reviewer named in REVIEWERS but absent from disk.
+# Not a skip: scripts/ never ships, so this only ever runs where all five exist. A named
+# reviewer that is not there is a rename nobody finished.
+r=$(receipt_repo receipt-reviewer-gone)
+rm -f "$r/agents/ts-reviewer.md"
+out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/gerr"; printf '%s' "$?" )
+c1=$(clock_branch_fails "$out" "$TMP/gerr" "is listed in REVIEWERS but is missing")
+c2=$(clock_branch_fails "$out" "$TMP/gerr" "agents/ts-reviewer.md")
+[ "$c1$c2" = "okok" ] && report "a reviewer listed but missing from disk fails" ok \
+  || report "a reviewer listed but missing from disk fails" no "reason=$c1 names-file=$c2"
+
+# 47. A reviewer whose Bash policy section has been renamed out from under the guard.
+# The section match is exact after strip().lower(), so a renamed heading is indistinguishable
+# from an absent one — and both must fail closed. A reviewer with no allow-list is not a
+# narrower reviewer, it is an unscoped one.
+r=$(receipt_repo receipt-policy-renamed)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "agents", "python-reviewer.md")
+src = p.read_text()
+if "## Bash policy\n" not in src:
+    sys.exit(3)
+p.write_text(src.replace("## Bash policy\n", "## Bash policy notes\n", 1))
+PYEOF
+if [ $? -ne 0 ]; then
+  report "a reviewer whose Bash policy heading was renamed fails" no \
+    "fixture could not be built: the heading this case renames was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/herr"; printf '%s' "$?" )
+  c1=$(clock_branch_fails "$out" "$TMP/herr" "has no '## Bash policy' section")
+  c2=$(clock_branch_fails "$out" "$TMP/herr" "agents/python-reviewer.md")
+  [ "$c1$c2" = "okok" ] && report "a reviewer whose Bash policy heading was renamed fails" ok \
+    || report "a reviewer whose Bash policy heading was renamed fails" no "reason=$c1 names-file=$c2"
+fi
+
+# 48. A receipt field with no entry in PRODUCERS.
+# The completeness half of the pairing, and the one the "cannot recur" claim rests on. The
+# field is added to all three schema copies at once, because a field added to one copy alone
+# is caught by the older drift check and would never reach this branch.
+r=$(receipt_repo receipt-field-unmapped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+for parts in (("agents", "_shared", "reviewer-contract.md"),
+              (".claude", "agents", "_shared", "reviewer-contract.md"),
+              ("skills", "implement", "SKILL.md")):
+    p = pathlib.Path(sys.argv[1], *parts)
+    src = p.read_text()
+    needle = "reviewed_by=subagent|inline\n"
+    if needle not in src:
+        sys.exit(3)
+    p.write_text(src.replace(needle, needle + "reviewed_model=<the model that reviewed>\n", 1))
+PYEOF
+if [ $? -ne 0 ]; then
+  report "a receipt field with no producer entry fails" no \
+    "fixture could not be built: the reviewed_by line this case appends after was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/uerr3"; printf '%s' "$?" )
+  c1=$(clock_branch_fails "$out" "$TMP/uerr3" "has no entry in PRODUCERS")
+  c2=$(clock_branch_fails "$out" "$TMP/uerr3" "reviewed_model")
+  [ "$c1$c2" = "okok" ] && report "a receipt field with no producer entry fails" ok \
+    || report "a receipt field with no producer entry fails" no "reason=$c1 names-field=$c2"
+fi
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
