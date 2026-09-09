@@ -1691,6 +1691,15 @@ write_spec "$r" "_archive/105-a-clock" "- [x] T5: **after the reviewer gate is C
 out=$(run_templates "$r")
 [ "$out" = "0" ] && c1=ok || c1=no
 
+# ...and one directly at .specs/_archive/spec.md, which the enumeration DOES reach. The case
+# above alone cannot fail if the `_archive` name check is deleted — its fixture sits a level
+# below what iterdir() inspects, so the exemption would still look tested while being gone.
+# An exemption nothing can mutation-test is an exemption that is not really pinned (G-8).
+r=$(specs_repo spec-archive-direct)
+write_spec "$r" "_archive" "- [x] T5: **after the reviewer gate is CLEAN** — bump both manifests to 0.4.4."
+out=$(run_templates "$r")
+[ "$out" = "0" ] && c1b=ok || c1b=no
+
 r=$(specs_repo spec-none)
 rmdir "$r/.specs"                  # ABSENT, not merely empty — specs_repo creates it, and a
                                    # fixture that leaves it in place never reaches the branch
@@ -1706,9 +1715,9 @@ printf '# Spec: x\n\n## 1. Requirements\n- [ ] **AC1:** x.\n\n## 3. Tasks (TDD-o
 out=$(run_templates "$r")
 [ "$out" = "0" ] && c3=ok || c3=no
 
-[ "$c1$c2$c3" = "okokok" ] && report "archived specs, a missing .specs and an unwritten Tasks section are not failures" ok \
+[ "$c1$c1b$c2$c3" = "okokokok" ] && report "archived specs, a missing .specs and an unwritten Tasks section are not failures" ok \
   || report "archived specs, a missing .specs and an unwritten Tasks section are not failures" no \
-     "archive-skipped=$c1 no-specs=$c2 no-tasks=$c3"
+     "archive-skipped=$c1 archive-direct=$c1b no-specs=$c2 no-tasks=$c3"
 
 # 53. A spec that exists and cannot be read must fail, not pass.
 #

@@ -24,6 +24,16 @@ The reviewer returned BLOCKED with 2 HIGH, 3 MEDIUM, 2 LOW against `5b5de68`. Bo
 
 The MEDIUM on the mirror is the one worth remembering: the first cut closed the phrasing that had actually occurred and left its symmetric twin open, which is a guard fitted to one example rather than to a class.
 
+## Second review round
+
+CLEAN at `27147c2` with one MEDIUM and two LOWs, all introduced by the first round's own fixes. Taken rather than accepted:
+
+- `docs/CONTRACT.md` carried **`M-12` twice** — the new row was numbered to sit beside its enforcer and collided with "Both plugin manifests validate". The table is id-addressed (`M-11` is cited twice elsewhere), so it is now `M-15`, appended in numeric order. Fixing an index-drift finding introduced an index defect, which is worth remembering about tables nothing checks.
+- `TASK_PREFIX` tolerated `- [X]` while `TASK_LINE` did not, so the widening was unreachable and a ticked-and-deferred task in that form would have been invisible to both subjects. The two now agree.
+- The unreadable-path header said "a live spec exists" when the subject may be `.specs/` itself, which establishes nothing about whether a spec exists.
+- The comment's "what a compliant task does not do is BEGIN a later clause with the phrase" was an empirical generalisation from two data points, and the reviewer produced a compliant rewording of T1 that trips it. Hedged, with the cost named.
+- **The `_archive` exemption was not mutation-testable.** Both rounds noted it as INFO: the fixture sat two levels below what the enumeration inspects, so deleting the name check left the case green. A second fixture at `.specs/_archive/spec.md` now fails when the exemption is removed — verified by deleting it and watching the case go red.
+
 ## The count claim
 
 62 → 66 after T1-T4, then → 67 after review added case 55. Both moves were re-enumerated with `git grep` across all tracked files rather than a hand-listed set of directories — the #105 lesson, where five places were corrected and a sixth left false. Six live statements, no seventh: `.steering/structure.md:19`, `README.md:41`, `README.md:156`, `README.ja.md:43`, `README.ja.md:157`, `CONTRIBUTING.md:21`.

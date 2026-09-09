@@ -80,10 +80,12 @@ SECTION = re.compile(r"^## ([A-Z][A-Za-z ]*?)\s*$")
 TASKS_HEADING = re.compile(r"^## 3\. Tasks")
 #: ANY checkbox line inside a Tasks block is a task line. Deliberately not `T\d+:` — that
 #: required an id and a colon, so `- [ ] **T1:** ...`, `- [ ] T1 — ...` and `- [ ] 1. ...`
-#: parsed as nothing at all and were skipped in silence. Bolding an id or using an em dash is
+#: parsed as nothing at all and were skipped in silence. `X` is accepted alongside `x` so that
+#: this and TASK_PREFIX below agree on what a task line is; while they disagreed, a `- [X]`
+#: task contributed nothing to EITHER subject and the live-spec half has no floor to notice. Bolding an id or using an em dash is
 #: ordinary drift in the file this guard watches, and each of those three forms let a split
 #: red step through with the guard exiting 0.
-TASK_LINE = re.compile(r"^- \[[ x]\]\s")
+TASK_LINE = re.compile(r"^- \[[ xX]\]\s")
 
 
 def tasks_by_section(text: str) -> dict[str, list[tuple[int, str]]]:
@@ -189,7 +191,8 @@ if split:
 #
 # A task announces its SCHEDULE in its directive — the first clause, before any elaboration.
 # Later clauses describe the work, and a compliant task legitimately says "after the review"
-# in one of them. What a compliant task does not do is BEGIN a later clause with the phrase:
+# in one of them. What a compliant task in this project's idiom rarely does is BEGIN a later
+# clause with the phrase — rarely, not never, and the difference is the cost below:
 # `— after the review` is a schedule, `— a live spec whose ... after the review` is a
 # description. So the directive is matched anywhere and later clauses only at their start.
 #
@@ -303,11 +306,11 @@ if spec_root.is_dir():
                     deferred.append((str(spec.relative_to(ROOT)), n, clause))
 
 if unreadable:
-    print("check-templates FAILED — a live spec exists but cannot be read", file=sys.stderr)
+    print("check-templates FAILED — a spec path exists but cannot be read", file=sys.stderr)
     for name, why in unreadable:
         print(f"  {name}: {why}", file=sys.stderr)
     print("", file=sys.stderr)
-    print("  A spec this guard could not open is not a spec with nothing wrong in it.", file=sys.stderr)
+    print("  A path this guard could not open is not a path with nothing wrong under it.", file=sys.stderr)
     sys.exit(1)
 
 if deferred:
