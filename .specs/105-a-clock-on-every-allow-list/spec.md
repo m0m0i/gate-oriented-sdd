@@ -12,7 +12,7 @@
   - [x] **AC1:** WHEN a reviewer fills in the Receipt block obeying only its own Bash policy THE SYSTEM SHALL permit it to obtain the current UTC time, in all five reviewer files.
   - [x] **AC2:** the regression test fails before the fix and passes after.
   - [x] **AC3:** WHEN a reviewer file's Bash policy omits the clock while the contract still requires `reviewed_at` THE SYSTEM SHALL fail a validator naming the file.
-  - [ ] **AC4:** WHEN this change is committed THE SYSTEM SHALL carry a version bump in both manifests, `agents/` being a shipped path.
+  - [x] **AC4:** WHEN this change is committed THE SYSTEM SHALL carry a version bump in both manifests, `agents/` being a shipped path.
 - Out of scope: the wording of `reviewed_at` in the contract (it stays `<YYYY-MM-DDTHH:MM:SSZ>`); the receipts already written, which are records and stay as they are; #35, which is about `reviewed_sha` naming the working tree rather than the reviewed commit, and is a separate defect in the same block.
 
 ### Clarifications
@@ -45,4 +45,4 @@
 - [x] T2: the clock as a sanctioned category in `agents/_shared/reviewer-contract.md`, copied to its mirror; the byte-compare at `check-receipt-schema.py:98` is the check. (AC3)
 - [x] T3: blast radius — a case proving the new failure still fires under `python3 -O`, so the check cannot be stripped the way #28 was. (AC2)
 - [x] T4: the path-count claim from 54 to 62 in the six live places named in the Blast radius; then refactor and the full validator line, `./scripts/check-leakage.sh` included.
-- [ ] T5: **after the reviewer gate is CLEAN** — bump both manifests to 0.4.4. `.steering/tech.md` puts the bump after the review deliberately, with the work-log entry and the `Status: done` flip, because `plugin.json` is outside `Source globs` and a bump before the receipt would re-stale it. (AC4)
+- [x] T5: **after the reviewer gate is CLEAN** — bump both manifests to 0.4.4. `.steering/tech.md` puts the bump after the review deliberately, with the work-log entry and the `Status: done` flip, because `plugin.json` is outside `Source globs` and a bump before the receipt would re-stale it. (AC4)
