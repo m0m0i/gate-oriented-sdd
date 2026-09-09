@@ -14,6 +14,7 @@ model: inherit
 Evidence gathering only:
 
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
+- `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
 - the validators named in `.steering/tech.md` — typically a format check, the analyzer, and the test suite
 - the SDK version command, to check an API against the pinned SDK before claiming it is wrong
 

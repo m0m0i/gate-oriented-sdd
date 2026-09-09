@@ -701,6 +701,16 @@ receipt_repo() {
   # together, which is the pair of edits that makes the skip reachable.
   mkdir -p "$r/.claude/agents/_shared"
   cp "$ROOT/.claude/agents/_shared/reviewer-contract.md" "$r/.claude/agents/_shared/"
+  # The five reviewers, because #105 made the guard read them too: a field the contract
+  # requires has to have a command on every reviewer's allow-list that can produce it. They
+  # are copied for EVERY receipt fixture, not only the cases below, so that case 34's control
+  # keeps exercising the whole guard rather than an early exit on a missing reviewer.
+  mkdir -p "$r/agents/_template" "$r/.claude/agents"
+  for rv in ts-reviewer python-reviewer dart-flutter-reviewer; do
+    cp "$ROOT/agents/$rv.md" "$r/agents/"
+  done
+  cp "$ROOT/agents/_template/reviewer.md" "$r/agents/_template/"
+  cp "$ROOT/.claude/agents/gate-sdd-reviewer.md" "$r/.claude/agents/"
   echo "$r"
 }
 
@@ -1288,6 +1298,291 @@ fi
 [ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15" = "okokokokokokokokokokokokokokok" ] && report "an empty work-set, an unclassifiable fence and a broken self-test all fail" ok \
   || report "an empty work-set, an unclassifiable fence and a broken self-test all fail" no \
      "empty-exit=$c1 empty-msg=$c2 nested-exit=$c3 nested-msg=$c4 unclosed-exit=$c5 unclosed-msg=$c6 selftest-exit=$c7 selftest-msg=$c8 quoted-exit=$c9 quoted-msg=$c10 unreadable-exit=$c11 unreadable-msg=$c12 invariant-exit=$c13 invariant-msg=$c14 invariant-not-selftest=$c15"
+
+
+# 43. A reviewer that cannot produce a field the contract requires must fail.
+#
+# #105. `reviewed_at` is the only receipt field whose value comes from outside both the diff
+# and the reviewer's own run, and no allow-list named a clock — so the contract required a
+# field every reviewer was simultaneously forbidden to produce. Each one resolved that on its
+# own: `date` run off-list and disclosed, a time taken from context, a placeholder.
+#
+# The check is a PAIRING, so both halves are pinned here. A guard that only looked for the
+# clock would go green the day `reviewed_at` left the contract, still demanding a command
+# nothing needed; one that only read the contract would never have caught this.
+r=$(receipt_repo receipt-clock)
+
+# Control first, as case 34 does and for the same reason: without it a case that fails because
+# the fixture is broken reads as a caught bug. The unmutated tree is the FIXED tree, so this
+# also pins that all five reviewers really do carry the clock.
+ctl=$( cd "$r" && python3 scripts/check-receipt-schema.py 2>/dev/null; echo "exit=$?" )
+case "$ctl" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+
+# Strip the clock from ONE reviewer, the way the tree looked before this fix. python3 rather
+# than sed -i, which is not portable, and it exits non-zero when its needle is gone so that a
+# reworded allow-list cannot no-op the mutation and leave this case green against a guard that
+# was never tested.
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "agents", "python-reviewer.md")
+src = p.read_text()
+kept = [ln for ln in src.splitlines(keepends=True) if "date -u" not in ln]
+if len(kept) == len(src.splitlines(keepends=True)):
+    sys.exit(3)
+p.write_text("".join(kept))
+PYEOF
+built=$?
+
+if [ "$built" -ne 0 ]; then
+  report "a reviewer that cannot produce a required receipt field fails" no \
+    "fixture could not be built: the clock line this case removes was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/cerr"; printf '%s' "$?" )
+  cerr=$(cat "$TMP/cerr" 2>/dev/null)
+  [ "$out" = "1" ] && c2=ok || c2=no
+  # Exit 1 is also what a traceback returns, so the code alone is not the check — this file's
+  # rule at :481-484. The path is required because a finding that does not say WHICH reviewer
+  # is unactionable across five of them, and the phrase unique to this branch is required
+  # because two sibling branches of the same guard also exit 1 naming a path.
+  case "$cerr" in *Traceback*) c3=no ;; *) c3=ok ;; esac
+  case "$cerr" in *"agents/python-reviewer.md"*) c4=ok ;; *) c4=no ;; esac
+  case "$cerr" in *"names no clock"*) c5=ok ;; *) c5=no ;; esac
+  [ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
+    && report "a reviewer that cannot produce a required receipt field fails" ok \
+    || report "a reviewer that cannot produce a required receipt field fails" no \
+       "control=$c1 exit=$c2 no-traceback=$c3 names-file=$c4 names-reason=$c5"
+fi
+
+# 44. The other half of the pairing: no requirement, no demand.
+#
+# A required field and its producer are one fact. Dropping `reviewed_at` from the contract
+# must stop the guard asking for a clock, or the check becomes a rule of its own that outlives
+# the reason it exists — which is how a guard earns the reputation that gets it switched off.
+r=$(receipt_repo receipt-clock-unrequired)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+paths = [
+    ("agents", "_shared", "reviewer-contract.md"),
+    (".claude", "agents", "_shared", "reviewer-contract.md"),
+    ("skills", "implement", "SKILL.md"),
+]
+for parts in paths:
+    p = pathlib.Path(sys.argv[1], *parts)
+    src = p.read_text()
+    kept = [ln for ln in src.splitlines(keepends=True) if not ln.lstrip().startswith("reviewed_at=")]
+    if len(kept) == len(src.splitlines(keepends=True)):
+        sys.exit(3)
+    p.write_text("".join(kept))
+# and the clock goes too, so the tree is consistent: nothing requires it, nothing offers it.
+for rv in ("agents/ts-reviewer.md", "agents/python-reviewer.md", "agents/dart-flutter-reviewer.md",
+           "agents/_template/reviewer.md", ".claude/agents/gate-sdd-reviewer.md"):
+    p = pathlib.Path(sys.argv[1], rv)
+    p.write_text("".join(ln for ln in p.read_text().splitlines(keepends=True) if "date -u" not in ln))
+PYEOF
+built=$?
+if [ "$built" -ne 0 ]; then
+  report "a contract that stops requiring the field stops demanding the clock" no \
+    "fixture could not be built: the reviewed_at line this case removes was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/uerr"; printf '%s' "$?" )
+  [ "$out" = "0" ] && c1=ok || c1=no
+  [ "$c1" = "ok" ] \
+    && report "a contract that stops requiring the field stops demanding the clock" ok \
+    || report "a contract that stops requiring the field stops demanding the clock" no \
+       "exit=$out stderr=$(cat "$TMP/uerr" 2>/dev/null | head -2 | tr '\n' ' ')"
+fi
+
+
+# 45. The clock check survives having assertions stripped.
+#
+# #28 is why this is behavioural rather than left to case 35. That case greps for `assert` at
+# statement position, which is a check on the SHAPE of the source and can be walked around —
+# `if __debug__:` is not an assert and is deleted by exactly the same flag. #105's check is
+# the newest safety check in this guard and therefore the one most likely to be written that
+# way by someone who did not read #28, so it is pinned by running it stripped.
+r=$(receipt_repo receipt-clock-stripped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "agents", "dart-flutter-reviewer.md")
+src = p.read_text()
+kept = [ln for ln in src.splitlines(keepends=True) if "date -u" not in ln]
+if len(kept) == len(src.splitlines(keepends=True)):
+    sys.exit(3)
+p.write_text("".join(kept))
+PYEOF
+built=$?
+
+if [ "$built" -ne 0 ]; then
+  report "the clock check still fires with assertions stripped" no \
+    "fixture could not be built: the clock line this case removes was not found"
+else
+  # Same pairing of requirements as case 34, and for the same reason: exit 1 is also what a
+  # traceback returns, so the code alone cannot tell a working check from a crashing one.
+  clock_fails() { # clock_fails <exit-code> <stderr-file> -> ok|no
+    [ "$1" = "1" ] || { echo no; return; }
+    serr=$(cat "$2" 2>/dev/null)
+    case "$serr" in *Traceback*) echo no; return ;; esac
+    case "$serr" in *"agents/dart-flutter-reviewer.md"*) : ;; *) echo no; return ;; esac
+    case "$serr" in *"names no clock"*) echo ok ;; *) echo no ;; esac
+  }
+  out=$( cd "$r" && python3 -O scripts/check-receipt-schema.py >/dev/null 2>"$TMP/serr"; printf '%s' "$?" )
+  c1=$(clock_fails "$out" "$TMP/serr")
+  # No flag, through the shebang — how PYTHONOPTIMIZE arrives without any caller choosing it.
+  out2=$( cd "$r" && PYTHONOPTIMIZE=1 ./scripts/check-receipt-schema.py >/dev/null 2>"$TMP/serr2"; printf '%s' "$?" )
+  c2=$(clock_fails "$out2" "$TMP/serr2")
+  [ "$c1$c2" = "okok" ] \
+    && report "the clock check still fires with assertions stripped" ok \
+    || report "the clock check still fires with assertions stripped" no "minus-O=$c1 PYTHONOPTIMIZE=$c2"
+fi
+
+
+# 46, 47, 48. The three hard-exit branches of the #105 pairing check.
+#
+# Cases 43-45 pin the branch that COLLECTS failures. These pin the three that exit on the
+# spot, and they are here because a guard's fail-closed paths are exactly the ones nobody
+# exercises by accident — case 7 passed for three releases while the gate did nothing.
+#
+# 48 carries the most weight of the three. The spec's claim that this is a class fix rather
+# than an instance fix rests entirely on it: a field added to the contract with no producer
+# entry must fail HERE, rather than reaching a reviewer that cannot produce it, which is the
+# omission #105 itself was.
+clock_branch_fails() { # clock_branch_fails <exit> <stderr-file> <needle> -> ok|no
+  [ "$1" = "1" ] || { echo no; return; }
+  serr=$(cat "$2" 2>/dev/null)
+  case "$serr" in *Traceback*) echo no; return ;; esac
+  case "$serr" in *"$3"*) echo ok ;; *) echo no ;; esac
+}
+
+# 46. A reviewer named in REVIEWERS but absent from disk.
+# Not a skip: scripts/ never ships, so this only ever runs where all five exist. A named
+# reviewer that is not there is a rename nobody finished.
+r=$(receipt_repo receipt-reviewer-gone)
+rm -f "$r/agents/ts-reviewer.md"
+out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/gerr"; printf '%s' "$?" )
+c1=$(clock_branch_fails "$out" "$TMP/gerr" "is listed in REVIEWERS but is missing")
+c2=$(clock_branch_fails "$out" "$TMP/gerr" "agents/ts-reviewer.md")
+[ "$c1$c2" = "okok" ] && report "a reviewer listed but missing from disk fails" ok \
+  || report "a reviewer listed but missing from disk fails" no "reason=$c1 names-file=$c2"
+
+# 47. A reviewer whose Bash policy section has been renamed out from under the guard.
+# The section match is exact after strip().lower(), so a renamed heading is indistinguishable
+# from an absent one — and both must fail closed. A reviewer with no allow-list is not a
+# narrower reviewer, it is an unscoped one.
+r=$(receipt_repo receipt-policy-renamed)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "agents", "python-reviewer.md")
+src = p.read_text()
+if "## Bash policy\n" not in src:
+    sys.exit(3)
+p.write_text(src.replace("## Bash policy\n", "## Bash policy notes\n", 1))
+PYEOF
+if [ $? -ne 0 ]; then
+  report "a reviewer whose Bash policy heading was renamed fails" no \
+    "fixture could not be built: the heading this case renames was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/herr"; printf '%s' "$?" )
+  c1=$(clock_branch_fails "$out" "$TMP/herr" "has no '## Bash policy' section")
+  c2=$(clock_branch_fails "$out" "$TMP/herr" "agents/python-reviewer.md")
+  [ "$c1$c2" = "okok" ] && report "a reviewer whose Bash policy heading was renamed fails" ok \
+    || report "a reviewer whose Bash policy heading was renamed fails" no "reason=$c1 names-file=$c2"
+fi
+
+# 48. A receipt field with no entry in PRODUCERS.
+# The completeness half of the pairing, and the one the "cannot recur" claim rests on. The
+# field is added to all three schema copies at once, because a field added to one copy alone
+# is caught by the older drift check and would never reach this branch.
+r=$(receipt_repo receipt-field-unmapped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+for parts in (("agents", "_shared", "reviewer-contract.md"),
+              (".claude", "agents", "_shared", "reviewer-contract.md"),
+              ("skills", "implement", "SKILL.md")):
+    p = pathlib.Path(sys.argv[1], *parts)
+    src = p.read_text()
+    needle = "reviewed_by=subagent|inline\n"
+    if needle not in src:
+        sys.exit(3)
+    p.write_text(src.replace(needle, needle + "reviewed_model=<the model that reviewed>\n", 1))
+PYEOF
+if [ $? -ne 0 ]; then
+  report "a receipt field with no producer entry fails" no \
+    "fixture could not be built: the reviewed_by line this case appends after was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/uerr3"; printf '%s' "$?" )
+  c1=$(clock_branch_fails "$out" "$TMP/uerr3" "has no entry in PRODUCERS")
+  c2=$(clock_branch_fails "$out" "$TMP/uerr3" "reviewed_model")
+  [ "$c1$c2" = "okok" ] && report "a receipt field with no producer entry fails" ok \
+    || report "a receipt field with no producer entry fails" no "reason=$c1 names-field=$c2"
+fi
+
+
+# 49. An emptied REVIEWERS must fail rather than report success.
+#
+# #16's shape, in the work-set #105 added. This file already guards its other hard-coded
+# work-set — `if len(SOURCES) < 2` at check-receipt-schema.py, with a comment citing #16 —
+# and the new tuple arrived without the equivalent. Emptying it makes the loop run zero times,
+# leaves the failure list empty, and prints a success line naming zero reviewers.
+#
+# The success line is checked as well as the exit code, because "0 reviewer(s) can produce"
+# is the sentence a reader would have skimmed past. A guard is allowed to check nothing only
+# when it says so loudly enough that nobody mistakes it for a pass.
+r=$(receipt_repo receipt-no-reviewers)
+python3 - "$r" <<'PYEOF'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-receipt-schema.py")
+src = p.read_text()
+new, n = re.subn(r"REVIEWERS = \(\n(?:    \"[^\"]+\",\n)+\)", "REVIEWERS = ()", src, count=1)
+if n != 1:
+    sys.exit(3)
+p.write_text(new)
+PYEOF
+if [ $? -ne 0 ]; then
+  report "an emptied REVIEWERS must not report success" no \
+    "fixture could not be built: the REVIEWERS tuple this case empties was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >"$TMP/nout" 2>"$TMP/nerr"; printf '%s' "$?" )
+  [ "$out" = "1" ] && c1=ok || c1=no
+  case "$(cat "$TMP/nerr" 2>/dev/null)" in *Traceback*) c2=no ;; *) c2=ok ;; esac
+  case "$(cat "$TMP/nerr" 2>/dev/null)" in *"below its floor"*) c3=ok ;; *) c3=no ;; esac
+  # The success line must not have been printed at all.
+  case "$(cat "$TMP/nout" 2>/dev/null)" in *"reviewer(s) can produce"*) c4=no ;; *) c4=ok ;; esac
+  [ "$c1$c2$c3$c4" = "okokokok" ] && report "an emptied REVIEWERS must not report success" ok \
+    || report "an emptied REVIEWERS must not report success" no \
+       "exit=$c1 no-traceback=$c2 says-empty=$c3 no-success-line=$c4"
+fi
+
+
+# 50. A producer LEAVING an allow-list must fail, not only a field arriving without one.
+#
+# The other half of #105's recurrence claim. Case 48 catches a new field with no producer;
+# nothing caught an existing field's producer being deleted from a reviewer, which is #105's
+# own mechanism running the other way. `reviewed_sha` is the second field with a command
+# behind it, so it is the one that shows the gap.
+r=$(receipt_repo receipt-sha-producer-gone)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "agents", "ts-reviewer.md")
+src = p.read_text()
+# The precondition is the replacement TARGET, not a substring of it. Checking only
+# "git rev-parse HEAD" would still pass if the bullet were reordered, leaving the replace a
+# no-op and this case failing through the wrong diagnosis — cases 47-49 all check the exact
+# string they mutate, and 50 was the odd one out.
+target = "`git log --oneline <base>...HEAD`, `git rev-parse HEAD`"
+if target not in src:
+    sys.exit(3)
+p.write_text(src.replace(target, "`git log --oneline <base>...HEAD`", 1))
+PYEOF
+if [ $? -ne 0 ]; then
+  report "a producer deleted from an allow-list fails" no \
+    "fixture could not be built: the git rev-parse bullet this case removes was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/perr"; printf '%s' "$?" )
+  c1=$(clock_branch_fails "$out" "$TMP/perr" "agents/ts-reviewer.md")
+  c2=$(clock_branch_fails "$out" "$TMP/perr" "reviewed_sha")
+  [ "$c1$c2" = "okok" ] && report "a producer deleted from an allow-list fails" ok \
+    || report "a producer deleted from an allow-list fails" no "names-file=$c1 names-field=$c2"
+fi
 
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"

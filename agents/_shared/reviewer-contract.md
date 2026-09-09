@@ -17,8 +17,11 @@ Reviewers get shell access because a reviewer that can run the type checker find
 - reading the diff, the log, and the current commit
 - running the project's own validators, as named in `.steering/tech.md`
 - checking an installed version before claiming an API is wrong
+- reading the clock, for the receipt's `reviewed_at` and nothing else
 
 Anything else is out of scope. If you believe another command is necessary, say so as a finding rather than running it.
+
+The clock is on that list because the Receipt block below requires `reviewed_at`, and it is the one field whose value comes from outside both the diff and your own run. A field this document requires of you while your allow-list forbids the only command that produces it is a contradiction you would have to resolve by yourself, and reviewers resolved it three different ways before it was noticed (#105). Your own reviewer file names the exact command; `scripts/check-receipt-schema.py` fails if any reviewer's allow-list has lost it while this block still asks for the field.
 
 ## Load order
 

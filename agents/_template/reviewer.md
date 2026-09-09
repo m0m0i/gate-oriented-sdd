@@ -16,6 +16,7 @@ model: inherit
 Evidence gathering only:
 
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
+- `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
 - these validators, and no others:
 {{VALIDATOR_LIST}}
 - the package manager's list command, to check an installed version before claiming an API is wrong

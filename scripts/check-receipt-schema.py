@@ -48,6 +48,36 @@ REQUIRED = ("reviewed_sha", "verdict", "reviewed_by")
 FIELD = re.compile(r"^\s*([a-z_]+)=")
 
 
+def bash_policy(path: pathlib.Path) -> str | None:
+    """The text of a reviewer's `## Bash policy` section, or None if it has no such section.
+
+    Scoped to the section rather than searched for across the whole file, because the rest of
+    a reviewer names commands it is describing rather than permitting — a rulebook row, a
+    validator table, an example of a finding. Matching those would let a reviewer pass while
+    its allow-list still forbade the command, which is the fail-open direction and the one
+    this repository is named for avoiding.
+
+    Ends at the next `## ` heading. Deliberately not at the next blank line: the section is a
+    bullet list with prose around it, and every reviewer file separates the two with one.
+    """
+    lines = path.read_text().splitlines()
+    body: list[str] = []
+    inside = False
+    for line in lines:
+        if line.startswith("## "):
+            if inside:
+                break
+            inside = line.strip().lower() == "## bash policy"
+            continue
+        if inside:
+            body.append(line)
+    # `inside` alone: `body` is appended to only while `inside` is true, and `inside` never
+    # goes back to false once set — the `## ` branch breaks first. So `or body` could never
+    # decide the return, and a second condition that cannot decide anything reads as though
+    # it does.
+    return "\n".join(body) if inside else None
+
+
 def fields(path: pathlib.Path) -> list[str]:
     """The receipt field names, in order, from the block that defines `reviewed_sha`.
 
@@ -151,4 +181,131 @@ if absent:
     print("  The copies agreeing is not enough. Every copy dropping the same field agrees too.", file=sys.stderr)
     sys.exit(1)
 
-print(f"check-receipt-schema: {len(found[first])} field(s) agree across {len(SOURCES)} copies")
+# --- A required field must have a producer on every reviewer's allow-list -----------------
+#
+# #105. The Receipt block and the Bash policy live in the same document but were written
+# against different questions: `reviewed_at` was specified as something the record must
+# CONTAIN, with no pass asking what a reviewer is permitted to RUN to fill it. No allow-list
+# named a clock, and the contract also says to raise a finding rather than run an off-list
+# command — so every reviewer resolved a contradiction on its own, three ways in one week.
+#
+# The rule is a pairing, in both directions. A field the contract requires must have a
+# command on every allow-list; a command demanded of every allow-list must be required by the
+# contract. Checking only the first leaves the guard demanding a clock the day `reviewed_at`
+# leaves the schema, and a guard that outlives its reason is one that gets switched off.
+
+#: Every reviewer whose allow-list this repository controls. The three shipped ones are the
+#: product, `_template` is what an unrecognised stack starts from, and the `.claude/` one is
+#: what actually reviews this repository — the copy missed on this guard's first pass, which
+#: is the whole reason that omission is called out in SOURCES above.
+REVIEWERS = (
+    "agents/ts-reviewer.md",
+    "agents/python-reviewer.md",
+    "agents/dart-flutter-reviewer.md",
+    "agents/_template/reviewer.md",
+    ".claude/agents/gate-sdd-reviewer.md",
+)
+
+#: The needle is the FULL format string, not a bare `date -u`. The contract requires
+#: `reviewed_at=<YYYY-MM-DDTHH:MM:SSZ>`, and `date -u` alone also spells
+#: `2026-09-09 09:04:55 UTC`, which is not that shape — so the loose needle would pass a
+#: reviewer that cannot actually produce what is asked for. Exact matching is affordable here
+#: because `scripts/` never ships: this guard only ever reads the five files in this
+#: repository, so an equivalent spelling in somebody else's fork is not its problem.
+#:
+#: The work-set, stated in full so it can never be silently empty — the failure #16 and #39
+#: are both about. Every field in the agreed schema appears here exactly once, and the
+#: `None` entries are a claim, not a gap, and there are exactly two kinds: the value is known
+#: to the reviewer from its own run, or no command produces it at all and the contract says
+#: what an absent one means. A field a COMMAND produces does not belong here — give it a
+#: needle, so the guard catches the producer leaving an allow-list. The tempting third kind,
+#: "the command is already on every allow-list", is refused: that is the reasoning
+#: `reviewed_sha` carried here, and a claim about an allow-list that nothing checks is how
+#: #105 happened. A field added to the contract with no entry here fails the completeness
+#: check below rather than reaching a reviewer that cannot produce it.
+PRODUCERS = {
+    # Two fields need a command, and both are enforced. `reviewed_sha` was first written here
+    # as a `None` with a comment saying the command was "on every allow-list already" — true
+    # when written, and a comment about an allow-list going unchecked is the whole root cause
+    # of #105. Enforced, the guard also catches a producer LEAVING a list, not only a field
+    # arriving without one.
+    "reviewed_sha": ("git rev-parse HEAD", "names no way to read the current commit",
+                     "git rev-parse HEAD"),
+    "reviewed_at": ("date -u +%Y-%m-%dT%H:%M:%SZ", "names no clock",
+                    "date -u +%Y-%m-%dT%H:%M:%SZ"),
+    # The rest need none. Four are the reviewer's own findings and its own name; the fifth is
+    # environmental.
+    "reviewer": None,       # its own name
+    "verdict": None,        # its own findings
+    "blockers": None,       # its own findings
+    "high": None,           # its own findings
+    # NOT "known from its own run". The contract says the opposite twelve lines under the
+    # Receipt block — "the one field you may not know the answer to from inside your own run" —
+    # and no command produces it, which is why the contract makes an absent value mean
+    # "unknown" rather than defaulting it. Listed with no needle because there is nothing to
+    # demand, not because the question was retired.
+    "reviewed_by": None,
+}
+
+# The same guard SOURCES gets a hundred lines above, for the same reason and citing the same
+# incident. A hard-coded work-set can be emptied by an edit to this file, and an emptied one
+# makes every loop below run zero times, leaves nothing in `_failures`, and prints a success
+# line reading "0 reviewer(s) can produce" — #16 verbatim. Five is the number that exist; a
+# reviewer deliberately retired should move this number down in the same change, which is a
+# decision worth having to make rather than one that happens silently.
+if len(REVIEWERS) < 5:
+    print("check-receipt-schema FAILED — REVIEWERS is below its floor", file=sys.stderr)
+    print(f"  listed: {len(REVIEWERS)}, expected at least 5", file=sys.stderr)
+    print("  An empty or shortened work-set must not report success — see #16. If a reviewer", file=sys.stderr)
+    print("  was retired on purpose, move the floor in the same change.", file=sys.stderr)
+    sys.exit(1)
+
+# Completeness before correctness. An unknown field is a field nobody asked the producer
+# question about, which is exactly how #105 arrived.
+unmapped = [f for f in found[first] if f not in PRODUCERS]
+if unmapped:
+    print("check-receipt-schema FAILED — a receipt field has no entry in PRODUCERS", file=sys.stderr)
+    print(f"  unmapped: {unmapped}", file=sys.stderr)
+    print("  Say how a reviewer obtains it. `None` means one of two things: known from the", file=sys.stderr)
+    print("  reviewer's own run, or produced by no command at all, with the contract defining", file=sys.stderr)
+    print("  what an absent value means. A field a COMMAND produces gets a needle instead —", file=sys.stderr)
+    print("  'the command is already on every allow-list' is how #105 happened.", file=sys.stderr)
+    sys.exit(1)
+
+#: Only the fields the agreed schema actually requires are demanded of the reviewers, so the
+#: pairing releases as well as binds.
+_demanded = {f: PRODUCERS[f] for f in found[first] if PRODUCERS[f] is not None}
+
+if _demanded:
+    _failures = []
+    for _rel in REVIEWERS:
+        _path = ROOT / _rel
+        if not _path.is_file():
+            # Not a skip. `scripts/` is this repository's own guard set and never ships, so a
+            # reviewer named here and absent from disk is a rename nobody finished, not an
+            # optional component.
+            print(f"check-receipt-schema FAILED — {_rel} is listed in REVIEWERS but is missing", file=sys.stderr)
+            sys.exit(1)
+        _policy = bash_policy(_path)
+        if _policy is None:
+            print(f"check-receipt-schema FAILED — {_rel} has no '## Bash policy' section", file=sys.stderr)
+            print("  The allow-list is what keeps a read-only reviewer read-only. A reviewer", file=sys.stderr)
+            print("  without one is not a narrower reviewer; it is an unscoped one.", file=sys.stderr)
+            sys.exit(1)
+        for _field, (_needle, _reason, _fix) in _demanded.items():
+            if _needle not in _policy:
+                _failures.append((_rel, _field, _reason, _fix))
+    if _failures:
+        print("check-receipt-schema FAILED — a reviewer cannot produce a field the contract requires", file=sys.stderr)
+        for _rel, _field, _reason, _fix in _failures:
+            print(f"  {_rel}: the contract requires {_field} but this reviewer's Bash policy {_reason}", file=sys.stderr)
+            print(f"    add to its allow-list: {_fix}", file=sys.stderr)
+        print("  Needles are matched literally — any spelling but this exact one counts as", file=sys.stderr)
+        print("  absent, including quoting the format string, reordering the arguments, or", file=sys.stderr)
+        print("  inserting a flag the command itself would accept.", file=sys.stderr)
+        print("  A field required by the contract and forbidden by the allow-list is not a", file=sys.stderr)
+        print("  strict reviewer. It is one that has been taught the allow-list is negotiable.", file=sys.stderr)
+        sys.exit(1)
+
+print(f"check-receipt-schema: {len(found[first])} field(s) agree across {len(SOURCES)} copies, "
+      f"and {len(REVIEWERS)} reviewer(s) can produce the {len(_demanded)} needing a command")
