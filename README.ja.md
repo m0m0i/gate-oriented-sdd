@@ -40,7 +40,7 @@ _[English →](./README.md)_
 
 ### ゲートを狭くしている理由
 
-普通のターンで発火するゲートは、いずれ無効化されます。そして無効化されたゲートに守れるものはありません。そのため `review-gate.sh` が口を出すのは、spec ブランチのタスクがすべて完了していて、かつ新しいクリーンなレビューが存在しない場合だけです。マージ済みのブランチ、実装途中のターン、レビューの*後*に正当に入るドキュメントコミットでは何も言いません。もう半分が `quality-gate.sh` で、こちらは自前のコマンドを一切持ちません。`.steering/tech.md` の `- Validators:` 行をそのまま実行するので、何を強制するかはフックではなくプロジェクト側の性質になります。ゲートとガードを合わせた57通りの経路は、モデルを介さず[決定的にテストしています](./scripts/test-gates.sh)。
+普通のターンで発火するゲートは、いずれ無効化されます。そして無効化されたゲートに守れるものはありません。そのため `review-gate.sh` が口を出すのは、spec ブランチのタスクがすべて完了していて、かつ新しいクリーンなレビューが存在しない場合だけです。マージ済みのブランチ、実装途中のターン、レビューの*後*に正当に入るドキュメントコミットでは何も言いません。もう半分が `quality-gate.sh` で、こちらは自前のコマンドを一切持ちません。`.steering/tech.md` の `- Validators:` 行をそのまま実行するので、何を強制するかはフックではなくプロジェクト側の性質になります。ゲートとガードを合わせた62通りの経路は、モデルを介さず[決定的にテストしています](./scripts/test-gates.sh)。
 
 ## 最小構成
 
@@ -154,7 +154,7 @@ agy plugin install ./gate-oriented-sdd
 
 検証環境: Claude Code 2.1.252（2026-09-05）· Antigravity CLI 1.1.17 / IDE 2.3.1（2026-08-21）· macOS
 
-**検証できていること。** まず、ゲートとガードの57通りの挙動です。モデルを介さず、決定的にテストしています（[`scripts/test-gates.sh`](./scripts/test-gates.sh)）。Antigravity の `Stop` フックが実際にブロックすることも、ドキュメントを読んで済ませたのではなく、動かして確かめました（[`docs/verified.md`](./docs/verified.md)）。2つのプラグインマニフェスト、ルールブックのハッシュ、機密混入チェックは、CI で毎回実行しています。skill は13個すべてが、少なくとも一度は実際に動いています。inception の一連の skill と `init` はこのリポジトリ自身か、実在するプロジェクトの使い捨てクローンに対して実行し、`spec`・`clarify`・`implement`・`worklog` は #17 以降のすべての spec で使い、`archive` は5回のスイープとして走らせました。inception と `init` の実行で見つかったことは [`docs/verified.md`](./docs/verified.md) に記録し、Issue として起票してあります。そして #17 以降のすべての spec には、`.specs/` の下に review receipt があります。2件を除いてサブエージェントとして起動した reviewer によるレビューで、その2件は inline でレビューしたことが receipt 自体に記録されています。
+**検証できていること。** まず、ゲートとガードの62通りの挙動です。モデルを介さず、決定的にテストしています（[`scripts/test-gates.sh`](./scripts/test-gates.sh)）。Antigravity の `Stop` フックが実際にブロックすることも、ドキュメントを読んで済ませたのではなく、動かして確かめました（[`docs/verified.md`](./docs/verified.md)）。2つのプラグインマニフェスト、ルールブックのハッシュ、機密混入チェックは、CI で毎回実行しています。skill は13個すべてが、少なくとも一度は実際に動いています。inception の一連の skill と `init` はこのリポジトリ自身か、実在するプロジェクトの使い捨てクローンに対して実行し、`spec`・`clarify`・`implement`・`worklog` は #17 以降のすべての spec で使い、`archive` は5回のスイープとして走らせました。inception と `init` の実行で見つかったことは [`docs/verified.md`](./docs/verified.md) に記録し、Issue として起票してあります。そして #17 以降のすべての spec には、`.specs/` の下に review receipt があります。2件を除いてサブエージェントとして起動した reviewer によるレビューで、その2件は inline でレビューしたことが receipt 自体に記録されています。
 
 これから確かめる項目は、[`docs/verified.md`](./docs/verified.md) と Issue に載せています。
 
