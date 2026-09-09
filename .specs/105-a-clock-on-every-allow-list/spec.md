@@ -41,6 +41,6 @@
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 - [x] T1: cases in `scripts/test-gates.sh` — a reviewer whose Bash policy names no clock fails `check-receipt-schema.py` with the file named, and one that names it passes — failing for the right reason against today's tree; then the pairing check in `check-receipt-schema.py` and the clock on all five allow-lists, ending green. (AC1, AC2, AC3)
 - [x] T2: the clock as a sanctioned category in `agents/_shared/reviewer-contract.md`, copied to its mirror; the byte-compare at `check-receipt-schema.py:98` is the check. (AC3)
-- [ ] T3: blast radius — a case proving the new failure still fires under `python3 -O`, so the check cannot be stripped the way #28 was. (AC2)
+- [x] T3: blast radius — a case proving the new failure still fires under `python3 -O`, so the check cannot be stripped the way #28 was. (AC2)
 - [ ] T4: the path-count claim from 54 to 56 in the five live places named in the Blast radius; then refactor and the full validator line, `./scripts/check-leakage.sh` included.
 - [ ] T5: **after the reviewer gate is CLEAN** — bump both manifests to 0.4.4. `.steering/tech.md` puts the bump after the review deliberately, with the work-log entry and the `Status: done` flip, because `plugin.json` is outside `Source globs` and a bump before the receipt would re-stale it. (AC4)

@@ -1393,5 +1393,48 @@ else
 fi
 
 
+# 45. The clock check survives having assertions stripped.
+#
+# #28 is why this is behavioural rather than left to case 35. That case greps for `assert` at
+# statement position, which is a check on the SHAPE of the source and can be walked around —
+# `if __debug__:` is not an assert and is deleted by exactly the same flag. #105's check is
+# the newest safety check in this guard and therefore the one most likely to be written that
+# way by someone who did not read #28, so it is pinned by running it stripped.
+r=$(receipt_repo receipt-clock-stripped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "agents", "dart-flutter-reviewer.md")
+src = p.read_text()
+kept = [ln for ln in src.splitlines(keepends=True) if "date -u" not in ln]
+if len(kept) == len(src.splitlines(keepends=True)):
+    sys.exit(3)
+p.write_text("".join(kept))
+PYEOF
+built=$?
+
+if [ "$built" -ne 0 ]; then
+  report "the clock check still fires with assertions stripped" no \
+    "fixture could not be built: the clock line this case removes was not found"
+else
+  # Same pairing of requirements as case 34, and for the same reason: exit 1 is also what a
+  # traceback returns, so the code alone cannot tell a working check from a crashing one.
+  clock_fails() { # clock_fails <exit-code> <stderr-file> -> ok|no
+    [ "$1" = "1" ] || { echo no; return; }
+    serr=$(cat "$2" 2>/dev/null)
+    case "$serr" in *Traceback*) echo no; return ;; esac
+    case "$serr" in *"agents/dart-flutter-reviewer.md"*) : ;; *) echo no; return ;; esac
+    case "$serr" in *"names no clock"*) echo ok ;; *) echo no ;; esac
+  }
+  out=$( cd "$r" && python3 -O scripts/check-receipt-schema.py >/dev/null 2>"$TMP/serr"; printf '%s' "$?" )
+  c1=$(clock_fails "$out" "$TMP/serr")
+  # No flag, through the shebang — how PYTHONOPTIMIZE arrives without any caller choosing it.
+  out2=$( cd "$r" && PYTHONOPTIMIZE=1 ./scripts/check-receipt-schema.py >/dev/null 2>"$TMP/serr2"; printf '%s' "$?" )
+  c2=$(clock_fails "$out2" "$TMP/serr2")
+  [ "$c1$c2" = "okok" ] \
+    && report "the clock check still fires with assertions stripped" ok \
+    || report "the clock check still fires with assertions stripped" no "minus-O=$c1 PYTHONOPTIMIZE=$c2"
+fi
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
