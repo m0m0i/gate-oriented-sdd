@@ -215,10 +215,13 @@ REVIEWERS = (
 #:
 #: The work-set, stated in full so it can never be silently empty — the failure #16 and #39
 #: are both about. Every field in the agreed schema appears here exactly once, and the
-#: `None` entries are a claim, not a gap: the value is known to the reviewer from its own run,
-#: or comes from a command already on every list, or is one no command produces at all — and
-#: for that last kind the contract says what an absent value means. A field added to the
-#: contract with no entry here fails the completeness check below rather than reaching a
+#: `None` entries are a claim, not a gap, and there are exactly two kinds: the value is known
+#: to the reviewer from its own run, or no command produces it at all and the contract says
+#: what an absent one means. A field a COMMAND produces does not belong here — give it a
+#: needle, so the guard catches the producer leaving an allow-list. That third category was
+#: offered here once, as "comes from a command already on every list", which is verbatim the
+#: reasoning `reviewed_sha` carried until it became the root cause of #105. A field added to
+#: the contract with no entry here fails the completeness check below rather than reaching a
 #: reviewer that cannot produce it.
 PRODUCERS = {
     # Two fields need a command, and both are enforced. `reviewed_sha` was first written here
@@ -263,9 +266,10 @@ unmapped = [f for f in found[first] if f not in PRODUCERS]
 if unmapped:
     print("check-receipt-schema FAILED — a receipt field has no entry in PRODUCERS", file=sys.stderr)
     print(f"  unmapped: {unmapped}", file=sys.stderr)
-    print("  Say how a reviewer obtains it. `None` means it is known from the reviewer's own", file=sys.stderr)
-    print("  run, or comes from a command already on every allow-list, or is a value no command", file=sys.stderr)
-    print("  produces and whose absence the contract defines — a claim, not a shrug.", file=sys.stderr)
+    print("  Say how a reviewer obtains it. `None` means one of two things: known from the", file=sys.stderr)
+    print("  reviewer's own run, or produced by no command at all, with the contract defining", file=sys.stderr)
+    print("  what an absent value means. A field a COMMAND produces gets a needle instead —", file=sys.stderr)
+    print("  'the command is already on every allow-list' is how #105 happened.", file=sys.stderr)
     sys.exit(1)
 
 #: Only the fields the agreed schema actually requires are demanded of the reviewers, so the
@@ -296,8 +300,9 @@ if _demanded:
         for _rel, _field, _reason, _fix in _failures:
             print(f"  {_rel}: the contract requires {_field} but this reviewer's Bash policy {_reason}", file=sys.stderr)
             print(f"    add to its allow-list: {_fix}", file=sys.stderr)
-        print("  Needles are matched literally: quoting the format string, or reordering the", file=sys.stderr)
-        print("  words of the command, counts as absent even though a shell would not care.", file=sys.stderr)
+        print("  Needles are matched literally — any spelling but this exact one counts as", file=sys.stderr)
+        print("  absent, including quoting the format string, reordering the arguments, or", file=sys.stderr)
+        print("  inserting a flag the command itself would accept.", file=sys.stderr)
         print("  A field required by the contract and forbidden by the allow-list is not a", file=sys.stderr)
         print("  strict reviewer. It is one that has been taught the allow-list is negotiable.", file=sys.stderr)
         sys.exit(1)
