@@ -1,7 +1,7 @@
 # Spec: "Unverified" is the word
 
-- Slug: 102-unverified-is-the-word Issue: 102 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-07
+- Slug: 102-unverified-is-the-word Issue: 102 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-07   Archived: 2026-09-10
 
 ## 1. Requirements (WHAT / WHY)
 

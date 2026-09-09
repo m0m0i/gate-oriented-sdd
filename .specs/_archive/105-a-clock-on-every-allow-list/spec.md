@@ -1,6 +1,6 @@
 # Spec: A clock on every reviewer's allow-list
-- Slug: 105-a-clock-on-every-allow-list   Issue: 105   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-09-09
+- Slug: 105-a-clock-on-every-allow-list   Issue: 105   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-09-09   Archived: 2026-09-10
 
 ## 1. Requirements (WHAT / WHY)
 - Reproduction: spawn any reviewer in this harness and read its Bash policy against the Receipt block in `agents/_shared/reviewer-contract.md`. The contract requires `reviewed_at=<YYYY-MM-DDTHH:MM:SSZ>` on every receipt; none of the five allow-lists — `agents/ts-reviewer.md`, `agents/python-reviewer.md`, `agents/dart-flutter-reviewer.md`, `agents/_template/reviewer.md`, `.claude/agents/gate-sdd-reviewer.md` — names a command that reports the current time.

@@ -1,7 +1,7 @@
 # Spec: Five sweeps, and the Japanese README's remaining translated sentences
 
-- Slug: 104-ja-natural-and-five-sweeps Issue: 104 Type: chore Status: done
-- Author: m0m0i Date: 2026-09-07
+- Slug: 104-ja-natural-and-five-sweeps Issue: 104 Type: chore Status: archived
+- Author: m0m0i Date: 2026-09-07   Archived: 2026-09-10
 
 ## 1. Requirements (WHAT / WHY)
 
