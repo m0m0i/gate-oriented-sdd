@@ -45,7 +45,8 @@ When every task is committed and the validators pass:
    The review gate reads this file and refuses to end a turn when a spec whose tasks are all ticked has no receipt, a non-CLEAN one, or one whose `reviewed_sha` predates a later source change.
 
    **Never write a receipt for a review that did not run.** The gate catches omission and staleness; a fabricated receipt defeats the only mechanical check in the flow, and it defeats it silently.
-5. Run `worklog`. The entry is committed on this branch, so it ships inside this issue's single pull request rather than in one of its own. Then summarize the diff and propose that PR, closing its issue.
+5. **Bump the version, if this project carries one.** `.steering/tech.md` says whether a release moves a version and which paths count as shipped. **The version bump lands here, after the receipt — never as a task.** The review gate arms when a spec has no unticked tasks, so a task held back until after the review keeps one box unticked for the whole review, and the gate stays silent through exactly the stretch it exists to cover. That is #113, found on a spec whose last task was the bump. The bump belongs with the other work that lands after the receipt, not in the Tasks list. A manifest normally sits outside the project's `Source globs`, so this does not re-stale the receipt; if it sits inside them, re-review.
+6. Run `worklog`. The entry is committed on this branch, so it ships inside this issue's single pull request rather than in one of its own. Then summarize the diff and propose that PR, closing its issue.
 
    **That PR is the last step. Do not propose archiving, and do not open a follow-up pull request for it.** Moving a shipped spec into `.specs/_archive/` is a sweep run on request, whenever `.specs/` has grown noisy enough to be worth a minute — a `git mv` is not a change that earns a branch, a review and a merge of its own. Nothing downstream is waiting on it either: the review gate reads `.specs/<current branch>/spec.md` and cannot see a shipped spec still sitting in `.specs/`.
 
@@ -57,4 +58,4 @@ When every task is committed and the validators pass:
 - **If a task proves the spec wrong, stop.** Amend `.specs/<slug>/spec.md`, say what changed and why, and get agreement before resuming. Do not code around a spec you no longer believe.
 - Match the surrounding code. `.steering/structure.md` says where code belongs.
 - Do not open a PR before the reviewer pass is clean of BLOCKER/HIGH.
-- Commits landing **after** the review — the work-log entry, the `Status: done` flip — do not invalidate the receipt; the gate only re-triggers when reviewable source changes. Fixing a finding *is* source: re-review, and rewrite the receipt.
+- Commits landing **after** the review — the work-log entry, the `Status: done` flip, the version bump — do not invalidate the receipt; the gate only re-triggers when reviewable source changes. Fixing a finding *is* source: re-review, and rewrite the receipt.

@@ -14,7 +14,7 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Nine today. A tenth needs an argument, in the spec that proposes it, for why review cannot
+Ten today. An eleventh needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time.
 """
@@ -98,6 +98,16 @@ CONTRACTS = (
         "skills/implement/SKILL.md",
         "Never record `subagent` for a review you ran inline",
         "reviewed_by is only worth having if it is written honestly. See #9.",
+    ),
+    (
+        "skills/implement/SKILL.md",
+        "The version bump lands here, after the receipt — never as a task",
+        "review-gate.sh arms when a spec has no unticked tasks. Delete this and the bump "
+        "goes back to being the last task, which holds one box unticked for the whole "
+        "review and keeps the gate silent through the one stretch it exists to cover. "
+        "Review cannot defend the sentence: its absence is invisible in a diff of this "
+        "file — the flow reads correctly either way — and what it restores is a gate that "
+        "says nothing, not a defect anyone can see. See #113.",
     ),
 )
 

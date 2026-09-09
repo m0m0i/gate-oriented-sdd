@@ -1699,5 +1699,57 @@ fi
   || report "a spec that cannot be read fails rather than passing" no "exit=$c1 msg=$c2"
 
 
+# --- guards: scripts/check-skill-contracts.py --------------------------------------
+#
+# #113. The other half of the same fix. check-templates.py above catches a spec that defers
+# a task; this catches the instruction that tells authors not to being edited out of the
+# shipped skill. They fail in opposite directions, and only this one reaches consumers —
+# scripts/ is not shipped, skills/ is.
+#
+# The guard had no case here at all before this, which is the guard-shaped hole #16 and #35
+# are both about: .steering/structure.md makes this file the project's whole notion of test
+# coverage, so a guard nothing exercises is a guard that can stop working unnoticed.
+
+# The real skills/ tree, so the control asserts every needle in CONTRACTS is genuinely
+# present rather than asserting it against a fixture built to satisfy it.
+contracts_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts"
+  cp "$ROOT/scripts/check-skill-contracts.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-skill-contracts.py"
+  cp -R "$ROOT/skills" "$r/skills"
+  echo "$r"
+}
+
+run_contracts() { ( cd "$1" && python3 scripts/check-skill-contracts.py >/dev/null 2>"$TMP/cerr"; printf '%s' "$?" ) }
+
+# 54. implement stripped of the post-receipt version bump must fail.
+#
+# The mutation REMOVES the sentence if it is there and is a no-op if it is not, deliberately.
+# A fixture builder that aborted on a missing target would have reported this case red for a
+# setup error on the turn before the step was written, and a red that comes from the fixture
+# proves nothing about the guard. Written this way, the pre-fix red is the real one: implement
+# carries no bump step, and check-skill-contracts.py does not care.
+r=$(contracts_repo contracts-control)
+out=$(run_contracts "$r")
+[ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(contracts_repo contracts-stripped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "implement", "SKILL.md")
+needle = "The version bump lands here, after the receipt — never as a task"
+src = p.read_text()
+p.write_text(src.replace(needle, "Bump the version at some point"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"skills/implement/SKILL.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"never as a task"*) c3=ok ;; *) c3=no ;; esac
+
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "implement stripped of the post-receipt version bump fails" ok \
+  || report "implement stripped of the post-receipt version bump fails" no \
+     "control=$c0 stripped-exit=$c1 names-file=$c2 names-needle=$c3"
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
