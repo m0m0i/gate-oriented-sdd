@@ -17,7 +17,9 @@ Machine-read lines. Each must stay on ONE physical line — the gates read them 
 
 Since 0.2.4 this one line answers **two different questions**: the review gate asks "what re-stales a receipt?" and the quality gate asks "what should trigger the validators?". Those have different right answers for the manifests, and the line can only give one.
 
-A version bump lands *after* the review, in the same family as the work-log entry and the `Status: done` flip, so including `plugin.json` here would re-stale a receipt on every single spec and force a second review of a one-character change. Excluded, therefore.
+A version bump lands *after* the review — as a **step of `implement`** rather than as a task, which is #113 — in the same family as the work-log entry and the `Status: done` flip, so including `plugin.json` here would re-stale a receipt on every single spec and force a second review of a one-character change. Excluded, therefore.
+
+The distinction between a step and a task is load-bearing rather than pedantic. This paragraph used to say only that the bump lands after the review, and a spec that wrote it as its last task therefore held one checkbox unticked for the whole review — which is precisely the state `review-gate.sh` reads as "still implementing", so the gate stayed silent through the review it exists to demand. `scripts/check-templates.py` now fails on a live spec that defers a task, and `scripts/check-skill-contracts.py` pins the step in `implement`.
 
 **The cost is explicit:** a commit touching only a manifest does not run the validators locally, so `check-manifests.py` will not catch a version disagreement on that turn. CI runs it on every pull request, which is the backstop. This is a reasoned trade — local speed against a check that is duplicated in CI — not an oversight, and it is recorded on #14.
 

@@ -6,6 +6,8 @@ All three share the same front matter and the same TDD-ordered Tasks section. Wh
 
 **One task is one complete Red-Green-Refactor cycle**, so a task ends green and is one commit. The red and green halves are deliberately not separate tasks: `quality-gate.sh` runs the project's validators on turn end, so a task that is only the red half cannot be committed without ending the turn red. `scripts/check-templates.py` fails if that split returns. See #10.
 
+**No task is sequenced after the review**, and section 3 therefore holds implementation work only. `review-gate.sh` arms when a spec has no unticked tasks, which stands in for "implementation is finished" — so a task held back until after the review keeps one box unticked for the whole review, and the gate stays silent through exactly the stretch it exists to cover. Work that genuinely belongs after the review is a **step of `implement`**, beside the work-log entry and the `Status: done` flip. The version bump is the one that used to be written as a task, and no longer is. See #113.
+
 ---
 
 ## Feature
