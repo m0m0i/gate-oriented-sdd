@@ -1,5 +1,5 @@
 # Spec: A clock on every reviewer's allow-list
-- Slug: 105-a-clock-on-every-allow-list   Issue: 105   Type: bug   Status: approved
+- Slug: 105-a-clock-on-every-allow-list   Issue: 105   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-09-09
 
 ## 1. Requirements (WHAT / WHY)
