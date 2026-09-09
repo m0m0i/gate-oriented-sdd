@@ -215,10 +215,11 @@ REVIEWERS = (
 #:
 #: The work-set, stated in full so it can never be silently empty — the failure #16 and #39
 #: are both about. Every field in the agreed schema appears here exactly once, and the
-#: `None` entries are a claim, not a gap: those values are known to the reviewer from its own
-#: run or from a command already on every list. A field added to the contract with no entry
-#: here fails the completeness check below rather than reaching a reviewer that cannot
-#: produce it.
+#: `None` entries are a claim, not a gap: the value is known to the reviewer from its own run,
+#: or comes from a command already on every list, or is one no command produces at all — and
+#: for that last kind the contract says what an absent value means. A field added to the
+#: contract with no entry here fails the completeness check below rather than reaching a
+#: reviewer that cannot produce it.
 PRODUCERS = {
     # Two fields need a command, and both are enforced. `reviewed_sha` was first written here
     # as a `None` with a comment saying the command was "on every allow-list already" — true
@@ -243,16 +244,17 @@ PRODUCERS = {
     "reviewed_by": None,
 }
 
-# The same guard SOURCES gets fifty lines below, for the same reason and citing the same
+# The same guard SOURCES gets a hundred lines above, for the same reason and citing the same
 # incident. A hard-coded work-set can be emptied by an edit to this file, and an emptied one
 # makes every loop below run zero times, leaves nothing in `_failures`, and prints a success
 # line reading "0 reviewer(s) can produce" — #16 verbatim. Five is the number that exist; a
 # reviewer deliberately retired should move this number down in the same change, which is a
 # decision worth having to make rather than one that happens silently.
 if len(REVIEWERS) < 5:
-    print("check-receipt-schema FAILED — REVIEWERS has an empty work-set", file=sys.stderr)
+    print("check-receipt-schema FAILED — REVIEWERS is below its floor", file=sys.stderr)
     print(f"  listed: {len(REVIEWERS)}, expected at least 5", file=sys.stderr)
-    print("  A guard with an empty work-set must not report success — see #16.", file=sys.stderr)
+    print("  An empty or shortened work-set must not report success — see #16. If a reviewer", file=sys.stderr)
+    print("  was retired on purpose, move the floor in the same change.", file=sys.stderr)
     sys.exit(1)
 
 # Completeness before correctness. An unknown field is a field nobody asked the producer
@@ -262,7 +264,8 @@ if unmapped:
     print("check-receipt-schema FAILED — a receipt field has no entry in PRODUCERS", file=sys.stderr)
     print(f"  unmapped: {unmapped}", file=sys.stderr)
     print("  Say how a reviewer obtains it. `None` means it is known from the reviewer's own", file=sys.stderr)
-    print("  run or from a command already on every allow-list — a claim, not a shrug.", file=sys.stderr)
+    print("  run, or comes from a command already on every allow-list, or is a value no command", file=sys.stderr)
+    print("  produces and whose absence the contract defines — a claim, not a shrug.", file=sys.stderr)
     sys.exit(1)
 
 #: Only the fields the agreed schema actually requires are demanded of the reviewers, so the
@@ -293,6 +296,8 @@ if _demanded:
         for _rel, _field, _reason, _fix in _failures:
             print(f"  {_rel}: the contract requires {_field} but this reviewer's Bash policy {_reason}", file=sys.stderr)
             print(f"    add to its allow-list: {_fix}", file=sys.stderr)
+        print("  Needles are matched literally: quoting the format string, or reordering the", file=sys.stderr)
+        print("  words of the command, counts as absent even though a shell would not care.", file=sys.stderr)
         print("  A field required by the contract and forbidden by the allow-list is not a", file=sys.stderr)
         print("  strict reviewer. It is one that has been taught the allow-list is negotiable.", file=sys.stderr)
         sys.exit(1)

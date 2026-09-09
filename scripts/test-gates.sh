@@ -1544,7 +1544,7 @@ else
   out=$( cd "$r" && python3 scripts/check-receipt-schema.py >"$TMP/nout" 2>"$TMP/nerr"; printf '%s' "$?" )
   [ "$out" = "1" ] && c1=ok || c1=no
   case "$(cat "$TMP/nerr" 2>/dev/null)" in *Traceback*) c2=no ;; *) c2=ok ;; esac
-  case "$(cat "$TMP/nerr" 2>/dev/null)" in *"empty work-set"*) c3=ok ;; *) c3=no ;; esac
+  case "$(cat "$TMP/nerr" 2>/dev/null)" in *"below its floor"*) c3=ok ;; *) c3=no ;; esac
   # The success line must not have been printed at all.
   case "$(cat "$TMP/nout" 2>/dev/null)" in *"reviewer(s) can produce"*) c4=no ;; *) c4=ok ;; esac
   [ "$c1$c2$c3$c4" = "okokokok" ] && report "an emptied REVIEWERS must not report success" ok \
@@ -1564,10 +1564,14 @@ python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "agents", "ts-reviewer.md")
 src = p.read_text()
-if "git rev-parse HEAD" not in src:
+# The precondition is the replacement TARGET, not a substring of it. Checking only
+# "git rev-parse HEAD" would still pass if the bullet were reordered, leaving the replace a
+# no-op and this case failing through the wrong diagnosis — cases 47-49 all check the exact
+# string they mutate, and 50 was the odd one out.
+target = "`git log --oneline <base>...HEAD`, `git rev-parse HEAD`"
+if target not in src:
     sys.exit(3)
-p.write_text(src.replace("`git log --oneline <base>...HEAD`, `git rev-parse HEAD`",
-                         "`git log --oneline <base>...HEAD`", 1))
+p.write_text(src.replace(target, "`git log --oneline <base>...HEAD`", 1))
 PYEOF
 if [ $? -ne 0 ]; then
   report "a producer deleted from an allow-list fails" no \
