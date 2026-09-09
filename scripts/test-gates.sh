@@ -701,6 +701,16 @@ receipt_repo() {
   # together, which is the pair of edits that makes the skip reachable.
   mkdir -p "$r/.claude/agents/_shared"
   cp "$ROOT/.claude/agents/_shared/reviewer-contract.md" "$r/.claude/agents/_shared/"
+  # The five reviewers, because #105 made the guard read them too: a field the contract
+  # requires has to have a command on every reviewer's allow-list that can produce it. They
+  # are copied for EVERY receipt fixture, not only the cases below, so that case 34's control
+  # keeps exercising the whole guard rather than an early exit on a missing reviewer.
+  mkdir -p "$r/agents/_template" "$r/.claude/agents"
+  for rv in ts-reviewer python-reviewer dart-flutter-reviewer; do
+    cp "$ROOT/agents/$rv.md" "$r/agents/"
+  done
+  cp "$ROOT/agents/_template/reviewer.md" "$r/agents/_template/"
+  cp "$ROOT/.claude/agents/gate-sdd-reviewer.md" "$r/.claude/agents/"
   echo "$r"
 }
 
@@ -1288,6 +1298,99 @@ fi
 [ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15" = "okokokokokokokokokokokokokokok" ] && report "an empty work-set, an unclassifiable fence and a broken self-test all fail" ok \
   || report "an empty work-set, an unclassifiable fence and a broken self-test all fail" no \
      "empty-exit=$c1 empty-msg=$c2 nested-exit=$c3 nested-msg=$c4 unclosed-exit=$c5 unclosed-msg=$c6 selftest-exit=$c7 selftest-msg=$c8 quoted-exit=$c9 quoted-msg=$c10 unreadable-exit=$c11 unreadable-msg=$c12 invariant-exit=$c13 invariant-msg=$c14 invariant-not-selftest=$c15"
+
+
+# 43. A reviewer that cannot produce a field the contract requires must fail.
+#
+# #105. `reviewed_at` is the only receipt field whose value comes from outside both the diff
+# and the reviewer's own run, and no allow-list named a clock — so the contract required a
+# field every reviewer was simultaneously forbidden to produce. Each one resolved that on its
+# own: `date` run off-list and disclosed, a time taken from context, a placeholder.
+#
+# The check is a PAIRING, so both halves are pinned here. A guard that only looked for the
+# clock would go green the day `reviewed_at` left the contract, still demanding a command
+# nothing needed; one that only read the contract would never have caught this.
+r=$(receipt_repo receipt-clock)
+
+# Control first, as case 34 does and for the same reason: without it a case that fails because
+# the fixture is broken reads as a caught bug. The unmutated tree is the FIXED tree, so this
+# also pins that all five reviewers really do carry the clock.
+ctl=$( cd "$r" && python3 scripts/check-receipt-schema.py 2>/dev/null; echo "exit=$?" )
+case "$ctl" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+
+# Strip the clock from ONE reviewer, the way the tree looked before this fix. python3 rather
+# than sed -i, which is not portable, and it exits non-zero when its needle is gone so that a
+# reworded allow-list cannot no-op the mutation and leave this case green against a guard that
+# was never tested.
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "agents", "python-reviewer.md")
+src = p.read_text()
+kept = [ln for ln in src.splitlines(keepends=True) if "date -u" not in ln]
+if len(kept) == len(src.splitlines(keepends=True)):
+    sys.exit(3)
+p.write_text("".join(kept))
+PYEOF
+built=$?
+
+if [ "$built" -ne 0 ]; then
+  report "a reviewer that cannot produce a required receipt field fails" no \
+    "fixture could not be built: the clock line this case removes was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/cerr"; printf '%s' "$?" )
+  cerr=$(cat "$TMP/cerr" 2>/dev/null)
+  [ "$out" = "1" ] && c2=ok || c2=no
+  # Exit 1 is also what a traceback returns, so the code alone is not the check — this file's
+  # rule at :481-484. The path is required because a finding that does not say WHICH reviewer
+  # is unactionable across five of them, and the phrase unique to this branch is required
+  # because two sibling branches of the same guard also exit 1 naming a path.
+  case "$cerr" in *Traceback*) c3=no ;; *) c3=ok ;; esac
+  case "$cerr" in *"agents/python-reviewer.md"*) c4=ok ;; *) c4=no ;; esac
+  case "$cerr" in *"names no clock"*) c5=ok ;; *) c5=no ;; esac
+  [ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
+    && report "a reviewer that cannot produce a required receipt field fails" ok \
+    || report "a reviewer that cannot produce a required receipt field fails" no \
+       "control=$c1 exit=$c2 no-traceback=$c3 names-file=$c4 names-reason=$c5"
+fi
+
+# 44. The other half of the pairing: no requirement, no demand.
+#
+# A required field and its producer are one fact. Dropping `reviewed_at` from the contract
+# must stop the guard asking for a clock, or the check becomes a rule of its own that outlives
+# the reason it exists — which is how a guard earns the reputation that gets it switched off.
+r=$(receipt_repo receipt-clock-unrequired)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+paths = [
+    ("agents", "_shared", "reviewer-contract.md"),
+    (".claude", "agents", "_shared", "reviewer-contract.md"),
+    ("skills", "implement", "SKILL.md"),
+]
+for parts in paths:
+    p = pathlib.Path(sys.argv[1], *parts)
+    src = p.read_text()
+    kept = [ln for ln in src.splitlines(keepends=True) if not ln.lstrip().startswith("reviewed_at=")]
+    if len(kept) == len(src.splitlines(keepends=True)):
+        sys.exit(3)
+    p.write_text("".join(kept))
+# and the clock goes too, so the tree is consistent: nothing requires it, nothing offers it.
+for rv in ("agents/ts-reviewer.md", "agents/python-reviewer.md", "agents/dart-flutter-reviewer.md",
+           "agents/_template/reviewer.md", ".claude/agents/gate-sdd-reviewer.md"):
+    p = pathlib.Path(sys.argv[1], rv)
+    p.write_text("".join(ln for ln in p.read_text().splitlines(keepends=True) if "date -u" not in ln))
+PYEOF
+built=$?
+if [ "$built" -ne 0 ]; then
+  report "a contract that stops requiring the field stops demanding the clock" no \
+    "fixture could not be built: the reviewed_at line this case removes was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/uerr"; printf '%s' "$?" )
+  [ "$out" = "0" ] && c1=ok || c1=no
+  [ "$c1" = "ok" ] \
+    && report "a contract that stops requiring the field stops demanding the clock" ok \
+    || report "a contract that stops requiring the field stops demanding the clock" no \
+       "exit=$out stderr=$(cat "$TMP/uerr" 2>/dev/null | head -2 | tr '\n' ' ')"
+fi
 
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"

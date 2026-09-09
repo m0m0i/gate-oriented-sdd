@@ -9,9 +9,9 @@
 - Impact: every review, on every project that installs this harness. The cost is not a broken gate — `hooks/review-gate.sh` reads only `verdict` and `reviewed_sha`, so nothing fails open here — it is that the receipt's record of *when* a review happened is produced by a different method each time, and a field the contract requires while the allow-list forbids teaches a reviewer that the allow-list is negotiable. That lesson is the hazard, because the allow-list is what keeps a read-only reviewer read-only.
 - **Root cause:** the Receipt block and the Bash policy are in the same document but were written against different questions. `reviewed_at` was specified as a receipt *field* — what the record must contain — with no pass over the Bash policy asking what a reviewer is actually permitted to run to fill it. The other six fields hid the omission: `reviewed_sha` comes from `git rev-parse HEAD`, which is on every list, and the rest are known to the reviewer from its own run. `reviewed_at` is the only field whose value comes from outside both the diff and the reviewer, and nothing checked that class of field against the allow-list.
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN a reviewer fills in the Receipt block obeying only its own Bash policy THE SYSTEM SHALL permit it to obtain the current UTC time, in all five reviewer files.
-  - [ ] **AC2:** the regression test fails before the fix and passes after.
-  - [ ] **AC3:** WHEN a reviewer file's Bash policy omits the clock while the contract still requires `reviewed_at` THE SYSTEM SHALL fail a validator naming the file.
+  - [x] **AC1:** WHEN a reviewer fills in the Receipt block obeying only its own Bash policy THE SYSTEM SHALL permit it to obtain the current UTC time, in all five reviewer files.
+  - [x] **AC2:** the regression test fails before the fix and passes after.
+  - [x] **AC3:** WHEN a reviewer file's Bash policy omits the clock while the contract still requires `reviewed_at` THE SYSTEM SHALL fail a validator naming the file.
   - [ ] **AC4:** WHEN this change is committed THE SYSTEM SHALL carry a version bump in both manifests, `agents/` being a shipped path.
 - Out of scope: the wording of `reviewed_at` in the contract (it stays `<YYYY-MM-DDTHH:MM:SSZ>`); the receipts already written, which are records and stay as they are; #35, which is about `reviewed_sha` naming the working tree rather than the reviewed commit, and is a separate defect in the same block.
 
@@ -37,7 +37,7 @@
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
-- [ ] T1: cases in `scripts/test-gates.sh` — a reviewer whose Bash policy names no clock fails `check-receipt-schema.py` with the file named, and one that names it passes — failing for the right reason against today's tree; then the pairing check in `check-receipt-schema.py` and the clock on all five allow-lists, ending green. (AC1, AC2, AC3)
+- [x] T1: cases in `scripts/test-gates.sh` — a reviewer whose Bash policy names no clock fails `check-receipt-schema.py` with the file named, and one that names it passes — failing for the right reason against today's tree; then the pairing check in `check-receipt-schema.py` and the clock on all five allow-lists, ending green. (AC1, AC2, AC3)
 - [ ] T2: the clock as a sanctioned category in `agents/_shared/reviewer-contract.md`, copied to its mirror; the byte-compare at `check-receipt-schema.py:98` is the check. (AC3)
 - [ ] T3: blast radius — a case proving the new failure still fires under `python3 -O`, so the check cannot be stripped the way #28 was. (AC2)
 - [ ] T4: refactor, then `./scripts/check-leakage.sh` and the full validator line.

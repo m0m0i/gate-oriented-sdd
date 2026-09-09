@@ -16,6 +16,7 @@ This repository is a harness whose product is shell scripts and prose. Markdown 
 Evidence gathering only:
 
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
+- `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
 - these validators, and no others:
   - `./scripts/check-leakage.sh`
   - `./scripts/check-manifests.py`
