@@ -187,18 +187,24 @@ if split:
 #
 # #113. The guard is positional, and the position is the load-bearing part.
 #
-# A task announces its SCHEDULE in its directive — the text before its first clause break.
-# What follows the break describes the work, not when it runs. Scanning the whole line
-# instead would flag the very spec that introduced this check, whose T1 and T3 describe
-# deferral at length while being ordinary pre-review tasks, and the two available repairs
-# from there are both worse than the gap: narrowing the phrase list until one document
-# passes tunes the guard to that document, and exempting the spec that owns the guard
-# exempts the file most likely to get it wrong.
+# A task announces its SCHEDULE in its directive — the first clause, before any elaboration.
+# Later clauses describe the work, and a compliant task legitimately says "after the review"
+# in one of them. What a compliant task does not do is BEGIN a later clause with the phrase:
+# `— after the review` is a schedule, `— a live spec whose ... after the review` is a
+# description. So the directive is matched anywhere and later clauses only at their start.
 #
-# The gap this leaves, stated rather than hidden: a task that buries its deferral in a
-# trailing clause — `T5: bump both manifests — after the review` — is not caught. Closing it
-# means reading the tail, and the tail is where a compliant task legitimately says the word.
-# A guard with a named edge beats a guard tuned until its own spec passes.
+# Both halves were found by review, and each had let a real phrasing through:
+#   - matching the whole line flagged this guard's own spec, whose T1 and T3 describe
+#     deferral at length while being ordinary pre-review tasks
+#   - matching only the directive missed `T5: bump both manifests — after the review`, the
+#     mirror of #105's real T5 and a coin flip away from it in phrasing
+#
+# The OVER-reach edge, which is the one an author will actually hit: a compliant task whose
+# DIRECTIVE names the review — `T2: a case proving the gate stays silent after the review —
+# then the fix` — is flagged, and specs about the review gate are a recurring genre here
+# (#8, #10, #16, #105, #113). It clears by moving the description out of the directive:
+# `T2: a case for the silent gate — proving it stays quiet after the review, then the fix`.
+# That is a real cost and it is why the phrase list stays short and literal.
 
 SPECS = ".specs"
 
@@ -211,18 +217,42 @@ DEFERRAL = re.compile(
     re.I,
 )
 
-#: `- [x] T5: **` — the checkbox, an optional task id, and optional bold. The id is optional
-#: because TASK_LINE above already accepts a line without one, and a directive extracted from
-#: a line this failed to strip would start with "T5:" and simply never match.
-TASK_PREFIX = re.compile(r"^- \[[ xX]\]\s*(?:\*\*)?\s*(?:T?\d+[:.)]\s*)?(?:\*\*)?\s*")
+#: `- [x] T5: `, `- [ ] T5 — `, `- [ ] **T5** — `. The separator after the id may be a dash,
+#: and that is not cosmetic: while this consumed only `[:.)]`, the dash form left `T5` behind
+#: as the whole body, CLAUSE_BREAK read the id separator as the first clause break, and the
+#: directive came back as the bare string "T5" — so the deferral was never examined and the
+#: guard exited 0. TASK_LINE above records the same three forms as ordinary drift that had
+#: already defeated the red/green half once. For an ACCUSING pattern, never matching is the
+#: fail-open, which is why this is written to over-consume rather than under-consume.
+TASK_PREFIX = re.compile(
+    r"^- \[[ xX]\]\s*(?:\*\*)?\s*(?:\*{0,2}T?\d+\*{0,2}\s*(?:[:.)]|[\u2014\u2013-])\s*)?(?:\*\*)?\s*"
+)
 
-#: Em dash, en dash, semicolon, or a sentence end. The first of these closes the directive.
+#: Em dash, en dash, semicolon, or a sentence end. Each closes a clause.
 CLAUSE_BREAK = re.compile(r"\s[\u2014\u2013]\s|;|(?<=\.)\s")
 
+#: Bold, backticks, brackets — stripped before a later clause is anchored, so that
+#: `— **after the review** bump` is judged on its words rather than its formatting.
+LEADING_MARKUP = re.compile(r"^[^0-9A-Za-z]+")
 
-def directive(line: str) -> str:
-    """The part of a task line that states what the task IS, before any elaboration."""
-    return CLAUSE_BREAK.split(TASK_PREFIX.sub("", line.strip()), 1)[0].strip()
+
+def clauses(line: str) -> list[str]:
+    """A task line's clauses, id and checkbox removed, in order. The first is the directive."""
+    body = TASK_PREFIX.sub("", line.strip())
+    return [c.strip() for c in CLAUSE_BREAK.split(body) if c.strip()]
+
+
+def deferral_in(line: str) -> str | None:
+    """The clause that schedules this task after the review, or None."""
+    parts = clauses(line)
+    if not parts:
+        return None
+    if DEFERRAL.search(parts[0]):
+        return parts[0]
+    for clause in parts[1:]:
+        if DEFERRAL.match(LEADING_MARKUP.sub("", clause)):
+            return clause
+    return None
 
 
 spec_root = ROOT / SPECS
@@ -231,14 +261,32 @@ unreadable: list[tuple[str, str]] = []
 scanned = 0
 
 if spec_root.is_dir():
-    for spec in sorted(spec_root.glob("*/spec.md")):
-        # `.specs/_archive/<slug>/spec.md` sits one level deeper than the glob reaches, so
-        # this is belt and braces — and it is kept because the exclusion is a DECISION, not
-        # an accident of the pattern. #105's T5 is exactly the forbidden shape, and it is a
-        # record of what was done. Rewriting a record to satisfy a guard written afterwards
-        # destroys its value as evidence; that is the #102 precedent.
-        if "_archive" in spec.relative_to(spec_root).parts:
+    # is_dir() succeeds on a directory this process cannot READ — stat needs only the
+    # parent's execute bit — and Path.glob swallows the OSError that scandir then raises.
+    # Zero entries is indistinguishable from a repository with nothing to check, so the
+    # first cut of this scan printed an affirmative line about specs it never enumerated.
+    # That is #16 one level up from the unreadable file below. Enumerate explicitly so the
+    # failure has somewhere to go.
+    try:
+        slugs = sorted(d for d in spec_root.iterdir() if d.is_dir())
+    except OSError as exc:
+        unreadable.append((SPECS, str(exc)))
+        slugs = []
+    for slug in slugs:
+        # `.specs/_archive/` holds records, not instructions. #105's T5 is precisely the
+        # forbidden shape, and rewriting a record to satisfy a guard written afterwards
+        # destroys its value as evidence — the #102 precedent. Skipped by NAME rather than
+        # by depth, so widening the enumeration later cannot quietly start scanning it.
+        if slug.name == "_archive":
             continue
+        try:
+            present = {entry.name for entry in slug.iterdir()}
+        except OSError as exc:
+            unreadable.append((str(slug.relative_to(ROOT)), str(exc)))
+            continue
+        if "spec.md" not in present:
+            continue
+        spec = slug / "spec.md"
         try:
             spec_text = spec.read_text()
         except OSError as exc:
@@ -250,9 +298,9 @@ if spec_root.is_dir():
         scanned += 1
         for lines in tasks_by_section(spec_text).values():
             for n, line in lines:
-                head = directive(line)
-                if DEFERRAL.search(head):
-                    deferred.append((str(spec.relative_to(ROOT)), n, head))
+                clause = deferral_in(line)
+                if clause:
+                    deferred.append((str(spec.relative_to(ROOT)), n, clause))
 
 if unreadable:
     print("check-templates FAILED — a live spec exists but cannot be read", file=sys.stderr)
@@ -264,9 +312,9 @@ if unreadable:
 
 if deferred:
     print("check-templates FAILED — a task is sequenced after the review", file=sys.stderr)
-    for name, n, head in deferred:
+    for name, n, clause in deferred:
         print(f"  {name}:{n}", file=sys.stderr)
-        print(f"    {head}", file=sys.stderr)
+        print(f"    {clause}", file=sys.stderr)
     print("", file=sys.stderr)
     print("  review-gate.sh arms when a spec has no unticked tasks, which stands in for", file=sys.stderr)
     print("  'implementation is finished'. A task held back until after the review keeps", file=sys.stderr)
@@ -275,9 +323,17 @@ if deferred:
     print("", file=sys.stderr)
     print("  Work that belongs after the review is a STEP of `implement`, beside the work", file=sys.stderr)
     print("  log entry and the `Status: done` flip — not a task. See #113.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  If the task is NOT deferred and merely describes deferral, move the phrase out", file=sys.stderr)
+    print("  of the directive and out of the start of a clause.", file=sys.stderr)
     sys.exit(1)
 
+# "0 live spec(s), none deferred" reads as a clean bill of health for a scan that examined
+# nothing. Say which of the two happened.
+specs_note = (
+    f"{scanned} live spec(s), no task sequenced after the review" if scanned else "no live spec to scan"
+)
 print(
     f"check-templates: {total} task line(s) across {len(blocks)} template(s), no split red steps; "
-    f"{scanned} live spec(s), no task sequenced after the review"
+    f"{specs_note}"
 )

@@ -49,6 +49,7 @@ The rulebook is the source for every Judgment row and holds each rule's rational
 | M-4 | The receipt schema agrees across its copies | Mechanical | — | `check-receipt-schema.py` |
 | M-5 | Skills keep their load-bearing sentences | Mechanical | — | `check-skill-contracts.py` |
 | M-6 | No spec template splits a red step from its green step | Mechanical | — | `check-templates.py` |
+| M-12 | No live spec sequences a task after the review | Mechanical | — | `check-templates.py`; `C-6`'s bump is a step of `implement`, not a task (#113) |
 | M-7 | Steering's machine-read lines parse | Mechanical | — | `check-steering-anchors.sh` |
 | M-8 | Shipped rulebooks match their locks | Mechanical | — | `check-locks.py` |
 | M-9 | The gates behave, on every path the suite pins | Mechanical | — | `test-gates.sh` |

@@ -18,7 +18,7 @@ The gates are the reason this repo exists. A change to `hooks/` must:
 
 1. Keep both blocking channels. One script emits JSON for Antigravity **and** exits 2 for Claude Code. A change that serves one harness only is a change that makes the other silently advisory.
 2. Keep the gate narrow. It stays silent on merged branches, mid-implementation turns, and post-review documentation commits. A gate that fires on ordinary turns gets switched off, and a switched-off gate protects nothing.
-3. Come with a case in `scripts/test-gates.sh`. 66 paths are covered; a 67th behaviour needs a 67th test.
+3. Come with a case in `scripts/test-gates.sh`. 67 paths are covered; a 68th behaviour needs a 68th test.
 
 ## Releasing
 
@@ -54,7 +54,8 @@ Stating the carve-out by delimiter instead is what #64 cost: the skills that gen
 ./scripts/check-markdown-fences.py  # no ```markdown fence hand-wraps the Markdown it quotes
 ./scripts/check-receipt-schema.py   # the receipt schema agrees across its copies
 ./scripts/check-skill-contracts.py  # skills still carry their load-bearing instructions
-./scripts/check-templates.py        # no spec template splits a red step from its green step
+./scripts/check-templates.py        # no spec template splits a red step from its green step,
+                                    # and no live spec sequences a task after the review
 ./assets/check-steering-anchors.sh  # steering's machine-read lines still parse
 ./assets/check-locks.py             # rulebooks match their locks (--update to re-pin)
 ./scripts/test-gates.sh             # the gates still behave

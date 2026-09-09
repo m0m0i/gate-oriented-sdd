@@ -45,7 +45,8 @@ Run all ten before every commit — CI runs the same ten:
 ./scripts/check-markdown-fences.py  # no ```markdown fence hand-wraps the Markdown it quotes
 ./scripts/check-receipt-schema.py   # the receipt schema agrees across its copies
 ./scripts/check-skill-contracts.py  # skills still carry their load-bearing instructions
-./scripts/check-templates.py        # no spec template splits a red step from its green step
+./scripts/check-templates.py        # no spec template splits a red step from its green step,
+                                    # and no live spec sequences a task after the review
 ./assets/check-steering-anchors.sh  # steering's machine-read lines still parse
 ./assets/check-locks.py             # rulebooks match their locks (--update to re-pin)
 ./scripts/test-gates.sh             # the gates still behave

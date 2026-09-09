@@ -34,7 +34,7 @@ All three share the same front matter and the same TDD-ordered Tasks section. Wh
 - Risks and trade-offs:
 
 ## 3. Tasks (TDD-ordered)
-> One task is one complete Red-Green-Refactor cycle, so one green commit.
+> One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [ ] T1: failing test for <behavior> — then the implementation that makes it pass
 - [ ] T2: refactor ...
 ```
@@ -71,7 +71,7 @@ The first task is always a test that reproduces the bug. If you cannot write tha
 - Why this cannot recur: <the guard, type, or test that makes the class of bug impossible rather than just this instance fixed>
 
 ## 3. Tasks (TDD-ordered)
-> One task is one complete Red-Green-Refactor cycle, so one green commit.
+> One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [ ] T1: regression test that fails for the right reason — then the fix for the root cause
 - [ ] T2: check the blast radius — tests for the other callers
 - [ ] T3: refactor

@@ -105,9 +105,10 @@ CONTRACTS = (
         "review-gate.sh arms when a spec has no unticked tasks. Delete this and the bump "
         "goes back to being the last task, which holds one box unticked for the whole "
         "review and keeps the gate silent through the one stretch it exists to cover. "
-        "Review cannot defend the sentence: its absence is invisible in a diff of this "
-        "file — the flow reads correctly either way — and what it restores is a gate that "
-        "says nothing, not a defect anyone can see. See #113.",
+        "Review cannot defend the sentence: a deleted step is plainly visible in a diff, "
+        "but its SIGNIFICANCE is not — the flow reads correctly either way — and what its "
+        "removal restores is a gate that says nothing, not a defect anyone can see. "
+        "See #113.",
     ),
 )
 
