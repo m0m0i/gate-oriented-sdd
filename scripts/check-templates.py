@@ -11,6 +11,18 @@ The disagreement is about what a *task* is, so this guard is written against the
 than against the current wording. A future edit that separates red from green again fails on
 the day it is made rather than on the day someone tries to follow it.
 
+It has a SECOND subject, added for #113: this repository's live specs under `.specs/`. The
+review gate arms on zero open tasks, which stands in for "implementation is finished" — and
+that proxy holds only while every task is implementation work. A task sequenced after the
+review holds a box unticked for the whole review window, so the gate stays silent during
+exactly the stretch it exists to cover. The fix was definitional, so this checks the
+definition is kept.
+
+The two subjects have different lifetimes and only the first ships: `skills/` is installed
+into consumer projects, `scripts/` is not. A consumer reading a copied version of this file
+is not subject to the `.specs/` half, and the failure messages name which subject failed so
+that this is legible from the output rather than from the source.
+
 What it does NOT check: that a task is a good task, or that the words chosen are the best
 ones. A guard on prose has to stay narrow or the prose stops being editable, and prose that
 cannot be edited rots — a worse failure than the one this prevents.
@@ -171,4 +183,101 @@ if split:
     print("  See #10.", file=sys.stderr)
     sys.exit(1)
 
-print(f"check-templates: {total} task line(s) across {len(blocks)} template(s), no split red steps")
+# --- second subject: this repository's live specs ----------------------------------
+#
+# #113. The guard is positional, and the position is the load-bearing part.
+#
+# A task announces its SCHEDULE in its directive — the text before its first clause break.
+# What follows the break describes the work, not when it runs. Scanning the whole line
+# instead would flag the very spec that introduced this check, whose T1 and T3 describe
+# deferral at length while being ordinary pre-review tasks, and the two available repairs
+# from there are both worse than the gap: narrowing the phrase list until one document
+# passes tunes the guard to that document, and exempting the spec that owns the guard
+# exempts the file most likely to get it wrong.
+#
+# The gap this leaves, stated rather than hidden: a task that buries its deferral in a
+# trailing clause — `T5: bump both manifests — after the review` — is not caught. Closing it
+# means reading the tail, and the tail is where a compliant task legitimately says the word.
+# A guard with a named edge beats a guard tuned until its own spec passes.
+
+SPECS = ".specs"
+
+#: Phrases that schedule work after the review. Deliberately short and literal, in the
+#: manner of RED and GREEN above: the guard recognises the idiom this project actually
+#: writes, not every English sentence that could mean the same thing.
+DEFERRAL = re.compile(
+    r"after the review\b|after the reviewer\b|after the receipt\b|after the gate\b"
+    r"|post-review\b|once the review\b|once the reviewer\b",
+    re.I,
+)
+
+#: `- [x] T5: **` — the checkbox, an optional task id, and optional bold. The id is optional
+#: because TASK_LINE above already accepts a line without one, and a directive extracted from
+#: a line this failed to strip would start with "T5:" and simply never match.
+TASK_PREFIX = re.compile(r"^- \[[ xX]\]\s*(?:\*\*)?\s*(?:T?\d+[:.)]\s*)?(?:\*\*)?\s*")
+
+#: Em dash, en dash, semicolon, or a sentence end. The first of these closes the directive.
+CLAUSE_BREAK = re.compile(r"\s[\u2014\u2013]\s|;|(?<=\.)\s")
+
+
+def directive(line: str) -> str:
+    """The part of a task line that states what the task IS, before any elaboration."""
+    return CLAUSE_BREAK.split(TASK_PREFIX.sub("", line.strip()), 1)[0].strip()
+
+
+spec_root = ROOT / SPECS
+deferred: list[tuple[str, int, str]] = []
+unreadable: list[tuple[str, str]] = []
+scanned = 0
+
+if spec_root.is_dir():
+    for spec in sorted(spec_root.glob("*/spec.md")):
+        # `.specs/_archive/<slug>/spec.md` sits one level deeper than the glob reaches, so
+        # this is belt and braces — and it is kept because the exclusion is a DECISION, not
+        # an accident of the pattern. #105's T5 is exactly the forbidden shape, and it is a
+        # record of what was done. Rewriting a record to satisfy a guard written afterwards
+        # destroys its value as evidence; that is the #102 precedent.
+        if "_archive" in spec.relative_to(spec_root).parts:
+            continue
+        try:
+            spec_text = spec.read_text()
+        except OSError as exc:
+            # Existence is not readability, and the two are indistinguishable downstream: a
+            # spec never opened contributes no task lines, and no task lines is what a
+            # compliant spec looks like. Fail closed. See #16, and case 53.
+            unreadable.append((str(spec.relative_to(ROOT)), str(exc)))
+            continue
+        scanned += 1
+        for lines in tasks_by_section(spec_text).values():
+            for n, line in lines:
+                head = directive(line)
+                if DEFERRAL.search(head):
+                    deferred.append((str(spec.relative_to(ROOT)), n, head))
+
+if unreadable:
+    print("check-templates FAILED — a live spec exists but cannot be read", file=sys.stderr)
+    for name, why in unreadable:
+        print(f"  {name}: {why}", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  A spec this guard could not open is not a spec with nothing wrong in it.", file=sys.stderr)
+    sys.exit(1)
+
+if deferred:
+    print("check-templates FAILED — a task is sequenced after the review", file=sys.stderr)
+    for name, n, head in deferred:
+        print(f"  {name}:{n}", file=sys.stderr)
+        print(f"    {head}", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  review-gate.sh arms when a spec has no unticked tasks, which stands in for", file=sys.stderr)
+    print("  'implementation is finished'. A task held back until after the review keeps", file=sys.stderr)
+    print("  that box unticked for the whole review, so the gate stays silent during the", file=sys.stderr)
+    print("  one stretch it exists to cover.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  Work that belongs after the review is a STEP of `implement`, beside the work", file=sys.stderr)
+    print("  log entry and the `Status: done` flip — not a task. See #113.", file=sys.stderr)
+    sys.exit(1)
+
+print(
+    f"check-templates: {total} task line(s) across {len(blocks)} template(s), no split red steps; "
+    f"{scanned} live spec(s), no task sequenced after the review"
+)

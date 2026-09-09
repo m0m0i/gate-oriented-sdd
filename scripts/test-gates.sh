@@ -1585,5 +1585,119 @@ else
 fi
 
 
+# --- guards: check-templates.py's live-spec scan -----------------------------------
+#
+# #113. review-gate.sh arms on zero open tasks, which stands in for "implementation is
+# finished". A task deliberately sequenced after the review holds one box unticked for the
+# whole review window, so the gate stays silent during exactly the stretch it exists to
+# cover — and .steering/tech.md used to tell authors to write one. The fix is definitional:
+# no task is sequenced after the review. This is the half that checks a live spec obeys it.
+#
+# The hard part is not catching #105's T5. It is catching it WITHOUT flagging the spec that
+# introduces the guard, whose own tasks necessarily describe deferral while not being
+# deferred. The distinction is positional: a task announces its schedule in its DIRECTIVE,
+# the text before its first clause break. What follows describes the work, not its timing.
+
+specs_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/skills/spec" "$r/.specs"
+  cp "$ROOT/scripts/check-templates.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-templates.py"
+  # A valid templates.md, so any failure below comes from the spec scan and not from the
+  # check this guard already performed.
+  write_templates "$r" "- [ ] T1: failing test for <behavior> — then the implementation that makes it pass"
+  echo "$r"
+}
+
+# $1 = repo, $2 = directory under .specs (may be nested, e.g. _archive/105-x), $3 = a task
+# line, $4 = a second task line (optional).
+write_spec() {
+  d="$1/.specs/$2"; mkdir -p "$d"
+  { printf '# Spec: x\n- Slug: %s   Status: approved\n\n## 1. Requirements\n' "$2"
+    printf -- '- [ ] **AC1:** an acceptance criterion, deliberately left unticked.\n\n'
+    printf '## 3. Tasks (TDD-ordered)\n%s\n' "$3"
+    [ $# -lt 4 ] || printf '%s\n' "$4"
+  } > "$d/spec.md"
+}
+
+# 51. A deferred task fails; a task that merely DESCRIBES deferral passes.
+#
+# The control runs first, as in case 36: "flags the thing we broke" is not evidence unless
+# "passes the thing we did not" stands beside it.
+#
+# The third fixture is this spec's own T1 and T3, verbatim. They are the adversarial case
+# and no invented line is a substitute — both contain a deferral phrase, both are ordinary
+# pre-review tasks, and a guard that flags them would have been tuned until its own spec
+# passed, which is the failure this case exists to make impossible.
+r=$(specs_repo spec-clean)
+write_spec "$r" "9-feature" "- [ ] T1: failing test for the thing — then the implementation that passes it"
+out=$(run_templates "$r")
+[ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(specs_repo spec-deferred)
+write_spec "$r" "9-feature" "- [ ] T1: failing test for the thing — then the implementation that passes it" \
+  "- [x] T5: **after the reviewer gate is CLEAN** — bump both manifests to 0.4.4."
+out=$(run_templates "$r"); err=$(cat "$TMP/terr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *".specs/9-feature/spec.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"after the reviewer gate is CLEAN"*) c3=ok ;; *) c3=no ;; esac
+
+r=$(specs_repo spec-describes)
+write_spec "$r" "113-post-review-task-disarms-the-gate" \
+  "- [ ] T1: cases in \`scripts/test-gates.sh\` — a live spec whose Tasks section names post-review work fails \`check-templates.py\` with the spec named; a clean spec passes. (AC4, AC5)" \
+  "- [ ] T3: the definition — \`skills/spec/templates.md\` states that no task is sequenced after the review. (AC1)"
+out=$(run_templates "$r"); derr=$(cat "$TMP/terr")
+[ "$out" = "0" ] && c4=ok || c4=no
+
+[ "$c0$c1$c2$c3$c4" = "okokokokok" ] && report "a deferred task fails, a task describing deferral passes" ok \
+  || report "a deferred task fails, a task describing deferral passes" no \
+     "clean-passes=$c0 deferred-fails=$c1 names-spec=$c2 names-line=$c3 describing-passes=$c4 [$derr]"
+
+# 52. The scan's boundaries: archived specs are records, and an absent or unwritten spec is
+# not a defect.
+#
+# .specs/_archive/ holds #105 itself, whose T5 is precisely the forbidden shape. Rewriting a
+# record to satisfy a guard added afterwards destroys its value as evidence — the #102
+# precedent. A repository with no .specs/ at all, and a spec whose Tasks section has not been
+# written yet, are both states `spec` tells an author to create: flagging them is #8.
+r=$(specs_repo spec-archive)
+write_spec "$r" "_archive/105-a-clock" "- [x] T5: **after the reviewer gate is CLEAN** — bump both manifests to 0.4.4."
+out=$(run_templates "$r")
+[ "$out" = "0" ] && c1=ok || c1=no
+
+r=$(specs_repo spec-none)          # no .specs/ content at all
+out=$(run_templates "$r")
+[ "$out" = "0" ] && c2=ok || c2=no
+
+r=$(specs_repo spec-empty)
+mkdir -p "$r/.specs/9-feature"
+printf '# Spec: x\n\n## 1. Requirements\n- [ ] **AC1:** x.\n\n## 3. Tasks (TDD-ordered)\n' > "$r/.specs/9-feature/spec.md"
+out=$(run_templates "$r")
+[ "$out" = "0" ] && c3=ok || c3=no
+
+[ "$c1$c2$c3" = "okokok" ] && report "archived specs, a missing .specs and an unwritten Tasks section are not failures" ok \
+  || report "archived specs, a missing .specs and an unwritten Tasks section are not failures" no \
+     "archive-skipped=$c1 no-specs=$c2 no-tasks=$c3"
+
+# 53. A spec that exists and cannot be read must fail, not pass.
+#
+# The same third state as cases 32 and 37. A spec the guard never opened contributes no task
+# lines, and an empty contribution is indistinguishable from a compliant one — so silence
+# here would be the guard reporting success about a file it could not read.
+r=$(specs_repo spec-unreadable)
+write_spec "$r" "9-feature" "- [ ] T1: failing test for the thing — then the implementation that passes it"
+chmod 000 "$r/.specs/9-feature/spec.md" 2>/dev/null
+if cat "$r/.specs/9-feature/spec.md" >/dev/null 2>&1; then
+  chmod 644 "$r/.specs/9-feature/spec.md" 2>/dev/null
+  c1=ok; c2=ok                      # chmod does not deny access here; a case that cannot fail is worse than none
+else
+  out=$(run_templates "$r"); err=$(cat "$TMP/terr")
+  chmod 644 "$r/.specs/9-feature/spec.md" 2>/dev/null
+  [ "$out" = "1" ] && c1=ok || c1=no
+  case "$err" in *"cannot be read"*) c2=ok ;; *) c2=no ;; esac
+fi
+[ "$c1$c2" = "okok" ] && report "a spec that cannot be read fails rather than passing" ok \
+  || report "a spec that cannot be read fails rather than passing" no "exit=$c1 msg=$c2"
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
