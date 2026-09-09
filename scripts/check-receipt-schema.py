@@ -218,6 +218,18 @@ PRODUCERS = {
     "reviewed_by": None,    # whether it was spawned, which only it knows
 }
 
+# The same guard SOURCES gets fifty lines below, for the same reason and citing the same
+# incident. A hard-coded work-set can be emptied by an edit to this file, and an emptied one
+# makes every loop below run zero times, leaves nothing in `_failures`, and prints a success
+# line reading "0 reviewer(s) can produce" — #16 verbatim. Five is the number that exist; a
+# reviewer deliberately retired should move this number down in the same change, which is a
+# decision worth having to make rather than one that happens silently.
+if len(REVIEWERS) < 5:
+    print("check-receipt-schema FAILED — REVIEWERS has an empty work-set", file=sys.stderr)
+    print(f"  listed: {len(REVIEWERS)}, expected at least 5", file=sys.stderr)
+    print("  A guard with an empty work-set must not report success — see #16.", file=sys.stderr)
+    sys.exit(1)
+
 # Completeness before correctness. An unknown field is a field nobody asked the producer
 # question about, which is exactly how #105 arrived.
 unmapped = [f for f in found[first] if f not in PRODUCERS]

@@ -1517,5 +1517,41 @@ else
 fi
 
 
+# 49. An emptied REVIEWERS must fail rather than report success.
+#
+# #16's shape, in the work-set #105 added. This file already guards its other hard-coded
+# work-set — `if len(SOURCES) < 2` at check-receipt-schema.py, with a comment citing #16 —
+# and the new tuple arrived without the equivalent. Emptying it makes the loop run zero times,
+# leaves the failure list empty, and prints a success line naming zero reviewers.
+#
+# The success line is checked as well as the exit code, because "0 reviewer(s) can produce"
+# is the sentence a reader would have skimmed past. A guard is allowed to check nothing only
+# when it says so loudly enough that nobody mistakes it for a pass.
+r=$(receipt_repo receipt-no-reviewers)
+python3 - "$r" <<'PYEOF'
+import pathlib, re, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-receipt-schema.py")
+src = p.read_text()
+new, n = re.subn(r"REVIEWERS = \(\n(?:    \"[^\"]+\",\n)+\)", "REVIEWERS = ()", src, count=1)
+if n != 1:
+    sys.exit(3)
+p.write_text(new)
+PYEOF
+if [ $? -ne 0 ]; then
+  report "an emptied REVIEWERS must not report success" no \
+    "fixture could not be built: the REVIEWERS tuple this case empties was not found"
+else
+  out=$( cd "$r" && python3 scripts/check-receipt-schema.py >"$TMP/nout" 2>"$TMP/nerr"; printf '%s' "$?" )
+  [ "$out" = "1" ] && c1=ok || c1=no
+  case "$(cat "$TMP/nerr" 2>/dev/null)" in *Traceback*) c2=no ;; *) c2=ok ;; esac
+  case "$(cat "$TMP/nerr" 2>/dev/null)" in *"empty work-set"*) c3=ok ;; *) c3=no ;; esac
+  # The success line must not have been printed at all.
+  case "$(cat "$TMP/nout" 2>/dev/null)" in *"reviewer(s) can produce"*) c4=no ;; *) c4=ok ;; esac
+  [ "$c1$c2$c3$c4" = "okokokok" ] && report "an emptied REVIEWERS must not report success" ok \
+    || report "an emptied REVIEWERS must not report success" no \
+       "exit=$c1 no-traceback=$c2 says-empty=$c3 no-success-line=$c4"
+fi
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
