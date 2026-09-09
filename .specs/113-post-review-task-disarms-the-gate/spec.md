@@ -1,5 +1,5 @@
 # Spec: A post-review task disarms the review gate
-- Slug: 113-post-review-task-disarms-the-gate   Issue: 113   Type: bug   Status: approved
+- Slug: 113-post-review-task-disarms-the-gate   Issue: 113   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-09-10
 
 ## 1. Requirements (WHAT / WHY)
