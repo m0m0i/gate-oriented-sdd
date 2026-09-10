@@ -595,3 +595,62 @@ Two general things worth keeping, both cheap to state and both learned the expen
 2. **An expectation that a check fails is not evidence the check works** unless "could not look" is
    distinguishable from "looked and found the problem". Otherwise the self-test is satisfied by the
    absence of the test.
+
+## Review round 6 — CLEAN, 0 blockers, 0 HIGH, 0 MEDIUM
+
+Reviewed at `0c03945`; receipt written. The `unreadable` path was attacked and holds, including the
+partial case: `bodies` is built for all three files before anything is examined, so a ref that
+resolves for two and not the third returns `unreadable` rather than grading the two it could read.
+That is a real ref in this repo's history — `git show <old-ref>:README.ja.md` fails at any commit
+predating that file. The crux is `if b is None` rather than `if not b`: an empty-but-readable file
+flows through and reports **red**, correctly, because a README with no section genuinely fails
+AC4/AC5, while a ref that cannot be read is a different fact. `if not b` would have collapsed the two
+and quietly reintroduced round 5's HIGH.
+
+### Two LOWs — accepted rather than fixed, and the reasons
+
+Both are fail-closed, and the reviewer's own disposal was that neither is worth another round. This
+is recorded **after** the receipt, which is why nothing was changed to accommodate it: `verify.py`'s
+logic is exactly what was reviewed at `0c03945`.
+
+- **The working-tree path raises instead of returning `unreadable`.** `text()` returns `None` for a
+  bad ref, but `ref is None` still calls `open()` bare, so a missing file raises out of the
+  comprehension. A traceback exits 1, so the direction is safe, and the same line would benefit from
+  an explicit `encoding="utf-8"` — on a non-UTF-8 locale `README.ja.md` decodes to mojibake and the
+  Japanese cues stop matching. Traced: that cannot go the other way, because `CUE`, `MAND` and
+  `NEG_MAND` are all Japanese on that file, so they fail together and the result is red.
+- **The recorded invocation rots on merge.** `./verify.py main:red -:green` depends on `main` still
+  holding the defect. Once this merges, `main` carries the corrected text, goes GREEN, mismatches
+  the expectation and exits 1 — and a future reader re-running the recorded evidence would conclude
+  the check is broken. **The remedy, for whoever re-runs this:** use the pre-branch commit, which is
+  a SHA that will always be red — `./verify.py 18205d5:red -:green`. The script stays correct
+  either way; it is only the example that ages.
+
+Also noted and not acted on: the mismatch line prints the raw argument, so the working tree shows as
+`-` where `check()` prints `working tree`; and a bare `:green` yields an empty ref, which
+`git show :README.md` accepts as the *index* rather than erroring.
+
+### The residual, extended
+
+`observations.md`'s RESIDUAL paragraph speaks only of `optin()`. It applies equally to
+`mandatory()`: its negation guard is bounded by the same enumeration, in the same way, with the same
+exit at #110. The structural asymmetry that made round 5's finding a MEDIUM is gone — `NEG_MAND` now
+covers all four of `MAND`'s cues — and what remains is paraphrase (「必須とはいえません」,
+「必須の対象外です」 and their English cousins), which is enumeration against natural language and is
+the documented floor rather than a defect to chase.
+
+### Six rounds, and what the record is actually for
+
+The artifact was correct after round 1. Every finding since was in the evidence: three blind spots in
+a grep (direction, markup, sentence scope), an uncommitted script, a fail-open introduced by a fix,
+and a negation guard covering half its cues. Five of those six were fail-opens — checks that would
+have reported the property true while it was false.
+
+The two lessons that transfer beyond this spec:
+
+1. **A pattern copied between an accusing check and a clearing check must have its direction
+   re-decided.** The same bolding gap appeared twice: in `NEG` it produced a false red, in
+   `NEG_MAND` a false green. `G-9`'s side decides the severity, not the gap.
+2. **An expectation that a check fails is not evidence the check works** unless *could not look* is
+   distinguishable from *looked and found it*. Round 5's HIGH was exactly this, and it is #16 —
+   one of the first five bugs filed against this repository — reappearing at the outermost layer.
