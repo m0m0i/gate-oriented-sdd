@@ -1,5 +1,5 @@
 # Spec: The minimum set, stated in one unit
-- Slug: 109-minimum-set-in-one-unit   Issue: 109   Type: bug   Status: approved
+- Slug: 109-minimum-set-in-one-unit   Issue: 109   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-09-11
 
 ## 1. Requirements (WHAT / WHY)
