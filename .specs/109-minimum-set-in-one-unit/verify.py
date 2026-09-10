@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """AC4 and AC5: the minimum set, partitioned per file, from markup rather than proximity.
 
-    ./verify.py            # the working tree — expect GREEN
-    ./verify.py main HEAD  # any refs — `main` must be RED, HEAD GREEN
+    ./verify.py                  # the working tree — expect GREEN
+    ./verify.py main:red -:green  # each ref with the verdict it must produce
+
+Every ref may carry an expected verdict (`:red` / `:green`, default `green`), and the exit code
+is 0 only when every ref matched what was expected. Without that, the documented two-ref form —
+whose whole point is that `main` is RED — would exit non-zero on a perfectly correct tree.
 
 AC4 wants two things of every file that states the set: `archive` is named in the mandatory
 enumeration, and it is not in the opt-in list. AC5 wants the three files to agree. Both fall
@@ -22,6 +26,12 @@ HEADS = {"README.md": "## The minimum set", "README.ja.md": "## 最小構成"}
 
 CUE  = r"opt-in|[Oo]ptional|任意"
 MAND = r"mandatory|必須|minimum install|最小構成に入る"
+
+#: A negated mandatory-cue must not read as a mandatory declaration — the mirror of NEG, on the
+#: clearing side. Bound to the CUE, never to the sentence: the Japanese caption
+#: 「必須だが、チェーンには出てこない」 contains 「ない」 and is that file's ONLY archive-mandatory
+#: declaration, so a blanket negation filter would turn a correct README.ja.md red.
+NEG_MAND = r"(?:no longer|not)\s+(?:\w+\s+){0,2}mandatory|(?:mandatory|必須)\s*(?:ではあ?りません|ではなく)"
 
 #: Split at sentence-FINAL punctuation only. `。` always ends one; `.` only when a sentence
 #: starts after it — otherwise "e.g." and "0.5.1" break a sentence apart and strand the cue
@@ -84,7 +94,7 @@ def mandatory(sec):
     found = set()
     for para in sec.split("\n"):
         for s in re.split(SENT, para):
-            if re.search(MAND, s):
+            if re.search(MAND, s) and not re.search(NEG_MAND, s):
                 found |= names(s)
     return found
 
@@ -105,5 +115,13 @@ def check(ref):
     return ok
 
 if __name__ == "__main__":
-    refs = [None if r == "-" else r for r in sys.argv[1:]] or [None]
-    sys.exit(0 if all([check(r) for r in refs]) else 1)
+    args = sys.argv[1:] or ["-"]
+    ok = True
+    for arg in args:
+        ref, _, want = arg.partition(":")
+        want = want or "green"
+        got = "green" if check(None if ref == "-" else ref) else "red"
+        if got != want:
+            print(f"  MISMATCH: {ref or 'working tree'} expected {want}, got {got}")
+            ok = False
+    sys.exit(0 if ok else 1)

@@ -441,3 +441,79 @@ was right and the mutant was not: the section declares `archive` mandatory *twic
 sentence — "and all three are mandatory regardless" — still carried the claim. A mutant that does
 not actually remove the property proves nothing about the check, and reading that MISSED as a
 finding would have produced a sixth round chasing a defect that was not there.
+
+## Review round 4 — CLEAN, 0 blockers, 0 HIGH, 2 MEDIUM (advisory)
+
+Reviewed at `987fb97`: **CLEAN**. The HIGH cleared — `verify.py` is committed at `100755`, the same
+mode as the three scripts it was modelled on, so the documented invocation actually runs. The
+reviewer did **not** execute it, saying so rather than running an off-list command: its allow-list
+names the nine `- Validators:` commands and a script in a spec directory is not among them. Both
+MEDIUMs are therefore source audits — possible only because the file now exists, which was the
+point of round 3's HIGH.
+
+Both were advisory and neither blocked the PR. **Both are fixed anyway**, because one is a
+fail-open and this repository's anchor is that gates never fail open — accepting it with a note
+would have been the cheaper answer and the wrong one.
+
+### MEDIUM 1 — `mandatory()` had no negation handling — fixed
+
+The same defect round 3 fixed in `optin()`, left unmirrored on the other side of the conjunction.
+`optin()` accuses and carries `NEG`; `mandatory()` *clears* — a hit satisfies `"archive" in mand`,
+the third conjunct — and it keyed on the bare word. So a negated mandatory read as a mandatory
+declaration, and a one-sentence fail-open existed in both languages with no anaphora and no exotic
+markup:
+
+| Mutation | Old result |
+| :-- | :-- |
+| caption drops the cue, and `README.md:94` ends `… and \`archive\` is no longer mandatory` | GREEN |
+| 「`archive` は必須ではありません。」 — carries no `CUE`, so `optin()` never examines it | GREEN |
+
+`NEG_MAND` now binds the negation to the cue: `(?:no longer|not)\s+(?:\w+\s+){0,2}mandatory` or
+`(?:mandatory|必須)\s*(?:ではあ?りません|ではなく)`. Both mutants are caught and both controls stay
+green.
+
+**Bound to the cue, never to the sentence** — and the reviewer supplied the reason, which is the
+part worth keeping. `README.ja.md`'s caption 「必須だが、チェーンには出てこない」 contains 「ない」
+**and is that file's only `archive`-mandatory declaration**. A blanket sentence-level negation
+filter would have turned a correct `README.ja.md` red. Verified after the fix: the caption survives.
+
+That asymmetry is worth recording on its own. `README.md` declares `archive` mandatory **twice** —
+the caption and the prose at `:94` — while `README.ja.md` declares it **once**, because
+「それでもこの3つは必須です。」 names no skill after the sentence split. The two files are not equally
+robust to a diagram edit. The direction is safe — a caption edit turns the Japanese file red, not
+green — so it is a note rather than a defect.
+
+### MEDIUM 2 — the documented invocation exited 1 on a correct tree — fixed
+
+`sys.exit(0 if all(...) else 1)` meant "every ref was GREEN", while both recorded invocations pass a
+ref that is *supposed* to be RED. Run as documented on a perfectly correct tree, the exit code was
+1 — and `observations.md` then said "it exits non-zero on failure, so it is runnable in CI", which
+would have put a permanently-failing command in CI. A check that fires on a correct state is one
+people switch off.
+
+Each ref now carries the verdict it must produce, and the exit code is 0 only when every ref matched:
+
+```
+./.specs/109-minimum-set-in-one-unit/verify.py main:red -:green    # exits 0
+```
+
+### On the mutant I called wrong — the reviewer checked, and it holds
+
+Flagged for scrutiny because "the test was wrong, not the code" is the conclusion most likely to be
+self-serving. Verified independently: `README.md`'s section matches `MAND` in exactly three
+sentences, exactly two contain `archive`, and a mutant editing only the caption leaves the second
+intact — so `MISSED` was the correct answer about a file that still declared the property. The
+reviewer also looked for the failure mode that would have made the conclusion wrong — a spurious
+third path putting `archive` into `mand` — and found none.
+
+### Four rounds, and what they were actually about
+
+**The artifact was correct after round 1.** Every finding from round 2 onward was in the evidence
+layer — the checks, not the READMEs. Written down because it is the opposite of the expected shape
+and it is the reusable lesson: the fix was easy and proving it was not, and each round found a way
+the proof could pass while the property was false. Round 1 direction, round 2 markup, round 3
+sentence scope and an uncommitted script, round 4 a negation on the clearing side. Five distinct
+fail-opens in the evidence for a three-file prose change.
+
+The exit from that regress is not a better regex. It is #110 — a machine-readable set, after which
+membership stops being a question about sentences at all.
