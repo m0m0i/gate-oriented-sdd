@@ -47,13 +47,13 @@ _[English →](./README.md)_
 skill が13個あるからといって、必須のドキュメントが13個あるわけではありません。そう読んでしまうのが、これを over-engineering だと切り捨てる最短コースです。**最小構成に入る skill は13個中10個**で、その10個が生み出すドキュメントは**5つ、それに3つの issue テンプレート**です。skill とドキュメントは数える単位が違うので、両者の数は一致しません。この節があるのは、まさにその取り違えを防ぐためです。
 
 ```text
-prd   design-doc   backlog  sprint   spec implement worklog
- ↓        ↓           ↓        ↓      ↓      ↓        ↓
-PRD → design doc → backlog → Issue → spec → code → worklog
-                               ↑         + receipt
-                    issue templates: feature / bug / chore
+skill:     prd   design-doc   backlog  sprint   spec implement worklog
+            ↓        ↓           ↓        ↓      ↓      ↓        ↓
+produces:  PRD → design doc → backlog → Issue → spec → code → worklog
+                                          ↑         + receipt
+                               issue templates: feature / bug / chore
 
-必須だがドキュメントを作らない: init, clarify, archive
+必須だが、チェーンには出てこない: init, clarify, archive
 ```
 
 テンプレートはこのチェーンの*横*ではなく*中*にあります。Issue のタイプが決まるのは Issue のステップで、そのタイプが spec の形を決めるからです。テンプレートを外してもチェーンは回りますが、bug に対して feature の形をした spec ができあがります。存在しないユーザーストーリーと、作り話でしかない受け入れ条件を持った spec です。
@@ -65,7 +65,7 @@ PRD → design doc → backlog → Issue → spec → code → worklog
 | Skill | 任意である理由 |
 | :-- | :-- |
 | `northstar` | `init` の対話が、別ルートで同じ `- Owns:` アンカーを作ってしまう |
-| `epics` | 機械的に読む先がどこにもない |
+| `epics` | 機械的に読む先が**まだ**どこにもない。これは決定ではなく、#22 で埋めるべき穴です |
 | `contract` | commit もレビュー指摘も溜まらないうちに走らせると、ルールブックが「無い」のではなく「悪い」ものができあがる |
 
 **skill はどれも、常に使えます。** `init` が設置するのは `.steering/`、`.specs/`、`.work_logs/`、issue テンプレート、reviewer、そして hook であって、skill 本体ではありません。skill はプラグインに同梱されているからです。ここでの選択が決めるのは、どのドキュメントを作るか、どの skill をフローに乗せるかであって、その skill を使えるかどうかではありません。

@@ -80,13 +80,13 @@ One issue = one spec = one branch = one PR. `clarify` is the phase most setups l
 Thirteen skills is not thirteen required documents, and reading it that way is the fastest route to dismissing this as over-engineering. **Ten of the thirteen are in a minimum install**, and between them they produce **five documents and three issue templates**. Skills and documents are different units, and the two counts do not line up — which is exactly the confusion this section exists to prevent.
 
 ```text
-prd   design-doc   backlog  sprint   spec implement worklog
- ↓        ↓           ↓        ↓      ↓      ↓        ↓
-PRD → design doc → backlog → Issue → spec → code → worklog
-                               ↑         + receipt
-                    issue templates: feature / bug / chore
+skill:     prd   design-doc   backlog  sprint   spec implement worklog
+            ↓        ↓           ↓        ↓      ↓      ↓        ↓
+produces:  PRD → design doc → backlog → Issue → spec → code → worklog
+                                          ↑         + receipt
+                               issue templates: feature / bug / chore
 
-also mandatory, producing no document: init, clarify, archive
+also mandatory, off the chain: init, clarify, archive
 ```
 
 The templates sit **inside** that chain rather than beside it: the Issue step is where the type is decided, and the type is what shapes the spec. Without them the chain still runs — it just produces feature-shaped specs for bugs, with a user story that does not exist and acceptance criteria that are fiction.
@@ -98,7 +98,7 @@ Opt-in, and worth adding when the project justifies it — three skills, each fo
 | Skill | Why it is opt-in |
 | :-- | :-- |
 | `northstar` | `init`'s interview already produces the `- Owns:` anchor by another route |
-| `epics` | nothing consumes it mechanically |
+| `epics` | nothing consumes it mechanically **yet** — the gap is #22, not a decision |
 | `contract` | run before there are commits and review findings to compile, it produces a *worse* rulebook rather than an absent one |
 
 **Every skill is always available.** `init` installs `.steering/`, `.specs/`, `.work_logs/`, the issue templates, the reviewer and the hooks — never the skills themselves, which ship with the plugin. The choice above governs which documents get created and which skills are in the flow, never whether one can be run.
