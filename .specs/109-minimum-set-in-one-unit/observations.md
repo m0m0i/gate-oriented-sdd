@@ -261,8 +261,9 @@ def optin(sec):
 # per file: seen == ALL and optin == OPT  =>  mandatory == TEN, and archive is in it
 ```
 
-The full runnable file, with the section extraction and the per-ref driver, is
-`minset.py` as recorded in this branch's session; the three functions above are its whole logic.
+> **Superseded in round 3.** This excerpt was never runnable and the file it named was never
+> committed — see "HIGH" under round 3. The real check is [`verify.py`](./verify.py) in this
+> directory, and the excerpt above is retained only as the record of what round 3 inherited.
 
 **Result.** Both AC4 and AC5 now fall out of one assertion — `seen == ALL and optin == OPT` — which
 is the partition AC5 claims and which entails AC4's property.
@@ -325,3 +326,118 @@ which is mechanical.
 - The eight AC checkboxes still read `[ ]` under `Status: done`. The reviewer found the convention
   mixed across archived specs and `skills/implement/SKILL.md` silent on it. Ticked in the
   post-receipt step, with the version bump.
+
+## Review round 3 — BLOCKED, 0 blockers, 1 HIGH, 3 MEDIUM, 1 LOW
+
+Reviewed at `4df1f07`. The redesign was accepted — the reviewer attacked `optin()`'s table parser
+as asked and could not reach a false green through it, because `optin == OPT` is an *equality*, so
+every parser failure drops all four names at once and lands red. Recording that negative result
+because it is the load-bearing one.
+
+### HIGH — the script was never committed, and the repo already had a convention for that
+
+`observations.md` claimed the check was "recorded here verbatim so anyone can re-run it" and then
+named a file that does not exist: `git ls-files | grep -i minset` returns nothing, `git status` was
+clean, so it was not even untracked. What was printed was the logic, not the check — `section()`
+undefined, `seen` computed nowhere, no driver — so **seven claimed results** (two refs × three
+files, five mutants, two controls) rested on something nobody could execute, the reviewer included.
+That is precisely the gap C-1 exists to close, and round 2's MEDIUM 2 had already named the two
+missing pieces; they were left missing while more weight was piled on them.
+
+**The repo knew the answer and this spec did not look.** Verification scripts for a spec are
+committed into the spec directory: `.specs/_archive/61-unwrap-hard-wrapped-markdown/` carries four,
+`64-fence-carve-out-by-delimiter/` and `66-pin-format-on-save-off-for-markdown/` carry `verify.py`.
+Three call sites — convention, not preference. And #61 is the same spec already cited above as the
+shape to copy for C-8, so the precedent was one directory away the whole time.
+
+Now committed as [`verify.py`](./verify.py), matching the name those three use. AC7 already admits
+"this spec directory", so no AC line moves and no C-8 exposure is created. It exits non-zero on
+failure, so it is runnable in CI or by hand:
+
+```
+./.specs/109-minimum-set-in-one-unit/verify.py main -     # `main` RED, working tree GREEN
+```
+
+### MEDIUM 1 — the Japanese carve-out bound to the copula, not to the predicate — fixed
+
+A real fail-open, and the sharpest finding of the three rounds. The carve-out was
+`` `{n}`\s*(is|は)[^.。]{0,24}(not opt-in|ではありません) ``. The English branch pins the whole negated
+predicate (`not opt-in`), so it is sound. The Japanese branch pinned only the copula and left the
+predicate inside an unconstrained window — and `ではありません` negates whatever precedes it. So these
+two were indistinguishable:
+
+| Sentence | Means | Old carve-out |
+| :-- | :-- | :-- |
+| `` `archive` は、小さいから任意、ではありません `` | *not* opt-in | cleared — correct |
+| `` `archive` は任意扱いで、必須ではありません `` | **is** opt-in | cleared — **wrong** |
+
+The second carries the cue, names `archive`, and asserts the defect; clearing it leaves
+`optin == OPT` intact and the check GREEN on a file that has just declared `archive` optional. Fixed
+by moving the cue *inside* the window — `` `{n}`\s*は[^.。]{0,12}(任意|opt-in)[^.。]{0,4}ではありません ``
+— so a negation of `必須` can no longer clear. The real sentence still clears; the defeater is now
+caught.
+
+### MEDIUM 2 — `mandatory == TEN` was derived, not observed — fixed
+
+Round 2's positive check was dropped when the partition replaced it, on the reasoning that
+`ALL - OPT` gives the mandatory set. That inference is valid only under a premise the check never
+verified: **that every skill the section mentions is mentioned in a declared role.** `seen == ALL`
+is pure presence. A file that drops its mandatory enumeration while still mentioning all thirteen in
+passing keeps `seen == ALL and optin == OPT` true with nothing declared mandatory at all.
+
+`mandatory()` is restored as a direct assertion, and the mutant proves the gap was real rather than
+theoretical: with both of `README.md`'s mandatory declarations removed, **`seen == ALL` still
+holds** while `archive in mandatory` goes false. The derivation would have passed; the direct check
+fails. Asserting a premise beats deriving from it.
+
+### MEDIUM 3 — sentence-scoped matching cannot see anaphora — recorded as a residual, not patched
+
+Both languages can move the name out of the cue's sentence:
+
+```
+… `northstar`, `epics` and `contract` are opt-in. So is `archive`.
+任意なのは `northstar`、`epics`、`contract` です。`archive` も同様です。
+```
+
+The reviewer's disposal is taken as offered, and it is the right one: **not a sixth patch.** A
+prose-matching check cannot be made paraphrase-proof, and each patch has cost a review round. The
+distinction that decides it: rounds 1 and 2 were green on text that *actually existed* — at `main`,
+and in the markup at HEAD. This one is a string constructed to defeat it and present nowhere.
+
+**RESIDUAL — what `verify.py` provably cannot see.** A role declared across a sentence boundary by
+anaphora ("So is `archive`.", 「`archive` も同様です。」), and a role declared in markup other than a
+pipe table. Both are unreachable by any amount of pattern-matching against prose, because the
+information is not local to the text being matched. This is the floor of the approach, and the exit
+is **#110** — once the installed set is a value the harness reads, membership stops being a
+question about sentences. Recorded as a documented limit rather than chased, which is how
+`.steering/product.md` already handles the `CAP-`/#22 gap.
+
+### LOW — a bolded negation broke the carve-out — fixed
+
+The English branch matched the literal `not opt-in`, and this section's house style bolds the key
+word (`**Every skill is always available.**`, `**まだ**`, `**Ten of the thirteen**`). An editor
+writing `` `archive` is **not** opt-in `` would have inserted `**` into the middle of the literal,
+stopping the carve-out and turning AC4 **red on a correct file**. The safe direction, but a trap
+laid in a file whose style invites it. Now `not\W{0,4}opt-in`, which survives the bolding —
+tolerated on the clearing side only, which is the side `G-9` permits.
+
+### Mutation tests — seven attacks, all caught
+
+| Mutant | Source | Caught |
+| :-- | :-- | :-- |
+| `archive` as a row of README.md's opt-in **table** | r2 HIGH | yes |
+| `` … and `archive` — the rest are not opt-in. `` | r2 MEDIUM (EN) | yes |
+| `` 任意なのは …、`archive` の4つで、必須ではありません。 `` | r2 MEDIUM (JA) | yes |
+| `` Optional (e.g. small repos): … `archive`. `` | splitter evasion | yes |
+| `` Optional since 0.5.1: … `archive`. `` | splitter evasion | yes |
+| `` `archive` は任意扱いで、必須ではありません。 `` | r3 MEDIUM 1 | yes |
+| both mandatory declarations removed, all thirteen still named | r3 MEDIUM 2 | yes |
+
+Controls: both real negations still clear, and a bolded `is **not** opt-in` still clears.
+
+**One mutant was wrong on the first attempt, and it is worth recording why.** The
+mandatory-dropped mutant initially edited only the diagram caption and reported MISSED. The check
+was right and the mutant was not: the section declares `archive` mandatory *twice*, and the prose
+sentence — "and all three are mandatory regardless" — still carried the claim. A mutant that does
+not actually remove the property proves nothing about the check, and reading that MISSED as a
+finding would have produced a sixth round chasing a defect that was not there.

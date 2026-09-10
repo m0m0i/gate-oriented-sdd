@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""AC4 and AC5: the minimum set, partitioned per file, from markup rather than proximity.
+
+    ./verify.py            # the working tree — expect GREEN
+    ./verify.py main HEAD  # any refs — `main` must be RED, HEAD GREEN
+
+AC4 wants two things of every file that states the set: `archive` is named in the mandatory
+enumeration, and it is not in the opt-in list. AC5 wants the three files to agree. Both fall
+out of one assertion per file — `seen == ALL and optin == OPT and archive in mandatory` —
+so the two criteria cannot disagree about what they read.
+
+Three rounds of review were spent on greps that each had a blind spot: direction (round 1),
+markup (round 2), and sentence scope (round 3). What survives is documented under RESIDUAL.
+"""
+import re, subprocess, sys
+
+TEN = {"init","prd","design-doc","backlog","sprint","spec","clarify","implement","worklog","archive"}
+OPT = {"northstar","epics","contract"}
+ALL = TEN | OPT
+FILES = ("README.md", "README.ja.md", "skills/init/SKILL.md")
+HEADS = {"README.md": "## The minimum set", "README.ja.md": "## 最小構成"}
+
+CUE  = r"opt-in|[Oo]ptional|任意"
+MAND = r"mandatory|必須|minimum install|最小構成に入る"
+
+#: Split at sentence-FINAL punctuation only. `。` always ends one; `.` only when a sentence
+#: starts after it — otherwise "e.g." and "0.5.1" break a sentence apart and strand the cue
+#: from the name it governs, which returns a false green.
+SENT = r"(?<=。)\s*|(?<=\.)\s+(?=[A-Z`|#*\-]|$)"
+
+#: A negation clears a name only when it negates THAT NAME'S ROLE. Binding to the name alone is
+#: not enough: `archive` は任意扱いで、必須ではありません asserts the defect and negates something
+#: else, so the cue must sit INSIDE the window, not outside it. `\W{0,4}` lets the English form
+#: survive the bolding this repo's prose favours — `is **not** opt-in`.
+NEG = (r"`{n}`\s*is[^.。]{{0,8}}not\W{{0,4}}opt-in"
+       r"|`{n}`\s*は[^.。]{{0,12}}(任意|opt-in)[^.。]{{0,4}}ではありません")
+
+def text(ref, path):
+    if ref is None:
+        return open(path).read()
+    return subprocess.run(["git","show",f"{ref}:{path}"], capture_output=True, text=True).stdout
+
+def section(body, path):
+    head = HEADS.get(path)
+    if head is None:                      # skills/init/SKILL.md — the one upstream sentence
+        for line in body.split("\n"):
+            if line.startswith("**Scaffold the mandatory set"):
+                return line
+        return ""
+    out, on = [], False
+    for line in body.split("\n"):
+        if line.strip() == head: on = True; continue
+        if on and line.startswith("## "): break
+        if on: out.append(line)
+    return "\n".join(out)
+
+def names(s):
+    return {n for n in re.findall(r"[a-z][a-z-]+", s)} & ALL
+
+def optin(sec):
+    """Names declared opt-in — from the data rows of a table whose header carries the cue,
+       and from prose in either direction, minus negations bound to the name's own role."""
+    found, in_table = set(), False
+    for line in sec.split("\n"):
+        if line.startswith("|") and re.search(CUE, line):       # the table's header row
+            in_table = True; continue
+        if in_table:
+            if not line.startswith("|"): in_table = False
+            elif not re.match(r"^\|\s*:?-{2,}", line):
+                found |= names(line.split("|")[1])              # first cell holds the skill
+    for para in sec.split("\n"):
+        if para.startswith("|"): continue                       # tables handled above
+        for s in re.split(SENT, para):
+            if not s.strip() or not re.search(CUE, s): continue
+            for n in names(s):
+                if not re.search(NEG.format(n=re.escape(n)), s):
+                    found.add(n)
+    return found
+
+def mandatory(sec):
+    """Names sitting in an enumeration that declares them mandatory. Asserted directly rather
+       than derived as ALL - OPT: the derivation is only valid while every name appears in a
+       declared role, and nothing detects that premise being lost."""
+    found = set()
+    for para in sec.split("\n"):
+        for s in re.split(SENT, para):
+            if re.search(MAND, s):
+                found |= names(s)
+    return found
+
+def check(ref):
+    print(f"--- {ref or 'working tree'} ---")
+    ok = True
+    for path in FILES:
+        sec = section(text(ref, path), path)
+        seen, opt, mand = names(sec), optin(sec), mandatory(sec)
+        good = seen == ALL and opt == OPT and "archive" in mand
+        ok &= good
+        print(f"  {path:<22} named {len(seen):>2}/13  opt-in {sorted(opt)}")
+        print(f"  {'':<22} archive: mandatory={'archive' in mand!s:<5} opt-in={'archive' in opt!s}"
+              f"   -> {'ok' if good else 'FAIL'}")
+        if not good and seen != ALL:
+            print(f"  {'':<22} not named: {sorted(ALL - seen)}")
+    print(f"  AC4/AC5: {'GREEN' if ok else 'RED'}\n")
+    return ok
+
+if __name__ == "__main__":
+    refs = [None if r == "-" else r for r in sys.argv[1:]] or [None]
+    sys.exit(0 if all([check(r) for r in refs]) else 1)
