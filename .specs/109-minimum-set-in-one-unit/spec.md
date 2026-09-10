@@ -1,0 +1,56 @@
+# Spec: The minimum set, stated in one unit
+- Slug: 109-minimum-set-in-one-unit   Issue: 109   Type: bug   Status: draft
+- Author: m0m0i   Date: 2026-09-11
+
+## 1. Requirements (WHAT / WHY)
+- Reproduction: read `README.md:78-92` — the section "The minimum set" — and answer the question it exists to answer: which skills does a minimum install run? The section opens by counting **documents** ("Six documents and three templates are mandatory"), renders a six-node document chain, then closes by naming four **skills** as optional. Stacked, the two read as one comparison, so the minimum set reads as six skills. `README.ja.md:47-57` mirrors it sentence for sentence, and `skills/init/SKILL.md:40` is the upstream sentence both render.
+- Expected: a reader can tell which skills a minimum install runs, and why the rest are optional. `.steering/product.md`'s CAP-7 — "a gate people leave switched on" — is what this section serves; it is the one written specifically to stop a reader dismissing the harness as over-engineered, and it says so in its own first sentence.
+- Actual: three defects, and one unstated fact.
+  - **The unit mismatch.** The mandatory side is counted in documents, the optional side is listed in skills, and neither is converted into the other. The minimum set is **ten skills** — `archive`, `backlog`, `clarify`, `design-doc`, `implement`, `init`, `prd`, `spec`, `sprint`, `worklog` — and three of them are absent from the diagram because none produces a document: `sprint` produces issues, `clarify` a section inside a spec, `implement` code and a receipt.
+  - **The double-count.** "Six documents and three templates" enumerates the six as *PRD, design doc, backlog, Issue templates, spec, work log* — with the issue templates counted once inside the six and again as the three. It is **five documents and three issue templates**.
+  - **`archive` is optional by a category error.** The other three optional skills each exist to produce one inception document; `archive` produces none — it is a `git mv` and a `Status` flip — so it was grouped with them by the word rather than by the property. It belongs in the minimum set, and the phase with the least ceremony is the one that accumulates dead specs fastest.
+  - **Nothing states that skills are always available.** `init` installs `.steering/`, `.specs/`, `.work_logs/`, the issue templates, the reviewer and the hooks; it never installs skills, which ship with the plugin. "Optional" governs which documents are created and which skills are in the flow — never whether a skill can be run.
+- Impact: every reader of either README, at the moment they are deciding whether this harness is worth adopting — and a reader who concludes "six skills" has been told something false about the two skills (`clarify`, `implement`) that carry the whole claim in `.steering/product.md`. Observed live rather than inferred: a working session read the section, proposed dropping `backlog` from the minimum set — which the README never said — and built two further rounds of design on that error before it was caught.
+- **Root cause:** one sentence, `skills/init/SKILL.md:40`, states the mandatory side in documents and the optional side in skills, on either side of a single dash. Both READMEs mirror it faithfully, so the confusion is rendered three times from one source and no two of the three can disagree — which is why C-2's "grep for every other statement" would not have caught it. Underneath that, `optional` is doing two unrelated jobs: *"this document may not be worth maintaining"* (`northstar`, `epics`, `contract`) and *"you might not run this"* (`archive`). Collapsing both into one word is what let a skill that produces no document at all be sorted by the property its neighbours happened to share.
+- Acceptance criteria:
+  - [ ] **AC1:** `git grep -nE "Six documents and three templates|6つのドキュメントと3つのテンプレート"` returns nothing outside `.specs/_archive/` and `.work_logs/`, which are records.
+  - [ ] **AC2:** The section states the minimum set as skills and names all ten; each of `sprint`, `clarify`, `implement` appears in it in both READMEs, and the document chain is labelled as the documents it is rather than as the set.
+  - [ ] **AC3:** The document count reads five documents and three issue templates, in all three files, with the templates counted once.
+  - [ ] **AC4:** `archive` is named in the mandatory set and not in the optional list, in all three files; the three that remain optional each carry the reason they are optional, and those reasons differ from one another.
+  - [ ] **AC5:** All three files state the same set (C-3), and the Japanese section is a mirror of the English rather than a second argument (C-2, and the author's judgment on the Japanese).
+  - [ ] **AC6:** Both READMEs state that every skill is always available, and that the choice governs documents and flow membership only.
+  - [ ] **AC7:** `git diff --name-only main` is confined to `README.md`, `README.ja.md`, `skills/init/SKILL.md`, both manifests, and this spec directory; every `- Validators:` command exits 0 after the last write.
+  - [ ] **AC8:** THE SYSTEM SHALL carry a version bump in both manifests, `skills/` being a shipped path — performed as the step of `implement` that follows the receipt, not as a task (#113).
+- Out of scope: **#110**, recording the chosen set as a mode the harness can read — this spec corrects what the set *is*, so that #110 has an accurate thing to select between; the two are sequenced, not merged. **#22**, verifying the mandatory set exists in an installed project. **#84**, `init` installing a rulebook over a `CONTRACT.md` that cites rules it does not carry. The "thirteen skills" count at `README.md:33`, `README.md:156` and `docs/EPICS.md:63`, which is correct — thirteen directories under `skills/` — and is a different claim from the minimum set. Whether `epics` and `northstar` should remain optional at all, which is a product question this bug does not reopen.
+
+### Clarifications
+
+- 2026-09-11 — **Does the chain diagram get redrawn in skills, relabelled as documents, or split in two?** It is the visual half of the unit mismatch: it draws six document nodes and the prose calls it the minimum set. **Answered: skills above the documents, one diagram carrying both units.** The rejected alternatives and why they lose: relabelling alone leaves the ten skills in a sentence, which is the same "read the prose, not the picture" failure that produced the live misread; two diagrams duplicate the `## The skills` table sitting immediately below the section. Serving AC2.
+- 2026-09-11 — **Patch or minor?** `skills/init/SKILL.md` is a shipped path, and `archive` moves from opt-in to mandatory, so #52 and #113 argue this is a process change and #47 argues it is prose. **Answered: patch, 0.5.1.** Nothing mechanical reads the set today — it is only ever described — so this corrects a description that was false rather than changing a flow. `archive` was always mandatory; the document said otherwise. The behaviour change lands on #110, which is what makes the set machine-read. Serving AC8.
+- Not asked, because the repository answers it: whether `init` counts inside the ten (it does — thirteen skills less the three opt-in), and whether `archive` belongs in the minimum set (#109 makes the argument and is the commitment). Whether a new guard should pin this is settled in Design rather than asked, the reasoning being decisive.
+
+## 2. Design (HOW)
+
+**Fix approach: correct the upstream sentence, then render it twice.** `skills/init/SKILL.md:40` is the single source both READMEs mirror, so it is edited first and the two READMEs are brought into agreement with it. Exact substring replacements, each asserted to match once; the greps in AC1–AC4 are the test, which is the shape #97 and #102 used for the same class of defect.
+
+Why not narrower — fixing only the count: the double-count is the least of the three defects. A reader who is told "five documents and three issue templates" and still cannot see `clarify` or `implement` has been failed in exactly the way the live misread demonstrates. Why not wider — rewriting the section around the ten skills and dropping the document chain: the chain is accurate and load-bearing. It shows the citation order, which is what `spec` refuses to start without, and the answer to the clarification keeps it.
+
+**Affected files:**
+
+| File | Change |
+| :-- | :-- |
+| `skills/init/SKILL.md:40` | the upstream sentence: units separated, templates counted once, `archive` out of the opt-in list, the three that remain each given their reason |
+| `README.md:78-92` | the section: diagram gains the skill row and the no-document line, prose follows `init` |
+| `README.ja.md:45-59` | the mirror, written as Japanese rather than translated (C-3, #104's standard) |
+| `plugin.json`, `.claude-plugin/plugin.json` | 0.5.0 → 0.5.1, as the step after the receipt |
+
+**Blast radius:** the section is prose with no mechanical consumer — that absence is the whole of #110 — so nothing reads these strings and no gate changes behaviour. What does touch it: `check-markdown-fences.py` reads the `text` fence the diagram sits in, and the diagram grows a row inside it; `check-leakage.sh` runs over both READMEs; `check-version-bump.py` fires in CI on the manifests. The `- Validators:` line covers the first two on every turn.
+
+**Why this cannot recur — and why no new guard.** The tempting guard is one that checks the three files agree on the set. It would have passed on this bug: they agreed perfectly, and rendered one confused sentence three times. The defect was never drift between the copies, it was a single sentence that stated its two halves in two different units, and no cross-file comparison can see that. A guard that cannot fail on the bug it is written for is a gate that fails open, which is the property `.steering/product.md` owns — so building one here would be worse than building none. What does make it recur less: the upstream sentence now names one unit per clause, so the next reader who edits it has nothing to conflate; AC1's grep is the regression test and stays runnable; and C-2 already covers the count, with the caveat now recorded in the root cause that C-2 cannot catch a single-source confusion. #54 is the standing argument against growing the guard count, and it applies.
+
+## 3. Tasks (TDD-ordered)
+> One task is one complete Red-Green-Refactor cycle, so one green commit.
+
+- [ ] T1: record AC1–AC4's greps red against `main`, in `observations.md` — then correct `skills/init/SKILL.md:40`, the upstream sentence, and re-run them.
+- [ ] T2: `README.md` — the diagram with its skill row, and the prose that follows `init`; assert AC2, AC3, AC4, AC6.
+- [ ] T3: `README.ja.md` as a mirror; assert AC5, then AC1 and AC7 over the whole branch with every validator at exit 0.
