@@ -43,3 +43,30 @@ Worth stating plainly, because it is the same defect one level down: **a line is
 meaning here, exactly as a document was not a unit of the minimum set.** The naive grep counts the
 wrong thing and reports a false failure; the old sentence counted the wrong thing and reported a
 false set. Neither is a wording problem.
+
+## T3 — the Japanese, and one amendment to AC1
+
+The Japanese section is written as Japanese, not translated (#104's standard), and carries claims
+identical to the English (C-3). Verified mechanically rather than by reading: all ten mandatory
+skills and exactly the three opt-ins are named in each of the three files, and the check reports
+10/10 and the same opt-in triple for `README.md`, `README.ja.md` and `skills/init/SKILL.md`.
+
+**The diagram is byte-identical to the English one except its last line.** The aligned rows are
+untouched, so the two files cannot drift apart in alignment. Only the free-floating caption is
+Japanese — `必須だがドキュメントを作らない:` — because it is a sentence rather than a label, and it
+sits below everything the alignment depends on. `issue templates: feature / bug / chore` stays
+English, which is what the section already did before this change.
+
+**AC1 was amended during this task**, and it is the more interesting half of T3. Its exclusion list
+named `.specs/_archive/` and `.work_logs/`, and the grep then failed on `.specs/109-.../spec.md`
+and this file — both of which quote the false wording, because a bug spec's Reproduction *is* the
+wording. The exclusion is now `.specs/` rather than `.specs/_archive/`, on #102's principle:
+rewriting a record to satisfy a later check destroys its value as evidence. The intent did not
+move — the claim is gone from every file that asserts it, which is what AC1 was always for.
+
+Worth noting for the reviewer, since it is the shape that usually deserves suspicion: this widens a
+test's exclusion mid-implementation, which is how a fail-open normally gets introduced. What makes
+it sound here is that the excluded files do not assert the claim in the repository's voice — they
+quote it as the defect under repair — and the narrower `':!.specs'` still fails loudly if the
+wording returns to `README.md`, `README.ja.md` or `skills/init/SKILL.md`. Verified: the grep is red
+at `main` and green at HEAD with the same exclusion.
