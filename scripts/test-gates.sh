@@ -1585,5 +1585,251 @@ else
 fi
 
 
+# --- guards: check-templates.py's live-spec scan -----------------------------------
+#
+# #113. review-gate.sh arms on zero open tasks, which stands in for "implementation is
+# finished". A task deliberately sequenced after the review holds one box unticked for the
+# whole review window, so the gate stays silent during exactly the stretch it exists to
+# cover — and .steering/tech.md used to tell authors to write one. The fix is definitional:
+# no task is sequenced after the review. This is the half that checks a live spec obeys it.
+#
+# The hard part is not catching #105's T5. It is catching it WITHOUT flagging the spec that
+# introduces the guard, whose own tasks necessarily describe deferral while not being
+# deferred. The distinction is positional: a task announces its schedule in its DIRECTIVE,
+# the text before its first clause break. What follows describes the work, not its timing.
+
+specs_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/skills/spec" "$r/.specs"
+  cp "$ROOT/scripts/check-templates.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-templates.py"
+  # A valid templates.md, so any failure below comes from the spec scan and not from the
+  # check this guard already performed.
+  write_templates "$r" "- [ ] T1: failing test for <behavior> — then the implementation that makes it pass"
+  echo "$r"
+}
+
+# $1 = repo, $2 = directory under .specs (may be nested, e.g. _archive/105-x), $3 = a task
+# line, $4 = a second task line (optional).
+write_spec() {
+  d="$1/.specs/$2"; mkdir -p "$d"
+  { printf '# Spec: x\n- Slug: %s   Status: approved\n\n## 1. Requirements\n' "$2"
+    printf -- '- [ ] **AC1:** an acceptance criterion, deliberately left unticked.\n\n'
+    printf '## 3. Tasks (TDD-ordered)\n%s\n' "$3"
+    [ $# -lt 4 ] || printf '%s\n' "$4"
+  } > "$d/spec.md"
+}
+
+# 51. A deferred task fails in every phrasing this project writes; a task that merely
+# DESCRIBES deferral passes.
+#
+# The control runs first, as in case 36: "flags the thing we broke" is not evidence unless
+# "passes the thing we did not" stands beside it.
+#
+# The pre-fix red, argued rather than assumed: before check-templates.py grew a second
+# subject it read only skills/spec/templates.md, so every fixture below exited 0 with the
+# deferred task sitting in .specs/ unexamined. The accusing halves of this case therefore
+# failed for the stated reason and not for a setup error.
+#
+# Four accusing fixtures, not one, because the SEPARATOR and the POSITION both varied in
+# review and each variation escaped:
+#   T5: **after ...** — bump      the id ends in a colon, deferral in the directive
+#   T5 — after ..., bump          the id ends in a DASH, which the prefix used to leave
+#                                 behind, collapsing the directive to the bare id "T5"
+#   **T5** — after ..., bump      the same, with the id bolded
+#   T5: bump ... — after ...      the mirror: deferral in the TAIL, not the directive
+# The last two are not contrived. #105's real T5 is the first form, and the mirror is a coin
+# flip away from it in phrasing.
+#
+# The third fixture is this spec's own T1 and T3, verbatim. They are the adversarial case
+# and no invented line is a substitute — both contain a deferral phrase, both are ordinary
+# pre-review tasks, and a guard that flags them would have been tuned until its own spec
+# passed, which is the failure this case exists to make impossible.
+r=$(specs_repo spec-clean)
+write_spec "$r" "9-feature" "- [ ] T1: failing test for the thing — then the implementation that passes it"
+out=$(run_templates "$r")
+[ "$out" = "0" ] && c0=ok || c0=no
+
+# $1 = fixture name, $2 = the offending task line. Echoes ok when the guard failed.
+deferred_fails() {
+  rr=$(specs_repo "$1")
+  write_spec "$rr" "9-feature" "- [ ] T1: failing test for the thing — then the implementation that passes it" "$2"
+  [ "$(run_templates "$rr")" = "1" ] && echo ok || echo no
+}
+
+r=$(specs_repo spec-deferred)
+write_spec "$r" "9-feature" "- [ ] T1: failing test for the thing — then the implementation that passes it" \
+  "- [x] T5: **after the reviewer gate is CLEAN** — bump both manifests to 0.4.4."
+out=$(run_templates "$r"); err=$(cat "$TMP/terr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *".specs/9-feature/spec.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"after the reviewer gate is CLEAN"*) c3=ok ;; *) c3=no ;; esac
+
+c5=$(deferred_fails spec-dash-id "- [ ] T5 — after the reviewer gate is CLEAN, bump both manifests.")
+c6=$(deferred_fails spec-bold-id "- [ ] **T5** — after the review, bump both manifests.")
+c7=$(deferred_fails spec-mirror "- [x] T5: bump both manifests to 0.4.4 — after the reviewer gate is CLEAN")
+
+r=$(specs_repo spec-describes)
+write_spec "$r" "113-post-review-task-disarms-the-gate" \
+  "- [ ] T1: cases in \`scripts/test-gates.sh\` — a live spec whose Tasks section names post-review work fails \`check-templates.py\` with the spec named; a clean spec passes. (AC4, AC5)" \
+  "- [ ] T3: the definition — \`skills/spec/templates.md\` states that no task is sequenced after the review. (AC1)"
+out=$(run_templates "$r"); derr=$(cat "$TMP/terr")
+[ "$out" = "0" ] && c4=ok || c4=no
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokokok" ] && report "a deferred task fails in every phrasing, a task describing deferral passes" ok \
+  || report "a deferred task fails in every phrasing, a task describing deferral passes" no \
+     "clean-passes=$c0 deferred-fails=$c1 names-spec=$c2 names-line=$c3 describing-passes=$c4 dash-id=$c5 bold-id=$c6 mirror=$c7 [$derr]"
+
+# 52. The scan's boundaries: archived specs are records, and an absent or unwritten spec is
+# not a defect.
+#
+# .specs/_archive/ holds #105 itself, whose T5 is precisely the forbidden shape. Rewriting a
+# record to satisfy a guard added afterwards destroys its value as evidence — the #102
+# precedent. A repository with no .specs/ at all, and a spec whose Tasks section has not been
+# written yet, are both states `spec` tells an author to create: flagging them is #8.
+r=$(specs_repo spec-archive)
+write_spec "$r" "_archive/105-a-clock" "- [x] T5: **after the reviewer gate is CLEAN** — bump both manifests to 0.4.4."
+out=$(run_templates "$r")
+[ "$out" = "0" ] && c1=ok || c1=no
+
+# ...and one directly at .specs/_archive/spec.md, which the enumeration DOES reach. The case
+# above alone cannot fail if the `_archive` name check is deleted — its fixture sits a level
+# below what iterdir() inspects, so the exemption would still look tested while being gone.
+# An exemption nothing can mutation-test is an exemption that is not really pinned (G-8).
+r=$(specs_repo spec-archive-direct)
+write_spec "$r" "_archive" "- [x] T5: **after the reviewer gate is CLEAN** — bump both manifests to 0.4.4."
+out=$(run_templates "$r")
+[ "$out" = "0" ] && c1b=ok || c1b=no
+
+r=$(specs_repo spec-none)
+rmdir "$r/.specs"                  # ABSENT, not merely empty — specs_repo creates it, and a
+                                   # fixture that leaves it in place never reaches the branch
+                                   # this case claims to cover. The two states happen to agree
+                                   # today, which is exactly why the case must build the right
+                                   # one rather than the one that passes.
+out=$(run_templates "$r")
+[ "$out" = "0" ] && c2=ok || c2=no
+
+r=$(specs_repo spec-empty)
+mkdir -p "$r/.specs/9-feature"
+printf '# Spec: x\n\n## 1. Requirements\n- [ ] **AC1:** x.\n\n## 3. Tasks (TDD-ordered)\n' > "$r/.specs/9-feature/spec.md"
+out=$(run_templates "$r")
+[ "$out" = "0" ] && c3=ok || c3=no
+
+[ "$c1$c1b$c2$c3" = "okokokok" ] && report "archived specs, a missing .specs and an unwritten Tasks section are not failures" ok \
+  || report "archived specs, a missing .specs and an unwritten Tasks section are not failures" no \
+     "archive-skipped=$c1 archive-direct=$c1b no-specs=$c2 no-tasks=$c3"
+
+# 53. A spec that exists and cannot be read must fail, not pass.
+#
+# The same third state as cases 32 and 37. A spec the guard never opened contributes no task
+# lines, and an empty contribution is indistinguishable from a compliant one — so silence
+# here would be the guard reporting success about a file it could not read.
+r=$(specs_repo spec-unreadable)
+write_spec "$r" "9-feature" "- [ ] T1: failing test for the thing — then the implementation that passes it"
+chmod 000 "$r/.specs/9-feature/spec.md" 2>/dev/null
+if cat "$r/.specs/9-feature/spec.md" >/dev/null 2>&1; then
+  chmod 644 "$r/.specs/9-feature/spec.md" 2>/dev/null
+  c1=ok; c2=ok                      # chmod does not deny access here; a case that cannot fail is worse than none
+else
+  out=$(run_templates "$r"); err=$(cat "$TMP/terr")
+  chmod 644 "$r/.specs/9-feature/spec.md" 2>/dev/null
+  [ "$out" = "1" ] && c1=ok || c1=no
+  case "$err" in *"cannot be read"*) c2=ok ;; *) c2=no ;; esac
+fi
+[ "$c1$c2" = "okok" ] && report "a spec that cannot be read fails rather than passing" ok \
+  || report "a spec that cannot be read fails rather than passing" no "exit=$c1 msg=$c2"
+
+
+# --- guards: scripts/check-skill-contracts.py --------------------------------------
+#
+# #113. The other half of the same fix. check-templates.py above catches a spec that defers
+# a task; this catches the instruction that tells authors not to being edited out of the
+# shipped skill. They fail in opposite directions, and only this one reaches consumers —
+# scripts/ is not shipped, skills/ is.
+#
+# The guard had no case here at all before this, which is the guard-shaped hole #16 and #35
+# are both about: .steering/structure.md makes this file the project's whole notion of test
+# coverage, so a guard nothing exercises is a guard that can stop working unnoticed.
+
+# The real skills/ tree, so the control asserts every needle in CONTRACTS is genuinely
+# present rather than asserting it against a fixture built to satisfy it.
+contracts_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts"
+  cp "$ROOT/scripts/check-skill-contracts.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-skill-contracts.py"
+  cp -R "$ROOT/skills" "$r/skills"
+  echo "$r"
+}
+
+run_contracts() { ( cd "$1" && python3 scripts/check-skill-contracts.py >/dev/null 2>"$TMP/cerr"; printf '%s' "$?" ) }
+
+# 54. implement stripped of the post-receipt version bump must fail.
+#
+# The mutation REMOVES the sentence if it is there and is a no-op if it is not, deliberately.
+# A fixture builder that aborted on a missing target would have reported this case red for a
+# setup error on the turn before the step was written, and a red that comes from the fixture
+# proves nothing about the guard. Written this way, the pre-fix red is the real one: implement
+# carries no bump step, and check-skill-contracts.py does not care.
+r=$(contracts_repo contracts-control)
+out=$(run_contracts "$r")
+[ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(contracts_repo contracts-stripped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "implement", "SKILL.md")
+needle = "The version bump lands here, after the receipt — never as a task"
+src = p.read_text()
+p.write_text(src.replace(needle, "Bump the version at some point"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"skills/implement/SKILL.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"never as a task"*) c3=ok ;; *) c3=no ;; esac
+
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "implement stripped of the post-receipt version bump fails" ok \
+  || report "implement stripped of the post-receipt version bump fails" no \
+     "control=$c0 stripped-exit=$c1 names-file=$c2 names-needle=$c3"
+
+
+# 55. A .specs/ or a spec directory that cannot be READ must fail, not scan nothing.
+#
+# Case 53 covers the unreadable spec FILE. One level up is a different state and it failed
+# open: `is_dir()` succeeds on a directory the process cannot read, because stat needs only
+# the parent's execute bit, and `Path.glob` swallows the OSError from scandir. Both yield
+# zero entries, which is indistinguishable from a repository with nothing to check — so the
+# guard printed an affirmative line about specs it never enumerated. That is #16 exactly, in
+# the half of the state space the first cut of this scan did not cover.
+r=$(specs_repo spec-dir-unreadable)
+write_spec "$r" "9-feature" "- [x] T5: **after the reviewer gate is CLEAN** — bump both manifests."
+chmod 000 "$r/.specs/9-feature" 2>/dev/null
+if ls "$r/.specs/9-feature" >/dev/null 2>&1; then
+  chmod 755 "$r/.specs/9-feature" 2>/dev/null
+  c1=ok; c2=ok                     # permissions not enforced here; a case that cannot fail is worse than none
+else
+  out=$(run_templates "$r"); err=$(cat "$TMP/terr")
+  chmod 755 "$r/.specs/9-feature" 2>/dev/null
+  [ "$out" = "1" ] && c1=ok || c1=no
+  case "$err" in *"cannot be read"*) c2=ok ;; *) c2=no ;; esac
+fi
+
+r=$(specs_repo spec-root-unreadable)
+write_spec "$r" "9-feature" "- [ ] T1: failing test for the thing — then the implementation that passes it"
+chmod 000 "$r/.specs" 2>/dev/null
+if ls "$r/.specs" >/dev/null 2>&1; then
+  chmod 755 "$r/.specs" 2>/dev/null
+  c3=ok; c4=ok
+else
+  out=$(run_templates "$r"); err=$(cat "$TMP/terr")
+  chmod 755 "$r/.specs" 2>/dev/null
+  [ "$out" = "1" ] && c3=ok || c3=no
+  case "$err" in *"cannot be read"*) c4=ok ;; *) c4=no ;; esac
+fi
+
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "an unreadable spec directory or .specs fails rather than scanning nothing" ok \
+  || report "an unreadable spec directory or .specs fails rather than scanning nothing" no \
+     "slug-exit=$c1 slug-msg=$c2 root-exit=$c3 root-msg=$c4"
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

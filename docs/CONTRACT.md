@@ -57,6 +57,7 @@ The rulebook is the source for every Judgment row and holds each rule's rational
 | M-12 | Both plugin manifests validate | Mechanical | — | `claude plugin validate --strict`, CI |
 | M-13 | A finished spec branch cannot end a turn without a fresh CLEAN receipt | Mechanical | — | `hooks/review-gate.sh` |
 | M-14 | A spec branch's slug carries its issue number | Mechanical | — | `hooks/review-gate.sh` |
+| M-15 | No live spec sequences a task after the review | Mechanical | — | `check-templates.py`; `C-6`'s bump is a step of `implement`, not a task (#113) |
 | G-1 | A guard never exits 0 where it could not do its job | Judgment | BLOCKER | rulebook |
 | G-2 | A value interpolated into `git` reaches it intact | Judgment | BLOCKER | rulebook |
 | G-3 | A blocking gate speaks both channels | Judgment | BLOCKER | rulebook |

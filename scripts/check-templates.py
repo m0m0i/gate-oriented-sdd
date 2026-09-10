@@ -11,6 +11,18 @@ The disagreement is about what a *task* is, so this guard is written against the
 than against the current wording. A future edit that separates red from green again fails on
 the day it is made rather than on the day someone tries to follow it.
 
+It has a SECOND subject, added for #113: this repository's live specs under `.specs/`. The
+review gate arms on zero open tasks, which stands in for "implementation is finished" — and
+that proxy holds only while every task is implementation work. A task sequenced after the
+review holds a box unticked for the whole review window, so the gate stays silent during
+exactly the stretch it exists to cover. The fix was definitional, so this checks the
+definition is kept.
+
+The two subjects have different lifetimes and only the first ships: `skills/` is installed
+into consumer projects, `scripts/` is not. A consumer reading a copied version of this file
+is not subject to the `.specs/` half, and the failure messages name which subject failed so
+that this is legible from the output rather than from the source.
+
 What it does NOT check: that a task is a good task, or that the words chosen are the best
 ones. A guard on prose has to stay narrow or the prose stops being editable, and prose that
 cannot be edited rots — a worse failure than the one this prevents.
@@ -68,10 +80,12 @@ SECTION = re.compile(r"^## ([A-Z][A-Za-z ]*?)\s*$")
 TASKS_HEADING = re.compile(r"^## 3\. Tasks")
 #: ANY checkbox line inside a Tasks block is a task line. Deliberately not `T\d+:` — that
 #: required an id and a colon, so `- [ ] **T1:** ...`, `- [ ] T1 — ...` and `- [ ] 1. ...`
-#: parsed as nothing at all and were skipped in silence. Bolding an id or using an em dash is
+#: parsed as nothing at all and were skipped in silence. `X` is accepted alongside `x` so that
+#: this and TASK_PREFIX below agree on what a task line is; while they disagreed, a `- [X]`
+#: task contributed nothing to EITHER subject and the live-spec half has no floor to notice. Bolding an id or using an em dash is
 #: ordinary drift in the file this guard watches, and each of those three forms let a split
 #: red step through with the guard exiting 0.
-TASK_LINE = re.compile(r"^- \[[ x]\]\s")
+TASK_LINE = re.compile(r"^- \[[ xX]\]\s")
 
 
 def tasks_by_section(text: str) -> dict[str, list[tuple[int, str]]]:
@@ -171,4 +185,158 @@ if split:
     print("  See #10.", file=sys.stderr)
     sys.exit(1)
 
-print(f"check-templates: {total} task line(s) across {len(blocks)} template(s), no split red steps")
+# --- second subject: this repository's live specs ----------------------------------
+#
+# #113. The guard is positional, and the position is the load-bearing part.
+#
+# A task announces its SCHEDULE in its directive — the first clause, before any elaboration.
+# Later clauses describe the work, and a compliant task legitimately says "after the review"
+# in one of them. What a compliant task in this project's idiom rarely does is BEGIN a later
+# clause with the phrase — rarely, not never, and the difference is the cost below:
+# `— after the review` is a schedule, `— a live spec whose ... after the review` is a
+# description. So the directive is matched anywhere and later clauses only at their start.
+#
+# Both halves were found by review, and each had let a real phrasing through:
+#   - matching the whole line flagged this guard's own spec, whose T1 and T3 describe
+#     deferral at length while being ordinary pre-review tasks
+#   - matching only the directive missed `T5: bump both manifests — after the review`, the
+#     mirror of #105's real T5 and a coin flip away from it in phrasing
+#
+# The OVER-reach edge, which is the one an author will actually hit: a compliant task whose
+# DIRECTIVE names the review — `T2: a case proving the gate stays silent after the review —
+# then the fix` — is flagged, and specs about the review gate are a recurring genre here
+# (#8, #10, #16, #105, #113). It clears by moving the description out of the directive:
+# `T2: a case for the silent gate — proving it stays quiet after the review, then the fix`.
+# That is a real cost and it is why the phrase list stays short and literal.
+
+SPECS = ".specs"
+
+#: Phrases that schedule work after the review. Deliberately short and literal, in the
+#: manner of RED and GREEN above: the guard recognises the idiom this project actually
+#: writes, not every English sentence that could mean the same thing.
+DEFERRAL = re.compile(
+    r"after the review\b|after the reviewer\b|after the receipt\b|after the gate\b"
+    r"|post-review\b|once the review\b|once the reviewer\b",
+    re.I,
+)
+
+#: `- [x] T5: `, `- [ ] T5 — `, `- [ ] **T5** — `. The separator after the id may be a dash,
+#: and that is not cosmetic: while this consumed only `[:.)]`, the dash form left `T5` behind
+#: as the whole body, CLAUSE_BREAK read the id separator as the first clause break, and the
+#: directive came back as the bare string "T5" — so the deferral was never examined and the
+#: guard exited 0. TASK_LINE above records the same three forms as ordinary drift that had
+#: already defeated the red/green half once. For an ACCUSING pattern, never matching is the
+#: fail-open, which is why this is written to over-consume rather than under-consume.
+TASK_PREFIX = re.compile(
+    r"^- \[[ xX]\]\s*(?:\*\*)?\s*(?:\*{0,2}T?\d+\*{0,2}\s*(?:[:.)]|[\u2014\u2013-])\s*)?(?:\*\*)?\s*"
+)
+
+#: Em dash, en dash, semicolon, or a sentence end. Each closes a clause.
+CLAUSE_BREAK = re.compile(r"\s[\u2014\u2013]\s|;|(?<=\.)\s")
+
+#: Bold, backticks, brackets — stripped before a later clause is anchored, so that
+#: `— **after the review** bump` is judged on its words rather than its formatting.
+LEADING_MARKUP = re.compile(r"^[^0-9A-Za-z]+")
+
+
+def clauses(line: str) -> list[str]:
+    """A task line's clauses, id and checkbox removed, in order. The first is the directive."""
+    body = TASK_PREFIX.sub("", line.strip())
+    return [c.strip() for c in CLAUSE_BREAK.split(body) if c.strip()]
+
+
+def deferral_in(line: str) -> str | None:
+    """The clause that schedules this task after the review, or None."""
+    parts = clauses(line)
+    if not parts:
+        return None
+    if DEFERRAL.search(parts[0]):
+        return parts[0]
+    for clause in parts[1:]:
+        if DEFERRAL.match(LEADING_MARKUP.sub("", clause)):
+            return clause
+    return None
+
+
+spec_root = ROOT / SPECS
+deferred: list[tuple[str, int, str]] = []
+unreadable: list[tuple[str, str]] = []
+scanned = 0
+
+if spec_root.is_dir():
+    # is_dir() succeeds on a directory this process cannot READ — stat needs only the
+    # parent's execute bit — and Path.glob swallows the OSError that scandir then raises.
+    # Zero entries is indistinguishable from a repository with nothing to check, so the
+    # first cut of this scan printed an affirmative line about specs it never enumerated.
+    # That is #16 one level up from the unreadable file below. Enumerate explicitly so the
+    # failure has somewhere to go.
+    try:
+        slugs = sorted(d for d in spec_root.iterdir() if d.is_dir())
+    except OSError as exc:
+        unreadable.append((SPECS, str(exc)))
+        slugs = []
+    for slug in slugs:
+        # `.specs/_archive/` holds records, not instructions. #105's T5 is precisely the
+        # forbidden shape, and rewriting a record to satisfy a guard written afterwards
+        # destroys its value as evidence — the #102 precedent. Skipped by NAME rather than
+        # by depth, so widening the enumeration later cannot quietly start scanning it.
+        if slug.name == "_archive":
+            continue
+        try:
+            present = {entry.name for entry in slug.iterdir()}
+        except OSError as exc:
+            unreadable.append((str(slug.relative_to(ROOT)), str(exc)))
+            continue
+        if "spec.md" not in present:
+            continue
+        spec = slug / "spec.md"
+        try:
+            spec_text = spec.read_text()
+        except OSError as exc:
+            # Existence is not readability, and the two are indistinguishable downstream: a
+            # spec never opened contributes no task lines, and no task lines is what a
+            # compliant spec looks like. Fail closed. See #16, and case 53.
+            unreadable.append((str(spec.relative_to(ROOT)), str(exc)))
+            continue
+        scanned += 1
+        for lines in tasks_by_section(spec_text).values():
+            for n, line in lines:
+                clause = deferral_in(line)
+                if clause:
+                    deferred.append((str(spec.relative_to(ROOT)), n, clause))
+
+if unreadable:
+    print("check-templates FAILED — a spec path exists but cannot be read", file=sys.stderr)
+    for name, why in unreadable:
+        print(f"  {name}: {why}", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  A path this guard could not open is not a path with nothing wrong under it.", file=sys.stderr)
+    sys.exit(1)
+
+if deferred:
+    print("check-templates FAILED — a task is sequenced after the review", file=sys.stderr)
+    for name, n, clause in deferred:
+        print(f"  {name}:{n}", file=sys.stderr)
+        print(f"    {clause}", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  review-gate.sh arms when a spec has no unticked tasks, which stands in for", file=sys.stderr)
+    print("  'implementation is finished'. A task held back until after the review keeps", file=sys.stderr)
+    print("  that box unticked for the whole review, so the gate stays silent during the", file=sys.stderr)
+    print("  one stretch it exists to cover.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  Work that belongs after the review is a STEP of `implement`, beside the work", file=sys.stderr)
+    print("  log entry and the `Status: done` flip — not a task. See #113.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  If the task is NOT deferred and merely describes deferral, move the phrase out", file=sys.stderr)
+    print("  of the directive and out of the start of a clause.", file=sys.stderr)
+    sys.exit(1)
+
+# "0 live spec(s), none deferred" reads as a clean bill of health for a scan that examined
+# nothing. Say which of the two happened.
+specs_note = (
+    f"{scanned} live spec(s), no task sequenced after the review" if scanned else "no live spec to scan"
+)
+print(
+    f"check-templates: {total} task line(s) across {len(blocks)} template(s), no split red steps; "
+    f"{specs_note}"
+)
