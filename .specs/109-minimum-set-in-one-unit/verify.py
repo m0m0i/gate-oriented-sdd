@@ -31,7 +31,12 @@ MAND = r"mandatory|必須|minimum install|最小構成に入る"
 #: clearing side. Bound to the CUE, never to the sentence: the Japanese caption
 #: 「必須だが、チェーンには出てこない」 contains 「ない」 and is that file's ONLY archive-mandatory
 #: declaration, so a blanket negation filter would turn a correct README.ja.md red.
-NEG_MAND = r"(?:no longer|not)\s+(?:\w+\s+){0,2}mandatory|(?:mandatory|必須)\s*(?:ではあ?りません|ではなく)"
+#: Every cue in MAND needs a negated form here, or the ones left out can be negated freely —
+#: a guard's exemption list is part of the guard. `\W{0,4}` carries across the same bolding
+#: tolerance NEG needed: in NEG a bolded negation caused a false RED, here it causes a false
+#: GREEN, so it is load-bearing rather than cosmetic. `\b` keeps `cannot` from supplying a `not`.
+NEG_MAND = (r"\b(?:no longer|not|never|isn't)\b\W{0,4}(?:\w+\s+){0,2}(?:mandatory|minimum install)"
+            r"|(?:必須|最小構成に入る)(?:わけ)?\s*(?:ではあ?りません|ではない|ではなく|から外)")
 
 #: Split at sentence-FINAL punctuation only. `。` always ends one; `.` only when a sentence
 #: starts after it — otherwise "e.g." and "0.5.1" break a sentence apart and strand the cue
@@ -46,9 +51,17 @@ NEG = (r"`{n}`\s*is[^.。]{{0,8}}not\W{{0,4}}opt-in"
        r"|`{n}`\s*は[^.。]{{0,12}}(任意|opt-in)[^.。]{{0,4}}ではありません")
 
 def text(ref, path):
+    """The file's content, or None when the ref could not be read at all.
+
+    None is NOT the same as empty. An unresolvable ref — a clone whose default branch is
+    `master`, a deleted or renamed branch, a shallow clone, a typo — gives returncode 128 and
+    empty stdout. Read as empty, that reports RED, which a `:red` expectation then ACCEPTS,
+    so the run exits 0 having looked at nothing. Not finding a problem and not having looked
+    must not share an outcome, so unreadable is a third verdict that matches no expectation."""
     if ref is None:
         return open(path).read()
-    return subprocess.run(["git","show",f"{ref}:{path}"], capture_output=True, text=True).stdout
+    r = subprocess.run(["git","show",f"{ref}:{path}"], capture_output=True, text=True)
+    return None if r.returncode != 0 else r.stdout
 
 def section(body, path):
     head = HEADS.get(path)
@@ -100,9 +113,15 @@ def mandatory(sec):
 
 def check(ref):
     print(f"--- {ref or 'working tree'} ---")
+    bodies = {path: text(ref, path) for path in FILES}
+    missing = [p for p, b in bodies.items() if b is None]
+    if missing:
+        print(f"  UNREADABLE at this ref: {', '.join(missing)}")
+        print("  AC4/AC5: UNREADABLE\n")
+        return "unreadable"
     ok = True
     for path in FILES:
-        sec = section(text(ref, path), path)
+        sec = section(bodies[path], path)
         seen, opt, mand = names(sec), optin(sec), mandatory(sec)
         good = seen == ALL and opt == OPT and "archive" in mand
         ok &= good
@@ -112,7 +131,7 @@ def check(ref):
         if not good and seen != ALL:
             print(f"  {'':<22} not named: {sorted(ALL - seen)}")
     print(f"  AC4/AC5: {'GREEN' if ok else 'RED'}\n")
-    return ok
+    return "green" if ok else "red"
 
 if __name__ == "__main__":
     args = sys.argv[1:] or ["-"]
@@ -120,7 +139,7 @@ if __name__ == "__main__":
     for arg in args:
         ref, _, want = arg.partition(":")
         want = want or "green"
-        got = "green" if check(None if ref == "-" else ref) else "red"
+        got = check(None if ref == "-" else ref)
         if got != want:
             print(f"  MISMATCH: {ref or 'working tree'} expected {want}, got {got}")
             ok = False

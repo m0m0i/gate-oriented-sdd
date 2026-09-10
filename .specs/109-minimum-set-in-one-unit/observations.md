@@ -517,3 +517,81 @@ fail-opens in the evidence for a three-file prose change.
 
 The exit from that regress is not a better regex. It is #110 — a machine-readable set, after which
 membership stops being a question about sentences at all.
+
+## Review round 5 — BLOCKED, 0 blockers, 1 HIGH, 1 MEDIUM, 1 LOW
+
+Reviewed at `092badf`. **The HIGH was introduced by round 4's fix**, on the exact path the fix was
+meant to improve, and it is the most instructive finding of the five rounds.
+
+### HIGH — making the check self-testing made it fail open
+
+Round 4 replaced `sys.exit(0 if all(check(r)) else 1)` with a per-ref expected verdict, so that
+`./verify.py main:red -:green` could assert the check *can* fail — self-testing, and a direct
+answer to round 1's defect, where "verified to discriminate" had been demonstrated against a file
+already fixed.
+
+`text()` discarded the subprocess return code. An unresolvable ref gives returncode 128 and empty
+stdout, so `section()` returned `""`, `seen` was empty, and `check()` reported **RED**. Under round
+4's exit that was harmless — the reviewer had audited it and called it fail-closed, correctly,
+because red always meant exit 1. **Round 5 inverted it.** `got = "red"` now *matched* `want = "red"`,
+and the run exited **0 having read nothing at `main`**.
+
+The irony is the finding: the expectation added to prove the check can fail was satisfiable by the
+check never having looked. That is round 1's defect returning at the outermost layer, and it is
+`G-1`'s own worked example — `check-locks.py` printing `0 pinned file(s)` and exiting 0, #16, one of
+the first five bugs filed against this repository.
+
+It needed **no text change to reach**, unlike every finding since round 3: a clone whose default
+branch is `master`, a renamed or deleted branch, a shallow clone, or a typo. `./verify.py mian:red
+-:green` exited 0, and the output *reassured*, because `main` printed RED exactly as expected.
+
+Fixed by making unreadable a **third verdict** that matches no expectation. `text()` returns `None`
+on a non-zero return code — `None` is not the same as empty — and `check()` reports `unreadable`
+before examining anything. Verified: `mian:red -:green` now exits 1, `main:red -:green` exits 0, and
+the no-argument form exits 0.
+
+**Red, green, and could-not-look are three things.** Two of them is how #16 happened.
+
+### MEDIUM — `NEG_MAND` guarded two of `MAND`'s four cues — fixed
+
+`MAND` carries `mandatory|必須|minimum install|最小構成に入る`; `NEG_MAND` named only the first two, so
+the phrase-cues could be negated freely. A guard's exemption list is part of the guard. Six
+reachable forms, all now caught:
+
+| Sentence | Why it escaped |
+| :-- | :-- |
+| `` `archive` is not in a minimum install. `` | no clause for `minimum install` |
+| 「`archive` は最小構成に入るわけではありません。」 | no clause for `最小構成に入る` |
+| `` `archive` is **not** mandatory `` | `not` followed by `**`, not `\s+` |
+| `` `archive` is never mandatory. `` | `never` absent from the alternation |
+| 「`archive` は必須ではない。」 | plain form missing beside `ではありません` |
+| 「`archive` を必須から外しました。」 | the most natural Japanese for the real regression |
+
+The third row is the one that matters beyond its own fix: **the same bolding hazard was already
+fixed once**, in round 3's LOW, where `NEG` gained `not\W{0,4}opt-in` because this section's house
+style bolds the key word. The tolerance was not carried across — and the direction reversed. In
+`NEG` a bolded negation produced a false *red*; in `NEG_MAND` it produced a false *green*. A
+cosmetic tolerance on the accusing side is load-bearing on the clearing side, and copying a pattern
+without re-deciding its direction is how that got missed.
+
+### LOW — `not` was unanchored, so `cannot` supplied one — fixed
+
+"You **cannot** skip the mandatory set." matched via the `not` inside `cannot`, discarding a
+sentence that asserts the property. Always the safe direction — a false red, never a false green —
+and none of the three live sections was hit. `\b` on both alternatives removes the path.
+
+### The shape of five rounds, restated now that it has a second instance
+
+Round 4's entry said every finding since round 1 had been in the evidence layer. Round 5 adds the
+sharper version: **the round-4 fix introduced the round-5 defect.** Not a missed case — a
+regression, in the direction the fix was reaching for, caught only because the reviewer was asked to
+be hostile to that specific path.
+
+Two general things worth keeping, both cheap to state and both learned the expensive way:
+
+1. **A pattern copied between an accusing check and a clearing check must have its direction
+   re-decided.** `\W{0,4}` was cosmetic in `NEG` and load-bearing in `NEG_MAND`. Same characters,
+   opposite consequence.
+2. **An expectation that a check fails is not evidence the check works** unless "could not look" is
+   distinguishable from "looked and found the problem". Otherwise the self-test is satisfied by the
+   absence of the test.
