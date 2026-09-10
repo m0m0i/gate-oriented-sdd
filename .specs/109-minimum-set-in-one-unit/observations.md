@@ -39,6 +39,10 @@ git grep -nPo '(opt-in|[Oo]ptional|任意)[^.。]{0,160}`archive`' -- <files>
 that is genuinely inside an opt-in clause. Verified to discriminate: it reports `init` green and both
 READMEs red at the same commit, which the line-scoped form cannot do.
 
+> **Withdrawn in round 1 of review — see "HIGH 1" below.** The clause above claiming this check
+> "verified to discriminate" is wrong: the demonstration was taken after `init` was already fixed.
+> The paragraph is left standing rather than edited, per #102; the correction is downstream.
+
 Worth stating plainly, because it is the same defect one level down: **a line is not a unit of
 meaning here, exactly as a document was not a unit of the minimum set.** The naive grep counts the
 wrong thing and reports a false failure; the old sentence counted the wrong thing and reported a
@@ -165,9 +169,10 @@ would not need the prose. They are now `skill:` and `produces:`. Separately the 
 `implement` directly above it, implying seven documents against the prose's five. Now
 "also mandatory, off the chain", which is true of exactly the three it names.
 
-Alignment was re-verified after adding the 11-character label gutter: `↓` at columns 1, 10, 22, 31,
-38, 45, 54 in both READMEs, matching the node centres, and the two files stay byte-identical through
-every aligned row.
+Alignment was re-verified after adding the 11-character label gutter. Measured at HEAD the `↓` row
+sits at **absolute columns 12, 21, 33, 42, 49, 56, 65** in both READMEs — the pre-gutter values
+(1, 10, 22, 31, 38, 45, 54) shifted by exactly the 11-character gutter — and `↑` is at absolute 42,
+still the centre of `Issue` at 40-44. The two files stay byte-identical through every aligned row.
 
 ### LOW 2 — the availability fact was fixed only downstream — fixed
 
@@ -183,3 +188,140 @@ AC3's recorded grep (`five documents|5つのドキュメント`) could not match
 rather than fail-open, the harmless direction, but it is still a check that does not check what it
 says. Corrected pattern `five documents|ドキュメントは\*\*5つ|5つのドキュメント`: 1/1/1 across the
 three files.
+
+## Review round 2 — BLOCKED, 0 blockers, 1 HIGH, 2 MEDIUM, 2 LOW
+
+Reviewed at `7d5042c`. Round 1's two HIGHs cleared. The new HIGH is in the same layer again — the
+evidence, not the artifact — and it is the third distinct blind spot found in one check. That
+pattern is the finding: **AC4 was being evidenced by pattern-matching against prose, and each fix
+closed one hole while leaving the shape that produces them.** Round 3 replaces the approach rather
+than patching it a third time.
+
+### HIGH — the check was line-scoped, so it could not see the opt-in table
+
+`git grep` matches within a physical line. Both READMEs declare their opt-in list as a **table**: the
+cue is in the header (`| Skill | Why it is opt-in |`), the skill name is in a data row, and the two
+are different lines. So the check could not see either README's opt-in list at all — the reviewer
+proved it by running the same pattern for `northstar` and `epics`, which are genuinely opt-in at
+HEAD and were returned only from `skills/init/SKILL.md`.
+
+The consequence for AC4: had `archive` come back as a row of either opt-in table, the negative check
+would have stayed at 0 hits and the positive one at 3/3, because `init` and the diagram caption
+still enumerate it as mandatory. **AC4 would have reported GREEN on a state where two files
+contradict themselves** — and the table is the markup *this diff introduced for exactly this list*,
+so it is the likeliest regression path, not a hypothetical one.
+
+### Round 3 — one check, recorded as a command, replacing three rounds of grep
+
+Both MEDIUMs are the same root cause as the HIGH, so all three are answered together:
+
+- **MEDIUM 1** — the negation carve-out cleared an entire sentence on the strength of any negation,
+  with nothing binding it to `archive`. Two sentences that assert the defect *and* clear it were
+  supplied, one of them native to this section's own prose style.
+- **MEDIUM 2** — AC5's recorded command asserted a union (all thirteen names appear somewhere) where
+  AC5 claims a partition (each file agrees on which are mandatory and which are opt-in), and it was
+  not runnable as written: `section()` was undefined and the `init` branch was a comment.
+
+The replacement is one script, run at both refs, recorded here verbatim so anyone can re-run it. It
+parses markup instead of matching proximity, asserts the **partition** rather than the union, and
+binds a negation to the name it negates:
+
+```python
+TEN = {"init","prd","design-doc","backlog","sprint","spec","clarify","implement","worklog","archive"}
+OPT = {"northstar","epics","contract"}
+ALL, CUE = TEN | OPT, r"opt-in|[Oo]ptional|任意"
+# split at sentence-FINAL punctuation only: 。 always; '.' only when a sentence starts after it,
+# so "e.g." and "0.5.1" cannot break a sentence apart and strand the cue from the name.
+SENT = r"(?<=。)\s*|(?<=\.)\s+(?=[A-Z`|#*\-]|$)"
+
+def names(s):
+    return {n for n in re.findall(r"[a-z][a-z-]+", s)} & ALL
+
+def optin(sec):
+    """Names declared opt-in: table data rows under an opt-in header, plus prose in
+       either direction. A negation clears a name only when bound to that name."""
+    found, in_table = set(), False
+    for line in sec.split("\n"):
+        if line.startswith("|") and re.search(CUE, line):        # the table's header row
+            in_table = True; continue
+        if in_table:
+            if not line.startswith("|"): in_table = False
+            elif not re.match(r"^\|\s*:?-{2,}", line):
+                found |= names(line.split("|")[1])               # first cell = the skill
+    for para in sec.split("\n"):
+        if para.startswith("|"): continue                        # tables handled above
+        for s in re.split(SENT, para):
+            if not s.strip() or not re.search(CUE, s): continue
+            for n in names(s):
+                if re.search(rf"`{n}`\s*(is|は)[^.。]{{0,24}}(not opt-in|ではありません)", s):
+                    continue                                     # negation bound to THIS name
+                found.add(n)
+    return found
+
+# per file: seen == ALL and optin == OPT  =>  mandatory == TEN, and archive is in it
+```
+
+The full runnable file, with the section extraction and the per-ref driver, is
+`minset.py` as recorded in this branch's session; the three functions above are its whole logic.
+
+**Result.** Both AC4 and AC5 now fall out of one assertion — `seen == ALL and optin == OPT` — which
+is the partition AC5 claims and which entails AC4's property.
+
+| Ref | `README.md` | `README.ja.md` | `skills/init/SKILL.md` | Verdict |
+| :-- | :-- | :-- | :-- | :-- |
+| `main` | 7/13 named, opt-in includes `archive` | 7/13, same | 6/13, opt-in includes `archive` | **RED** |
+| HEAD | 13/13, opt-in `{contract, epics, northstar}` | 13/13, same | 13/13, same | **GREEN** |
+
+At `main` all three files fail, `skills/init/SKILL.md` included — the file round 1's check was blind
+to — and `archive` is reported `mandatory=False opt-in=True` in every one of them.
+
+### Mutation tests — five attacks, all caught
+
+Assumption is what produced three rounds of this, so the check is attacked rather than trusted. Each
+mutant asserts `archive` is opt-in; each must be caught.
+
+| Mutant | Source | Caught |
+| :-- | :-- | :-- |
+| `archive` added as a row of README.md's opt-in **table** | round 2 HIGH | yes |
+| `… and \`archive\` — the rest are not opt-in.` | round 2 MEDIUM 1 (EN) | yes |
+| `任意なのは …、\`archive\` の4つで、必須ではありません。` | round 2 MEDIUM 1 (JA) | yes |
+| `Optional (e.g. small repos): … \`archive\`.` | splitter evasion | yes |
+| `Optional since 0.5.1: … \`archive\`.` | splitter evasion | yes |
+
+Controls: the two legitimate negations actually in the READMEs — `` `archive` is not opt-in for
+being small `` and 「`archive` は、小さいから任意、ではありません」 — both stay clear, so the
+carve-out still does the job it exists for.
+
+The last two mutants are ones the reviewer did not raise. The round-2 splitter broke a sentence at
+any `.`, so `e.g.` and a version number both stranded the cue from the name and returned a false
+green. Found by probing the splitter rather than by being told, and fixed in `SENT` above.
+
+### LOW 1 — the arrow columns were quoted pre-gutter — fixed
+
+Corrected in the round-1 section above: absolute 12, 21, 33, 42, 49, 56, 65, with the pre-gutter
+values named as such.
+
+### LOW 2 — `produces:` is an English label in the Japanese diagram — recorded, for the author
+
+Round 1 justified `issue templates:` staying English on the grounds that the section already did
+that before this change. `produces:` has no such precedent — it is new, and it is the one word in
+the diagram a Japanese reader must translate. `skill:` is unremarkable, `skill` being an established
+loanword in this README (`skill が13個…`).
+
+The argument for leaving it: both READMEs stay byte-identical through every aligned row, so the two
+diagrams cannot drift apart in alignment, and that property has already caught one error in this
+branch. The argument against: it is a Japanese-wording call in a file whose whole standard (#104,
+#90) is that it reads as Japanese rather than as a translation.
+
+**Left as `produces:` and flagged for the author's judgment rather than decided here**, since the
+Japanese README is theirs to call. `生成物:` is the obvious alternative and is the same display width
+in a monospace font only if the gutter is re-measured — the aligned rows would need regenerating,
+which is mechanical.
+
+### Also from round 2's INFO
+
+- A forward pointer now sits at the round-1 AC4 paragraph, marking it withdrawn and naming where.
+  The paragraph itself stays, per #102.
+- The eight AC checkboxes still read `[ ]` under `Status: done`. The reviewer found the convention
+  mixed across archived specs and `skills/implement/SKILL.md` silent on it. Ticked in the
+  post-receipt step, with the version bump.
