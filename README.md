@@ -77,17 +77,31 @@ One issue = one spec = one branch = one PR. `clarify` is the phase most setups l
 
 ## The minimum set
 
-Thirteen skills is not thirteen required documents, and reading it that way is the fastest route to dismissing this as over-engineering. Six documents and three templates are mandatory; the rest earn their place when a project is large enough to need them.
+Thirteen skills is not thirteen required documents, and reading it that way is the fastest route to dismissing this as over-engineering. **Ten of the thirteen are in a minimum install**, and between them they produce **five documents and three issue templates**. Skills and documents are different units, and the two counts do not line up — which is exactly the confusion this section exists to prevent.
 
 ```text
-PRD → design doc → backlog → Issue → spec → worklog
-                               ↑
+prd   design-doc   backlog  sprint   spec implement worklog
+ ↓        ↓           ↓        ↓      ↓      ↓        ↓
+PRD → design doc → backlog → Issue → spec → code → worklog
+                               ↑         + receipt
                     issue templates: feature / bug / chore
+
+also mandatory, producing no document: init, clarify, archive
 ```
 
 The templates sit **inside** that chain rather than beside it: the Issue step is where the type is decided, and the type is what shapes the spec. Without them the chain still runs — it just produces feature-shaped specs for bugs, with a user story that does not exist and acceptance criteria that are fiction.
 
-Optional, and worth adding when the project justifies them: `northstar`, `epics`, `contract`, and `archive`.
+Five of the ten produce a document and five do not, which is why counting documents finds the wrong set. `sprint` and `implement` are on the chain even so, because an Issue and a receipt are steps in it without being documents. `init`, `clarify` and `archive` are on it nowhere — `init` installs the harness, `clarify` writes a section inside a spec, `archive` is a `git mv` and a `Status` flip — and all three are mandatory regardless. `archive` is not opt-in for being small: the phase with the least ceremony is the one that accumulates dead specs fastest.
+
+Opt-in, and worth adding when the project justifies it — three skills, each for a different reason:
+
+| Skill | Why it is opt-in |
+| :-- | :-- |
+| `northstar` | `init`'s interview already produces the `- Owns:` anchor by another route |
+| `epics` | nothing consumes it mechanically |
+| `contract` | run before there are commits and review findings to compile, it produces a *worse* rulebook rather than an absent one |
+
+**Every skill is always available.** `init` installs `.steering/`, `.specs/`, `.work_logs/`, the issue templates, the reviewer and the hooks — never the skills themselves, which ship with the plugin. The choice above governs which documents get created and which skills are in the flow, never whether one can be run.
 
 The middle of that chain is not this plugin's invention — it is **GitHub's**. Issues, branches, pull requests, closed by their PR. They work from pair-programming scale upward; a team of thirty is not the threshold.
 

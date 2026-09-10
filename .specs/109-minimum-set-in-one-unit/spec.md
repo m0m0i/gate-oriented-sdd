@@ -52,5 +52,5 @@ Why not narrower — fixing only the count: the double-count is the least of the
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
 - [x] T1: record AC1–AC4's greps red against `main`, in `observations.md` — then correct `skills/init/SKILL.md:40`, the upstream sentence, and re-run them.
-- [ ] T2: `README.md` — the diagram with its skill row, and the prose that follows `init`; assert AC2, AC3, AC4, AC6.
+- [x] T2: `README.md` — the diagram with its skill row, and the prose that follows `init`; assert AC2, AC3, AC4, AC6.
 - [ ] T3: `README.ja.md` as a mirror; assert AC5, then AC1 and AC7 over the whole branch with every validator at exit 0.
