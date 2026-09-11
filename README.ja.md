@@ -49,7 +49,7 @@ skill が13個あるからといって、必須のドキュメントが13個あ�
 ```text
 skill:     prd   design-doc   backlog  sprint   spec implement worklog
             ↓        ↓           ↓        ↓      ↓      ↓        ↓
-produces:  PRD → design doc → backlog → Issue → spec → code → worklog
+成果物:    PRD → design doc → backlog → Issue → spec → code → worklog
                                           ↑         + receipt
                                issue templates: feature / bug / chore
 

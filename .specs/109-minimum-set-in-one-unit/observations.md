@@ -654,3 +654,36 @@ The two lessons that transfer beyond this spec:
 2. **An expectation that a check fails is not evidence the check works** unless *could not look* is
    distinguishable from *looked and found it*. Round 5's HIGH was exactly this, and it is #16 —
    one of the first five bugs filed against this repository — reappearing at the outermost layer.
+
+## Post-receipt — `produces:` → `成果物:`, on the author's call
+
+Round 6's LOW 2 left the Japanese label open for the author, who chose **`成果物:`**. Applied after
+the CLEAN receipt at `0c03945`; `README.ja.md` is outside `Source globs`, so the review gate does
+not re-fire, and this is recorded rather than re-reviewed. Stating that plainly because it is a
+content change to a reviewed artifact, not a work-log entry.
+
+**It is the first label in this diagram that is not ASCII, and that breaks an assumption the
+previous six rounds ran on.** Every alignment claim in this file until now was in *character
+indices*, and that worked only because every row was ASCII, where one character is one column.
+`成果物:` is 4 characters and **7 display columns** — the three kanji are East Asian Wide. Padded to
+the gutter it is 8 characters but 11 columns:
+
+| Row | Gutter | Characters | Display columns |
+| :-- | :-- | :-- | :-- |
+| skill | `skill:` + 5 spaces | 11 | 11 |
+| arrows | 11 spaces | 11 | 11 |
+| chain (EN) | `produces:` + 2 spaces | 11 | 11 |
+| chain (JA) | `成果物:` + 4 spaces | **8** | **11** |
+
+Aligned on **display columns**, not characters, because that is what a reader sees — the
+character-count convention recorded at the top of this file was always a proxy for it, and the proxy
+holds only while the text is ASCII. Verified in both files after the change: gutters 11/11/11,
+node centres and arrow columns both `[12, 21, 33, 42, 49, 56, 65]`, and `↑` at 42 on the centre of
+`Issue`. A character-index check would now report `README.ja.md` misaligned and be wrong.
+
+**What it costs, stated rather than glossed:** the two READMEs are no longer byte-identical through
+*every* aligned row. The skill row, the arrow row, the `↑` row and the templates row still are; only
+the chain row's gutter differs. That byte-identity was cited in round 1 as the property that keeps
+the two diagrams from drifting, and it caught one real error on this branch, so giving up part of it
+is a genuine trade and not a free one. What replaces it is the display-column check above, which is
+the stronger invariant — it is what byte-identity was standing in for.
