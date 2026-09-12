@@ -55,9 +55,13 @@ Why not the narrower fix — editing only the three reviewers: `init` would stil
 | `skills/init/SKILL.md:60` | names the exact relative path instead of "next to it", and the concrete tree it lands in |
 | `docs/layout.md:43` | draws `_shared/reviewer-contract.md`, not the flat sibling |
 | `scripts/check-contract-path.py` | **new** — compares every statement of the placement |
+| `scripts/check-skill-contracts.py` | a 16th entry pinning `init`'s destination sentence — see below |
+| `scripts/test-gates.sh` | cases for the reviewers, the guard, and its work-set floor |
 | `.steering/tech.md`, `.github/workflows/ci.yml` | the new guard on the `- Validators:` line and in CI |
 
 **Blast radius:** `scripts/check-receipt-schema.py` reads `.claude/agents/_shared/reviewer-contract.md` as the dogfood mirror of `agents/_shared/reviewer-contract.md`; neither file moves, so its pairing is untouched — asserted in T3 rather than assumed. `assets/check-locks.py` hashes `rules/*.md` only, so no lock re-pins. No hook reads any of this. The three reviewers are shipped paths, so a version bump is owed.
+
+**The 16th `check-skill-contracts.py` entry, and why #54's argument does not stop it.** The #54 clarification above argues for the *new guard*; this is a separate cost and needs its own line. `check-contract-path.py` verifies that `init` **names** the canonical path — and a reverted `"copy `_shared/reviewer-contract.md` next to it"` still ends in the canonical suffix, so it passes. What goes unguarded is the sentence saying **where to put it**, which is the absence that produced four placements for one file. Review cannot hold it: reverting to "next to it" reads as concision, and what it removes is the one instruction that stops each install from guessing.
 
 **Why this cannot recur — and why a guard rather than review.** The new check is in `scripts/` because it verifies the **plugin's internal agreement**, not an installed project's state, and it is a **new file rather than an extension of `check-receipt-schema.py`**: that guard already has one subject, and #117 records what happens when a guard acquires a second with a different lifetime. It reads the placement from each of the five statements and fails naming any that differs, with the third outcome this repository now insists on — a statement it cannot find or read is neither agreement nor disagreement, and must fail rather than compare four of five and report success.
 

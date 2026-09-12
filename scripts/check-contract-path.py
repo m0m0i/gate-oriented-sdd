@@ -23,6 +23,19 @@ import sys
 #: The one placement, relative to whichever directory the reviewer sits in.
 CANONICAL = "_shared/reviewer-contract.md"
 
+#: The two concrete forms that placement takes, one per harness. A reviewer must name at
+#: least one of these, and the reason is empirical rather than tidy: a reviewer reading its
+#: own instruction is a tool-using agent whose working directory is the PROJECT ROOT, not the
+#: directory its own file sits in. `_shared/reviewer-contract.md` resolves from neither root —
+#: found by a reviewer following that line literally, failing, and guessing `agents/_shared/`,
+#: which is the plugin's copy rather than the install's. Identical here only by luck. The bare
+#: relative form is the right way to SAY where the file lives and is useless for opening it.
+CONCRETE = (
+    ".claude/agents/" + CANONICAL,   # Claude Code
+    ".agents/" + CANONICAL,          # Antigravity
+)
+ALLOWED = (CANONICAL,) + CONCRETE
+
 #: Files that state it, in two groups, because the rule genuinely differs between them.
 #: Fixed rather than globbed: `.specs/` holds records, and rewriting a record to satisfy a
 #: later guard destroys its value as evidence (#102).
@@ -51,16 +64,46 @@ SUFFIX = (
     "skills/init/SKILL.md",
     "docs/layout.md",
     "scripts/check-receipt-schema.py",
+    # Both state the placement and were outside the comparison while the docstring, the CI
+    # step name and the commit message all certified "every statement" — a guard's exemption
+    # list is part of the guard, and an unstated omission is the defect this file exists for.
+    "docs/CONTRACT.md",
+    "AGENTS.md",
 )
 
 SOURCES = EXACT + SUFFIX
 
+#: Floors. An empty work-set makes every loop below run zero times, `problems` stay empty, and
+#: the success line print `0 source(s) agree` at exit 0 — a guard certifying a comparison it
+#: never made. `check-receipt-schema.py:150,256` already carries this for its two tuples and
+#: case 49 pins it; the same tuple arrived here without it one release later.
+MIN_EXACT, MIN_SUFFIX = 5, 5
+
+#: Constraint this imposes, stated because it is real and otherwise invisible: a document must
+#: write the whole path on ONE physical line. Splitting `_shared/` onto its own tree row leaves
+#: `reviewer-contract.md` bare, which reads here as the flat form and fails with a message
+#: about a wrong path rather than a wrong line break. Teaching the guard to parse ASCII trees
+#: was considered and rejected — that is materially more code between reading an input and
+#: deciding, and every branch of it is a new way to match nothing and pass, which is G-1 risk
+#: bought for a cosmetic gain. The dumb regex is the right trade; it just has to say so.
+#:
 #: Any path-shaped mention, including a bare filename — `docs/layout.md` drew the flat sibling
 #: inside an ASCII tree, which is exactly the form a stricter pattern would have missed.
 MENTION = re.compile(r"[\w./-]*reviewer-contract\.md")
 
 
 def main():
+    if len(EXACT) < MIN_EXACT or len(SUFFIX) < MIN_SUFFIX:
+        print(
+            f"check-contract-path FAILED\n"
+            f"  work-set below its floor: {len(EXACT)} exact (min {MIN_EXACT}), "
+            f"{len(SUFFIX)} suffix (min {MIN_SUFFIX}).\n"
+            f"  A source removed from a tuple is a source that stopped being compared, and "
+            f"that must not read as agreement.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
     problems = []
     for name in SOURCES:
         path = pathlib.Path(name)
@@ -83,16 +126,27 @@ def main():
             problems.append(f"{name}: names no reviewer-contract path at all")
             continue
 
-        exact = name in EXACT
-        for stated in sorted(set(mentions)):
-            if exact:
-                if stated != CANONICAL:
+        if name in EXACT:
+            for stated in sorted(set(mentions)):
+                if stated not in ALLOWED:
                     problems.append(
-                        f"{name}: says `{stated}`, but a reviewer's own instruction must be "
-                        f"exactly `{CANONICAL}` — it is read from the reviewer's directory"
+                        f"{name}: says `{stated}`, which is not one of the allowed forms "
+                        f"({', '.join(ALLOWED)})"
                     )
-            elif not stated.endswith(CANONICAL):
-                problems.append(f"{name}: says `{stated}`, which does not end in `{CANONICAL}`")
+            # …and at least one form a reader can actually open from the project root. Naming
+            # only the relative form is how #82's replacement fix failed its own review.
+            if not any(m in CONCRETE for m in mentions):
+                problems.append(
+                    f"{name}: names no concrete path. A reviewer reads its own instruction "
+                    f"with the PROJECT ROOT as its working directory, so `{CANONICAL}` alone "
+                    f"resolves to nothing — name {' or '.join(CONCRETE)} as well"
+                )
+        else:
+            for stated in sorted(set(mentions)):
+                if not stated.endswith(CANONICAL):
+                    problems.append(
+                        f"{name}: says `{stated}`, which does not end in `{CANONICAL}`"
+                    )
 
     if problems:
         print("check-contract-path FAILED", file=sys.stderr)
