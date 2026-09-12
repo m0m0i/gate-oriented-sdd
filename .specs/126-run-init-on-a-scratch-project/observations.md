@@ -188,9 +188,9 @@ That is the same shape #124 was filed for, arriving in a document rather than a 
 
 ## What this run was worth
 
-Three new defects, one of them (#127) shipped **this morning** by #110 and reachable on the very first install — and none of the three was visible from reading the skill. Against that: #82's fix **confirmed working on a real install**, which is the observation `1.0.0` was waiting on and which no amount of reasoning could have produced.
+Three new defects from the run — one of them (#127) shipped **this morning** by #110 and reachable on the very first install — and a fourth, #130, that the *review of this record* found hiding behind #127's fail-fast. None of the four was visible from reading the skill. Against that: **#82's Claude Code half confirmed working on a real install** — the `.agents/` destination it also added stays unopened by anything — which is the observation `1.0.0` was waiting on and which no amount of reasoning could have produced.
 
-Both halves argue the same thing. The harness's own claim is that a gate beats a request; this run is the same claim applied to verification — **executing the skill beats reading it**, and the gap between them is where three of today's defects were living.
+Both halves argue the same thing. The harness's own claim is that a gate beats a request; this run is the same claim applied to verification — **executing the skill beats reading it**, and the gap between them is where four of today's defects were living.
 
 ## Review round 1 — CLEAN, 0 blockers, 0 HIGH, 4 MEDIUM, 3 LOW
 
@@ -226,8 +226,8 @@ arises, so dropping that qualifier would have been the overstatement.
 All three LOWs fixed:
 
 - **The `1.0.0` row said "confirms #82 on a real install", unqualified** — in the one row a release
-  decision gets quoted from, eighteen lines above the entry recording that `.agents/` has never
-  been opened. Now "**#82's Claude Code half**", with the gap named in the row itself. The general
+  decision gets quoted from, sixteen lines above the entry recording that `.agents/` has never
+  been opened. _(The review said eighteen without counting and this record inherited it verbatim — a reviewer's unchecked number becoming a record's unchecked number one commit later, which the reviewer then caught against itself.)_ Now "**#82's Claude Code half**", with the gap named in the row itself. The general
   point is worth keeping: a qualifier that lives elsewhere in the document does not travel with the
   sentence that gets quoted.
 - **The record had not inherited the review's second "could not observe"** — that the reviewer
@@ -240,11 +240,53 @@ All three LOWs fixed:
 
 ### What two rounds of reviewing a *record* were worth
 
-Neither round found anything wrong with the run. Both found things wrong with what the run
-**claimed** — a second cause masked by a fail-fast, a stale ledger field, a version row covering no
+Neither round found an **observation that was false**. Both found things wrong with what the run
+**claimed** — and one, #130, with how far it looked: a run that stops at the first red sees one cause,
+which is a coverage defect in the method rather than in the writing. Both halves of them: a second cause masked by a fail-fast, a stale ledger field, a version row covering no
 version, a grammatical subject that never acted, a count that read as found-all, an unverifiable
 aside, and a qualifier that would not have travelled with the sentence it qualified.
 
 That is the argument for reviewing verification records at all. The run is gone; the record is the
 only thing that will ever be read again, and every one of those defects would have survived into it
 unchallenged.
+
+## Review round 3 — CLEAN, 0 blockers, 0 HIGH, 1 MEDIUM, 3 LOW
+
+Reviewed at `6029756`. **The MEDIUM is the rule this record had just written, on its third
+instance, in this file.**
+
+Round 2 recorded: *a qualifier that lives elsewhere in the document does not travel with the
+sentence that gets quoted.* Round 3 found the unqualified `#82` claim **still standing at `:191`**,
+under the heading *What this run was worth* — the passage a release note lifts. I had reported
+fixing it "where the claim is also made"; there were two places and I fixed one.
+
+Worth stating plainly, because it is the more useful half: **writing the rule down did not make me
+apply it.** I recorded the principle and then failed to enumerate the instances it governed — which
+is what a guard does and a paragraph does not. The claim is now qualified in all three places, and
+enumerated rather than trusted.
+
+### The three LOWs
+
+- **"Neither round found anything wrong with the run" was false by this file's own account.** #130
+  is a coverage defect in the run's *method* — a run that stops at the first red sees one cause —
+  and the summary erased the half reflecting on the run while keeping the half reflecting on the
+  writing. In the section where that asymmetry is hardest for the author to see, which is why I
+  asked the reviewer to look there.
+- **"Three new defects" no longer agreed with the record's own five-issue ledger.** `verified.md`
+  had it right; the observations' closing section had not caught up. Three is true of *what the run
+  produced*; four is true of *what this record produced*, which is what the heading promises.
+- **"Eighteen lines above" was sixteen** — and the number was the reviewer's, written without
+  counting in round 2 and inherited here verbatim. It caught it against itself. A reviewer's
+  unchecked count becomes a record's unchecked count one commit later, and the neighbouring "37
+  lines below" being correct is what made the wrong one look checked.
+
+### Three rounds on a record, and the shape of what they found
+
+Round 1: a second cause masked by a fail-fast, and four overstatements. Round 2: where the
+corrections landed. Round 3: the one place a correction had not landed, plus two counts and a
+false dichotomy.
+
+**Every round found something, and every round found it in the summary rather than in the
+observations.** The step-by-step record of what `init` did has survived three passes untouched.
+What kept failing is the part that tells a reader what it meant — which is the part that gets
+quoted, and the only part most readers will see.
