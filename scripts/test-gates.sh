@@ -2124,9 +2124,23 @@ out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
 [ "$out" = "1" ] && c5=ok || c5=no
 case "$err" in *upgrade*) c6=ok ;; *) c6=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "init stripped of the mode line, its wiring, or its upgrade path fails" ok \
-  || report "init stripped of the mode line, its wiring, or its upgrade path fails" no \
-     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6"
+# #82's half: the contract-path guard checks that init NAMES the canonical path, and cannot
+# check that init says WHERE to put it. That sentence is the only statement of the destination,
+# and its absence is what produced four placements for one file.
+r=$(contracts_repo contracts-nodest)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "inside the agents directory you are installing into"
+p.write_text(p.read_text().replace(needle, "next to it"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c7=ok || c7=no
+case "$err" in *"agents directory"*) c8=ok ;; *) c8=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "init stripped of the mode line, its wiring, its upgrade path or its destination fails" ok \
+  || report "init stripped of the mode line, its wiring, its upgrade path or its destination fails" no \
+     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8"
 
 
 # --- shipped reviewers: the contract path they name -----------------------------------
@@ -2189,6 +2203,101 @@ grep -q 'say so and stop' "$ROOT/agents/_shared/reviewer-contract.md" && c3=ok |
 [ "$c0$c1$c2$c3" = "okokokok" ] && report "every shipped reviewer's contract path resolves in both layouts" ok \
   || report "every shipped reviewer's contract path resolves in both layouts" no \
      "template-control=$c0 claude=$c1 antigravity=$c2 stop-rule-intact=$c3 [$out]"
+
+
+# --- guards: scripts/check-contract-path.py -------------------------------------------
+#
+# #82. One fact — where the reviewer contract lives — was written in five places and nothing
+# compared them, so it drifted into four different forms and stayed that way for months.
+# Review did not catch it; it surfaced only when `init` was run against a real project (#76).
+# A fix that corrects the five and leaves the comparison to review re-opens on the next edit,
+# which is how it reached five in the first place.
+#
+# A NEW guard rather than an extension of check-receipt-schema.py: that one already has a
+# subject, and #117 records what happens when a guard acquires a second with a different
+# lifetime.
+
+# $1 = name. A repo holding the seven files the guard compares, all in agreement.
+cpath_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/agents/_shared" "$r/agents/_template" "$r/skills/init" "$r/docs"
+  cp "$ROOT/scripts/check-contract-path.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-contract-path.py"
+  for f in ts python dart-flutter; do
+    printf 'x\n\n**Read `_shared/reviewer-contract.md` first.** y\n' > "$r/agents/$f-reviewer.md"
+  done
+  printf 'x\n\n**Read `_shared/reviewer-contract.md` first.** y\n' > "$r/agents/_template/reviewer.md"
+  printf 'x\n' > "$r/agents/_shared/reviewer-contract.md"
+  printf 'copy `_shared/reviewer-contract.md` to it\n' > "$r/skills/init/SKILL.md"
+  printf '  |-- _shared/reviewer-contract.md\n' > "$r/docs/layout.md"
+  printf '"agents/_shared/reviewer-contract.md",\n' > "$r/scripts/check-receipt-schema.py"
+  echo "$r"
+}
+run_cpath() { ( cd "$1" && python3 scripts/check-contract-path.py >/dev/null 2>"$TMP/cperr"; printf '%s' "$?" ) }
+
+# 62. Agreement passes; ANY single file disagreeing fails and is named.
+#
+# The control runs first. Then each of the four kinds of statement is broken on its own —
+# a reviewer, the template, a document, and the sibling guard — because a check that only
+# looked at the reviewers would pass three of the four ways this actually drifted, and
+# `docs/layout.md`'s flat form is the one that was really wrong.
+r=$(cpath_repo cp-control)
+out=$(run_cpath "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(cpath_repo cp-reviewer)
+printf 'x\n\n**Read `agents/_shared/reviewer-contract.md` first.** y\n' > "$r/agents/ts-reviewer.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *ts-reviewer.md*) c2=ok ;; *) c2=no ;; esac
+
+r=$(cpath_repo cp-template)
+printf 'x\n\n**Read `../_shared/reviewer-contract.md` first.** y\n' > "$r/agents/_template/reviewer.md"
+out=$(run_cpath "$r"); [ "$out" = "1" ] && c3=ok || c3=no
+
+# The real defect's shape: a document drawing the flat sibling instead of the _shared/ form.
+r=$(cpath_repo cp-layout)
+printf '  |-- reviewer-contract.md\n' > "$r/docs/layout.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c4=ok || c4=no
+case "$err" in *layout.md*) c5=ok ;; *) c5=no ;; esac
+
+r=$(cpath_repo cp-sibling)
+printf '".claude/agents/reviewer-contract.md",\n' > "$r/scripts/check-receipt-schema.py"
+out=$(run_cpath "$r"); [ "$out" = "1" ] && c6=ok || c6=no
+
+[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "one contract placement, and any file disagreeing is named" ok \
+  || report "one contract placement, and any file disagreeing is named" no \
+     "control=$c0 reviewer-exit=$c1 names=$c2 template=$c3 layout-exit=$c4 names=$c5 sibling=$c6"
+
+# 63. A statement the guard cannot find or read is a THIRD outcome, never agreement.
+#
+# Four of five compared and a success line printed is #16, and this guard is one more place to
+# make that mistake. A file that has stopped mentioning the contract at all is the quieter
+# half: nothing disagrees, because nothing is left to disagree.
+r=$(cpath_repo cp-missing); rm "$r/docs/layout.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *layout.md*) c2=ok ;; *) c2=no ;; esac
+
+r=$(cpath_repo cp-silent); printf 'no mention here at all\n' > "$r/docs/layout.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *"names no"*) c4=ok ;; *) c4=no ;; esac
+
+r=$(cpath_repo cp-unreadable)
+chmod 000 "$r/docs/layout.md" 2>/dev/null
+if cat "$r/docs/layout.md" >/dev/null 2>&1; then
+  chmod 644 "$r/docs/layout.md" 2>/dev/null
+  c5=ok; c6=ok                     # permissions not enforced here; a case that cannot fail is worse than none
+else
+  out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+  chmod 644 "$r/docs/layout.md" 2>/dev/null
+  [ "$out" = "1" ] && c5=ok || c5=no
+  case "$err" in *"cannot be read"*) c6=ok ;; *) c6=no ;; esac
+fi
+
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] && report "a statement the contract guard cannot find or read fails, never agrees" ok \
+  || report "a statement the contract guard cannot find or read fails, never agrees" no \
+     "missing-exit=$c1 names=$c2 silent-exit=$c3 silent-msg=$c4 unreadable-exit=$c5 unreadable-msg=$c6"
 
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
