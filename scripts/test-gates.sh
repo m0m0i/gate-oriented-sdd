@@ -1831,5 +1831,153 @@ fi
      "slug-exit=$c1 slug-msg=$c2 root-exit=$c3 root-msg=$c4"
 
 
+# --- guards: assets/check-document-set.py -------------------------------------------
+#
+# #110. `init` chose between a minimum and a full document set and recorded nothing, so the
+# harness could not tell "minimum, deliberately" from "full, half-abandoned". The mode is now
+# DECLARED in .steering/tech.md and VERIFIED against the filesystem here. The declaration is
+# the point: derivation from which files exist cannot distinguish deliberate omission from
+# abandonment, which is the whole feature.
+#
+# The checker is a guard a project OWNS — copied into its scripts/ and named on its
+# `- Validators:` line, like check-steering-anchors.sh and check-locks.py — so no hook
+# branches on the mode. A gate that branched on mode would be a switch that turns enforcement
+# down, which is why AC5 forbids it and why nothing below drives a hook.
+
+# $1 = name, $2 = the `- Mode:` value (empty writes no line at all), $3 = Docs value (optional)
+docset_repo() {
+  # $2 is read with ${2-} rather than $2: the suite runs under `set -u`, and an unbound $2
+  # aborts the subshell, which returns an EMPTY path. Every later `rm "$r/..."` then operates
+  # on "/..." and the assertions read whatever the previous case left behind. That is a
+  # fixture failure wearing a guard failure's clothes — it cost one red run here, and one of
+  # the assertions passed SPURIOUSLY while it lasted, on an error file that was empty because
+  # nothing had run at all.
+  m=${2-}
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/.steering" "$r/.github/ISSUE_TEMPLATE" "$r/.specs" "$r/.work_logs"
+  cp "$ROOT/assets/check-document-set.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-document-set.py"
+  d=${3:-docs/}
+  mkdir -p "$r/$d" 2>/dev/null || true
+  {
+    printf '# Tech\n\n'
+    printf -- '- Validators: ./scripts/check-document-set.py\n'
+    printf -- '- Reviewer: some-reviewer\n'
+    printf -- '- Docs: %s\n' "$d"
+    [ -n "$m" ] && printf -- '- Mode: %s\n' "$m"
+  } > "$r/.steering/tech.md"
+  for t in feature bug chore; do printf 'x\n' > "$r/.github/ISSUE_TEMPLATE/$t.md"; done
+  for f in PRD DESIGN BACKLOG; do printf 'x\n' > "$r/$d/$f.md"; done
+  echo "$r"
+}
+add_full_docs() { for f in NORTH_STAR EPICS CONTRACT; do printf 'x\n' > "$1/${2:-docs}/$f.md"; done; }
+run_docset() { ( cd "$1" && python3 scripts/check-document-set.py >/dev/null 2>"$TMP/derr"; printf '%s' "$?" ) }
+
+# 56. Both modes verified in both directions, and the mandatory set checked under BOTH.
+#
+# The control runs first and in both modes: a checker that failed on every input would satisfy
+# the accusing halves on its own. The minimum-mode control is the one with no dogfooding in
+# this repository — every document the full set names exists here — so it is the half most
+# likely to be wrong and is asserted explicitly rather than inferred from the full-mode pass.
+r=$(docset_repo ds-full-ok full); add_full_docs "$r"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(docset_repo ds-min-ok minimum)                       # the three optional documents absent
+out=$(run_docset "$r"); [ "$out" = "0" ] && c1=ok || c1=no
+
+# full mode, one required document missing: must fail AND name it.
+r=$(docset_repo ds-full-gap full); add_full_docs "$r"; rm "$r/docs/CONTRACT.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c2=ok || c2=no
+case "$err" in *CONTRACT.md*) c3=ok ;; *) c3=no ;; esac
+
+# minimum mode must NOT report the optional three as missing...
+r=$(docset_repo ds-min-quiet minimum)
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+case "$err" in *CONTRACT.md*|*EPICS.md*|*NORTH_STAR.md*) c4=no ;; *) c4=ok ;; esac
+
+# ...but it must still verify the MANDATORY set. A mode that checks nothing is not a mode.
+r=$(docset_repo ds-min-gap minimum); rm "$r/docs/BACKLOG.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *BACKLOG.md*) c6=ok ;; *) c6=no ;; esac
+
+# An optional document PRESENT under minimum is not an error: clarify settled that a
+# minimum-mode project may run `contract` at any point without changing mode.
+r=$(docset_repo ds-min-extra minimum); printf 'x\n' > "$r/docs/CONTRACT.md"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c7=ok || c7=no
+
+# The issue templates are part of the set in both modes.
+r=$(docset_repo ds-tpl-gap full); add_full_docs "$r"; rm "$r/.github/ISSUE_TEMPLATE/bug.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c8=ok || c8=no
+case "$err" in *bug.md*) c9=ok ;; *) c9=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokokok" ] \
+  && report "both modes verify their own set, in both directions" ok \
+  || report "both modes verify their own set, in both directions" no \
+     "full-ok=$c0 min-ok=$c1 full-gap-exit=$c2 names-doc=$c3 min-quiet=$c4 min-gap-exit=$c5 names-doc=$c6 min-extra-ok=$c7 tpl-exit=$c8 tpl-names=$c9"
+
+# 57. No mode, an unknown mode, and an unreadable tech.md are a THIRD outcome, never a default.
+#
+# This is #16 at the newest layer. A checker that reads "no `- Mode:` line" as "minimum"
+# reports success having verified the smaller set — indistinguishable from a project that
+# chose minimum — and the declaration it exists to enforce is then optional in practice.
+# Reachable with no adversarial input at all: any project installed before this feature has
+# no line.
+r=$(docset_repo ds-nomode "")                    # no `- Mode:` line written
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *Mode*) c2=ok ;; *) c2=no ;; esac
+
+r=$(docset_repo ds-badmode velocity)             # a value that is neither minimum nor full
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *velocity*) c4=ok ;; *) c4=no ;; esac
+
+r=$(docset_repo ds-notech full); rm "$r/.steering/tech.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c5=ok || c5=no
+
+r=$(docset_repo ds-unreadable full); add_full_docs "$r"
+chmod 000 "$r/.steering/tech.md" 2>/dev/null
+if cat "$r/.steering/tech.md" >/dev/null 2>&1; then
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  c6=ok; c7=ok                     # permissions not enforced here; a case that cannot fail is worse than none
+else
+  out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  [ "$out" = "1" ] && c6=ok || c6=no
+  case "$err" in *"cannot be read"*) c7=ok ;; *) c7=no ;; esac
+fi
+
+# A `- Mode:` line the reader cannot parse is the #34 shape: bolded, it yields nothing and
+# the file looks right. It must fail as "no mode", not pass on a default.
+r=$(docset_repo ds-bolded "")
+printf -- '- **Mode: full**\n' >> "$r/.steering/tech.md"
+out=$(run_docset "$r"); [ "$out" = "1" ] && c8=ok || c8=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokok" ] \
+  && report "an absent, unknown or unreadable mode fails rather than defaulting" ok \
+  || report "an absent, unknown or unreadable mode fails rather than defaulting" no \
+     "nomode-exit=$c1 nomode-msg=$c2 bad-exit=$c3 bad-names=$c4 notech=$c5 unreadable-exit=$c6 unreadable-msg=$c7 bolded=$c8"
+
+# 58. Documents in another repository cannot be verified here, and must say so rather than pass.
+#
+# `- Docs:` may hold "the path/URL of a shared documentation repo in a multi-repo product",
+# per init. A URL is not a directory, so every document would read as absent — which would be
+# a false RED — and treating it as "nothing to check" would be a false GREEN. Neither is
+# acceptable, so it is a named outcome and init does not put this checker on the Validators
+# line of a project configured that way.
+r=$(docset_repo ds-remote full "https://example.invalid/docs")
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"cannot be verified"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"not found"*) c3=no ;; *) c3=ok ;; esac     # must NOT read as absent documents
+
+[ "$c1$c2$c3" = "okokok" ] && report "a remote Docs value is named, not read as absent documents" ok \
+  || report "a remote Docs value is named, not read as absent documents" no \
+     "exit=$c1 says-unverifiable=$c2 not-reported-as-missing=$c3"
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
