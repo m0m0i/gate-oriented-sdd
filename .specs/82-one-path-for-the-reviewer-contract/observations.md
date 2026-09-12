@@ -285,3 +285,39 @@ checked, mechanically, every time**, because the failure is silent and reads as 
 
 Filed rather than fixed here: nothing. Fixed rather than accepted: all three, on the grounds that
 two were fail-opens and the third was the pattern this branch has now hit four times.
+
+## Review round 5 — CLEAN, 0 blockers, 0 HIGH, 0 MEDIUM, 1 LOW
+
+Reviewed at `aa76a8f`. The reviewer answered both questions I put by tracing rather than by
+reading case names: `shape` cannot be non-empty and fall through (assigned once, no `try`, no
+early return, the dispatch ends in `raise`), and the six fixtures pin the **dispatch** and not
+merely their own clauses — six of the seven go red on the exit code alone if the `if shape:`
+block is deleted, and the seventh has the message assertion that catches it.
+
+### The LOW was forward-looking, and taken anyway
+
+`shape` was a plain local inspected once, with every clause above it **by convention**. A seventh
+clause appended below the dispatch would compute, append, and never be read — exit 0, success
+line, nothing looked at. That is this branch's own recurring failure moved one level out: not a
+check reading the wrong stream, but a check whose output is collected after the collector has
+been emptied.
+
+Fixed structurally rather than by a comment: the clauses now live in `shape_problems()`, which
+**returns** the list, and `main()` does `if problems := shape_problems():`. A clause written
+outside that function has nowhere to append, so the mistake fails at authoring time instead of
+silently at runtime.
+
+Taken despite being LOW and forward-looking because this branch hit "a check that cannot fire"
+**four times**, and this makes that entire class impossible in this file rather than merely
+absent from it today. All seven clause mutations and a neutered dispatch were re-verified red
+after the lift.
+
+### One property neither of us had named
+
+The reviewer found it while checking the round-4 fix: **`SHIPPED_PREFIX` can no longer be widened
+to nothing.** Set it to `""` and every `SUFFIX` member starts with it, so the sink clause fires on
+all five and the green control goes red. `INSTALLED_PREFIXES = ("",)` behaves the same, and
+`()` fails closed the other way because `str.startswith(())` is `False` for everything. The two
+constants are now pinned from both sides by clauses that share them — a stronger property than
+the fixtures alone provide, and it arrived as a side effect of closing the sink rather than by
+design.

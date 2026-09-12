@@ -112,7 +112,15 @@ INSTALLED_PREFIXES = (".claude/agents/", ".agents/")
 MENTION = re.compile(r"[\w./-]*reviewer-contract\.md")
 
 
-def main():
+def shape_problems():
+    """Everything wrong with the work-set itself, before any file is compared.
+
+    A function rather than a block in `main()`, and that is structural rather than tidy: these
+    clauses append to a list that is inspected exactly once, so a seventh clause written below
+    that inspection would compute, append, and never be read — exit 0, success line, nothing
+    looked at. This branch hit "a check that cannot fire" four times; here the collector has no
+    scope outside this function, so a misplaced clause fails at authoring time.
+    """
     shape = []
     if len(SHIPPED) < MIN_SHIPPED or len(INSTALLED) < MIN_INSTALLED or len(SUFFIX) < MIN_SUFFIX:
         shape.append(
@@ -142,9 +150,13 @@ def main():
                 f"`{n}` is in INSTALLED but does not live under "
                 f"{' or '.join(INSTALLED_PREFIXES)} — only an install may name one destination"
             )
-    if shape:
+    return shape
+
+
+def main():
+    if problems := shape_problems():
         print("check-contract-path FAILED", file=sys.stderr)
-        for line in shape:
+        for line in problems:
             print(f"  {line}", file=sys.stderr)
         print(
             "\n  A source removed from a tuple, displaced by a duplicate, or moved to the tuple "
