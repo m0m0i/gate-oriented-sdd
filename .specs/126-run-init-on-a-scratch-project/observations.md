@@ -287,9 +287,11 @@ corrections landed. Round 3: the one place a correction had not landed, plus two
 false dichotomy.
 
 **Every round found something, and all but two of the findings were in the summary rather than the
-observations.** The exceptions both landed in step 4 — the fixture file count, and the two-causes
-paragraph that is #130, which was round 1's largest finding. The step-by-step record was **amended
-in two of the three passes**, not untouched.
+observations.** The exceptions were the fixture file count, in `## T1`, and the two-causes
+paragraph in step 4 — which is #130, round 1's largest finding. A **third correction** also landed
+in step 4, proof 4's `#82` qualifier, from a finding filed against `docs/verified.md`; that is why
+*two findings* and *three corrections* both appear in this file and both are right. The
+step-by-step record was **amended in two of the three passes**, not untouched.
 
 _An earlier wording claimed it had survived all three untouched, and review disproved it from the
 commit hunks. It was false in the direction that flatters the run, and it certified a half of the
@@ -343,7 +345,7 @@ correcting a false sentence that was still sitting nine lines above the descript
 Both are applied now and verified by grep, each replacement independent so one failure cannot
 silently discard the other.
 
-**That is the fifth instance on this branch of the same shape**, and it is the sharpest because the
+**That is the fifth instance of the shape #124 tracks, and the third recorded on this branch**, and it is the sharpest because the
 artifact was a claim about itself: a step that did not run, whose failure was not checked, followed
 by a report that assumed it had. #124 was filed for four of these; this one belongs in it too, and
 it extends the rule — *"a case must assert why it went red"* has a sibling: **a report must be
@@ -351,5 +353,51 @@ written from the artifact, not from the intent.** Every prior instance was a che
 fail; this was a narrative that could not be false, because nothing compared it to the file.
 
 The mechanical fix is the one already learned twice today and not yet generalised: **bind the exit
-status, and re-read the artifact.** `python3 - <<'PY'` in a `&&` chain does not stop a later
-`git commit`, and an `AssertionError` on stderr scrolls past.
+status, and re-read the artifact.** The diagnosis matters and an earlier wording here had it
+backwards: `&&` is exactly what *would* have stopped the commit — an uncaught `AssertionError` exits
+1, and `python3 … && git commit` never reaches the commit. What I actually used was a
+**newline-separated sequence**, where every command runs regardless of the last one's status, and
+the `AssertionError` scrolled past on stderr. Verified both ways rather than reasoned about.
+
+## Review round 5 — CLEAN, 0 blockers, 0 HIGH, 2 MEDIUM, 1 LOW
+
+Reviewed at `08eb58b`. The reviewer verified the previous round's confession **from the artifact
+rather than from my message** — `git show cb3a159 --stat` is 34 insertions and 0 deletions, a pure
+append, so the account was exact. It also re-counted "nine lines above the description" against the
+old blob and found it reconciles. That is the behaviour the round-4 entry asked for, applied to the
+entry itself.
+
+Three findings, and **all three were in text I adopted rather than derived**:
+
+- **"The exceptions both landed in step 4" was wrong** — the fixture file count is at `:31`, inside
+  `## T1`. The wording was the reviewer's own suggested fix from round 4, taken verbatim. It also
+  conflated two counts: *two findings* were filed against observation lines, while *three
+  corrections* landed there, the third being proof 4's `#82` qualifier from a finding filed against
+  `docs/verified.md`. Both numbers appear in this file; neither was wrong; nothing bridged them.
+- **"The fifth instance on this branch" reattached a scope the record had already withdrawn.**
+  #124's four were "in two days", and one of them happened in #82's session — a different branch.
+  On *this* branch the enumerable instances are three. The round-1 withdrawal had moved that count
+  into #124 precisely because it could not be scoped here, and the round-4 entry quietly moved it
+  back.
+- **The shell diagnosis was backwards.** I wrote that `&&` does not stop a later `git commit`. It is
+  exactly what does — an uncaught `AssertionError` exits 1 and the chain halts. What I actually used
+  was a newline-separated sequence. Verified both ways in a shell rather than reasoned about, and
+  the prescription that follows it was right all along; only the explanation pointed a future reader
+  away from the form that would have saved them.
+
+### The pattern under all three, which is the reviewer's and belongs in #124
+
+**Text adopted from elsewhere does not inherit the checking that the text around it got.** The
+central claim of the round-4 section — that `cb3a159` applied neither fix — was derived, checked and
+true. Its two peripheral claims were copied: one from the reviewer's round-4 report, one from the
+arithmetic of a withdrawn sentence. Both were wrong.
+
+The reviewer's own framing, recorded because it implicates it as much as me: its uncounted
+"eighteen" and its mislocated "both landed in step 4" **both entered this record because it wrote
+them in a report and I trusted the report over the file.** A review is not a source; it is a claim
+about a source, and it needs re-deriving exactly as much as anything else does.
+
+That is the third form of one thing on this branch — after *a qualifier does not travel with the
+sentence that gets quoted* and *writing the rule down did not make me apply it*. All three are the
+same failure at different distances: **the check that was not performed because something nearby had
+been.**
