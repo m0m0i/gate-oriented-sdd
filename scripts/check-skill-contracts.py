@@ -28,6 +28,22 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 #: (skill file, required substring, why it must stay)
 CONTRACTS = (
     (
+        "skills/spec/SKILL.md",
+        "In a `minimum`-mode project the backlog is the queue and creating the issue from it is the normal path",
+        "Without the scope, the side-door accusation fires on EVERY spec in a project that "
+        "never runs sprint as a batch — and a rule that is wrong every time is a rule the "
+        "user learns to skip, taking the real one ('no issue, no spec') with it. #110.",
+    ),
+    (
+        "skills/contract/SKILL.md",
+        "The trigger is evidence, not scale",
+        "contract's step 1 asks for the last fifty commits and its red flags name copying a "
+        "style guide wholesale, so run early it produces a WORSE rulebook rather than an "
+        "absent one. Stated as scale instead, a minimum-mode reader concludes the skill is "
+        "unavailable to them rather than not yet useful — and mode governs documents and "
+        "flow membership, never availability. #110, and #109's availability clause.",
+    ),
+    (
         "skills/init/SKILL.md",
         "`- Mode: minimum` or `- Mode: full` on one physical line",
         "Without the line, nothing downstream can tell a deliberate omission from an "

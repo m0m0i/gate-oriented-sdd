@@ -7,6 +7,8 @@ description: Write the development contract — the language, style, testing, an
 
 A coding-standards document that only exists as prose is a document nobody re-reads. This skill writes one, then does the thing that makes it matter: **compiles every rule that can be enforced into the place that enforces it.**
 
+**The trigger is evidence, not scale.** Run this when recurring review findings reveal an unwritten rule — not when a project reaches some size. Step 1 asks for the last fifty commits and any review comments, and the red flags below name copying a style guide wholesale: run before there is anything to compile from, it produces a *worse* rulebook rather than an absent one. A project installed in `minimum` mode may run it **at any point, without changing mode** — the mode governs which documents `init` creates and which skills are in the flow, never which skills can be run.
+
 Each rule lands in exactly one of three tiers, and the tier is chosen by *how the rule can be checked*, not by how important it feels:
 
 | Tier | Destination | Enforced by |
