@@ -28,7 +28,7 @@ screen, which is the half a reader sees._
 
 ## T1 — the scratch project, built before `init` saw it
 
-A git repository in a temp directory, TypeScript, deleted in T4. Eight files:
+A git repository in a temp directory, TypeScript, deleted in T4. Eight files — `tests/` held exactly one, `ledger.test.mjs`; the count is named literally because T4 deletes the only thing that could confirm it:
 
 | Path | Why it is there |
 | :-- | :-- |
@@ -116,6 +116,8 @@ $ <touch a source file>; sh .claude/hooks/quality-gate.sh
 exit=2   Quality gate: a gating validator failed.
 ```
 
+**A second, independent cause sits behind it, and the run did not see it.** `check-document-set.py` fails at `docs.is_dir()` before reaching its `TEMPLATES = ("feature.md", "bug.md", "chore.md")` check — and on this target `bug.md` does not exist either, because step 3's merge bullet said to add only the *missing* types and `bug` was not missing. So **fixing #127 alone would not turn proof 1 green** on any project that already had a differently-named bug template. Two bullets in the same step disagree on a literal filename. Filed as **#130** after review caught what this record had attributed wholly to #127 — the fail-fast hid it, and I read the first cause as the only one.
+
 **That is CAP-4's falsifier — "a user's first turn blocked by a failure that predates them" — produced by the harness rather than by the project.** It is #81's shape with a different file, and it arrived with #110. The gap is inside step 3: the opening promises the mandatory set, the bullets never create it, and #110 then added a validator that requires it.
 
 Note the timing, because it matters for how it is found: the gate stays **silent** until a source file changes, since `quality-gate.sh` runs the `- Validators:` line only when a `- Source globs:` path moved. So the failure lies dormant through the whole install and fires on the user's first real edit.
@@ -151,7 +153,7 @@ The run is about a skill that writes many untracked files into a repository that
 
 _The first comparison reported 2/3 and looked like a real difference._ It was not: my extraction regex read the baseline block up to the first three-backtick run, and `check-markdown-fences`'s own output **contains** one. So the record was complete in git and truncated in the renderer, and my comparison read the truncation. The fence is now four backticks and the reason is recorded where it happened.
 
-That is the fourth time in two days that a *record or a fixture* — not the thing under test — produced a result that read as a finding. It is #124's subject, arriving in a document rather than a case.
+That is the same shape #124 was filed for, arriving in a document rather than a case. _Review pushed back on an earlier wording here — "the fourth time in two days" — as a claim about this repository's history that the diff cannot support. It is withdrawn: the instances are enumerated in #124 itself, which is where a reader can count them._
 
 | Criterion | Result |
 | :-- | :-- |
@@ -159,6 +161,10 @@ That is the fourth time in two days that a *record or a fixture* — not the thi
 | AC2 | diff is `docs/verified.md` + this spec directory. `check-version-bump`: **no shipped file changed** — so no version bump, as the spec said |
 | AC3 | `check-leakage: clean`, run by hand; **zero** occurrences of the scratch project's name in either committed file |
 | AC8 | no shipped file modified in response to any finding |
+| AC4 | every step recorded above, with "Not exercised" naming what could not be |
+| AC5 | proof 4 — attempted from the project root, stated as observed |
+| AC6 | #83 confirmed, #84 not reproduced, #81 not observed; #127/#128/#129 filed, #130/#131 after review |
+| AC7 | the `docs/verified.md` section, with the synthetic limitation above its table |
 
 ### Filed, not fixed
 
@@ -183,3 +189,24 @@ That is the fourth time in two days that a *record or a fixture* — not the thi
 Three new defects, one of them (#127) shipped **this morning** by #110 and reachable on the very first install — and none of the three was visible from reading the skill. Against that: #82's fix **confirmed working on a real install**, which is the observation `1.0.0` was waiting on and which no amount of reasoning could have produced.
 
 Both halves argue the same thing. The harness's own claim is that a gate beats a request; this run is the same claim applied to verification — **executing the skill beats reading it**, and the gap between them is where three of today's defects were living.
+
+## Review round 1 — CLEAN, 0 blockers, 0 HIGH, 4 MEDIUM, 3 LOW
+
+Reviewed at `f1c2402`. Every finding was about **the record**, which is correct — the run is gone and the record is the artifact.
+
+**The reviewer could only re-run 9 of the 11 validators.** `./assets/check-document-set.py` and `./scripts/check-contract-path.py` are on the `- Validators:` line and absent from its allow-list, so it recorded them as **unknown rather than as agreeing** — the same discipline this record is being judged by, applied to itself. Filed as **#131**. AC1's "11/11" is therefore 9/11 independently confirmed, and that is now stated rather than implied.
+
+### The findings, and what they changed
+
+- **A second cause of proof 1, hidden behind the first.** The record blamed #127 entirely. `check-document-set.py` also requires a literal `bug.md`, which step 3's merge bullet tells the installer *not* to create — and the `docs.is_dir()` fail-fast hides it. **Fixing #127 alone would not turn proof 1 green.** Filed as #130. This is the finding worth the round: a run that stops at the first red reports one cause, and the record inherited that.
+- **`docs/verified.md`'s own "Last updated" field** said 2026-09-05 while the diff added a 2026-09-12 section — the honesty ledger, stale by the definition stated in its own sentence.
+- **The section named the plugin version and not Claude Code's**, so the new row was covered by no version line, in a file whose preamble says "re-verify when the version column moves".
+- **The `1.0.0` row's subject was an actor that never acted.** "Does a shipped reviewer open its contract" — no reviewer was spawned; the operator resolved the paths. The claim is sound and the grammar overstated it. Reworded to what was performed.
+- **"Detect every signal — yes"** read as *all were found*, where four of seven had nothing to detect. Now says so, including that the package manager was *inferred* rather than proved.
+- The scratch project's file count and the T4 criterion table, both tightened.
+
+### One claim withdrawn
+
+The record said this was "the fourth time in two days" that a record or fixture produced a result reading as a finding. Review pushed back: that is a claim about the repository's history, not verifiable from the diff, and C-1 is what it exists for. Withdrawn and replaced with a pointer to #124, which enumerates the instances.
+
+**A reviewer correcting an author's self-criticism is worth recording.** The instinct that a confession is automatically safe is wrong — an unverifiable claim is unverifiable in either direction, and this one was flattering in its own way: it made a pattern sound better-established than the evidence in front of the reviewer.

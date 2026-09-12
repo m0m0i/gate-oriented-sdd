@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-09-05 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
+Last **updated**: 2026-09-12 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
 
 The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The two Antigravity rows carry the date they were verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
@@ -229,26 +229,26 @@ The greenfield path — a project with no `AGENTS.md`, no templates and no earli
 
 ## `init` at 0.7.0 on a synthetic TypeScript project
 
-Run 2026-09-12 (#126), plugin 0.7.0, `skills/` identical to the installed copy. Full record in `.specs/126-run-init-on-a-scratch-project/observations.md`.
+Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy), Claude Code 2.1.252. Full record in `.specs/126-run-init-on-a-scratch-project/observations.md`.
 
 **What this run is weak evidence for, stated in the row rather than a footnote.** The target was **synthetic** — built for the run with a linter, a type checker, tests, a `src/` layout, an existing issue template and a commit convention. CAP-4 is *"installation into a repository that already has opinions"*, and a repository whose opinions were chosen by the installer cannot prove it. **#76's run against a real project is not superseded, and a fresh one is still owed.**
 
 | Question | Observed |
 | :-- | :-- |
-| Does step 1 detect every signal in its table? | **yes** — manifest, scripts, test layout, commit convention from `git log`, issue templates and their labels, branch. No remote existed, so the tracker was correctly left to step 2. |
+| Does step 1 check every signal in its table? | **yes — checked; four had nothing to detect.** Found: manifest, scripts, test layout, commit convention from `git log`, issue templates and their labels, branch. Absent on this target: no lockfile (so the package manager was *inferred*, not proved), no CI workflow, no remote (so the tracker was correctly left to step 2), no prior install. |
 | Does it run each candidate validator before adopting it? | **yes** — all three ran on the clean tree and were adopted. The project's validators were separately confirmed to *fail* on a real violation, so adoption meant something. |
 | Does step 2 ask only what step 1 could not detect? | **yes**, five questions in the listed order. **Self-answered** — the operator built the target — so this is evidence that the questions are asked and in what order, and evidence for **nothing** about whether they are the right questions. |
 | Does step 3 merge into existing issue templates rather than replacing? | **yes**, and the merge leaves `spec` unable to read a type — #128. |
 | Does step 3 write the three `.specs/`/`.work_logs/` READMEs it lists? | **no source exists for them** — #83, confirmed at 0.7.0. They were written by hand. |
 | Does step 3 create the mandatory document set it opens by promising? | **no.** Not one of its ten bullets creates `PRD.md`, `DESIGN.md` or `BACKLOG.md` — #127. |
-| Does step 4's first proof pass? | **no.** `check-document-set.py`, which step 3 installs, fails on the documents step 3 never wrote. The gate is armed **red** by the harness's own file — CAP-4's falsifier — and lies dormant until the first source edit. #127. |
+| Does step 4's first proof pass? | **no, and for two independent reasons.** `check-document-set.py`, which step 3 installs, fails on the documents step 3 never wrote (#127) — and behind that, hidden by its fail-fast, it also requires a literal `bug.md` that step 3's merge bullet told the installer not to create (#130). **Fixing #127 alone would not turn this proof green** on a project with a differently-named bug template. The gate is armed **red** by the harness's own file — CAP-4's falsifier — and lies dormant until the first source edit. |
 | Does `review-gate.sh` stay silent on an ordinary branch? | **yes**, exit 0, empty stderr. |
 | Do both gates block when they should? | **yes** — `quality-gate` exit 2 naming the failing validator; `review-gate` exit 2 naming the project's own reviewer and receipt path, then exit 0 once a CLEAN receipt sits at HEAD. |
-| **Does a shipped reviewer open its contract with no hand-edit?** | **yes.** Attempted rather than read, from the project root, in the order the file names them: `_shared/…` misses, `.claude/agents/_shared/…` **opens**, `.agents/…` misses. This is the observation `1.0.0` was waiting on, and it confirms #82 on a real install. |
+| **Do the contract paths a shipped reviewer names resolve, unedited, from the project root?** | **yes.** Attempted rather than read — resolved by the operator, in the order the file names them; no reviewer was spawned: `_shared/…` misses, `.claude/agents/_shared/…` **opens**, `.agents/…` misses. This is the observation `1.0.0` was waiting on, and it confirms #82 on a real install. |
 
 **Not exercised, and why:** the reviewer was not *spawned* (needs a session restart in the target; verified on #76 and unchanged here). #84 could not fire — it needs an existing `CONTRACT.md` citing rule ids, and a clean install has none, so "not reproduced" says nothing about whether it is fixed. #81's check is `ruff`, which was not installed. Antigravity entirely. The cold interview.
 
-**Filed from this run:** #127, #128, #129.
+**Filed from this run:** #127, #128, #129 — and, from its review, #130 (the second cause above) and #131 (this reviewer's allow-list has drifted from the `- Validators:` line, so only 9 of 11 validators were independently re-run).
 
 ## Still to verify
 
