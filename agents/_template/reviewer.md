@@ -9,7 +9,7 @@ model: inherit
 
 <!-- The frontmatter placeholders are quoted deliberately: bare {{...}} is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before it is ever substituted. Keep the quotes. -->
 
-**Read `_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to {{LANGUAGE}} and to this project.
+**Read the reviewer contract first** — `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/_shared/reviewer-contract.md` under Antigravity — open whichever your project has. It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to {{LANGUAGE}} and to this project.
 
 ## Bash policy
 

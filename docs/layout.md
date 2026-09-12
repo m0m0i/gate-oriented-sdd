@@ -40,7 +40,7 @@ your-project/
 │   ├── settings.json              ←   the three hook layers
 │   ├── hooks/                     ←   gate-lib.sh, quality-gate.sh, review-gate.sh, steering-digest.sh
 │   └── agents/
-│       ├── reviewer-contract.md   ←   severity, output format, the receipt
+│       ├── _shared/reviewer-contract.md ←  severity, output format, the receipt
 │       ├── <name>-reviewer.md     ←   the project's reviewer
 │       └── <name>-reviewer/
 │           ├── rules/*.md         ←   the rulebook — never enters a normal session

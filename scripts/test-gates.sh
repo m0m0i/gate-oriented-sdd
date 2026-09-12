@@ -2124,9 +2124,375 @@ out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
 [ "$out" = "1" ] && c5=ok || c5=no
 case "$err" in *upgrade*) c6=ok ;; *) c6=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "init stripped of the mode line, its wiring, or its upgrade path fails" ok \
-  || report "init stripped of the mode line, its wiring, or its upgrade path fails" no \
-     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6"
+# #82's half: the contract-path guard checks that init NAMES the canonical path, and cannot
+# check that init says WHERE to put it. That sentence is the only statement of the destination,
+# and its absence is what produced four placements for one file.
+r=$(contracts_repo contracts-nodest)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "inside the agents directory you are installing into"
+p.write_text(p.read_text().replace(needle, "next to it"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c7=ok || c7=no
+case "$err" in *"agents directory"*) c8=ok ;; *) c8=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "init stripped of the mode line, its wiring, its upgrade path or its destination fails" ok \
+  || report "init stripped of the mode line, its wiring, its upgrade path or its destination fails" no \
+     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8"
+
+
+# --- shipped reviewers: the contract path they name -----------------------------------
+#
+# #82. A reference reviewer's FIRST instruction is "Read the reviewer contract first", and the
+# contract it points at tells a reviewer that cannot find it to say so and stop. So a path that
+# does not resolve does not degrade the review — it ends it, and the failure is
+# indistinguishable from a careful reviewer being careful. CAP-1, falsified at install time.
+#
+# Resolution is judged FROM THE PROJECT ROOT, and that is the whole of this case. A reviewer
+# reads its own instruction as a tool-using agent whose working directory is the project root,
+# not the directory its own file sits in. Judging from the agents directory is what let the
+# first cut of this branch pass a reviewer naming `_shared/reviewer-contract.md` alone — a path
+# that resolves from neither root, and whose obvious guess (`agents/_shared/`) lands on the
+# plugin's copy rather than the install's.
+
+# $1 = repo name, $2 = the agents directory. Echoes the PROJECT ROOT.
+install_reviewers() {
+  r="$TMP/$1"; a="$r/$2"
+  mkdir -p "$a/_shared"
+  cp "$ROOT/agents/_shared/reviewer-contract.md" "$a/_shared/"
+  cp "$ROOT/agents/ts-reviewer.md" "$ROOT/agents/python-reviewer.md" \
+     "$ROOT/agents/dart-flutter-reviewer.md" "$a/"
+  cp "$ROOT/agents/_template/reviewer.md" "$a/tpl-reviewer.md"
+  echo "$r"
+}
+
+# $1 = project root, $2 = agents dir. Names every reviewer none of whose stated paths resolves
+# from the project root. Prints nothing when every one of them can be opened.
+unresolved() {
+  python3 - "$1" "$2" <<'PYEOF'
+import pathlib, re, sys
+root, adir = pathlib.Path(sys.argv[1]), sys.argv[2]
+for f in sorted((root / adir).glob("*reviewer.md")):
+    stated = re.findall(r"[\w./-]*reviewer-contract\.md", f.read_text())
+    if not stated:
+        print(f"{f.name}: names no contract path"); continue
+    if not any((root / s).exists() for s in stated):
+        print(f"{f.name}: none of {sorted(set(stated))} resolves from the project root")
+PYEOF
+}
+
+# 61. Every shipped reviewer resolves from the project root in both layouts, and a broken one
+# is named.
+#
+# The template is the control and runs first: "the others are broken" is not evidence unless
+# "the one that is right passes" sits beside it. The fifth copy is the accusing half, added
+# after review observed that a passing-only case cannot distinguish "looked and found nothing"
+# from "could not look" — G-4.
+r=$(install_reviewers rv-claude ".claude/agents")
+out=$(unresolved "$r" ".claude/agents")
+case "$out" in *tpl-reviewer*) c0=no ;; *) c0=ok ;; esac
+[ -z "$out" ] && c1=ok || c1=no
+
+r=$(install_reviewers rv-antigravity ".agents")
+out2=$(unresolved "$r" ".agents")
+[ -z "$out2" ] && c2=ok || c2=no
+
+r=$(install_reviewers rv-broken ".claude/agents")
+printf 'x\n\nRead `agents/_shared/reviewer-contract.md` first.\n' > "$r/.claude/agents/bad-reviewer.md"
+out3=$(unresolved "$r" ".claude/agents")
+case "$out3" in *bad-reviewer*) c3=ok ;; *) c3=no ;; esac
+case "$out3" in *ts-reviewer*|*tpl-reviewer*) c4=no ;; *) c4=ok ;; esac   # and ONLY that one
+
+grep -q 'say so and stop' "$ROOT/agents/_shared/reviewer-contract.md" && c5=ok || c5=no
+
+# The contract must be named in the FIRST instruction, not buried in a footnote. The rewrite of
+# this case dropped the `Read \`…\`` anchor the old regex had, so position went unguarded — the
+# third thing neither condition covered, and it moved in the wrong direction.
+c6=ok
+for f in "$ROOT"/agents/ts-reviewer.md "$ROOT"/agents/python-reviewer.md \
+         "$ROOT"/agents/dart-flutter-reviewer.md "$ROOT"/agents/_template/reviewer.md; do
+  grep -q '^\*\*Read the reviewer contract first\*\*.*_shared/reviewer-contract\.md' "$f" || c6=no
+done
+
+[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "every shipped reviewer resolves from the project root, and a broken one is named" ok \
+  || report "every shipped reviewer resolves from the project root, and a broken one is named" no \
+     "template-control=$c0 claude=$c1 antigravity=$c2 accuses-broken=$c3 only-broken=$c4 stop-rule-intact=$c5 first-instruction=$c6 [$out|$out3]"
+
+
+# --- guards: scripts/check-contract-path.py -------------------------------------------
+#
+# One fact — where the reviewer contract lives — was written in many places and nothing
+# compared them, so it drifted into four forms and survived months of review. It surfaced only
+# when `init` was run against a real project (#76). A fix that corrects them and leaves the
+# comparison to review re-opens on the next edit, which is how it drifted in the first place.
+#
+# A NEW guard rather than an extension of check-receipt-schema.py: that one already has a
+# subject, and #117 records what happens when a guard acquires a second with a different
+# lifetime.
+
+# $1 = name. A repo holding every file the guard compares, all in agreement.
+cpath_repo() {
+  r="$TMP/$1"
+  mkdir -p "$r/scripts" "$r/agents/_shared" "$r/agents/_template" "$r/skills/init" "$r/docs" "$r/.claude/agents"
+  cp "$ROOT/scripts/check-contract-path.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-contract-path.py"
+  rv='x\n\nRead `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/_shared/reviewer-contract.md` under Antigravity.\n'
+  for f in ts python dart-flutter; do printf "$rv" > "$r/agents/$f-reviewer.md"; done
+  printf "$rv" > "$r/agents/_template/reviewer.md"
+  printf 'x\n' > "$r/agents/_shared/reviewer-contract.md"
+  printf 'Read `.claude/agents/_shared/reviewer-contract.md` first.\n' > "$r/.claude/agents/gate-sdd-reviewer.md"
+  printf 'copy `_shared/reviewer-contract.md` to it\n' > "$r/skills/init/SKILL.md"
+  printf '  |-- _shared/reviewer-contract.md\n' > "$r/docs/layout.md"
+  printf '"agents/_shared/reviewer-contract.md",\n' > "$r/scripts/check-receipt-schema.py"
+  printf '`.claude/agents/_shared/reviewer-contract.md`\n' > "$r/docs/CONTRACT.md"
+  printf '`_shared/reviewer-contract.md`\n' > "$r/AGENTS.md"
+  echo "$r"
+}
+# stdout is CAPTURED, not discarded: case 64 asserts the success line does NOT print, and
+# grepping stderr for a string that only ever reaches stdout is an assertion that cannot fail.
+# Case 49 captures stdout for exactly this reason; this helper did not, and the mutation table
+# in observations.md credited it with a catch it never made.
+run_cpath() { ( cd "$1" && python3 scripts/check-contract-path.py >"$TMP/cpout" 2>"$TMP/cperr"; printf '%s' "$?" ) }
+
+# 62. Agreement passes; ANY single file disagreeing fails and is named; a reviewer naming only
+# the relative form fails for its own reason.
+r=$(cpath_repo cp-control)
+out=$(run_cpath "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(cpath_repo cp-reviewer)
+printf 'Read `agents/_shared/reviewer-contract.md` first.\n' > "$r/agents/ts-reviewer.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *ts-reviewer.md*) c2=ok ;; *) c2=no ;; esac
+
+r=$(cpath_repo cp-template)
+printf 'Read `../_shared/reviewer-contract.md` first.\n' > "$r/agents/_template/reviewer.md"
+out=$(run_cpath "$r"); [ "$out" = "1" ] && c3=ok || c3=no
+
+# The real defect's shape: a document drawing the flat sibling instead of the _shared/ form.
+r=$(cpath_repo cp-layout)
+printf '  |-- reviewer-contract.md\n' > "$r/docs/layout.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c4=ok || c4=no
+case "$err" in *layout.md*) c5=ok ;; *) c5=no ;; esac
+
+r=$(cpath_repo cp-sibling)
+printf '".claude/agents/reviewer-contract.md",\n' > "$r/scripts/check-receipt-schema.py"
+out=$(run_cpath "$r"); [ "$out" = "1" ] && c6=ok || c6=no
+
+# A reviewer naming ONLY the relative form. This is what this branch's first cut shipped, and
+# it failed its own review: a reviewer's working directory is the PROJECT ROOT, so that path
+# resolves to nothing.
+r=$(cpath_repo cp-relative-only)
+printf 'Read `_shared/reviewer-contract.md` first.\n' > "$r/agents/ts-reviewer.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c7=ok || c7=no
+case "$err" in *"does not name"*) c8=ok ;; *) c8=no ;; esac
+
+# The ALLOWED check on its own. Every mutant above that removes it is ALSO caught by the
+# concrete-path check, so without this sub-case that rule could be deleted with the suite
+# green — a guard half that cannot fail. Here the reviewer names a valid concrete form AND a
+# junk one, so the concrete check is satisfied and only ALLOWED can object.
+r=$(cpath_repo cp-extra-form)
+printf 'Read `.claude/agents/_shared/reviewer-contract.md`, or `vendor/reviewer-contract.md`.\n' > "$r/agents/ts-reviewer.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *vendor*) c10=ok ;; *) c10=no ;; esac
+
+# A SHIPPED reviewer naming only one destination. It satisfies ALLOWED and satisfies "at least
+# one concrete form", so before the SHIPPED/INSTALLED split it passed — handing every
+# Antigravity consumer a reviewer that cannot open its contract. That is #82's own shape
+# narrowed to one harness, and two-harness correctness is why the issue's fix was overruled.
+r=$(cpath_repo cp-one-harness)
+printf 'Read `_shared/reviewer-contract.md`, at `.claude/agents/_shared/reviewer-contract.md`.\n' > "$r/agents/ts-reviewer.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c11=ok || c11=no
+# The specific sentence, not the bare path: the failure epilogue enumerates CONCRETE on EVERY
+# failure, so grepping for `.agents/_shared` alone was satisfied by the epilogue regardless of
+# which problem fired — and saying WHICH destination is missing is the entire value of the
+# SHIPPED rule. Second time on this branch that an assertion read the wrong text.
+case "$err" in *"is shipped to both harnesses and does not name .agents/_shared"*) c12=ok ;; *) c12=no ;; esac
+
+# …while the INSTALLED reviewer naming exactly one is correct and must stay green.
+r=$(cpath_repo cp-install-one)
+out=$(run_cpath "$r"); [ "$out" = "0" ] && c13=ok || c13=no
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13" = "okokokokokokokokokokokokokok" ] && report "one contract placement, any file disagreeing is named, and a shipped reviewer must name both harnesses" ok \
+  || report "one contract placement, any file disagreeing is named, and a shipped reviewer must name both harnesses" no \
+     "control=$c0 reviewer-exit=$c1 names=$c2 template=$c3 layout-exit=$c4 names=$c5 sibling=$c6 relative-only=$c7 names-reason=$c8 extra-form=$c9 names-junk=$c10 one-harness=$c11 names-missing=$c12 install-one-ok=$c13"
+
+# 63. A statement the guard cannot find or read is a THIRD outcome, never agreement.
+r=$(cpath_repo cp-missing); rm "$r/docs/layout.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *layout.md*) c2=ok ;; *) c2=no ;; esac
+
+r=$(cpath_repo cp-silent); printf 'no mention here at all\n' > "$r/docs/layout.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *"names no"*) c4=ok ;; *) c4=no ;; esac
+
+r=$(cpath_repo cp-unreadable)
+chmod 000 "$r/docs/layout.md" 2>/dev/null
+if cat "$r/docs/layout.md" >/dev/null 2>&1; then
+  chmod 644 "$r/docs/layout.md" 2>/dev/null
+  c5=ok; c6=ok                     # permissions not enforced here; a case that cannot fail is worse than none
+else
+  out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+  chmod 644 "$r/docs/layout.md" 2>/dev/null
+  [ "$out" = "1" ] && c5=ok || c5=no
+  case "$err" in *"cannot be read"*) c6=ok ;; *) c6=no ;; esac
+fi
+
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] && report "a statement the contract guard cannot find or read fails, never agrees" ok \
+  || report "a statement the contract guard cannot find or read fails, never agrees" no \
+     "missing-exit=$c1 names=$c2 silent-exit=$c3 silent-msg=$c4 unreadable-exit=$c5 unreadable-msg=$c6"
+
+# 64. An empty or shrunken work-set must fail, not print "0 source(s) agree".
+#
+# Case 49 pins this for check-receipt-schema.py's two tuples, and its comment says the new
+# tuple there "arrived without the equivalent". This guard arrived the same way one release
+# later, and review caught it: emptying SHIPPED leaves the three shipped reviewers uncompared
+# while `3 source(s) agree` prints at exit 0 — the exact defect #82 exists for, passing.
+#
+# The mutation edits the COPY in the fixture, so it tests the shipped floor rather than a
+# reimplementation of it.
+shrink_cpath() {  # $1 = repo, $2 = the tuple to empty
+  # Scans to the BALANCED closing paren rather than to a `)` at line start. The first cut used
+  # `^NAME = \(.*?^\)`, which works for a multi-line tuple and silently runs past a ONE-LINE
+  # one — it swallowed `EXACT = SHIPPED + INSTALLED` and the guard then died of NameError,
+  # exiting 1 for the wrong reason and turning this case green while the floor it tests was
+  # deleted. Third instance on this branch of a fixture failure wearing a guard failure's
+  # clothes, so the result is now parsed before it is used.
+  python3 - "$1" "$2" <<'PYEOF'
+import ast, pathlib, re, sys
+name = sys.argv[2]
+p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
+src = p.read_text()
+m = re.search(rf"^{name} = \(", src, flags=re.M)
+if not m:
+    raise SystemExit(f"fixture no-op: {name} tuple not found")
+i, depth = m.end() - 1, 0
+while i < len(src):
+    if src[i] == "(":
+        depth += 1
+    elif src[i] == ")":
+        depth -= 1
+        if depth == 0:
+            break
+    i += 1
+else:
+    raise SystemExit(f"fixture broken: {name} tuple never closes")
+out = src[: m.start()] + f"{name} = ()" + src[i + 1 :]
+try:
+    ast.parse(out)
+except SyntaxError as exc:
+    raise SystemExit(f"fixture broken: shrinking {name} produced unparseable source ({exc})")
+p.write_text(out)
+PYEOF
+}
+
+r=$(cpath_repo cp-empty-shipped)
+if shrink_cpath "$r" SHIPPED; then cf=ok; else cf=no; fi
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+{ [ "$out" = "1" ] && [ "$cf" = ok ]; } && c1=ok || c1=no
+case "$err" in *floor*) c2=ok ;; *) c2=no ;; esac
+sout=$(cat "$TMP/cpout")
+case "$sout" in *"source(s) agree"*) c3=no ;; *) c3=ok ;; esac   # the success line must NOT print
+
+r=$(cpath_repo cp-empty-suffix)
+if shrink_cpath "$r" SUFFIX; then cf2=ok; else cf2=no; fi
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+# The REASON, not just the exit code: a guard that dies during import also exits 1, and the
+# floor these exist to test would be gone while the case read green. #124's own pattern, and
+# two of its instances were in the commit that filed it.
+{ [ "$out" = "1" ] && [ "$cf2" = ok ]; } && c4=ok || c4=no
+case "$err" in *Traceback*) c4=no ;; esac
+case "$err" in *floor*) : ;; *) c4=no ;; esac
+
+# The INSTALLED clause was pinned by nothing: delete it and the suite stayed green, after which
+# emptying INSTALLED drops this repository's own reviewer out of the comparison and prints
+# "9 source(s) agree" at exit 0 — the dogfood file leaving the guard silently, which is the very
+# reason it was added.
+r=$(cpath_repo cp-empty-installed)
+if shrink_cpath "$r" INSTALLED; then cf3=ok; else cf3=no; fi
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+{ [ "$out" = "1" ] && [ "$cf3" = ok ]; } && c5=ok || c5=no
+case "$err" in *Traceback*) c5=no ;; esac
+case "$err" in *floor*) : ;; *) c5=no ;; esac
+
+# A duplicate satisfies a floor that counts entries while displacing the name it replaced.
+r=$(cpath_repo cp-dupe)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
+src = p.read_text()
+out = src.replace('"agents/python-reviewer.md",', '"agents/ts-reviewer.md",')
+if out == src:
+    raise SystemExit("fixture no-op: python-reviewer entry not found")
+p.write_text(out)
+PYEOF
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c6=ok || c6=no
+case "$err" in *duplicate*) c7=ok ;; *) c7=no ;; esac
+
+# An entry moved to the tuple with the weaker obligation — a one-line diff that reads as tidying
+# and hands back round 2's HIGH.
+r=$(cpath_repo cp-misgrouped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
+src = p.read_text()
+out = src.replace('INSTALLED = (".claude/agents/gate-sdd-reviewer.md",)',
+                  'INSTALLED = (".claude/agents/gate-sdd-reviewer.md", "agents/ts-reviewer.md")')
+if out == src:
+    raise SystemExit("fixture no-op: INSTALLED tuple not found")
+p.write_text(out)
+PYEOF
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c8=ok || c8=no
+case "$err" in *"only an install may name one destination"*) c9=ok ;; *) c9=no ;; esac
+
+# A non-reviewer padding SHIPPED to hold the floor while a real reviewer leaves it. Floors and
+# distinctness both pass; only the prefix clause can object. This is the mutation demonstrated
+# in round 3 — pad the tuple, move the reviewer — and it was caught by nothing.
+r=$(cpath_repo cp-misgrouped-shipped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
+src = p.read_text()
+out = src.replace('"agents/ts-reviewer.md",', '"docs/layout.md",')
+if out == src:
+    raise SystemExit("fixture no-op: ts-reviewer entry not found")
+p.write_text(out)
+PYEOF
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c10=ok || c10=no
+case "$err" in *"does not live under"*) c11=ok ;; *) c11=no ;; esac
+
+# And a reviewer demoted into SUFFIX, where only the canonical suffix is required — the rule
+# under which `agents/_shared/reviewer-contract.md`, the original defect, passes.
+r=$(cpath_repo cp-reviewer-in-suffix)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
+src = p.read_text()
+needle = '    "docs/CONTRACT.md",'
+out = src.replace(needle, needle + '\n    "agents/ts-reviewer.md",')
+if out == src:
+    raise SystemExit("fixture no-op: docs/CONTRACT.md entry not found")
+p.write_text(out)
+PYEOF
+then cf4=ok; else cf4=no; fi
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+{ [ "$out" = "1" ] && [ "$cf4" = ok ]; } && c12b=ok || c12b=no
+case "$err" in *"sits in SUFFIX"*) c13b=ok ;; *) c13b=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12b$c13b" = "okokokokokokokokokokokokok" ] && report "an empty, duplicated or misgrouped contract-path work-set fails rather than agreeing" ok \
+  || report "an empty, duplicated or misgrouped contract-path work-set fails rather than agreeing" no \
+     "shipped-exit=$c1 says-floor=$c2 no-success-line=$c3 suffix-exit=$c4 installed-exit=$c5 dupe-exit=$c6 says-dupe=$c7 misgrouped-exit=$c8 says-group=$c9 pad-shipped=$c10 says-prefix=$c11 reviewer-in-suffix=$c12b says-suffix=$c13b"
 
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"

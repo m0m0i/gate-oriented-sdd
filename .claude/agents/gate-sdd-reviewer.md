@@ -7,7 +7,7 @@ model: inherit
 
 # gate-sdd-reviewer
 
-**Read `_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is specific to this project.
+**Read `.claude/agents/_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is specific to this project.
 
 This repository is a harness whose product is shell scripts and prose. Markdown under `skills/` and `agents/` is not documentation — it is the deliverable, and it is executed by a model. Review it as source.
 

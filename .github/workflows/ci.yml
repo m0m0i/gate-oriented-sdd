@@ -62,6 +62,14 @@ jobs:
       - name: Steering anchors are readable
         run: ./assets/check-steering-anchors.sh
 
+      # One fact — where the reviewer contract lives — was written in five places and nothing
+      # compared them, so it drifted into four forms and survived months of review. It surfaced
+      # only when init was run against a real project. A shipped reviewer whose first
+      # instruction does not resolve is told by that contract to stop, so the drift ends
+      # reviews rather than degrading them.
+      - name: Every statement of the contract path agrees
+        run: ./scripts/check-contract-path.py
+
       # The document set is the one validator the turn-end gate structurally cannot cover:
       # quality-gate.sh runs the `- Validators:` line only when a path matching
       # `- Source globs:` changed, and a document is never source — the two sets are disjoint

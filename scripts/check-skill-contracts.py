@@ -14,7 +14,7 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Fifteen today. A sixteenth needs an argument, in the spec that proposes it, for why review cannot
+Sixteen today. A seventeenth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time.
 """
@@ -27,6 +27,15 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 #: (skill file, required substring, why it must stay)
 CONTRACTS = (
+    (
+        "skills/init/SKILL.md",
+        "inside the agents directory you are installing into",
+        "The contract-path guard checks that init NAMES the canonical path; it cannot check "
+        "that init says WHERE to put it. The sentence this pins is the only statement of the "
+        "destination, and its absence is what produced four placements for one file — #82. "
+        "Review cannot defend it: reverting to 'next to it' reads as concision, and what it "
+        "removes is the one instruction that stops each install from guessing.",
+    ),
     (
         "skills/init/SKILL.md",
         "A project that already carries a `- Mode:` line is an upgrade, never a fresh install",
