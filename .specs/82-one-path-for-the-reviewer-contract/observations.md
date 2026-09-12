@@ -321,3 +321,38 @@ all five and the green control goes red. `INSTALLED_PREFIXES = ("",)` behaves th
 constants are now pinned from both sides by clauses that share them — a stronger property than
 the fixtures alone provide, and it arrived as a side effect of closing the sink rather than by
 design.
+
+## Review round 6 — APPROVE, zero findings above INFO
+
+Reviewed at `a4016cb`; receipt written. The reviewer checked the one thing a refactor can break
+silently — whether the lift unpinned the eight mutations verified against the pre-lift code. It
+did not: all four tuples are still module-level and above the new function, so no fixture pattern
+crosses the new boundary and `shrink_cpath`'s `ast.parse` still applies.
+
+Its closing note is worth keeping: `problems` names two lists in one function — the walrus
+binding from `shape_problems()`, then a fresh list for the comparison loop. Safe either way,
+because the shape branch always raises when non-empty, so control reaches the second only when
+the first was empty. Recorded so nobody re-derives it.
+
+## Six rounds, and what they were about
+
+Two HIGH in round 1, two in round 2, then MEDIUMs thinning to nothing. Not one of them was in the
+*feature*. The reviewers were right after round 1; everything since was about whether the
+evidence could fail.
+
+**The finding that justifies the whole layer:** round 1's HIGH 2 was found because the reviewer
+**tried to use the instruction the branch had just written**, failed, and guessed the wrong file.
+No amount of reading would have produced it — the fix was internally consistent, all validators
+were green, and it was wrong. That is the argument for an independent reviewer that executes
+rather than inspects, stated better by an incident than by any rule.
+
+**The failure this branch kept repeating**, four times, each time in the evidence rather than the
+artifact: *a check that could not fire*. An assertion reading the wrong stream. A fixture whose
+regex missed a one-line tuple and crashed the guard instead of mutating it. A fixture whose `\n`
+became a literal newline. A clause pinned by nothing. Each was invisible to a green suite and
+each was found only by breaking the thing on purpose and **reading why it went red** — which is
+now #124.
+
+**And the fix twice carried its own defect in.** Round 1's repair left `init` instructing
+operators to delete exactly what it had added; round 2's `any` let a shipped reviewer serve one
+harness. A correct change is not a finished one.
