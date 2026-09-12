@@ -2207,9 +2207,18 @@ case "$out3" in *ts-reviewer*|*tpl-reviewer*) c4=no ;; *) c4=ok ;; esac   # and 
 
 grep -q 'say so and stop' "$ROOT/agents/_shared/reviewer-contract.md" && c5=ok || c5=no
 
-[ "$c0$c1$c2$c3$c4$c5" = "okokokokokok" ] && report "every shipped reviewer resolves from the project root, and a broken one is named" ok \
+# The contract must be named in the FIRST instruction, not buried in a footnote. The rewrite of
+# this case dropped the `Read \`…\`` anchor the old regex had, so position went unguarded — the
+# third thing neither condition covered, and it moved in the wrong direction.
+c6=ok
+for f in "$ROOT"/agents/ts-reviewer.md "$ROOT"/agents/python-reviewer.md \
+         "$ROOT"/agents/dart-flutter-reviewer.md "$ROOT"/agents/_template/reviewer.md; do
+  grep -q '^\*\*Read the reviewer contract first\*\*' "$f" || c6=no
+done
+
+[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "every shipped reviewer resolves from the project root, and a broken one is named" ok \
   || report "every shipped reviewer resolves from the project root, and a broken one is named" no \
-     "template-control=$c0 claude=$c1 antigravity=$c2 accuses-broken=$c3 only-broken=$c4 stop-rule-intact=$c5 [$out|$out3]"
+     "template-control=$c0 claude=$c1 antigravity=$c2 accuses-broken=$c3 only-broken=$c4 stop-rule-intact=$c5 first-instruction=$c6 [$out|$out3]"
 
 
 # --- guards: scripts/check-contract-path.py -------------------------------------------
@@ -2241,7 +2250,11 @@ cpath_repo() {
   printf '`_shared/reviewer-contract.md`\n' > "$r/AGENTS.md"
   echo "$r"
 }
-run_cpath() { ( cd "$1" && python3 scripts/check-contract-path.py >/dev/null 2>"$TMP/cperr"; printf '%s' "$?" ) }
+# stdout is CAPTURED, not discarded: case 64 asserts the success line does NOT print, and
+# grepping stderr for a string that only ever reaches stdout is an assertion that cannot fail.
+# Case 49 captures stdout for exactly this reason; this helper did not, and the mutation table
+# in observations.md credited it with a catch it never made.
+run_cpath() { ( cd "$1" && python3 scripts/check-contract-path.py >"$TMP/cpout" 2>"$TMP/cperr"; printf '%s' "$?" ) }
 
 # 62. Agreement passes; ANY single file disagreeing fails and is named; a reviewer naming only
 # the relative form fails for its own reason.
@@ -2276,7 +2289,7 @@ r=$(cpath_repo cp-relative-only)
 printf 'Read `_shared/reviewer-contract.md` first.\n' > "$r/agents/ts-reviewer.md"
 out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 [ "$out" = "1" ] && c7=ok || c7=no
-case "$err" in *"no concrete path"*) c8=ok ;; *) c8=no ;; esac
+case "$err" in *"does not name"*) c8=ok ;; *) c8=no ;; esac
 
 # The ALLOWED check on its own. Every mutant above that removes it is ALSO caught by the
 # concrete-path check, so without this sub-case that rule could be deleted with the suite
@@ -2288,9 +2301,23 @@ out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 [ "$out" = "1" ] && c9=ok || c9=no
 case "$err" in *vendor*) c10=ok ;; *) c10=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10" = "okokokokokokokokokokok" ] && report "one contract placement, any file disagreeing is named, and a relative-only reviewer fails" ok \
-  || report "one contract placement, any file disagreeing is named, and a relative-only reviewer fails" no \
-     "control=$c0 reviewer-exit=$c1 names=$c2 template=$c3 layout-exit=$c4 names=$c5 sibling=$c6 relative-only=$c7 names-reason=$c8 extra-form=$c9 names-junk=$c10"
+# A SHIPPED reviewer naming only one destination. It satisfies ALLOWED and satisfies "at least
+# one concrete form", so before the SHIPPED/INSTALLED split it passed — handing every
+# Antigravity consumer a reviewer that cannot open its contract. That is #82's own shape
+# narrowed to one harness, and two-harness correctness is why the issue's fix was overruled.
+r=$(cpath_repo cp-one-harness)
+printf 'Read `_shared/reviewer-contract.md`, at `.claude/agents/_shared/reviewer-contract.md`.\n' > "$r/agents/ts-reviewer.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c11=ok || c11=no
+case "$err" in *".agents/_shared"*) c12=ok ;; *) c12=no ;; esac
+
+# …while the INSTALLED reviewer naming exactly one is correct and must stay green.
+r=$(cpath_repo cp-install-one)
+out=$(run_cpath "$r"); [ "$out" = "0" ] && c13=ok || c13=no
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13" = "okokokokokokokokokokokokokok" ] && report "one contract placement, any file disagreeing is named, and a shipped reviewer must name both harnesses" ok \
+  || report "one contract placement, any file disagreeing is named, and a shipped reviewer must name both harnesses" no \
+     "control=$c0 reviewer-exit=$c1 names=$c2 template=$c3 layout-exit=$c4 names=$c5 sibling=$c6 relative-only=$c7 names-reason=$c8 extra-form=$c9 names-junk=$c10 one-harness=$c11 names-missing=$c12 install-one-ok=$c13"
 
 # 63. A statement the guard cannot find or read is a THIRD outcome, never agreement.
 r=$(cpath_repo cp-missing); rm "$r/docs/layout.md"
@@ -2323,7 +2350,7 @@ fi
 #
 # Case 49 pins this for check-receipt-schema.py's two tuples, and its comment says the new
 # tuple there "arrived without the equivalent". This guard arrived the same way one release
-# later, and review caught it: emptying EXACT leaves the three shipped reviewers uncompared
+# later, and review caught it: emptying SHIPPED leaves the three shipped reviewers uncompared
 # while `3 source(s) agree` prints at exit 0 — the exact defect #82 exists for, passing.
 #
 # The mutation edits the COPY in the fixture, so it tests the shipped floor rather than a
@@ -2340,12 +2367,13 @@ p.write_text(out)
 PYEOF
 }
 
-r=$(cpath_repo cp-empty-exact)
-if shrink_cpath "$r" EXACT; then cf=ok; else cf=no; fi
+r=$(cpath_repo cp-empty-shipped)
+if shrink_cpath "$r" SHIPPED; then cf=ok; else cf=no; fi
 out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 { [ "$out" = "1" ] && [ "$cf" = ok ]; } && c1=ok || c1=no
 case "$err" in *floor*) c2=ok ;; *) c2=no ;; esac
-case "$err" in *"source(s) agree"*) c3=no ;; *) c3=ok ;; esac   # the success line must NOT print
+sout=$(cat "$TMP/cpout")
+case "$sout" in *"source(s) agree"*) c3=no ;; *) c3=ok ;; esac   # the success line must NOT print
 
 r=$(cpath_repo cp-empty-suffix)
 if shrink_cpath "$r" SUFFIX; then cf2=ok; else cf2=no; fi
@@ -2354,7 +2382,7 @@ out=$(run_cpath "$r")
 
 [ "$c1$c2$c3$c4" = "okokokok" ] && report "an empty contract-path work-set fails rather than agreeing with nothing" ok \
   || report "an empty contract-path work-set fails rather than agreeing with nothing" no \
-     "exact-exit=$c1 says-floor=$c2 no-success-line=$c3 suffix-exit=$c4"
+     "shipped-exit=$c1 says-floor=$c2 no-success-line=$c3 suffix-exit=$c4"
 
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"

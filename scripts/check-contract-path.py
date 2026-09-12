@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Every statement of where the reviewer contract lives must name the same place.
 
-#82: that one fact was written in five files and nothing compared them, so it drifted into
+#82: that one fact was written in file after file and nothing compared them, so it drifted into
 four different forms and stayed that way for months. Review did not catch it — it surfaced
 only when `init` was run against a real project (#76), and by then a consumer copying a
 reference reviewer got a reviewer whose first instruction did not resolve, which the contract
 itself answers with "say so and stop".
 
-**The path is relative to the reviewer, not to a harness root.** These files ship to Claude
-Code (`.claude/agents/`) and to Antigravity (`.agents/`), so a single absolute root would be
-wrong for one of them by construction. `_shared/reviewer-contract.md` resolves under both.
+**A reviewer names the relative form AND a concrete destination per harness.** These files ship
+to Claude Code (`.claude/agents/`) and to Antigravity (`.agents/`), so a single absolute root
+would be wrong for one of them by construction — but the relative form alone resolves from
+*neither* project root, because a reviewer reads its own instruction with the project root as
+its working directory. The relative form says where the file lives; the concrete ones are what
+can actually be opened. Both belong in the file.
 
 A separate guard rather than an extension of `check-receipt-schema.py`: that one already has a
 subject, and #117 records what a guard acquiring a second one with a different lifetime costs.
@@ -45,16 +48,25 @@ ALLOWED = (CANONICAL,) + CONCRETE
 #: ends with the canonical suffix and is exactly what was broken, because `agents/` is the
 #: plugin's directory and does not exist in an install. So is `../_shared/…`. Only equality
 #: separates a path that resolves from one that merely looks similar.
-EXACT = (
+#: SHIPPED — templates copied into either harness, so each must name BOTH concrete
+#: destinations. "At least one concrete form" is not enough here and the difference is this
+#: branch's central invariant: a shipped reviewer carrying only `.claude/agents/…` passes every
+#: other rule while handing every Antigravity consumer a reviewer that cannot open its
+#: contract. That is #82's own shape, narrowed to one harness.
+SHIPPED = (
     "agents/ts-reviewer.md",
     "agents/python-reviewer.md",
     "agents/dart-flutter-reviewer.md",
     "agents/_template/reviewer.md",
-    # This repository's own install. It was already correct when #82 was filed — which is
-    # precisely why dogfooding never surfaced the bug: the instance we run was right and the
-    # product we ship was wrong, and nothing compared the two. Pinned here so that stays true.
-    ".claude/agents/gate-sdd-reviewer.md",
 )
+
+#: INSTALLED — this repository's own reviewer. It lives in one harness, so it names that one
+#: destination and naming the other would be noise. It was already correct when #82 was filed,
+#: which is precisely why dogfooding never surfaced the bug: the instance we run was right and
+#: the product we ship was wrong, and nothing compared the two. Pinned so that stays true.
+INSTALLED = (".claude/agents/gate-sdd-reviewer.md",)
+
+EXACT = SHIPPED + INSTALLED
 
 #: SUFFIX — documents and sibling guards that draw or reference a CONCRETE tree, where
 #: `.claude/agents/_shared/reviewer-contract.md` is correct and must stay allowed. They are
@@ -77,7 +89,7 @@ SOURCES = EXACT + SUFFIX
 #: the success line print `0 source(s) agree` at exit 0 — a guard certifying a comparison it
 #: never made. `check-receipt-schema.py:150,256` already carries this for its two tuples and
 #: case 49 pins it; the same tuple arrived here without it one release later.
-MIN_EXACT, MIN_SUFFIX = 5, 5
+MIN_SHIPPED, MIN_INSTALLED, MIN_SUFFIX = 4, 1, 5
 
 #: Constraint this imposes, stated because it is real and otherwise invisible: a document must
 #: write the whole path on ONE physical line. Splitting `_shared/` onto its own tree row leaves
@@ -93,10 +105,11 @@ MENTION = re.compile(r"[\w./-]*reviewer-contract\.md")
 
 
 def main():
-    if len(EXACT) < MIN_EXACT or len(SUFFIX) < MIN_SUFFIX:
+    if len(SHIPPED) < MIN_SHIPPED or len(INSTALLED) < MIN_INSTALLED or len(SUFFIX) < MIN_SUFFIX:
         print(
             f"check-contract-path FAILED\n"
-            f"  work-set below its floor: {len(EXACT)} exact (min {MIN_EXACT}), "
+            f"  work-set below its floor: {len(SHIPPED)} shipped (min {MIN_SHIPPED}), "
+            f"{len(INSTALLED)} installed (min {MIN_INSTALLED}), "
             f"{len(SUFFIX)} suffix (min {MIN_SUFFIX}).\n"
             f"  A source removed from a tuple is a source that stopped being compared, and "
             f"that must not read as agreement.",
@@ -133,13 +146,22 @@ def main():
                         f"{name}: says `{stated}`, which is not one of the allowed forms "
                         f"({', '.join(ALLOWED)})"
                     )
-            # …and at least one form a reader can actually open from the project root. Naming
-            # only the relative form is how #82's replacement fix failed its own review.
-            if not any(m in CONCRETE for m in mentions):
+            # …and the forms a reader can actually open from the project root. `all` for a
+            # shipped template, because it is copied into either harness; `any` for an install,
+            # which only has one. Naming only the relative form is how this branch's own
+            # replacement fix failed its review.
+            missing = [c for c in CONCRETE if c not in mentions]
+            if name in SHIPPED and missing:
                 problems.append(
-                    f"{name}: names no concrete path. A reviewer reads its own instruction "
-                    f"with the PROJECT ROOT as its working directory, so `{CANONICAL}` alone "
-                    f"resolves to nothing — name {' or '.join(CONCRETE)} as well"
+                    f"{name}: is shipped to both harnesses and does not name "
+                    f"{', '.join(missing)}. A reviewer reads its own instruction with the "
+                    f"PROJECT ROOT as its working directory, so `{CANONICAL}` alone resolves "
+                    f"to nothing, and one destination serves only one harness"
+                )
+            elif name in INSTALLED and not any(m in CONCRETE for m in mentions):
+                problems.append(
+                    f"{name}: is an install and names no concrete path — one of "
+                    f"{', '.join(CONCRETE)} must be present"
                 )
         else:
             for stated in sorted(set(mentions)):
@@ -153,9 +175,10 @@ def main():
         for p in problems:
             print(f"  {p}", file=sys.stderr)
         print(
-            f"\n  The reviewer contract is named relative to the reviewer: `{CANONICAL}`.\n"
-            f"  It resolves under .claude/agents/ and under .agents/, which an absolute\n"
-            f"  path cannot do — these files ship to both harnesses.",
+            f"\n  A reviewer names `{CANONICAL}` — where the file lives — AND the concrete\n"
+            f"  path for each harness it ships to: {', '.join(CONCRETE)}.\n"
+            f"  The relative form alone resolves from neither project root, because a reviewer\n"
+            f"  reads its own instruction with the project root as its working directory.",
             file=sys.stderr,
         )
         raise SystemExit(1)

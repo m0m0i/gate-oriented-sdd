@@ -94,7 +94,7 @@ the mutation from everything else in the file.
 
 | Mutation | Caught by |
 | :-- | :-- |
-| floors removed | `empty contract-path work-set` — exact-exit, says-floor, no-success-line |
+| floors removed | `empty contract-path work-set` — exact-exit, says-floor. ~~no-success-line~~ **did not catch it**: that assertion grepped stderr for a string that only reaches stdout, which `run_cpath` discarded. Corrected in round 2; see below. |
 | concrete-path rule removed | `relative-only reviewer fails` |
 | ALLOWED-set check removed | `extra-form` (isolated on purpose — see below) |
 | a shipped reviewer reverted to relative-only | `resolves from the project root` |
@@ -103,3 +103,82 @@ The third needed its own sub-case. Every mutation that removes the `ALLOWED` che
 caught by the concrete-path check, so without a reviewer naming a valid concrete form *and* a junk
 one, that rule could have been deleted with the suite green — a guard half that cannot fail.
 Found by mutating it and watching nothing go red.
+
+## Review round 2 — BLOCKED, 0 blockers, 2 HIGH, 3 MEDIUM, 2 LOW
+
+Reviewed at `1178f08`. Both round-1 HIGHs cleared. Both new ones are **residue of that fix** —
+one in a file the fix did not revisit, one inside the condition the fix added.
+
+### HIGH 1 — `init` still ordered the operator to delete the working paths
+
+Round 1 corrected every reviewer and left `skills/init/SKILL.md:60` untouched:
+
+> "The reviewer names it relative to itself, so that one path is correct under either harness
+> **and must not be rewritten to an absolute one**."
+
+Both halves were false by then. The premise is what round 1 refuted. The instruction is worse:
+every reviewer `init` hands the operator now contains exactly the two absolute forms that
+sentence forbids, so an operator — or an agent — following `init` literally has a standing
+instruction to strip the only paths a reviewer can open. **The fix's own installer was the
+reintroduction route for the defect.**
+
+`check-contract-path.py` could not see it: `SUFFIX` inspects paths, and this is a sentence *about*
+paths. A guard that reads mentions cannot read intent, which is the same seam the 16th
+`check-skill-contracts.py` entry exists in.
+
+### HIGH 2 — "at least one concrete form" let a shipped reviewer serve one harness
+
+`if not any(m in CONCRETE for m in mentions)` asked for *at least one*, and `EXACT` held two
+kinds of file with two different obligations. Deleting `.agents/_shared/…` from a shipped
+reviewer left `_shared/…` (in `ALLOWED`) and `.claude/agents/…` (in `CONCRETE`) — both conditions
+satisfied, eleven validators green, **and every Antigravity consumer handed a reviewer that
+cannot open its contract.** Demonstrated before fixing.
+
+That is #82's own shape narrowed to one harness — and two-harness correctness is the entire
+reason the issue's proposed fix was overruled, so it was this branch's central invariant left
+unguarded. Case 61 could not see it either: it installs into one layout at a time and asks
+`any`, so the `.claude/` mention alone satisfies the `.claude/` run.
+
+Split by obligation rather than patched with a flag: **`SHIPPED`** (templates copied into either
+harness — every form in `ALLOWED`, and **both** concrete destinations present) and
+**`INSTALLED`** (this repo's own reviewer — exactly one, its own), each with its own floor.
+
+### MEDIUM — the assertion that credited itself with a catch it never made
+
+Round 1's `no-success-line` sub-case grepped **stderr** for `source(s) agree`, a string that only
+ever reaches **stdout**, which `run_cpath` sent to `/dev/null`. `c3=ok` unconditionally. Case 49 —
+the case this was modelled on — captures stdout and greps that; this helper did not.
+
+The round-1 mutation table above credited it with catching the floor mutation. **It caught
+nothing**, and that row is now corrected in place rather than rewritten, per #102. `run_cpath`
+captures stdout; a mutant that prints the success line on the floor path now turns it red, which
+is how that was verified rather than assumed.
+
+This is the third time on this branch that a check written to catch something could not have.
+The pattern is specific enough to name: **an assertion about output must read the stream the
+output actually goes to**, and the only way to know is to make the thing it forbids happen.
+
+### The rest
+
+- **The guard's docstring and failure epilogue still taught the refuted rule** — and the epilogue
+  is the closing paragraph of *every* failure, so someone tripping `does not name .agents/…` was
+  told in the same breath that the relative form resolves and absolute paths are the mistake.
+  A guard's failure text is read at the worst possible moment and treated as authoritative. Both
+  corrected.
+- **The clarification in `spec.md` still recorded the refuted answer**, unmarked, and that is what
+  a later spec reads to learn how this was settled. Amended in place with today's date, no AC line
+  touched — the `docs/verified.md` convention of leaving the original and adding the supersession
+  in the same document.
+- **`unresolved()` lost its position anchor** in round 1's rewrite, so a reviewer keeping the path
+  in a footnote would have passed. Restored as an explicit assertion that every shipped reviewer's
+  first instruction is the contract line.
+- The reviewers now end "— open whichever your project has", because the contract's stop rule is
+  deliberately aggressive and a reviewer that tries one path, misses, and stops would be the
+  failure mode reintroduced by naming two.
+
+### What three rounds of this have actually been about
+
+Twice now the branch has been wrong about where a reviewer can open its contract —
+plugin-relative, then reviewer-relative — and both times the error was invisible to eleven green
+validators and obvious to someone who **tried to use the instruction**. The guards were never the
+problem; what they check was.

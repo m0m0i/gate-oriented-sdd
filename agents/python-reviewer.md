@@ -7,7 +7,7 @@ model: inherit
 
 # python-reviewer
 
-**Read the reviewer contract first** — `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/_shared/reviewer-contract.md` under Antigravity. It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to Python.
+**Read the reviewer contract first** — `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/_shared/reviewer-contract.md` under Antigravity — open whichever your project has. It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to Python.
 
 ## Bash policy
 
