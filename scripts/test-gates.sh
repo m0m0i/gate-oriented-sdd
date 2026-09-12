@@ -2213,7 +2213,7 @@ grep -q 'say so and stop' "$ROOT/agents/_shared/reviewer-contract.md" && c5=ok |
 c6=ok
 for f in "$ROOT"/agents/ts-reviewer.md "$ROOT"/agents/python-reviewer.md \
          "$ROOT"/agents/dart-flutter-reviewer.md "$ROOT"/agents/_template/reviewer.md; do
-  grep -q '^\*\*Read the reviewer contract first\*\*' "$f" || c6=no
+  grep -q '^\*\*Read the reviewer contract first\*\*.*_shared/reviewer-contract\.md' "$f" || c6=no
 done
 
 [ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "every shipped reviewer resolves from the project root, and a broken one is named" ok \
@@ -2309,7 +2309,11 @@ r=$(cpath_repo cp-one-harness)
 printf 'Read `_shared/reviewer-contract.md`, at `.claude/agents/_shared/reviewer-contract.md`.\n' > "$r/agents/ts-reviewer.md"
 out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 [ "$out" = "1" ] && c11=ok || c11=no
-case "$err" in *".agents/_shared"*) c12=ok ;; *) c12=no ;; esac
+# The specific sentence, not the bare path: the failure epilogue enumerates CONCRETE on EVERY
+# failure, so grepping for `.agents/_shared` alone was satisfied by the epilogue regardless of
+# which problem fired — and saying WHICH destination is missing is the entire value of the
+# SHIPPED rule. Second time on this branch that an assertion read the wrong text.
+case "$err" in *"is shipped to both harnesses and does not name .agents/_shared"*) c12=ok ;; *) c12=no ;; esac
 
 # …while the INSTALLED reviewer naming exactly one is correct and must stay green.
 r=$(cpath_repo cp-install-one)
@@ -2356,13 +2360,36 @@ fi
 # The mutation edits the COPY in the fixture, so it tests the shipped floor rather than a
 # reimplementation of it.
 shrink_cpath() {  # $1 = repo, $2 = the tuple to empty
+  # Scans to the BALANCED closing paren rather than to a `)` at line start. The first cut used
+  # `^NAME = \(.*?^\)`, which works for a multi-line tuple and silently runs past a ONE-LINE
+  # one — it swallowed `EXACT = SHIPPED + INSTALLED` and the guard then died of NameError,
+  # exiting 1 for the wrong reason and turning this case green while the floor it tests was
+  # deleted. Third instance on this branch of a fixture failure wearing a guard failure's
+  # clothes, so the result is now parsed before it is used.
   python3 - "$1" "$2" <<'PYEOF'
-import pathlib, re, sys
+import ast, pathlib, re, sys
+name = sys.argv[2]
 p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
 src = p.read_text()
-out = re.sub(rf"^{sys.argv[2]} = \(.*?^\)", f"{sys.argv[2]} = ()", src, flags=re.S | re.M)
-if out == src:
-    raise SystemExit(f"fixture no-op: {sys.argv[2]} tuple not found")
+m = re.search(rf"^{name} = \(", src, flags=re.M)
+if not m:
+    raise SystemExit(f"fixture no-op: {name} tuple not found")
+i, depth = m.end() - 1, 0
+while i < len(src):
+    if src[i] == "(":
+        depth += 1
+    elif src[i] == ")":
+        depth -= 1
+        if depth == 0:
+            break
+    i += 1
+else:
+    raise SystemExit(f"fixture broken: {name} tuple never closes")
+out = src[: m.start()] + f"{name} = ()" + src[i + 1 :]
+try:
+    ast.parse(out)
+except SyntaxError as exc:
+    raise SystemExit(f"fixture broken: shrinking {name} produced unparseable source ({exc})")
 p.write_text(out)
 PYEOF
 }
@@ -2380,9 +2407,50 @@ if shrink_cpath "$r" SUFFIX; then cf2=ok; else cf2=no; fi
 out=$(run_cpath "$r")
 { [ "$out" = "1" ] && [ "$cf2" = ok ]; } && c4=ok || c4=no
 
-[ "$c1$c2$c3$c4" = "okokokok" ] && report "an empty contract-path work-set fails rather than agreeing with nothing" ok \
-  || report "an empty contract-path work-set fails rather than agreeing with nothing" no \
-     "shipped-exit=$c1 says-floor=$c2 no-success-line=$c3 suffix-exit=$c4"
+# The INSTALLED clause was pinned by nothing: delete it and the suite stayed green, after which
+# emptying INSTALLED drops this repository's own reviewer out of the comparison and prints
+# "9 source(s) agree" at exit 0 — the dogfood file leaving the guard silently, which is the very
+# reason it was added.
+r=$(cpath_repo cp-empty-installed)
+if shrink_cpath "$r" INSTALLED; then cf3=ok; else cf3=no; fi
+out=$(run_cpath "$r")
+{ [ "$out" = "1" ] && [ "$cf3" = ok ]; } && c5=ok || c5=no
+
+# A duplicate satisfies a floor that counts entries while displacing the name it replaced.
+r=$(cpath_repo cp-dupe)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
+src = p.read_text()
+out = src.replace('"agents/python-reviewer.md",', '"agents/ts-reviewer.md",')
+if out == src:
+    raise SystemExit("fixture no-op: python-reviewer entry not found")
+p.write_text(out)
+PYEOF
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c6=ok || c6=no
+case "$err" in *duplicate*) c7=ok ;; *) c7=no ;; esac
+
+# An entry moved to the tuple with the weaker obligation — a one-line diff that reads as tidying
+# and hands back round 2's HIGH.
+r=$(cpath_repo cp-misgrouped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
+src = p.read_text()
+out = src.replace('INSTALLED = (".claude/agents/gate-sdd-reviewer.md",)',
+                  'INSTALLED = (".claude/agents/gate-sdd-reviewer.md", "agents/ts-reviewer.md")')
+if out == src:
+    raise SystemExit("fixture no-op: INSTALLED tuple not found")
+p.write_text(out)
+PYEOF
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c8=ok || c8=no
+case "$err" in *"only an install may name one destination"*) c9=ok ;; *) c9=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] && report "an empty, duplicated or misgrouped contract-path work-set fails rather than agreeing" ok \
+  || report "an empty, duplicated or misgrouped contract-path work-set fails rather than agreeing" no \
+     "shipped-exit=$c1 says-floor=$c2 no-success-line=$c3 suffix-exit=$c4 installed-exit=$c5 dupe-exit=$c6 says-dupe=$c7 misgrouped-exit=$c8 says-group=$c9"
 
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"

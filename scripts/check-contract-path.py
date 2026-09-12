@@ -91,6 +91,14 @@ SOURCES = EXACT + SUFFIX
 #: case 49 pins it; the same tuple arrived here without it one release later.
 MIN_SHIPPED, MIN_INSTALLED, MIN_SUFFIX = 4, 1, 5
 
+#: Where each group's members must live. The grouping IS an exemption list — `SHIPPED` must name
+#: both destinations and `INSTALLED` only its own — so moving one entry between the tuples grants
+#: an exemption in a one-line diff that reads as tidying. The distinguishing property was stated
+#: only in the comments beside them, which is the shape this branch spent three rounds proving is
+#: not enough.
+SHIPPED_PREFIX = "agents/"
+INSTALLED_PREFIXES = (".claude/agents/", ".agents/")
+
 #: Constraint this imposes, stated because it is real and otherwise invisible: a document must
 #: write the whole path on ONE physical line. Splitting `_shared/` onto its own tree row leaves
 #: `reviewer-contract.md` bare, which reads here as the flat form and fails with a message
@@ -105,14 +113,36 @@ MENTION = re.compile(r"[\w./-]*reviewer-contract\.md")
 
 
 def main():
+    shape = []
     if len(SHIPPED) < MIN_SHIPPED or len(INSTALLED) < MIN_INSTALLED or len(SUFFIX) < MIN_SUFFIX:
-        print(
-            f"check-contract-path FAILED\n"
-            f"  work-set below its floor: {len(SHIPPED)} shipped (min {MIN_SHIPPED}), "
+        shape.append(
+            f"work-set below its floor: {len(SHIPPED)} shipped (min {MIN_SHIPPED}), "
             f"{len(INSTALLED)} installed (min {MIN_INSTALLED}), "
-            f"{len(SUFFIX)} suffix (min {MIN_SUFFIX}).\n"
-            f"  A source removed from a tuple is a source that stopped being compared, and "
-            f"that must not read as agreement.",
+            f"{len(SUFFIX)} suffix (min {MIN_SUFFIX})"
+        )
+    # A floor counts entries, not distinct names, so a duplicate satisfies it while the source it
+    # replaced stops being compared — a plausible copy-paste when a reviewer is added.
+    if len(set(SOURCES)) != len(SOURCES):
+        dupes = sorted({n for n in SOURCES if SOURCES.count(n) > 1})
+        shape.append(f"duplicate source(s), so a name was displaced rather than added: {dupes}")
+    # And an entry in the wrong tuple silently grants itself the weaker obligation.
+    for n in SHIPPED:
+        if not n.startswith(SHIPPED_PREFIX):
+            shape.append(f"`{n}` is in SHIPPED but does not live under `{SHIPPED_PREFIX}`")
+    for n in INSTALLED:
+        if not n.startswith(INSTALLED_PREFIXES):
+            shape.append(
+                f"`{n}` is in INSTALLED but does not live under "
+                f"{' or '.join(INSTALLED_PREFIXES)} — only an install may name one destination"
+            )
+    if shape:
+        print("check-contract-path FAILED", file=sys.stderr)
+        for line in shape:
+            print(f"  {line}", file=sys.stderr)
+        print(
+            "\n  A source removed from a tuple, displaced by a duplicate, or moved to the tuple "
+            "with\n  the weaker obligation is a source that stopped being checked — and that "
+            "must not read\n  as agreement.",
             file=sys.stderr,
         )
         raise SystemExit(1)
