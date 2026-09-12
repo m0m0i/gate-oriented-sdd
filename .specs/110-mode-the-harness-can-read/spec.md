@@ -73,7 +73,7 @@ The checker is `assets/check-document-set.py`, copied by `init` into the project
 | the `- Validators:` wiring | Structural twin of the existing `check-steering-anchors.sh` entry: what the deletion removes is a check that then says nothing, and a check saying nothing is indistinguishable from a check passing. |
 | the upgrade path | Reads as ordinary advice, so deletion looks like trimming — while what it restores is `init` overwriting a choice the author deliberately made, the feature undoing itself. |
 | `spec`'s mode read | Deleting the clause reads as *tightening* a rule, which is the direction a reviewer waves through, and the damage lands in installs that never appear in this repository's diffs. |
-| `contract`'s evidence trigger | #109 is the precedent: that exact confusion survived three documents and an unknown number of readings, because a sentence that is merely imprecise reads as fine. |
+| `contract`'s evidence trigger | It is the only place any document says a minimum-mode project may run this skill **at all**. Deleted, the skill still reads complete, while a model executing it there has no instruction saying it is permitted — so it defers, and the mode starts governing availability, which every document here says it never does. |
 
 **Risks and trade-offs:**
 

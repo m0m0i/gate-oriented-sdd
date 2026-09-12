@@ -55,8 +55,8 @@ def steering_value(text, key):
     that follows it, so `- Mode: full   ` is the string `full   ` to every shell consumer.
     Stripping here would make this reader accept a value the hooks would not — the #34 shape
     inverted, and in the direction that passes silently. Parity is the stricter behaviour, so
-    parity is what this does; `report_whitespace` below turns the resulting failure into a
-    sentence that names the real cause instead of a confusing one.
+    parity is what this does; the `mode.strip()` branch in `main` below turns the resulting
+    failure into a sentence that names the real cause instead of a confusing one.
     """
     for line in text.split("\n"):
         m = re.match(rf"^ *- *{key}: *(.*)$", line)
@@ -97,7 +97,13 @@ def main():
             )
         fail(f"`- Mode: {mode}` is not a mode. Expected one of: {', '.join(MODES)}.")
 
-    docs_value = steering_value(text, "Docs") or "docs/"
+    # Stripped, unlike `mode` — and the asymmetry is deliberate. The parity argument above
+    # only bites where a shell consumer reads the same value: `gate_steering_value` is called
+    # for Validators, Source globs, Owns and Reviewer, and check-steering-anchors.sh reads
+    # Docs solely to test it non-empty. Nothing paths on it, so there is no reader here to be
+    # stricter than — while `Path("docs/ ")` is a directory named " " inside docs/, which
+    # fails with a message whose cause is invisible in rendered Markdown.
+    docs_value = (steering_value(text, "Docs") or "docs/").strip()
     if "://" in docs_value:
         # `- Docs:` may name a shared documentation repository in a multi-repo product. A URL
         # is not a directory, so every document would read as absent — a false RED — while

@@ -1987,6 +1987,46 @@ case "$err" in *"not found"*) c3=no ;; *) c3=ok ;; esac     # must NOT read as a
      "exit=$c1 says-unverifiable=$c2 not-reported-as-missing=$c3"
 
 
+# 60. Trailing whitespace: strict on `Mode`, tolerant on `Docs`, and each says why.
+#
+# This case exists because the parity fix that produced it was, for one round, an INTENTION.
+# `steering_value` dropped `.strip()` so it would return exactly what `sed -n "s/^ *- *KEY: *//p"`
+# returns — the Python had been the more PERMISSIVE of the two, accepting a value the hooks
+# would not match, which is #34 inverted and the direction that passes silently. Nothing
+# asserted it. Restoring `.strip()` reintroduced the divergence with all 71 cases green, so a
+# later "tidy up this odd return" commit would have undone it unopposed. G-4: no case, not
+# shipped.
+#
+# The two halves are deliberately asymmetric, and the asymmetry is the thing under test.
+# `Mode` is read by a shell consumer, so parity is the stricter behaviour and wins. `Docs` is
+# not — gate_steering_value is called for Validators, Source globs, Owns and Reviewer, and the
+# anchors guard reads Docs only to test it non-empty — so there is no reader to be stricter
+# than, and `Path("docs/ ")` would fail on a directory named " " with the cause invisible in
+# rendered Markdown. A single rule applied to both would be wrong at one end or the other.
+r=$(docset_repo ds-ws-mode ""); add_full_docs "$r"
+printf -- '- Mode: full \n' >> "$r/.steering/tech.md"      # one trailing space
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *whitespace*) c2=ok ;; *) c2=no ;; esac
+# exit 1 alone cannot tell the parity fix from the pre-existing "not a mode" branch, so the
+# message is asserted too — and asserted NOT to be the unactionable one.
+case "$err" in *"is not a mode"*) c3=no ;; *) c3=ok ;; esac
+
+# The mirror: `Docs` with a trailing space must still PASS. Strict here would fire on an
+# ordinary steering file and is how a gate gets switched off.
+r=$(docset_repo ds-ws-docs full); add_full_docs "$r"
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], ".steering", "tech.md")
+p.write_text(p.read_text().replace("- Docs: docs/\n", "- Docs: docs/ \n"))
+PYEOF
+out=$(run_docset "$r")
+[ "$out" = "0" ] && c4=ok || c4=no
+
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "trailing whitespace is strict on Mode and tolerant on Docs" ok \
+  || report "trailing whitespace is strict on Mode and tolerant on Docs" no \
+     "mode-exit=$c1 mode-names-whitespace=$c2 mode-not-generic=$c3 docs-tolerant=$c4"
+
 # 59. init stripped of the document-set wiring must fail.
 #
 # Two entries, and the second is the load-bearing one: copying the checker onto the

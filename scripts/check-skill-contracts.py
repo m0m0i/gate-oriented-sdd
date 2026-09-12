@@ -14,7 +14,7 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Fifteen today. An eleventh needs an argument, in the spec that proposes it, for why review cannot
+Fifteen today. A sixteenth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time.
 """
@@ -54,9 +54,12 @@ CONTRACTS = (
         "absent one. Stated as scale instead, a minimum-mode reader concludes the skill is "
         "unavailable to them rather than not yet useful — and mode governs documents and "
         "flow membership, never availability. #110, and #109's availability clause. Review "
-        "cannot defend it: #109 is the precedent — that exact confusion survived three "
-        "documents and an unknown number of readings, because a sentence that is merely "
-        "imprecise reads as fine.",
+        "cannot defend it — and the argument is about DELETION, since a presence check can "
+        "only catch that: the sentence is the one place any document says a minimum-mode "
+        "project may run this skill AT ALL. Remove it and the skill still reads complete, "
+        "while a model executing it in a minimum project has no instruction saying it is "
+        "permitted — so it defers or refuses, and the mode silently starts governing "
+        "availability, which is the one thing every document here says it never does.",
     ),
     (
         "skills/init/SKILL.md",
