@@ -66,4 +66,4 @@ Why not the narrower fix — editing only the three reviewers: `init` would stil
 
 - [x] T1: a case that fails because a shipped reviewer, copied into an installed agents directory, names a contract path that does not resolve there — and passes for `_template`, which already resolves — then the three reference reviewers (AC1, AC4, AC6).
 - [x] T2: cases for `scripts/check-contract-path.py` covering agreement, each single disagreement, and an unreadable statement — then the guard, then `skills/init/SKILL.md` and `docs/layout.md` brought into agreement, which is what turns it green (AC2, AC3).
-- [ ] T3: the guard onto `- Validators:` and into CI; assert the blast radius — `check-receipt-schema.py`'s mirror pairing still passes, this repository's own `.claude/agents/` still resolves, and the full validator set is green (AC5).
+- [x] T3: the guard onto `- Validators:` and into CI; assert the blast radius — `check-receipt-schema.py`'s mirror pairing still passes, this repository's own `.claude/agents/` still resolves, and the full validator set is green (AC5).

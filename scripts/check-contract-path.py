@@ -37,6 +37,10 @@ EXACT = (
     "agents/python-reviewer.md",
     "agents/dart-flutter-reviewer.md",
     "agents/_template/reviewer.md",
+    # This repository's own install. It was already correct when #82 was filed — which is
+    # precisely why dogfooding never surfaced the bug: the instance we run was right and the
+    # product we ship was wrong, and nothing compared the two. Pinned here so that stays true.
+    ".claude/agents/gate-sdd-reviewer.md",
 )
 
 #: SUFFIX — documents and sibling guards that draw or reference a CONCRETE tree, where

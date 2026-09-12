@@ -2227,6 +2227,8 @@ cpath_repo() {
   done
   printf 'x\n\n**Read `_shared/reviewer-contract.md` first.** y\n' > "$r/agents/_template/reviewer.md"
   printf 'x\n' > "$r/agents/_shared/reviewer-contract.md"
+  mkdir -p "$r/.claude/agents"
+  printf 'x\n\n**Read `_shared/reviewer-contract.md` first.** y\n' > "$r/.claude/agents/gate-sdd-reviewer.md"
   printf 'copy `_shared/reviewer-contract.md` to it\n' > "$r/skills/init/SKILL.md"
   printf '  |-- _shared/reviewer-contract.md\n' > "$r/docs/layout.md"
   printf '"agents/_shared/reviewer-contract.md",\n' > "$r/scripts/check-receipt-schema.py"
