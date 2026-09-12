@@ -56,6 +56,6 @@ The scratch project is built in a temp directory, given a TypeScript toolchain w
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
 - [x] T1: capture this repository's baseline — every `- Validators:` command and `test-gates.sh`'s count, recorded to `observations.md` — then build the scratch project and record its pre-`init` state (AC1's before-half).
-- [ ] T2: run `init` steps 1–4 in the scratch project, recording each as it goes, including what could not be exercised; assert AC4, AC5, AC6.
+- [x] T2: run `init` steps 1–4 in the scratch project, recording each as it goes, including what could not be exercised; assert AC4, AC5, AC6.
 - [ ] T3: write the `docs/verified.md` section with the synthetic-target limitation in the row itself, and update "Still to verify" (AC7).
 - [ ] T4: re-run the baseline and compare, confirm the diff is confined and no shipped path moved, run `check-leakage.sh` by hand, file any new defect as an issue, and delete the scratch project (AC1's after-half, AC2, AC3, AC8).
