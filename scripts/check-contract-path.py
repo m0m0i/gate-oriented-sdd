@@ -129,6 +129,13 @@ def main():
     for n in SHIPPED:
         if not n.startswith(SHIPPED_PREFIX):
             shape.append(f"`{n}` is in SHIPPED but does not live under `{SHIPPED_PREFIX}`")
+    for n in SUFFIX:
+        if n.startswith(SHIPPED_PREFIX) or n.startswith(INSTALLED_PREFIXES):
+            shape.append(
+                f"`{n}` is a reviewer but sits in SUFFIX, where only the canonical suffix is "
+                f"required — `agents/_shared/reviewer-contract.md` passes that rule, and it is "
+                f"the original defect"
+            )
     for n in INSTALLED:
         if not n.startswith(INSTALLED_PREFIXES):
             shape.append(

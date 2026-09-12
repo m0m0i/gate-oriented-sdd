@@ -2404,8 +2404,13 @@ case "$sout" in *"source(s) agree"*) c3=no ;; *) c3=ok ;; esac   # the success l
 
 r=$(cpath_repo cp-empty-suffix)
 if shrink_cpath "$r" SUFFIX; then cf2=ok; else cf2=no; fi
-out=$(run_cpath "$r")
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+# The REASON, not just the exit code: a guard that dies during import also exits 1, and the
+# floor these exist to test would be gone while the case read green. #124's own pattern, and
+# two of its instances were in the commit that filed it.
 { [ "$out" = "1" ] && [ "$cf2" = ok ]; } && c4=ok || c4=no
+case "$err" in *Traceback*) c4=no ;; esac
+case "$err" in *floor*) : ;; *) c4=no ;; esac
 
 # The INSTALLED clause was pinned by nothing: delete it and the suite stayed green, after which
 # emptying INSTALLED drops this repository's own reviewer out of the comparison and prints
@@ -2413,8 +2418,10 @@ out=$(run_cpath "$r")
 # reason it was added.
 r=$(cpath_repo cp-empty-installed)
 if shrink_cpath "$r" INSTALLED; then cf3=ok; else cf3=no; fi
-out=$(run_cpath "$r")
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 { [ "$out" = "1" ] && [ "$cf3" = ok ]; } && c5=ok || c5=no
+case "$err" in *Traceback*) c5=no ;; esac
+case "$err" in *floor*) : ;; *) c5=no ;; esac
 
 # A duplicate satisfies a floor that counts entries while displacing the name it replaced.
 r=$(cpath_repo cp-dupe)
@@ -2448,9 +2455,44 @@ out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 [ "$out" = "1" ] && c8=ok || c8=no
 case "$err" in *"only an install may name one destination"*) c9=ok ;; *) c9=no ;; esac
 
-[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] && report "an empty, duplicated or misgrouped contract-path work-set fails rather than agreeing" ok \
+# A non-reviewer padding SHIPPED to hold the floor while a real reviewer leaves it. Floors and
+# distinctness both pass; only the prefix clause can object. This is the mutation demonstrated
+# in round 3 — pad the tuple, move the reviewer — and it was caught by nothing.
+r=$(cpath_repo cp-misgrouped-shipped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
+src = p.read_text()
+out = src.replace('"agents/ts-reviewer.md",', '"docs/layout.md",')
+if out == src:
+    raise SystemExit("fixture no-op: ts-reviewer entry not found")
+p.write_text(out)
+PYEOF
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c10=ok || c10=no
+case "$err" in *"does not live under"*) c11=ok ;; *) c11=no ;; esac
+
+# And a reviewer demoted into SUFFIX, where only the canonical suffix is required — the rule
+# under which `agents/_shared/reviewer-contract.md`, the original defect, passes.
+r=$(cpath_repo cp-reviewer-in-suffix)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
+src = p.read_text()
+needle = '    "docs/CONTRACT.md",'
+out = src.replace(needle, needle + '\n    "agents/ts-reviewer.md",')
+if out == src:
+    raise SystemExit("fixture no-op: docs/CONTRACT.md entry not found")
+p.write_text(out)
+PYEOF
+then cf4=ok; else cf4=no; fi
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+{ [ "$out" = "1" ] && [ "$cf4" = ok ]; } && c12b=ok || c12b=no
+case "$err" in *"sits in SUFFIX"*) c13b=ok ;; *) c13b=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12b$c13b" = "okokokokokokokokokokokokok" ] && report "an empty, duplicated or misgrouped contract-path work-set fails rather than agreeing" ok \
   || report "an empty, duplicated or misgrouped contract-path work-set fails rather than agreeing" no \
-     "shipped-exit=$c1 says-floor=$c2 no-success-line=$c3 suffix-exit=$c4 installed-exit=$c5 dupe-exit=$c6 says-dupe=$c7 misgrouped-exit=$c8 says-group=$c9"
+     "shipped-exit=$c1 says-floor=$c2 no-success-line=$c3 suffix-exit=$c4 installed-exit=$c5 dupe-exit=$c6 says-dupe=$c7 misgrouped-exit=$c8 says-group=$c9 pad-shipped=$c10 says-prefix=$c11 reviewer-in-suffix=$c12b says-suffix=$c13b"
 
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"

@@ -243,3 +243,45 @@ The reviewer proposed lifting *"an assertion about output must read the stream t
 goes to"* into `rules/gates-and-guards.md` as a `G-*` clause, on the grounds that three occurrences
 on one branch is this repository's own bar for a convention. That is a rulebook change and belongs
 to its own issue rather than to #82's diff.
+
+## Review round 4 — CLEAN, 0 blockers, 0 HIGH, 2 MEDIUM, 1 LOW
+
+Reviewed at `7277dbe`. All three advisory findings fixed, because one of the MEDIUMs was **the
+pattern #124 was filed for, sitting in the commit that filed it.**
+
+- **The `SHIPPED` prefix clause was pinned by nothing.** Set `SHIPPED_PREFIX = ""` and all 76
+  cases stayed green. It is load-bearing, not decoration: it closes the round-3 mutation of
+  padding `SHIPPED` with a non-reviewer to hold the floor while a real reviewer leaves it, which
+  passes floors and distinctness and was caught by nothing else.
+- **`cp-empty-suffix` and `cp-empty-installed` asserted only exit 1**, so a guard dying during
+  import would have read as the floor firing — the exact incident of round 3, one layer up from
+  where it was fixed. Both now assert the reason and exclude a traceback, which is what case 49
+  already did and these did not inherit.
+- **`SUFFIX` was the remaining sink.** `SHIPPED` and `INSTALLED` now certify their own membership
+  and `SUFFIX` accepted anything, so a reviewer moved there drops to "ends with the canonical
+  suffix" — under which `agents/_shared/reviewer-contract.md`, **the original #82 defect**,
+  passes. Closed.
+
+Six shape clauses now, each with its own fixture, and all seven mutations of them go red.
+
+### The same trap, twice in ten minutes, in the commit that named it
+
+Writing the `SUFFIX` sink fixture, the case reported red — and the clause was fine. The
+fixture's Python contained `'…",\n    "agents/ts-reviewer.md",'`, and the `\n` was written into
+the shell heredoc as a **literal newline**, splitting the string literal across two lines. Python
+exited on a `SyntaxError`, nothing mutated, the guard passed, and the assertion read that as the
+clause failing to fire.
+
+**Fourth instance on this branch**, hours after filing #124 for the first three. Both halves of
+the fix were already written down in that issue: escape the sequence so the heredoc carries it
+intact, and **bind the fixture's exit status into the assertion** so a fixture that did not run
+cannot be mistaken for a guard that did not fire.
+
+That it happened again while writing the issue about it is the most useful thing in this record.
+The lesson is not "be careful" — it is that **every fixture which edits source needs its status
+checked, mechanically, every time**, because the failure is silent and reads as a finding.
+
+### Round 4's disposition
+
+Filed rather than fixed here: nothing. Fixed rather than accepted: all three, on the grounds that
+two were fail-opens and the third was the pattern this branch has now hit four times.
