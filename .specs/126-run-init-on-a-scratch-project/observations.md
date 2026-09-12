@@ -345,7 +345,8 @@ correcting a false sentence that was still sitting nine lines above the descript
 Both are applied now and verified by grep, each replacement independent so one failure cannot
 silently discard the other.
 
-**That is the fifth instance of the shape #124 tracks, and the third recorded on this branch**, and it is the sharpest because the
+**That is the fifth instance of the shape #124 tracks, and the third recorded on this branch**, and
+it is the sharpest because the
 artifact was a claim about itself: a step that did not run, whose failure was not checked, followed
 by a report that assumed it had. #124 was filed for four of these; this one belongs in it too, and
 it extends the rule — *"a case must assert why it went red"* has a sibling: **a report must be
@@ -367,7 +368,8 @@ append, so the account was exact. It also re-counted "nine lines above the descr
 old blob and found it reconciles. That is the behaviour the round-4 entry asked for, applied to the
 entry itself.
 
-Three findings, and **all three were in text I adopted rather than derived**:
+Three findings: **two in text I adopted rather than derived, and one — the shell diagnosis — in text I
+reasoned rather than ran.**
 
 - **"The exceptions both landed in step 4" was wrong** — the fixture file count is at `:31`, inside
   `## T1`. The wording was the reviewer's own suggested fix from round 4, taken verbatim. It also
@@ -385,7 +387,7 @@ Three findings, and **all three were in text I adopted rather than derived**:
   the prescription that follows it was right all along; only the explanation pointed a future reader
   away from the form that would have saved them.
 
-### The pattern under all three, which is the reviewer's and belongs in #124
+### The pattern under two of the three, which is the reviewer's and belongs in #124
 
 **Text adopted from elsewhere does not inherit the checking that the text around it got.** The
 central claim of the round-4 section — that `cb3a159` applied neither fix — was derived, checked and
@@ -397,7 +399,40 @@ The reviewer's own framing, recorded because it implicates it as much as me: its
 them in a report and I trusted the report over the file.** A review is not a source; it is a claim
 about a source, and it needs re-deriving exactly as much as anything else does.
 
+**The third had a different lesson and folding it in would have lost it.** The shell sentence failed
+because a claim about a tool's behaviour was asserted from memory where one command would have tested
+it — the same failure as asserting a count, and the less flattering of the two, since copying someone
+else's wording is a gentler story than asserting how `&&` behaves without running it.
+
 That is the third form of one thing on this branch — after *a qualifier does not travel with the
 sentence that gets quoted* and *writing the rule down did not make me apply it*. All three are the
 same failure at different distances: **the check that was not performed because something nearby had
 been.**
+
+## Review round 6 — CLEAN, 0 blockers, 0 HIGH, 1 MEDIUM, 1 LOW
+
+What changed, and nothing else. The reviewer's advice was to record the fixes without a new thesis,
+on the evidence that a thesis had failed in each of the last three rounds and a list in none.
+
+- **`:371`** — "all three were in text I adopted rather than derived" was false for one of the
+  three. The shell diagnosis was new text in `08eb58b`, not adopted; `:382` already attributed it
+  correctly and `:392` already narrowed the set to two, so the section contradicted itself twelve
+  lines apart. Now: two adopted, one reasoned-rather-than-run.
+- **`:390`** — the heading's scope narrowed to match.
+- **New sentence after `:392`** — the third finding's own lesson, which folding it into the
+  adopted-text thesis had erased: a claim about a tool's behaviour is testable in one command, and
+  asserting it instead is the same failure as asserting a count. Recorded as the less flattering of
+  the two, because copying someone else's wording is a gentler story than asserting how `&&` behaves
+  without running it.
+- **`:348`** — re-wrapped from 130 columns to 99.
+
+One fact noticed while re-wrapping and not acted on: this file mixes hard-wrapped prose (the review
+sections, ~100 columns) with unwrapped paragraphs (the T1–T4 observations, some over 400). #61 made
+unwrapped the convention for this repository. `check-markdown-fences.py` passes either way, since it
+polices `​```markdown` fences rather than prose. Left as it is — consistency here is worth less than
+another round.
+
+**Stopping here** on the reviewer's recommendation: rounds 1–2 found defects in what the run
+recorded; rounds 3–6 found defects only in sections about the reviews, each created by the round
+before it. The observations half has been stable since `6029756` and the `docs/verified.md` section
+since round 3 — the parts that will actually be read again are done.
