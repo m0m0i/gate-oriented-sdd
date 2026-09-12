@@ -227,6 +227,29 @@ Full working record: `.specs/76-run-init-on-a-scratch-clone/observations.md`. Sp
 
 The greenfield path — a project with no `AGENTS.md`, no templates and no earlier install — was not run; this target had all three, by the author's choice, because merge is the path consumers hit. The interview was answered by someone who wrote the project, from drafts derived from its files. The upgrade path, `init` on the unstripped clone, is the next thing to run and is named as a candidate for the next sprint.
 
+## `init` at 0.7.0 on a synthetic TypeScript project
+
+Run 2026-09-12 (#126), plugin 0.7.0, `skills/` identical to the installed copy. Full record in `.specs/126-run-init-on-a-scratch-project/observations.md`.
+
+**What this run is weak evidence for, stated in the row rather than a footnote.** The target was **synthetic** — built for the run with a linter, a type checker, tests, a `src/` layout, an existing issue template and a commit convention. CAP-4 is *"installation into a repository that already has opinions"*, and a repository whose opinions were chosen by the installer cannot prove it. **#76's run against a real project is not superseded, and a fresh one is still owed.**
+
+| Question | Observed |
+| :-- | :-- |
+| Does step 1 detect every signal in its table? | **yes** — manifest, scripts, test layout, commit convention from `git log`, issue templates and their labels, branch. No remote existed, so the tracker was correctly left to step 2. |
+| Does it run each candidate validator before adopting it? | **yes** — all three ran on the clean tree and were adopted. The project's validators were separately confirmed to *fail* on a real violation, so adoption meant something. |
+| Does step 2 ask only what step 1 could not detect? | **yes**, five questions in the listed order. **Self-answered** — the operator built the target — so this is evidence that the questions are asked and in what order, and evidence for **nothing** about whether they are the right questions. |
+| Does step 3 merge into existing issue templates rather than replacing? | **yes**, and the merge leaves `spec` unable to read a type — #128. |
+| Does step 3 write the three `.specs/`/`.work_logs/` READMEs it lists? | **no source exists for them** — #83, confirmed at 0.7.0. They were written by hand. |
+| Does step 3 create the mandatory document set it opens by promising? | **no.** Not one of its ten bullets creates `PRD.md`, `DESIGN.md` or `BACKLOG.md` — #127. |
+| Does step 4's first proof pass? | **no.** `check-document-set.py`, which step 3 installs, fails on the documents step 3 never wrote. The gate is armed **red** by the harness's own file — CAP-4's falsifier — and lies dormant until the first source edit. #127. |
+| Does `review-gate.sh` stay silent on an ordinary branch? | **yes**, exit 0, empty stderr. |
+| Do both gates block when they should? | **yes** — `quality-gate` exit 2 naming the failing validator; `review-gate` exit 2 naming the project's own reviewer and receipt path, then exit 0 once a CLEAN receipt sits at HEAD. |
+| **Does a shipped reviewer open its contract with no hand-edit?** | **yes.** Attempted rather than read, from the project root, in the order the file names them: `_shared/…` misses, `.claude/agents/_shared/…` **opens**, `.agents/…` misses. This is the observation `1.0.0` was waiting on, and it confirms #82 on a real install. |
+
+**Not exercised, and why:** the reviewer was not *spawned* (needs a session restart in the target; verified on #76 and unchanged here). #84 could not fire — it needs an existing `CONTRACT.md` citing rule ids, and a clean install has none, so "not reproduced" says nothing about whether it is fixed. #81's check is `ruff`, which was not installed. Antigravity entirely. The cold interview.
+
+**Filed from this run:** #127, #128, #129.
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
@@ -236,6 +259,8 @@ The greenfield path — a project with no `AGENTS.md`, no templates and no earli
 - [ ] Antigravity subagent invocation contract, for the reviewer.
 - [ ] `northstar` meeting an `Owns:` line it disagrees with — the collision path #55 could not reach.
 - [ ] The cold interview: `northstar`, `prd`, `epics` answered by someone without the repository's context.
+- [ ] **`init` on a real project at 0.7.0** — #126 ran against a synthetic target, which tests CAP-4 weakly. The three findings it produced (#127, #128, #129) were all reachable on a project whose opinions were the installer's; a real one may reach more.
+- [ ] Whether a reviewer under Antigravity picks the `.agents/` path its instruction names — #82 added both destinations and only the Claude Code one has been opened.
 - [ ] `init` on a greenfield repo — no `AGENTS.md`, no templates, no earlier install. Detection and the five-question interview ran on #76 against a real project with all three; the greenfield path did not.
 - [ ] Whether a non-default `- Docs:` path reaches every inception skill, or any of them hardcode `docs/`.
 - [ ] `--update` on a reviewer that has a lock and a changed rulebook — the shipped rulebooks were untouched, so only the unchanged path ran.
