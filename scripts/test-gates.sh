@@ -2015,19 +2015,63 @@ case "$err" in *"is not a mode"*) c3=no ;; *) c3=ok ;; esac
 # The mirror: `Docs` with a trailing space must still PASS. Strict here would fire on an
 # ordinary steering file and is how a gate gets switched off.
 r=$(docset_repo ds-ws-docs full); add_full_docs "$r"
-python3 - "$r" <<'PYEOF'
+# The assertion below expects a PASS, so a no-op mutation would satisfy it by leaving an
+# ordinary repo — silent green. The needle matches byte-for-byte only because docset_repo
+# writes `- Docs: %s\n`, so the edit reports whether it applied AND the shell checks it: a
+# `raise` alone is not enough, because the shell does not inspect a heredoc python's exit
+# status. Found by mutating docset_repo's format string and watching this case stay green.
+#
+# Not an `assert`: this suite's own guard forbids expressing a safety check that way, since
+# `python -O` strips them — #28, found in a guard protecting the receipt schema.
+if python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], ".steering", "tech.md")
-p.write_text(p.read_text().replace("- Docs: docs/\n", "- Docs: docs/ \n"))
+src = p.read_text()
+out = src.replace("- Docs: docs/\n", "- Docs: docs/ \n")
+if out == src:
+    raise SystemExit("fixture no-op: the `- Docs:` needle no longer matches docset_repo's format")
+p.write_text(out)
 PYEOF
+then cf1=ok; else cf1=no; fi
 out=$(run_docset "$r")
-[ "$out" = "0" ] && c4=ok || c4=no
+{ [ "$out" = "0" ] && [ "$cf1" = ok ]; } && c4=ok || c4=no
 
-[ "$c1$c2$c3$c4" = "okokokok" ] && report "trailing whitespace is strict on Mode and tolerant on Docs" ok \
-  || report "trailing whitespace is strict on Mode and tolerant on Docs" no \
-     "mode-exit=$c1 mode-names-whitespace=$c2 mode-not-generic=$c3 docs-tolerant=$c4"
+# A whitespace-ONLY `- Docs:` is the third state, and it was a fail-open for one round. With
+# the strip outside the `or`, a tab is truthy, survives the default, and is then emptied —
+# and `pathlib.Path("")` is `.`, a directory that always exists. The guard then verified the
+# set at the repository ROOT and, on a project keeping its documents there, exited 0 with a
+# success line naming no directory. The anchors guard cannot catch it either: a tab is not
+# empty, so it reports `Docs` resolved about the same line.
+#
+# The fixture puts the documents where a real project puts them, so a run against `.` finds
+# nothing and the exit code separates the two behaviours.
+r=$(docset_repo ds-docs-blank full); add_full_docs "$r"
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], ".steering", "tech.md")
+src = p.read_text()
+out = src.replace("- Docs: docs/\n", "- Docs: \t\n")
+if out == src:
+    raise SystemExit("fixture no-op: the `- Docs:` needle no longer matches docset_repo's format")
+p.write_text(out)
+PYEOF
+then cf2=ok; else cf2=no; fi
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+# Must fall back to docs/ exactly as an absent line does, and therefore PASS on this tree —
+# never verify `.` and never report the documents missing from a directory nobody configured.
+{ [ "$out" = "0" ] && [ "$cf2" = ok ]; } && c5=ok || c5=no
+case "$err" in *PRD.md*) c6=no ;; *) c6=ok ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] && report "trailing whitespace is strict on Mode, tolerant on Docs, and blank Docs never means the repo root" ok \
+  || report "trailing whitespace is strict on Mode, tolerant on Docs, and blank Docs never means the repo root" no \
+     "mode-exit=$c1 mode-names-whitespace=$c2 mode-not-generic=$c3 docs-tolerant=$c4 blank-falls-back=$c5 not-root-scanned=$c6"
 
 # 59. init stripped of the document-set wiring must fail.
+#
+# Out of numeric order on purpose: 60 is grouped with the other docset cases above,
+# because it shares their fixture family, while this one uses contracts_repo. The suite's
+# source comments and its output order have already diverged (G-9); this is the third
+# instance and it is deliberate rather than drift.
 #
 # Two entries, and the second is the load-bearing one: copying the checker onto the
 # `- Validators:` line is the ONLY route by which the mode reaches a gate. Delete that

@@ -154,3 +154,66 @@ and two of them were unpinned or over-applied. Neither round found a defect in w
 *does* — both found defects in the connective tissue around it. That is the same lesson #109
 recorded from the other side, and it is now twice-earned: **a fix is not finished when it is
 correct; it is finished when reverting it turns something red.**
+
+## Review round 3 — BLOCKED, 0 blockers, 1 HIGH, 1 LOW
+
+Reviewed at `d3ed794`. Round 2's HIGH closed. **The new HIGH was introduced by round 2's fix** —
+the third consecutive round in which a repair carried its own defect in, and the second on this
+branch.
+
+### HIGH — the strip sat outside the `or`, so a blank `Docs` meant the repository root
+
+Round 2 wrote `docs_value = (steering_value(text, "Docs") or "docs/").strip()`. The `or` sees the
+**raw** value, so a whitespace-only line is truthy, survives the default, and is then emptied by
+the strip — and `pathlib.Path("")` is `PosixPath('.')`, a directory that always exists.
+
+Verified rather than reasoned about:
+
+```
+$ python3 -c 'import pathlib; print(repr(pathlib.Path("")), pathlib.Path("").is_dir())'
+PosixPath('.') True
+```
+
+The guard then verifies the document set at the repository **root**. On a project that keeps
+`PRD.md`, `DESIGN.md` and `BACKLOG.md` there, the run exits **0** with a success line naming no
+directory — indistinguishable from a correct run. `- Docs: \t` reaches it, and so does a
+non-breaking space pasted from a rendered page, because the regex's ` *` is ASCII-space-only.
+
+**And nothing else catches it.** `check-steering-anchors.sh` accuses only on an *empty* value, and
+a tab is not empty — confirmed on this repository: with `- Docs: \t` written, that guard prints
+`6 of 6 anchor(s) resolved, none unreadable` about the very line pointing nowhere. Two guards, both
+green, certifying a configuration neither had looked at.
+
+Fixed by moving the strip inside the `or`, so a whitespace-only value falls back to `docs/` exactly
+as an absent line does and `Path("")` is unreachable. The success line now also names the
+directory — `mode \`full\` at \`docs/\`` — which is the reviewer's suggestion and the thing that
+would have made this defect visible in CI output rather than silent.
+
+### The LOW became the more interesting half
+
+The `docs-tolerant` fixture mutates `- Docs: docs/` into `- Docs: docs/ ` by string replacement, and
+its assertion expects a **pass**. So a needle that stops matching is a no-op that leaves an ordinary
+repo — which passes. Silent green, with the case quietly demoted to a restatement of case 56.
+
+Two things went wrong fixing it, and the second is the one worth keeping.
+
+1. The first attempt used `assert out != src`. **This suite's own guard rejected it**: "no guard
+   expresses a safety check as an assert", because `python -O` strips them — #28, found in a guard
+   that was protecting the receipt schema. Replaced with an explicit `raise SystemExit`.
+2. **The `raise` did not work either, and the mutation test is what said so.** The shell does not
+   inspect a heredoc python's exit status, so the fixture died loudly into stderr and the case went
+   on to test an unmutated repo and pass. Breaking `docset_repo`'s format string on purpose left the
+   case **green**. The status is now bound into the report (`cf1`/`cf2`), and the same mutation is
+   red.
+
+That is the round's real lesson, and it is the same one twice: **a safety check is not a safety
+check until something fails when you break it.** The first fix was an intention, the second was a
+better-written intention, and only the third was a behaviour. `assert` → `raise` → *checked by the
+caller* is the whole arc, and only the last step changed any outcome.
+
+### Ordering
+
+Case 60 sits above case 59 in the source, so the numbered comments read 56, 57, 58, 60, 59. It is
+grouped with its fixture family rather than renumbered, and case 59 now carries a note saying so —
+the suite's source and output order had already diverged twice, and an undocumented third would read
+as drift.

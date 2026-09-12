@@ -103,7 +103,15 @@ def main():
     # Docs solely to test it non-empty. Nothing paths on it, so there is no reader here to be
     # stricter than — while `Path("docs/ ")` is a directory named " " inside docs/, which
     # fails with a message whose cause is invisible in rendered Markdown.
-    docs_value = (steering_value(text, "Docs") or "docs/").strip()
+    # The strip goes INSIDE the `or`, not outside it. Outside, a whitespace-only value is
+    # truthy, survives the default, and is then emptied — and `pathlib.Path("")` is `.`, a
+    # directory that always exists. The guard would then verify the set at the repository
+    # root and, on a project keeping its documents there, print a success line naming no
+    # directory at all: exit 0 having checked somewhere nobody configured. `- Docs: \t`
+    # reaches this, and so does a non-breaking space pasted from a rendered page, because the
+    # regex's ` *` is ASCII-space-only. Inside, a whitespace-only value falls back to `docs/`
+    # exactly as an absent line does, and `Path("")` is unreachable.
+    docs_value = steering_value(text, "Docs").strip() or "docs/"
     if "://" in docs_value:
         # `- Docs:` may name a shared documentation repository in a multi-repo product. A URL
         # is not a directory, so every document would read as absent — a false RED — while
@@ -148,8 +156,9 @@ def main():
     # checker's own output would be the same defect one layer down.
     n_docs = len(wanted) - len(TEMPLATES)
     print(
-        f"check-document-set: mode `{mode}` — {n_docs} document(s), {len(TEMPLATES)} issue "
-        f"template(s) and {len(MANDATORY_DIRS)} directory(ies) present{optional_note}"
+        f"check-document-set: mode `{mode}` at `{docs}/` — {n_docs} document(s), "
+        f"{len(TEMPLATES)} issue template(s) and {len(MANDATORY_DIRS)} directory(ies) "
+        f"present{optional_note}"
     )
 
 
