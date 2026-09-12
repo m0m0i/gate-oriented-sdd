@@ -242,7 +242,7 @@ All three LOWs fixed:
 
 Neither round found an **observation that was false**. Both found things wrong with what the run
 **claimed** — and one, #130, with how far it looked: a run that stops at the first red sees one cause,
-which is a coverage defect in the method rather than in the writing. Both halves of them: a second cause masked by a fail-fast, a stale ledger field, a version row covering no
+which is a coverage defect in the method rather than in the writing. Between them: a second cause masked by a fail-fast, a stale ledger field, a version row covering no
 version, a grammatical subject that never acted, a count that read as found-all, an unverifiable
 aside, and a qualifier that would not have travelled with the sentence it qualified.
 
@@ -286,9 +286,17 @@ Round 1: a second cause masked by a fail-fast, and four overstatements. Round 2:
 corrections landed. Round 3: the one place a correction had not landed, plus two counts and a
 false dichotomy.
 
-**Every round found something, and every round found it in the summary rather than in the
-observations.** The step-by-step record of what `init` did has survived three passes untouched.
-What kept failing is the part that tells a reader what it meant — which is the part that gets
+**Every round found something, and all but two of the findings were in the summary rather than the
+observations.** The exceptions both landed in step 4 — the fixture file count, and the two-causes
+paragraph that is #130, which was round 1's largest finding. The step-by-step record was **amended
+in two of the three passes**, not untouched.
+
+_An earlier wording claimed it had survived all three untouched, and review disproved it from the
+commit hunks. It was false in the direction that flatters the run, and it certified a half of the
+document review had never cleared — "no finding was filed" read as "it was sound", which is the
+collapse this record refuses one level up every time it keeps #84 at **not reproduced**._
+
+What kept failing is still, mostly, the part that tells a reader what it meant — the part that gets
 quoted, and the only part most readers will see.
 
 ## Review round 4 — CLEAN, 0 blockers, 0 HIGH, 1 MEDIUM, 1 LOW
@@ -324,3 +332,24 @@ Both were cheap to check and neither was checked, because a sentence *about* evi
 evidence. The rule that would have caught both: **when a record generalises over a set, enumerate
 the set in the record.** Three instances of the `#82` claim; three rounds of findings. Both lists
 were short, both were available, and neither was written down until review demanded it.
+
+### A correction to the round-4 entry above, and the fifth instance of the same thing
+
+The commit that added the round-4 section **claimed both fixes and made neither.** The script
+applied the first replacement, asserted on the second, threw before `write_text`, and I committed
+the appended narrative without re-reading the file. So for one commit this record described
+correcting a false sentence that was still sitting nine lines above the description.
+
+Both are applied now and verified by grep, each replacement independent so one failure cannot
+silently discard the other.
+
+**That is the fifth instance on this branch of the same shape**, and it is the sharpest because the
+artifact was a claim about itself: a step that did not run, whose failure was not checked, followed
+by a report that assumed it had. #124 was filed for four of these; this one belongs in it too, and
+it extends the rule — *"a case must assert why it went red"* has a sibling: **a report must be
+written from the artifact, not from the intent.** Every prior instance was a check that could not
+fail; this was a narrative that could not be false, because nothing compared it to the file.
+
+The mechanical fix is the one already learned twice today and not yet generalised: **bind the exit
+status, and re-read the artifact.** `python3 - <<'PY'` in a `&&` chain does not stop a later
+`git commit`, and an `AssertionError` on stderr scrolls past.
