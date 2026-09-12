@@ -290,3 +290,37 @@ false dichotomy.
 observations.** The step-by-step record of what `init` did has survived three passes untouched.
 What kept failing is the part that tells a reader what it meant — which is the part that gets
 quoted, and the only part most readers will see.
+
+## Review round 4 — CLEAN, 0 blockers, 0 HIGH, 1 MEDIUM, 1 LOW
+
+Reviewed at `76b232a`. I asked the reviewer to check the one sentence it was better placed to check
+than I was — a claim about its own three reports. **It was false, and false in the direction that
+flatters the run.**
+
+The claim: *every round found it in the summary rather than in the observations*, and *the
+step-by-step record has survived three passes untouched*. Disproved from the commit hunks: `fd43af8`
+amended `## T1` and `### Step 4 — prove`, and `6029756` amended `### Step 4` again — three
+corrections inside the observations half, one of them the two-causes paragraph that became #130 and
+that I had myself called round 1's largest finding.
+
+**Why it was worth a MEDIUM rather than a shrug**, in the reviewer's framing and now recorded here:
+the sentence certified a half of the document that review had never cleared. *"No finding was filed
+against the observations"* and *"the observations were sound"* are different statements, and
+collapsing them is the same move this record refuses one level up every time it keeps #84 at **not
+reproduced** rather than passed. It was also the file's closing sentence — which, by this branch's
+own evidence, is the most-quoted position in it.
+
+The LOW was a fragment — "Both halves of them:" — left by patching a sentence in place rather than
+rewriting it, in the paragraph whose subject is that the summary is the part people read.
+
+### Four rounds, and the one thing I would carry to the next record
+
+Round 4 found the same failure as round 3, one level more abstract: **a general claim asserted
+instead of enumerated.** Round 3 was a qualifier I stated as a rule and did not apply to its three
+instances. Round 4 was a summary I asserted about three reports without checking them against the
+three diffs sitting in the same branch.
+
+Both were cheap to check and neither was checked, because a sentence *about* evidence reads as
+evidence. The rule that would have caught both: **when a record generalises over a set, enumerate
+the set in the record.** Three instances of the `#82` claim; three rounds of findings. Both lists
+were short, both were available, and neither was written down until review demanded it.
