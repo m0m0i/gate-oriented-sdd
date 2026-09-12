@@ -2129,5 +2129,67 @@ case "$err" in *upgrade*) c6=ok ;; *) c6=no ;; esac
      "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6"
 
 
+# --- shipped reviewers: the contract path they name -----------------------------------
+#
+# #82. A reference reviewer's FIRST instruction is "Read `<path>` first", and the contract it
+# points at tells a reviewer that cannot find it to say so and stop. So a path that does not
+# resolve in an installed project does not degrade the review — it ends it, and the failure is
+# indistinguishable from a careful reviewer being careful. That is CAP-1 falsified at install
+# time.
+#
+# The path must be relative to the REVIEWER, not to the plugin: these files ship to Claude Code
+# (`.claude/agents/`) and to Antigravity (`.agents/`), so one absolute root is wrong for one of
+# them by construction. The check therefore installs into BOTH layouts — an assertion that held
+# only under `.claude/` would pass a file that hardcodes it.
+
+# $1 = the agents directory to build, relative to a fresh temp root. Echoes the root.
+install_reviewers() {
+  r="$TMP/$1"; a="$r/$2"
+  mkdir -p "$a/_shared"
+  cp "$ROOT/agents/_shared/reviewer-contract.md" "$a/_shared/"
+  cp "$ROOT/agents/ts-reviewer.md" "$ROOT/agents/python-reviewer.md" \
+     "$ROOT/agents/dart-flutter-reviewer.md" "$a/"
+  cp "$ROOT/agents/_template/reviewer.md" "$a/tpl-reviewer.md"
+  echo "$a"
+}
+
+# Reads each reviewer's stated path and reports the ones that do not resolve from the agents
+# directory. Prints nothing when all resolve.
+unresolved() {
+  python3 - "$1" <<'PYEOF'
+import pathlib, re, sys
+a = pathlib.Path(sys.argv[1])
+for f in sorted(a.glob("*reviewer.md")):
+    m = re.search(r"Read `([^`]*reviewer-contract\.md)`", f.read_text())
+    if not m:
+        print(f"{f.name}: names no contract path"); continue
+    if not (a / m.group(1)).exists():
+        print(f"{f.name}: `{m.group(1)}` does not resolve")
+PYEOF
+}
+
+# 61. Every shipped reviewer's contract path resolves, in both harness layouts.
+#
+# The template is the control and it runs first — it already names the reviewer-relative form,
+# so "the three are broken" is not evidence unless "the one that is right passes" sits beside
+# it. Without that, a check that reported everything unresolved would satisfy the accusing half
+# on its own.
+a=$(install_reviewers rv-claude ".claude/agents")
+out=$(unresolved "$a")
+case "$out" in *tpl-reviewer*) c0=no ;; *) c0=ok ;; esac      # the template must NOT be listed
+[ -z "$out" ] && c1=ok || c1=no
+
+a=$(install_reviewers rv-antigravity ".agents")
+out2=$(unresolved "$a")
+[ -z "$out2" ] && c2=ok || c2=no
+
+# And the contract's own instruction stays as it is: AC1 removes the cause, not the symptom.
+grep -q 'say so and stop' "$ROOT/agents/_shared/reviewer-contract.md" && c3=ok || c3=no
+
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "every shipped reviewer's contract path resolves in both layouts" ok \
+  || report "every shipped reviewer's contract path resolves in both layouts" no \
+     "template-control=$c0 claude=$c1 antigravity=$c2 stop-rule-intact=$c3 [$out]"
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

@@ -7,7 +7,7 @@ model: inherit
 
 # ts-reviewer
 
-**Read `agents/_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to TypeScript and Node.
+**Read `_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to TypeScript and Node.
 
 ## Bash policy
 

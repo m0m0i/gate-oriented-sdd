@@ -7,7 +7,7 @@ model: inherit
 
 # python-reviewer
 
-**Read `agents/_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to Python.
+**Read `_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to Python.
 
 ## Bash policy
 

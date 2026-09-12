@@ -7,7 +7,7 @@ model: inherit
 
 # dart-flutter-reviewer
 
-**Read `agents/_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to Dart and Flutter.
+**Read `_shared/reviewer-contract.md` first.** It defines severity, output format, the receipt, and the rules of engagement. Everything below is what is specific to Dart and Flutter.
 
 ## Bash policy
 
