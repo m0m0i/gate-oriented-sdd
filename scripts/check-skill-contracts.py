@@ -29,6 +29,22 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CONTRACTS = (
     (
         "skills/init/SKILL.md",
+        "`- Mode: minimum` or `- Mode: full` on one physical line",
+        "Without the line, nothing downstream can tell a deliberate omission from an "
+        "abandoned install, and check-document-set.py has nothing to verify against. The "
+        "mode is declared, never derived — derivation cannot distinguish the two, which is "
+        "the whole of #110.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "copy `assets/check-document-set.py` to the project's `scripts/` directory and add it to the `- Validators:` line",
+        "This is the ONLY route by which the mode reaches a gate. Delete it and the mode "
+        "becomes a comment: declared, never checked. It must stay on the `- Validators:` "
+        "line rather than in a hook, because a gate that branches on mode is a switch that "
+        "turns enforcement down — #110's AC5.",
+    ),
+    (
+        "skills/init/SKILL.md",
         "copy `assets/check-steering-anchors.sh` to the project's `scripts/` directory and add it to the `- Validators:` line",
         "Without it a project's steering anchors are unchecked, and an anchor written in a "
         "form its reader cannot parse fails silently — the file looks right and the value "

@@ -75,6 +75,6 @@ The checker is `assets/check-document-set.py`, copied by `init` into the project
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
 - [x] T1: cases for `assets/check-document-set.py` covering all three outcomes in both modes and both directions — red first — then the checker that makes them pass (AC2, AC3, AC4, AC12).
-- [ ] T2: cases for `init`'s contract — the `- Mode:` line written, the checker copied and appended to `- Validators:`, the re-run offering an upgrade — then the `skills/init/SKILL.md` changes (AC1, AC9).
+- [x] T2: cases for `init`'s contract — the `- Mode:` line written, the checker copied and appended to `- Validators:`, the re-run offering an upgrade — then the `skills/init/SKILL.md` changes (AC1, AC9).
 - [ ] T3: `skills/spec/SKILL.md` step 1 scoped to `full`, and `skills/contract/SKILL.md`'s evidence trigger, each pinned by a `check-skill-contracts.py` entry (AC7, AC8).
 - [ ] T4: both READMEs — the two modes and the equal-enforcement statement — and this repo's own `- Mode: full` plus the checker on its `- Validators:` line; assert AC10, AC11 and the full validator set green.

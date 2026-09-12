@@ -1979,5 +1979,48 @@ case "$err" in *"not found"*) c3=no ;; *) c3=ok ;; esac     # must NOT read as a
      "exit=$c1 says-unverifiable=$c2 not-reported-as-missing=$c3"
 
 
+# 59. init stripped of the document-set wiring must fail.
+#
+# Two entries, and the second is the load-bearing one: copying the checker onto the
+# `- Validators:` line is the ONLY route by which the mode reaches a gate. Delete that
+# sentence and the mode becomes a comment — declared on every install, checked on none — and
+# the deletion is invisible in review, because what it removes is a check that says nothing
+# rather than a behaviour anyone sees. That is the argument check-skill-contracts.py's own
+# docstring demands of a new entry.
+#
+# The control runs first: a guard that failed on every input would satisfy the accusing half
+# on its own. Both mutations are no-ops if their target is already absent, deliberately — a
+# fixture that aborted would report a setup error as a guard failure.
+r=$(contracts_repo contracts-mode-control)
+out=$(run_contracts "$r")
+[ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(contracts_repo contracts-nomode)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "`- Mode: minimum` or `- Mode: full` on one physical line"
+p.write_text(p.read_text().replace(needle, "a mode line somewhere"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"skills/init/SKILL.md"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(contracts_repo contracts-nowiring)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "copy `assets/check-document-set.py` to the project's `scripts/` directory and add it to the `- Validators:` line"
+p.write_text(p.read_text().replace(needle, "install the document-set checker"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *"Validators"*) c4=ok ;; *) c4=no ;; esac
+
+[ "$c0$c1$c2$c3$c4" = "okokokokok" ] && report "init stripped of the mode line or its Validators wiring fails" ok \
+  || report "init stripped of the mode line or its Validators wiring fails" no \
+     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4"
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
