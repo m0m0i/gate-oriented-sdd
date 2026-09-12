@@ -1831,5 +1831,303 @@ fi
      "slug-exit=$c1 slug-msg=$c2 root-exit=$c3 root-msg=$c4"
 
 
+# --- guards: assets/check-document-set.py -------------------------------------------
+#
+# #110. `init` chose between a minimum and a full document set and recorded nothing, so the
+# harness could not tell "minimum, deliberately" from "full, half-abandoned". The mode is now
+# DECLARED in .steering/tech.md and VERIFIED against the filesystem here. The declaration is
+# the point: derivation from which files exist cannot distinguish deliberate omission from
+# abandonment, which is the whole feature.
+#
+# The checker is a guard a project OWNS — copied into its scripts/ and named on its
+# `- Validators:` line, like check-steering-anchors.sh and check-locks.py — so no hook
+# branches on the mode. A gate that branched on mode would be a switch that turns enforcement
+# down, which is why AC5 forbids it and why nothing below drives a hook.
+
+# $1 = name, $2 = the `- Mode:` value (empty writes no line at all), $3 = Docs value (optional)
+docset_repo() {
+  # $2 is read with ${2-} rather than $2: the suite runs under `set -u`, and an unbound $2
+  # aborts the subshell, which returns an EMPTY path. Every later `rm "$r/..."` then operates
+  # on "/..." and the assertions read whatever the previous case left behind. That is a
+  # fixture failure wearing a guard failure's clothes — it cost one red run here, and one of
+  # the assertions passed SPURIOUSLY while it lasted, on an error file that was empty because
+  # nothing had run at all.
+  m=${2-}
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/.steering" "$r/.github/ISSUE_TEMPLATE" "$r/.specs" "$r/.work_logs"
+  cp "$ROOT/assets/check-document-set.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-document-set.py"
+  d=${3:-docs/}
+  # A URL is not a path. Seeding it would build a real tree at `$r/https:/example.invalid/docs`,
+  # and case 58 would then survive only because add_full_docs is not called for it — red for
+  # the right verdict and the wrong reason, one "for symmetry" edit away from going green on a
+  # checker that reads a URL as a directory. G-4: a fixture must be able to fail for the reason
+  # it claims to test.
+  case "$d" in
+    *://*) : ;;
+    *) mkdir -p "$r/$d" 2>/dev/null || true
+       for f in PRD DESIGN BACKLOG; do printf 'x\n' > "$r/$d/$f.md"; done ;;
+  esac
+  {
+    printf '# Tech\n\n'
+    printf -- '- Validators: ./scripts/check-document-set.py\n'
+    printf -- '- Reviewer: some-reviewer\n'
+    printf -- '- Docs: %s\n' "$d"
+    [ -n "$m" ] && printf -- '- Mode: %s\n' "$m"
+  } > "$r/.steering/tech.md"
+  for t in feature bug chore; do printf 'x\n' > "$r/.github/ISSUE_TEMPLATE/$t.md"; done
+  echo "$r"
+}
+add_full_docs() { for f in NORTH_STAR EPICS CONTRACT; do printf 'x\n' > "$1/docs/$f.md"; done; }
+run_docset() { ( cd "$1" && python3 scripts/check-document-set.py >/dev/null 2>"$TMP/derr"; printf '%s' "$?" ) }
+
+# 56. Both modes verified in both directions, and the mandatory set checked under BOTH.
+#
+# The control runs first and in both modes: a checker that failed on every input would satisfy
+# the accusing halves on its own. The minimum-mode control is the one with no dogfooding in
+# this repository — every document the full set names exists here — so it is the half most
+# likely to be wrong and is asserted explicitly rather than inferred from the full-mode pass.
+r=$(docset_repo ds-full-ok full); add_full_docs "$r"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(docset_repo ds-min-ok minimum)                       # the three optional documents absent
+out=$(run_docset "$r"); [ "$out" = "0" ] && c1=ok || c1=no
+
+# full mode, one required document missing: must fail AND name it.
+r=$(docset_repo ds-full-gap full); add_full_docs "$r"; rm "$r/docs/CONTRACT.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c2=ok || c2=no
+case "$err" in *CONTRACT.md*) c3=ok ;; *) c3=no ;; esac
+
+# minimum mode must NOT report the optional three as missing...
+r=$(docset_repo ds-min-quiet minimum)
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+case "$err" in *CONTRACT.md*|*EPICS.md*|*NORTH_STAR.md*) c4=no ;; *) c4=ok ;; esac
+
+# ...but it must still verify the MANDATORY set. A mode that checks nothing is not a mode.
+r=$(docset_repo ds-min-gap minimum); rm "$r/docs/BACKLOG.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *BACKLOG.md*) c6=ok ;; *) c6=no ;; esac
+
+# An optional document PRESENT under minimum is not an error: clarify settled that a
+# minimum-mode project may run `contract` at any point without changing mode.
+r=$(docset_repo ds-min-extra minimum); printf 'x\n' > "$r/docs/CONTRACT.md"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c7=ok || c7=no
+
+# The issue templates are part of the set in both modes.
+r=$(docset_repo ds-tpl-gap full); add_full_docs "$r"; rm "$r/.github/ISSUE_TEMPLATE/bug.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c8=ok || c8=no
+case "$err" in *bug.md*) c9=ok ;; *) c9=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokokok" ] \
+  && report "both modes verify their own set, in both directions" ok \
+  || report "both modes verify their own set, in both directions" no \
+     "full-ok=$c0 min-ok=$c1 full-gap-exit=$c2 names-doc=$c3 min-quiet=$c4 min-gap-exit=$c5 names-doc=$c6 min-extra-ok=$c7 tpl-exit=$c8 tpl-names=$c9"
+
+# 57. No mode, an unknown mode, and an unreadable tech.md are a THIRD outcome, never a default.
+#
+# This is #16 at the newest layer. A checker that reads "no `- Mode:` line" as "minimum"
+# reports success having verified the smaller set — indistinguishable from a project that
+# chose minimum — and the declaration it exists to enforce is then optional in practice.
+# Reachable with no adversarial input at all: any project installed before this feature has
+# no line.
+r=$(docset_repo ds-nomode "")                    # no `- Mode:` line written
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *Mode*) c2=ok ;; *) c2=no ;; esac
+
+r=$(docset_repo ds-badmode velocity)             # a value that is neither minimum nor full
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *velocity*) c4=ok ;; *) c4=no ;; esac
+
+r=$(docset_repo ds-notech full); rm "$r/.steering/tech.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c5=ok || c5=no
+
+r=$(docset_repo ds-unreadable full); add_full_docs "$r"
+chmod 000 "$r/.steering/tech.md" 2>/dev/null
+if cat "$r/.steering/tech.md" >/dev/null 2>&1; then
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  c6=ok; c7=ok                     # permissions not enforced here; a case that cannot fail is worse than none
+else
+  out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  [ "$out" = "1" ] && c6=ok || c6=no
+  case "$err" in *"cannot be read"*) c7=ok ;; *) c7=no ;; esac
+fi
+
+# A `- Mode:` line the reader cannot parse is the #34 shape: bolded, it yields nothing and
+# the file looks right. It must fail as "no mode", not pass on a default.
+r=$(docset_repo ds-bolded "")
+printf -- '- **Mode: full**\n' >> "$r/.steering/tech.md"
+out=$(run_docset "$r"); [ "$out" = "1" ] && c8=ok || c8=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokok" ] \
+  && report "an absent, unknown or unreadable mode fails rather than defaulting" ok \
+  || report "an absent, unknown or unreadable mode fails rather than defaulting" no \
+     "nomode-exit=$c1 nomode-msg=$c2 bad-exit=$c3 bad-names=$c4 notech=$c5 unreadable-exit=$c6 unreadable-msg=$c7 bolded=$c8"
+
+# 58. Documents in another repository cannot be verified here, and must say so rather than pass.
+#
+# `- Docs:` may hold "the path/URL of a shared documentation repo in a multi-repo product",
+# per init. A URL is not a directory, so every document would read as absent — which would be
+# a false RED — and treating it as "nothing to check" would be a false GREEN. Neither is
+# acceptable, so it is a named outcome and init does not put this checker on the Validators
+# line of a project configured that way.
+r=$(docset_repo ds-remote full "https://example.invalid/docs")
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"cannot be verified"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"not found"*) c3=no ;; *) c3=ok ;; esac     # must NOT read as absent documents
+
+[ "$c1$c2$c3" = "okokok" ] && report "a remote Docs value is named, not read as absent documents" ok \
+  || report "a remote Docs value is named, not read as absent documents" no \
+     "exit=$c1 says-unverifiable=$c2 not-reported-as-missing=$c3"
+
+
+# 60. Trailing whitespace: strict on `Mode`, tolerant on `Docs`, and each says why.
+#
+# This case exists because the parity fix that produced it was, for one round, an INTENTION.
+# `steering_value` dropped `.strip()` so it would return exactly what `sed -n "s/^ *- *KEY: *//p"`
+# returns — the Python had been the more PERMISSIVE of the two, accepting a value the hooks
+# would not match, which is #34 inverted and the direction that passes silently. Nothing
+# asserted it. Restoring `.strip()` reintroduced the divergence with all 71 cases green, so a
+# later "tidy up this odd return" commit would have undone it unopposed. G-4: no case, not
+# shipped.
+#
+# The two halves are deliberately asymmetric, and the asymmetry is the thing under test.
+# `Mode` is read by a shell consumer, so parity is the stricter behaviour and wins. `Docs` is
+# not — gate_steering_value is called for Validators, Source globs, Owns and Reviewer, and the
+# anchors guard reads Docs only to test it non-empty — so there is no reader to be stricter
+# than, and `Path("docs/ ")` would fail on a directory named " " with the cause invisible in
+# rendered Markdown. A single rule applied to both would be wrong at one end or the other.
+r=$(docset_repo ds-ws-mode ""); add_full_docs "$r"
+printf -- '- Mode: full \n' >> "$r/.steering/tech.md"      # one trailing space
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *whitespace*) c2=ok ;; *) c2=no ;; esac
+# exit 1 alone cannot tell the parity fix from the pre-existing "not a mode" branch, so the
+# message is asserted too — and asserted NOT to be the unactionable one.
+case "$err" in *"is not a mode"*) c3=no ;; *) c3=ok ;; esac
+
+# The mirror: `Docs` with a trailing space must still PASS. Strict here would fire on an
+# ordinary steering file and is how a gate gets switched off.
+r=$(docset_repo ds-ws-docs full); add_full_docs "$r"
+# The assertion below expects a PASS, so a no-op mutation would satisfy it by leaving an
+# ordinary repo — silent green. The needle matches byte-for-byte only because docset_repo
+# writes `- Docs: %s\n`, so the edit reports whether it applied AND the shell checks it: a
+# `raise` alone is not enough, because the shell does not inspect a heredoc python's exit
+# status. Found by mutating docset_repo's format string and watching this case stay green.
+#
+# Not an `assert`: this suite's own guard forbids expressing a safety check that way, since
+# `python -O` strips them — #28, found in a guard protecting the receipt schema.
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], ".steering", "tech.md")
+src = p.read_text()
+out = src.replace("- Docs: docs/\n", "- Docs: docs/ \n")
+if out == src:
+    raise SystemExit("fixture no-op: the `- Docs:` needle no longer matches docset_repo's format")
+p.write_text(out)
+PYEOF
+then cf1=ok; else cf1=no; fi
+out=$(run_docset "$r")
+{ [ "$out" = "0" ] && [ "$cf1" = ok ]; } && c4=ok || c4=no
+
+# A whitespace-ONLY `- Docs:` is the third state, and it was a fail-open for one round. With
+# the strip outside the `or`, a tab is truthy, survives the default, and is then emptied —
+# and `pathlib.Path("")` is `.`, a directory that always exists. The guard then verified the
+# set at the repository ROOT and, on a project keeping its documents there, exited 0 with a
+# success line naming no directory. The anchors guard cannot catch it either: a tab is not
+# empty, so it reports `Docs` resolved about the same line.
+#
+# The fixture puts the documents where a real project puts them, so a run against `.` finds
+# nothing and the exit code separates the two behaviours.
+r=$(docset_repo ds-docs-blank full); add_full_docs "$r"
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], ".steering", "tech.md")
+src = p.read_text()
+out = src.replace("- Docs: docs/\n", "- Docs: \t\n")
+if out == src:
+    raise SystemExit("fixture no-op: the `- Docs:` needle no longer matches docset_repo's format")
+p.write_text(out)
+PYEOF
+then cf2=ok; else cf2=no; fi
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+# Must fall back to docs/ exactly as an absent line does, and therefore PASS on this tree —
+# never verify `.` and never report the documents missing from a directory nobody configured.
+{ [ "$out" = "0" ] && [ "$cf2" = ok ]; } && c5=ok || c5=no
+case "$err" in *PRD.md*) c6=no ;; *) c6=ok ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] && report "trailing whitespace is strict on Mode, tolerant on Docs, and blank Docs never means the repo root" ok \
+  || report "trailing whitespace is strict on Mode, tolerant on Docs, and blank Docs never means the repo root" no \
+     "mode-exit=$c1 mode-names-whitespace=$c2 mode-not-generic=$c3 docs-tolerant=$c4 blank-falls-back=$c5 not-root-scanned=$c6"
+
+# 59. init stripped of the document-set wiring must fail.
+#
+# Out of numeric order on purpose: 60 is grouped with the other docset cases above,
+# because it shares their fixture family, while this one uses contracts_repo. The suite's
+# source comments and its output order have already diverged (G-9); this is the third
+# instance and it is deliberate rather than drift.
+#
+# Two entries, and the second is the load-bearing one: copying the checker onto the
+# `- Validators:` line is the ONLY route by which the mode reaches a gate. Delete that
+# sentence and the mode becomes a comment — declared on every install, checked on none — and
+# the deletion is invisible in review, because what it removes is a check that says nothing
+# rather than a behaviour anyone sees. That is the argument check-skill-contracts.py's own
+# docstring demands of a new entry.
+#
+# The control runs first: a guard that failed on every input would satisfy the accusing half
+# on its own. Both mutations are no-ops if their target is already absent, deliberately — a
+# fixture that aborted would report a setup error as a guard failure.
+r=$(contracts_repo contracts-mode-control)
+out=$(run_contracts "$r")
+[ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(contracts_repo contracts-nomode)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "`- Mode: minimum` or `- Mode: full` on one physical line"
+p.write_text(p.read_text().replace(needle, "a mode line somewhere"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"skills/init/SKILL.md"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(contracts_repo contracts-nowiring)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "copy `assets/check-document-set.py` to the project's `scripts/` directory and add it to the `- Validators:` line"
+p.write_text(p.read_text().replace(needle, "install the document-set checker"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *"Validators"*) c4=ok ;; *) c4=no ;; esac
+
+# The third clause of #110's T2, which had prose and no pin until review found it. The
+# upgrade bullet is what stops a re-run from recreating documents the author deliberately
+# declined — the feature undoing itself — and it read as ordinary advice, so its deletion
+# would have looked like trimming.
+r=$(contracts_repo contracts-noupgrade)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "A project that already carries a `- Mode:` line is an upgrade, never a fresh install"
+p.write_text(p.read_text().replace(needle, "Re-running init is fine"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *upgrade*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "init stripped of the mode line, its wiring, or its upgrade path fails" ok \
+  || report "init stripped of the mode line, its wiring, or its upgrade path fails" no \
+     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6"
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
