@@ -62,6 +62,15 @@ jobs:
       - name: Steering anchors are readable
         run: ./assets/check-steering-anchors.sh
 
+      # The document set is the one validator the turn-end gate structurally cannot cover:
+      # quality-gate.sh runs the `- Validators:` line only when a path matching
+      # `- Source globs:` changed, and a document is never source — the two sets are disjoint
+      # by construction, because one line points at documents and the other at code. So the
+      # guard ran on every turn where nothing it checks could have changed, and was absent on
+      # the turns where something did. CI is where that window closes.
+      - name: Document set matches the declared mode
+        run: ./assets/check-document-set.py
+
       # The repo's central claim is that the review gate is enforced rather than
       # advisory. That is testable without a model, so it is tested.
       - name: Review gate behaves

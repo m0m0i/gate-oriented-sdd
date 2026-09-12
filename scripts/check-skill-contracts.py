@@ -14,7 +14,7 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Ten today. An eleventh needs an argument, in the spec that proposes it, for why review cannot
+Fifteen today. An eleventh needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time.
 """
@@ -28,11 +28,23 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 #: (skill file, required substring, why it must stay)
 CONTRACTS = (
     (
+        "skills/init/SKILL.md",
+        "A project that already carries a `- Mode:` line is an upgrade, never a fresh install",
+        "Without it a re-run recreates documents the author deliberately declined, which is "
+        "the exact failure the mode was recorded to prevent — the feature undoing itself. "
+        "Review cannot defend it: the bullet reads as ordinary advice, and its deletion looks "
+        "like trimming, while what it actually restores is `init` overwriting a deliberate "
+        "choice. #110 AC9, promised by that spec's T2.",
+    ),
+    (
         "skills/spec/SKILL.md",
         "In a `minimum`-mode project the backlog is the queue and creating the issue from it is the normal path",
         "Without the scope, the side-door accusation fires on EVERY spec in a project that "
         "never runs sprint as a batch — and a rule that is wrong every time is a rule the "
-        "user learns to skip, taking the real one ('no issue, no spec') with it. #110.",
+        "user learns to skip, taking the real one ('no issue, no spec') with it. #110. "
+        "Review cannot defend it: deleting the clause reads as tightening a rule, which is "
+        "the direction a reviewer waves through, and the damage lands in installs that "
+        "never appear in this repository's diffs.",
     ),
     (
         "skills/contract/SKILL.md",
@@ -41,7 +53,10 @@ CONTRACTS = (
         "style guide wholesale, so run early it produces a WORSE rulebook rather than an "
         "absent one. Stated as scale instead, a minimum-mode reader concludes the skill is "
         "unavailable to them rather than not yet useful — and mode governs documents and "
-        "flow membership, never availability. #110, and #109's availability clause.",
+        "flow membership, never availability. #110, and #109's availability clause. Review "
+        "cannot defend it: #109 is the precedent — that exact confusion survived three "
+        "documents and an unknown number of readings, because a sentence that is merely "
+        "imprecise reads as fine.",
     ),
     (
         "skills/init/SKILL.md",
@@ -49,7 +64,9 @@ CONTRACTS = (
         "Without the line, nothing downstream can tell a deliberate omission from an "
         "abandoned install, and check-document-set.py has nothing to verify against. The "
         "mode is declared, never derived — derivation cannot distinguish the two, which is "
-        "the whole of #110.",
+        "the whole of #110. Review cannot defend it: an init that stops writing the line "
+        "still installs a working harness, and every check stays green — the loss shows up "
+        "only in a project nobody is reviewing, on the day someone asks which set it chose.",
     ),
     (
         "skills/init/SKILL.md",
@@ -57,7 +74,10 @@ CONTRACTS = (
         "This is the ONLY route by which the mode reaches a gate. Delete it and the mode "
         "becomes a comment: declared, never checked. It must stay on the `- Validators:` "
         "line rather than in a hook, because a gate that branches on mode is a switch that "
-        "turns enforcement down — #110's AC5.",
+        "turns enforcement down — #110's AC5. Review cannot defend it for the same reason "
+        "the check-steering-anchors entry exists: what the deletion removes is a check that "
+        "then says nothing, and a check saying nothing is indistinguishable from a check "
+        "passing.",
     ),
     (
         "skills/init/SKILL.md",

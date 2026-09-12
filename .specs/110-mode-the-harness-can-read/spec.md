@@ -65,6 +65,16 @@ The checker is `assets/check-document-set.py`, copied by `init` into the project
 | `scripts/test-gates.sh` | cases for the checker only; no gate case changes (AC11) |
 | `plugin.json`, `.claude-plugin/plugin.json` | the version bump, as the step after the receipt |
 
+**Five new `check-skill-contracts.py` entries, and why review cannot hold these sentences.** That guard's own docstring requires the argument to be made in the spec proposing the entry, and #54 is the standing argument against growing the count. Three are `init`'s and two are prose in other skills:
+
+| Needle | Why review cannot defend it |
+| :-- | :-- |
+| `- Mode:` written at all | An `init` that stops writing the line still installs a working harness and every check stays green. The loss shows up only in a project nobody is reviewing, on the day someone asks which set it chose. |
+| the `- Validators:` wiring | Structural twin of the existing `check-steering-anchors.sh` entry: what the deletion removes is a check that then says nothing, and a check saying nothing is indistinguishable from a check passing. |
+| the upgrade path | Reads as ordinary advice, so deletion looks like trimming — while what it restores is `init` overwriting a choice the author deliberately made, the feature undoing itself. |
+| `spec`'s mode read | Deleting the clause reads as *tightening* a rule, which is the direction a reviewer waves through, and the damage lands in installs that never appear in this repository's diffs. |
+| `contract`'s evidence trigger | #109 is the precedent: that exact confusion survived three documents and an unknown number of readings, because a sentence that is merely imprecise reads as fine. |
+
 **Risks and trade-offs:**
 
 - **The four open `init` bugs (#81–#84).** This spec changes `init`'s *output*, not the defects they describe, and none of them touches the `- Mode:` line or the document-set check — so they are recorded as a risk rather than a blocker. If any of them restructures step 3, AC1 and AC9 land on a moved target and this spec needs re-reading, not rewriting.

@@ -1857,7 +1857,16 @@ docset_repo() {
   cp "$ROOT/assets/check-document-set.py" "$r/scripts/"
   chmod +x "$r/scripts/check-document-set.py"
   d=${3:-docs/}
-  mkdir -p "$r/$d" 2>/dev/null || true
+  # A URL is not a path. Seeding it would build a real tree at `$r/https:/example.invalid/docs`,
+  # and case 58 would then survive only because add_full_docs is not called for it — red for
+  # the right verdict and the wrong reason, one "for symmetry" edit away from going green on a
+  # checker that reads a URL as a directory. G-4: a fixture must be able to fail for the reason
+  # it claims to test.
+  case "$d" in
+    *://*) : ;;
+    *) mkdir -p "$r/$d" 2>/dev/null || true
+       for f in PRD DESIGN BACKLOG; do printf 'x\n' > "$r/$d/$f.md"; done ;;
+  esac
   {
     printf '# Tech\n\n'
     printf -- '- Validators: ./scripts/check-document-set.py\n'
@@ -1866,10 +1875,9 @@ docset_repo() {
     [ -n "$m" ] && printf -- '- Mode: %s\n' "$m"
   } > "$r/.steering/tech.md"
   for t in feature bug chore; do printf 'x\n' > "$r/.github/ISSUE_TEMPLATE/$t.md"; done
-  for f in PRD DESIGN BACKLOG; do printf 'x\n' > "$r/$d/$f.md"; done
   echo "$r"
 }
-add_full_docs() { for f in NORTH_STAR EPICS CONTRACT; do printf 'x\n' > "$1/${2:-docs}/$f.md"; done; }
+add_full_docs() { for f in NORTH_STAR EPICS CONTRACT; do printf 'x\n' > "$1/docs/$f.md"; done; }
 run_docset() { ( cd "$1" && python3 scripts/check-document-set.py >/dev/null 2>"$TMP/derr"; printf '%s' "$?" ) }
 
 # 56. Both modes verified in both directions, and the mandatory set checked under BOTH.
@@ -2017,9 +2025,24 @@ out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
 [ "$out" = "1" ] && c3=ok || c3=no
 case "$err" in *"Validators"*) c4=ok ;; *) c4=no ;; esac
 
-[ "$c0$c1$c2$c3$c4" = "okokokokok" ] && report "init stripped of the mode line or its Validators wiring fails" ok \
-  || report "init stripped of the mode line or its Validators wiring fails" no \
-     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4"
+# The third clause of #110's T2, which had prose and no pin until review found it. The
+# upgrade bullet is what stops a re-run from recreating documents the author deliberately
+# declined — the feature undoing itself — and it read as ordinary advice, so its deletion
+# would have looked like trimming.
+r=$(contracts_repo contracts-noupgrade)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "A project that already carries a `- Mode:` line is an upgrade, never a fresh install"
+p.write_text(p.read_text().replace(needle, "Re-running init is fine"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *upgrade*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "init stripped of the mode line, its wiring, or its upgrade path fails" ok \
+  || report "init stripped of the mode line, its wiring, or its upgrade path fails" no \
+     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6"
 
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"

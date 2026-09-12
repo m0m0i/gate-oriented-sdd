@@ -49,10 +49,19 @@ def fail(message):
 
 
 def steering_value(text, key):
+    """The first value for `key`, byte-for-byte as `gate_steering_value` would return it.
+
+    No `.strip()`. `sed -n "s/^ *- *KEY: *//p"` removes what precedes the value and nothing
+    that follows it, so `- Mode: full   ` is the string `full   ` to every shell consumer.
+    Stripping here would make this reader accept a value the hooks would not — the #34 shape
+    inverted, and in the direction that passes silently. Parity is the stricter behaviour, so
+    parity is what this does; `report_whitespace` below turns the resulting failure into a
+    sentence that names the real cause instead of a confusing one.
+    """
     for line in text.split("\n"):
         m = re.match(rf"^ *- *{key}: *(.*)$", line)
         if m:
-            return m.group(1).strip()
+            return m.group(1)
     return ""
 
 
@@ -76,6 +85,16 @@ def main():
             f"`- Mode: full` on one physical line. A mode is declared, never assumed."
         )
     if mode not in MODES:
+        if mode.strip() in MODES:
+            # Parity with the shell reader means trailing whitespace is part of the value, so
+            # this really is a malformed line rather than a near miss — but saying only "not a
+            # mode" about a line that reads `- Mode: full` to a human is a diagnosis nobody
+            # can act on.
+            fail(
+                f"`- Mode:` carries trailing whitespace, so its value is {mode!r} rather than "
+                f"{mode.strip()!r}. The hooks read this line with sed and do not trim it either. "
+                f"Remove the trailing space."
+            )
         fail(f"`- Mode: {mode}` is not a mode. Expected one of: {', '.join(MODES)}.")
 
     docs_value = steering_value(text, "Docs") or "docs/"
@@ -118,9 +137,13 @@ def main():
     # non-empty by construction, and the count is printed rather than the word "all" so that a
     # shrinking set is visible in CI output rather than silent.
     optional_note = "" if mode == "full" else " (the 3 opt-in documents are not required, and may be present)"
+    # Counted in their own units. This spec exists partly because #109's section counted issue
+    # templates once inside a total and again beside it; reintroducing that conflation in the
+    # checker's own output would be the same defect one layer down.
+    n_docs = len(wanted) - len(TEMPLATES)
     print(
-        f"check-document-set: mode `{mode}` — {len(wanted)} document(s) and "
-        f"{len(MANDATORY_DIRS)} directory(ies) present{optional_note}"
+        f"check-document-set: mode `{mode}` — {n_docs} document(s), {len(TEMPLATES)} issue "
+        f"template(s) and {len(MANDATORY_DIRS)} directory(ies) present{optional_note}"
     )
 
 
