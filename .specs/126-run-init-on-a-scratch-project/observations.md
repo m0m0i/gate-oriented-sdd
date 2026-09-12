@@ -7,7 +7,12 @@ Plugin **0.7.0**, `skills/` identical to the installed copy. Run 2026-09-12T09:2
 The invariant is that this repository is unchanged. "Nothing broke" is an assertion unless
 the before-state exists, so it is recorded here first.
 
-```
+_Fenced with four backticks, not three: `check-markdown-fences`'s own output contains a
+three-backtick run, which closes a three-backtick fence early. The block was complete in
+git and truncated in every renderer — a record that is right in the file and wrong on the
+screen, which is the half a reader sees._
+
+````
 ./scripts/check-leakage.sh         check-leakage: clean
 ./scripts/check-manifests.py       check-manifests: both manifests agree
 ./scripts/check-markdown-fences.py check-markdown-fences: 10 ```markdown fence(s), no hand-wrapped prose
@@ -19,7 +24,7 @@ the before-state exists, so it is recorded here first.
 ./assets/check-document-set.py     check-document-set: mode `full` at `docs/` — 6 document(s), 3 issue template(s) and 2 directory(ies) present
 ./scripts/check-contract-path.py   check-contract-path: 10 source(s) agree on `_shared/reviewer-contract.md`
 ./scripts/test-gates.sh            test-gates: 76 passed, 0 failed
-```
+````
 
 ## T1 — the scratch project, built before `init` saw it
 
@@ -139,3 +144,42 @@ The relative form misses — which is exactly what #82's round 1 discovered and 
 Testing proof 3, I created a spec branch, `git add -A`, committed — which swept **the entire `init` output** onto that branch — then checked out `main` and deleted the branch. All of it vanished. Recovered from the dangling commit via `git reflog`.
 
 The run is about a skill that writes many untracked files into a repository that already has commits. **Committing "everything" mid-run binds that output to whatever branch happens to be checked out.** #82's session lost two case rewrites to `git checkout` on the same day; this is the same lesson from the other end — in a working tree full of uncommitted work, every git command that moves HEAD is destructive by default.
+
+## T4 — re-verification, what was filed, and the discard
+
+**AC1 — the invariant holds. 11/11 validators identical** to the baseline captured before anything ran, compared by name rather than by eye.
+
+_The first comparison reported 2/3 and looked like a real difference._ It was not: my extraction regex read the baseline block up to the first three-backtick run, and `check-markdown-fences`'s own output **contains** one. So the record was complete in git and truncated in the renderer, and my comparison read the truncation. The fence is now four backticks and the reason is recorded where it happened.
+
+That is the fourth time in two days that a *record or a fixture* — not the thing under test — produced a result that read as a finding. It is #124's subject, arriving in a document rather than a case.
+
+| Criterion | Result |
+| :-- | :-- |
+| AC1 | 11/11 validators identical; `test-gates` 76 before and after |
+| AC2 | diff is `docs/verified.md` + this spec directory. `check-version-bump`: **no shipped file changed** — so no version bump, as the spec said |
+| AC3 | `check-leakage: clean`, run by hand; **zero** occurrences of the scratch project's name in either committed file |
+| AC8 | no shipped file modified in response to any finding |
+
+### Filed, not fixed
+
+| # | What |
+| :-- | :-- |
+| **#127** | `init` installs `check-document-set.py` and never creates the documents it requires — the gate is armed **red** by the harness's own file, dormant until the first source edit. CAP-4's falsifier. |
+| **#128** | the template merge leaves `spec` with no way to read an issue's type — no label mapping is recorded, and the kept template's shape is not the one `spec`'s bug template draws on |
+| **#129** | step 2 asks the operator to confirm a branch convention `review-gate.sh` will reject, and says nothing about what to do with a conflicting answer |
+
+### Confirmed, not reproduced, and not observed — kept distinct on purpose
+
+- **#83 — confirmed.** No source ships for the three READMEs.
+- **#84 — not reproduced**, because a clean install has no `CONTRACT.md` for it to fire on. That says nothing about whether it is fixed, and the distinction matters: a run that reports "did not fire" as "passed" is the failure this repository keeps finding one level up.
+- **#81 — not observed.** Its check is `ruff`; it is not installed here.
+
+### The scratch project is deleted
+
+`rm -rf` on its temp root, verified gone. Nothing was pushed anywhere. It existed in version control only inside itself.
+
+## What this run was worth
+
+Three new defects, one of them (#127) shipped **this morning** by #110 and reachable on the very first install — and none of the three was visible from reading the skill. Against that: #82's fix **confirmed working on a real install**, which is the observation `1.0.0` was waiting on and which no amount of reasoning could have produced.
+
+Both halves argue the same thing. The harness's own claim is that a gate beats a request; this run is the same claim applied to verification — **executing the skill beats reading it**, and the gap between them is where three of today's defects were living.
