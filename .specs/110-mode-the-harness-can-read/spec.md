@@ -1,5 +1,5 @@
 # Spec: The installed document set, as a mode the harness reads
-- Slug: 110-mode-the-harness-can-read   Issue: 110   Type: feature   Status: approved
+- Slug: 110-mode-the-harness-can-read   Issue: 110   Type: feature   Status: done
 - Author: m0m0i   Date: 2026-09-11
 
 ## 1. Requirements (WHAT / WHY)
