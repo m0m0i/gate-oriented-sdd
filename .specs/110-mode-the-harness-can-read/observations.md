@@ -217,3 +217,58 @@ Case 60 sits above case 59 in the source, so the numbered comments read 56, 57, 
 grouped with its fixture family rather than renumbered, and case 59 now carries a note saying so —
 the suite's source and output order had already diverged twice, and an undocumented third would read
 as drift.
+
+## Review round 4 — CLEAN, 0 blockers, 0 HIGH, 0 MEDIUM, 1 LOW
+
+Reviewed at `ae1d607`. Both questions I put came back clean: the `if python3 … <<'PYEOF' … PYEOF
+then … fi` construct does capture the status (the heredoc body starts after the redirection line,
+so `then` continues the compound normally), the brace group carries the last command's status as
+intended, and moving the strip inside the `or` changes nothing for `./docs` — it normalises to the
+same path and the success line prints the walked directory rather than the raw value.
+
+### The one deviation from a verbatim receipt, stated rather than quiet
+
+The reviewer's Receipt block reads `high=1`, and it flagged that itself rather than choosing:
+`high=` on a CLEAN receipt is ambiguous between *"none were ever found"* and *"none remain"*.
+Rounds 1-3 each carried a HIGH against an **earlier** SHA; at `ae1d607` there are none.
+
+**Written as `high=0`**, because the field describes the reviewed SHA and #109's own final receipt
+is the precedent — `verdict=CLEAN`, `high=0`, after six rounds of which four carried HIGHs. Recorded
+here because `implement` says to copy the block verbatim, and a field changed silently is
+indistinguishable from a field fabricated. This is the only value that differs, and the reviewer
+asked for the decision explicitly.
+
+### LOW — accepted, not fixed
+
+`cf1`/`cf2` decide two assertions but appear in neither the report name nor the detail string, so a
+red run says `docs-tolerant=no` without saying which half broke. The `SystemExit` message does print
+immediately above, so no information is lost — this is about the first line an operator reads.
+
+Not fixed because `scripts/**/*.sh` is inside `Source globs`: editing it now re-stales a CLEAN
+receipt and buys a fifth review round for a detail string. It should ride along with the next change
+to this file. The fix, for whoever takes it: `"… docs-tolerant=$c4 (mutated=$cf1) …"`.
+
+### One residual filed rather than fixed here
+
+`assets/check-steering-anchors.sh` accuses only when a value is **empty**, so a whitespace-only
+anchor value counts as resolved — for all six anchors, not just `Docs`. Confirmed empirically this
+round: with `- Docs: \t` written, that guard printed `6 of 6 anchor(s) resolved, none unreadable`
+about a line pointing nowhere. `check-document-set.py` now defends itself for `Docs` (falls back)
+and for `Mode` (`\t` is not a mode, so it fails closed), but the general case belongs to the anchors
+guard. Filed as its own issue rather than widened into this branch.
+
+### A technique worth naming, because nothing in the rulebook says to do it
+
+Round 3's silent-green fixture was found by **mutating the fixture builder rather than the subject**
+— changing `docset_repo`'s `- Docs: %s` format string and watching the case stay green. Every
+mutation test in this repository so far has broken the *thing under test*; this one broke the
+*thing doing the testing*, and that is the only move that could have found it. The question it
+answers: *if my fixture silently stopped constructing the state it claims, would any case notice?*
+
+### Four rounds, and what they were about
+
+The artifact was right in round 1. Every finding after that concerned the wiring and the evidence:
+where the check runs (round 1), whether the fix is pinned (round 2), whether the pin can fail
+(round 3). Round 4 found nothing new. That is #109's lesson arriving from the other direction —
+there the fix was right and the proof was wrong; here the feature was right and its *installation*
+was wrong, three times in a row, each time introduced by the previous repair.
