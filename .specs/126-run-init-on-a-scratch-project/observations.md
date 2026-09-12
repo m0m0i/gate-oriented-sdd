@@ -131,7 +131,7 @@ misses  .agents/_shared/reviewer-contract.md
 -> opened with NO hand-edit; first line: '# Reviewer contract'
 ```
 
-The relative form misses — which is exactly what #82's round 1 discovered and why the concrete paths were added. The Claude Code path opens. `.agents/…` misses because this is a Claude Code install, which is what "open whichever your project has" is for. **#82's fix works on a real install.**
+The relative form misses — which is exactly what #82's round 1 discovered and why the concrete paths were added. The Claude Code path opens. `.agents/…` misses because this is a Claude Code install, which is what "open whichever your project has" is for. **#82's Claude Code half works on a real install** — the `.agents/` destination it also added remains unopened by anything.
 
 ### Not exercised, named rather than omitted (C-9)
 
@@ -157,14 +157,14 @@ That is the same shape #124 was filed for, arriving in a document rather than a 
 
 | Criterion | Result |
 | :-- | :-- |
-| AC1 | 11/11 validators identical; `test-gates` 76 before and after |
+| AC1 | 11/11 validators identical; `test-gates` 76 before and after — **9/11 independently re-run at review**, the other two outside the reviewer's allow-list (#131) |
 | AC2 | diff is `docs/verified.md` + this spec directory. `check-version-bump`: **no shipped file changed** — so no version bump, as the spec said |
 | AC3 | `check-leakage: clean`, run by hand; **zero** occurrences of the scratch project's name in either committed file |
-| AC8 | no shipped file modified in response to any finding |
 | AC4 | every step recorded above, with "Not exercised" naming what could not be |
 | AC5 | proof 4 — attempted from the project root, stated as observed |
 | AC6 | #83 confirmed, #84 not reproduced, #81 not observed; #127/#128/#129 filed, #130/#131 after review |
 | AC7 | the `docs/verified.md` section, with the synthetic limitation above its table |
+| AC8 | no shipped file modified in response to any finding |
 
 ### Filed, not fixed
 
@@ -173,6 +173,8 @@ That is the same shape #124 was filed for, arriving in a document rather than a 
 | **#127** | `init` installs `check-document-set.py` and never creates the documents it requires — the gate is armed **red** by the harness's own file, dormant until the first source edit. CAP-4's falsifier. |
 | **#128** | the template merge leaves `spec` with no way to read an issue's type — no label mapping is recorded, and the kept template's shape is not the one `spec`'s bug template draws on |
 | **#129** | step 2 asks the operator to confirm a branch convention `review-gate.sh` will reject, and says nothing about what to do with a conflicting answer |
+| **#130** | `check-document-set.py` requires a literal `bug.md` that step 3's merge bullet tells the installer not to create — the second cause of proof 1, filed after review found it |
+| **#131** | this reviewer's allow-list has drifted from the `- Validators:` line, so two of eleven validators could not be independently re-run |
 
 ### Confirmed, not reproduced, and not observed — kept distinct on purpose
 
@@ -196,6 +198,8 @@ Reviewed at `f1c2402`. Every finding was about **the record**, which is correct 
 
 **The reviewer could only re-run 9 of the 11 validators.** `./assets/check-document-set.py` and `./scripts/check-contract-path.py` are on the `- Validators:` line and absent from its allow-list, so it recorded them as **unknown rather than as agreeing** — the same discipline this record is being judged by, applied to itself. Filed as **#131**. AC1's "11/11" is therefore 9/11 independently confirmed, and that is now stated rather than implied.
 
+**And the issue numbers are the author's claim, not a verified one.** The reviewer could not confirm that #127-#131 exist: that needs `gh`, which is outside its allow-list, and no committed file here references them. AC6 only requires the numbers to appear in the record, so this is not a conformance gap — it is the one "could not observe" from the review that this record had not inherited, in the document whose whole subject is inheriting exactly those.
+
 ### The findings, and what they changed
 
 - **A second cause of proof 1, hidden behind the first.** The record blamed #127 entirely. `check-document-set.py` also requires a literal `bug.md`, which step 3's merge bullet tells the installer *not* to create — and the `docs.is_dir()` fail-fast hides it. **Fixing #127 alone would not turn proof 1 green.** Filed as #130. This is the finding worth the round: a run that stops at the first red reports one cause, and the record inherited that.
@@ -210,3 +214,37 @@ Reviewed at `f1c2402`. Every finding was about **the record**, which is correct 
 The record said this was "the fourth time in two days" that a record or fixture produced a result reading as a finding. Review pushed back: that is a claim about the repository's history, not verifiable from the diff, and C-1 is what it exists for. Withdrawn and replaced with a pointer to #124, which enumerates the instances.
 
 **A reviewer correcting an author's self-criticism is worth recording.** The instinct that a confession is automatically safe is wrong — an unverifiable claim is unverifiable in either direction, and this one was flattering in its own way: it made a pattern sound better-established than the evidence in front of the reviewer.
+
+## Review round 2 — APPROVE, 0 blockers, 0 HIGH, 0 MEDIUM, 3 LOW
+
+Reviewed at `fd43af8`. All four round-1 MEDIUMs and three LOWs closed. The reviewer re-derived the
+two-causes paragraph independently and confirmed it does not oversell — naming the three clauses
+that keep it honest, of which the load-bearing one is *"on any project that already had a
+differently-named bug template"*: on a greenfield target `init` copies `bug.md` and cause B never
+arises, so dropping that qualifier would have been the overstatement.
+
+All three LOWs fixed:
+
+- **The `1.0.0` row said "confirms #82 on a real install", unqualified** — in the one row a release
+  decision gets quoted from, eighteen lines above the entry recording that `.agents/` has never
+  been opened. Now "**#82's Claude Code half**", with the gap named in the row itself. The general
+  point is worth keeping: a qualifier that lives elsewhere in the document does not travel with the
+  sentence that gets quoted.
+- **The record had not inherited the review's second "could not observe"** — that the reviewer
+  cannot confirm #127–#131 exist, because `gh` is outside its allow-list. Now stated: the numbers
+  are the author's claim. In a document about inheriting exactly those, missing one was the right
+  thing to be caught on.
+- **The two ledgers a reader scans had not caught up with round 2** — AC1 asserted 11/11 where the
+  9/11 qualification sat 37 lines below, the Filed table listed three of five issues, and the AC
+  rows had landed out of order. All three fixed at the ledger rather than in prose.
+
+### What two rounds of reviewing a *record* were worth
+
+Neither round found anything wrong with the run. Both found things wrong with what the run
+**claimed** — a second cause masked by a fail-fast, a stale ledger field, a version row covering no
+version, a grammatical subject that never acted, a count that read as found-all, an unverifiable
+aside, and a qualifier that would not have travelled with the sentence it qualified.
+
+That is the argument for reviewing verification records at all. The run is gone; the record is the
+only thing that will ever be read again, and every one of those defects would have survived into it
+unchallenged.
