@@ -1,5 +1,5 @@
 # Spec: One path for the reviewer contract
-- Slug: 82-one-path-for-the-reviewer-contract   Issue: 82   Type: bug   Status: approved
+- Slug: 82-one-path-for-the-reviewer-contract   Issue: 82   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-09-12
 
 ## 1. Requirements (WHAT / WHY)
