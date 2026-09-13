@@ -168,7 +168,7 @@ agy plugin install ./gate-oriented-sdd
 
 ## ステータス
 
-**v0.8.0、pre-release です。** 検証済みバージョンの一覧を添えた reference implementation であって、サポート付きのプロダクトではありません。[eval スイート](./evals/) は開発中です。4つのケースは書いてあり、`claude plugin eval` はこのアカウントではまだ early access のままです。
+**v0.9.0、pre-release です。** 検証済みバージョンの一覧を添えた reference implementation であって、サポート付きのプロダクトではありません。[eval スイート](./evals/) は開発中です。4つのケースは書いてあり、`claude plugin eval` はこのアカウントではまだ early access のままです。
 
 検証環境: Claude Code 2.1.252（2026-09-05）· Antigravity CLI 1.1.17 / IDE 2.3.1（2026-08-21）· macOS
 
