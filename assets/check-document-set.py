@@ -236,6 +236,14 @@ def main():
         started = []
         unreadable = []
         for directory in (SPECS, ARCHIVE):
+            # `Path.is_dir()` swallows OSError, and this is the one place that is safe —
+            # but only by an invariant worth writing down, because it lives elsewhere.
+            # `_archive` is itself an entry of `.specs`, so the scan above has already
+            # classified it with error-visible stats: unreadable in any way, it is in
+            # `unreadable` and we never reach a verdict. A dangling link is False in both
+            # places, which is honest. Skipping `_archive` by name in that loop — the natural
+            # way to stop it being listed twice — would activate this swallow with nothing
+            # left to catch it.
             if directory is ARCHIVE and not ARCHIVE.is_dir():
                 continue
             try:

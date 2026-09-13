@@ -24,6 +24,18 @@ report() { # report <name> <ok|no> <detail>
   else fail=$((fail+1)); printf '  FAIL %s — %s\n' "$1" "$3" >&2; fi
 }
 
+# A half that could not run is not a half that passed.
+#
+# Several cases below self-disable when the environment cannot produce the state they need —
+# `chmod 000` under root is the live one, and skipping beats a case that silently cannot fail.
+# But those branches then set their variable to `ok`, the aggregate matches, and `report` prints
+# the same line it prints for a real pass: G-1 one layer out, in the suite that exists to
+# enforce G-1. Under root — any container-based CI step — four halves of case 69 stop testing
+# anything and the output is identical. So the skip is spoken, and the count is printed at the
+# end beside the passes.
+skipped=0
+note_skip() { skipped=$((skipped+1)); printf '  skip %s — %s\n' "$1" "$2"; }
+
 # A repo with the harness installed and one spec branch.
 #
 # Source lives one directory down, in src/, and the glob defaults to the quoted form the
@@ -920,6 +932,7 @@ chmod 000 "$r/skills/spec/templates.md" 2>/dev/null
 if cat "$r/skills/spec/templates.md" >/dev/null 2>&1; then
   chmod 644 "$r/skills/spec/templates.md" 2>/dev/null
   c3=ok; c4=ok
+  note_skip "templates/unreadable-templates-md" "permissions not enforced here (running as root?)"
 else
   out2=$(run_templates "$r"); err2=$(cat "$TMP/terr")
   chmod 644 "$r/skills/spec/templates.md" 2>/dev/null
@@ -1729,7 +1742,8 @@ write_spec "$r" "9-feature" "- [ ] T1: failing test for the thing — then the i
 chmod 000 "$r/.specs/9-feature/spec.md" 2>/dev/null
 if cat "$r/.specs/9-feature/spec.md" >/dev/null 2>&1; then
   chmod 644 "$r/.specs/9-feature/spec.md" 2>/dev/null
-  c1=ok; c2=ok                      # chmod does not deny access here; a case that cannot fail is worse than none
+  c1=ok; c2=ok
+  note_skip "receipt/unreadable" "chmod does not deny access here (running as root?)"
 else
   out=$(run_templates "$r"); err=$(cat "$TMP/terr")
   chmod 644 "$r/.specs/9-feature/spec.md" 2>/dev/null
@@ -1805,7 +1819,8 @@ write_spec "$r" "9-feature" "- [x] T5: **after the reviewer gate is CLEAN** — 
 chmod 000 "$r/.specs/9-feature" 2>/dev/null
 if ls "$r/.specs/9-feature" >/dev/null 2>&1; then
   chmod 755 "$r/.specs/9-feature" 2>/dev/null
-  c1=ok; c2=ok                     # permissions not enforced here; a case that cannot fail is worse than none
+  c1=ok; c2=ok
+  note_skip "templates/unreadable-spec-dir" "permissions not enforced here (running as root?)"
 else
   out=$(run_templates "$r"); err=$(cat "$TMP/terr")
   chmod 755 "$r/.specs/9-feature" 2>/dev/null
@@ -1819,6 +1834,7 @@ chmod 000 "$r/.specs" 2>/dev/null
 if ls "$r/.specs" >/dev/null 2>&1; then
   chmod 755 "$r/.specs" 2>/dev/null
   c3=ok; c4=ok
+  note_skip "templates/unreadable-specs-root" "permissions not enforced here (running as root?)"
 else
   out=$(run_templates "$r"); err=$(cat "$TMP/terr")
   chmod 755 "$r/.specs" 2>/dev/null
@@ -1950,7 +1966,8 @@ r=$(docset_repo ds-unreadable full); add_full_docs "$r"
 chmod 000 "$r/.steering/tech.md" 2>/dev/null
 if cat "$r/.steering/tech.md" >/dev/null 2>&1; then
   chmod 644 "$r/.steering/tech.md" 2>/dev/null
-  c6=ok; c7=ok                     # permissions not enforced here; a case that cannot fail is worse than none
+  c6=ok; c7=ok
+  note_skip "docset/unreadable-tech-md" "permissions not enforced here (running as root?)"
 else
   out=$(run_docset "$r"); err=$(cat "$TMP/derr")
   chmod 644 "$r/.steering/tech.md" 2>/dev/null
@@ -2199,7 +2216,8 @@ r=$(init_tree ds-boot-unreadable bootstrap); spec_in "$r/.specs/7-a-thing"
 chmod 000 "$r/.specs" 2>/dev/null
 if ( cd "$r" && ls .specs >/dev/null 2>&1 ); then
   chmod 755 "$r/.specs" 2>/dev/null
-  c7=ok; c8=ok            # permissions not enforced here; a case that cannot fail is worse than none
+  c7=ok; c8=ok
+  note_skip "bootstrap/unreadable-.specs" "permissions not enforced here (running as root?)"
 else
   out=$(run_docset "$r"); err=$(cat "$TMP/derr")
   chmod 755 "$r/.specs" 2>/dev/null
@@ -2217,7 +2235,8 @@ r=$(init_tree ds-boot-slug-unreadable bootstrap); spec_in "$r/.specs/7-a-thing"
 chmod 000 "$r/.specs/7-a-thing" 2>/dev/null
 if ( cd "$r" && cat .specs/7-a-thing/spec.md >/dev/null 2>&1 ); then
   chmod 755 "$r/.specs/7-a-thing" 2>/dev/null
-  c10=ok; c11=ok          # permissions not enforced here; a case that cannot fail is worse than none
+  c10=ok; c11=ok
+  note_skip "bootstrap/unreadable-slug" "permissions not enforced here (running as root?)"
 else
   out=$(run_docset "$r"); err=$(cat "$TMP/derr")
   chmod 755 "$r/.specs/7-a-thing" 2>/dev/null
@@ -2235,9 +2254,26 @@ ln -s "$TMP/ds-boot-symlink-elsewhere/7-a-thing" "$r/.specs/7-a-thing" 2>/dev/nu
 if [ -L "$r/.specs/7-a-thing" ]; then
   out=$(run_docset "$r"); err=$(cat "$TMP/derr")
   [ "$out" = "1" ] && c12=ok || c12=no
-  case "$err" in *7-a-thing*) c13=ok ;; *) c13=no ;; esac
+  # The MESSAGE, not just the exit code. `*7-a-thing*` alone is satisfied by the unreadable
+  # branch as well, which would pin "not green" rather than the outcome following symlinks
+  # exists to produce — the link was resolved and the spec behind it counted.
+  case "$err" in *"already exist"*7-a-thing*) c13=ok ;; *) c13=no ;; esac
 else
-  c12=ok; c13=ok          # symlinks unavailable; a case that cannot fail is worse than none
+  c12=ok; c13=ok
+  note_skip "bootstrap/symlinked-slug" "symlink creation unavailable on this filesystem"
+fi
+
+# The green control for that widening. G-6: a condition that widens when a gate fires needs a
+# case proving it does not fire on a correct repo. A dangling link holds no spec, and `is_dir()`
+# answers a definite ENOENT rather than an unknown — so it must stay silent, not join the
+# `unreadable` list that a loop or a permission wall belongs in.
+r=$(init_tree ds-boot-dangling bootstrap)
+ln -s "$TMP/ds-boot-dangling-nowhere" "$r/.specs/7-dangling" 2>/dev/null
+if [ -L "$r/.specs/7-dangling" ]; then
+  out=$(run_docset "$r"); [ "$out" = "0" ] && c14=ok || c14=no
+else
+  c14=ok
+  note_skip "bootstrap/dangling-symlink" "symlink creation unavailable on this filesystem"
 fi
 
 # ...and the scan is `bootstrap`-only. In minimum and full a spec is the ordinary state of a
@@ -2245,10 +2281,10 @@ fi
 r=$(docset_repo ds-min-spec minimum); spec_in "$r/.specs/7-a-thing"
 out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
 
-[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13" = "okokokokokokokokokokokokok" ] \
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14" = "okokokokokokokokokokokokokok" ] \
   && report "bootstrap expires at the first spec, and cannot expire quietly" ok \
   || report "bootstrap expires at the first spec, and cannot expire quietly" no \
-     "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9 slug-unreadable-red=$c10 names-slug=$c11 symlink-red=$c12 names-symlink=$c13"
+     "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9 slug-unreadable-red=$c10 names-slug=$c11 symlink-red=$c12 names-symlink=$c13 dangling-stays-green=$c14"
 
 # 59. init stripped of the document-set wiring must fail.
 #
@@ -2542,7 +2578,8 @@ r=$(cpath_repo cp-unreadable)
 chmod 000 "$r/docs/layout.md" 2>/dev/null
 if cat "$r/docs/layout.md" >/dev/null 2>&1; then
   chmod 644 "$r/docs/layout.md" 2>/dev/null
-  c5=ok; c6=ok                     # permissions not enforced here; a case that cannot fail is worse than none
+  c5=ok; c6=ok
+  note_skip "contract-path/unreadable" "permissions not enforced here (running as root?)"
 else
   out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
   chmod 644 "$r/docs/layout.md" 2>/dev/null
@@ -2941,5 +2978,5 @@ case "$err" in *"states the receipt count twice and they disagree"*) c15=ok ;; *
      "count-before-exit=$c1 quotes-it=$c2 count-ja-exit=$c3 quotes-ja=$c4 noise-stays-green=$c5 unknown-exit=$c6 says-silence=$c7 ja-particle-exit=$c8 quotes-particle=$c9 ja-eval-noise-green=$c10 ja-unrelated-green=$c11 ja-silent-exit=$c12 ja-silent-msg=$c13 ja-echo-exit=$c14 ja-echo-msg=$c15"
 
 
-printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
+printf '\ntest-gates: %d passed, %d failed, %d half-case(s) skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
