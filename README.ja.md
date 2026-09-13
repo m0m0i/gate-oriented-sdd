@@ -168,11 +168,11 @@ agy plugin install ./gate-oriented-sdd
 
 ## ステータス
 
-**v0.4.3、pre-release です。** 検証済みバージョンの一覧を添えた reference implementation であって、サポート付きのプロダクトではありません。[eval スイート](./evals/) は開発中です。4つのケースは書いてあり、`claude plugin eval` はこのアカウントではまだ early access のままです。
+**v0.7.0、pre-release です。** 検証済みバージョンの一覧を添えた reference implementation であって、サポート付きのプロダクトではありません。[eval スイート](./evals/) は開発中です。4つのケースは書いてあり、`claude plugin eval` はこのアカウントではまだ early access のままです。
 
 検証環境: Claude Code 2.1.252（2026-09-05）· Antigravity CLI 1.1.17 / IDE 2.3.1（2026-08-21）· macOS
 
-**検証できていること。** まず、ゲートとガードの67通りの挙動です。モデルを介さず、決定的にテストしています（[`scripts/test-gates.sh`](./scripts/test-gates.sh)）。Antigravity の `Stop` フックが実際にブロックすることも、ドキュメントを読んで済ませたのではなく、動かして確かめました（[`docs/verified.md`](./docs/verified.md)）。2つのプラグインマニフェスト、ルールブックのハッシュ、機密混入チェックは、CI で毎回実行しています。skill は13個すべてが、少なくとも一度は実際に動いています。inception の一連の skill と `init` はこのリポジトリ自身か、実在するプロジェクトの使い捨てクローンに対して実行し、`spec`・`clarify`・`implement`・`worklog` は #17 以降のすべての spec で使い、`archive` はこのリポジトリ自身の出荷済み spec に対して何度もスイープしています。inception と `init` の実行で見つかったことは [`docs/verified.md`](./docs/verified.md) に記録し、Issue として起票してあります。そして #17 以降のすべての spec には、`.specs/` の下に review receipt があります。2件を除いてサブエージェントとして起動した reviewer によるレビューで、その2件は inline でレビューしたことが receipt 自体に記録されています。
+**検証できていること。** まず、ゲートとガードの挙動です。モデルを介さず、決定的にテストしています（[`scripts/test-gates.sh`](./scripts/test-gates.sh)。何通りあるかはスイートが持つ数字であって、ここで維持している数字ではありません）。Antigravity の `Stop` フックが実際にブロックすることも、ドキュメントを読んで済ませたのではなく、動かして確かめました（[`docs/verified.md`](./docs/verified.md)）。2つのプラグインマニフェスト、ルールブックのハッシュ、機密混入チェックは、CI で毎回実行しています。skill は13個すべてが、少なくとも一度は実際に動いています。inception の一連の skill と `init` はこのリポジトリ自身か、実在するプロジェクトの使い捨てクローンに対して実行し、`spec`・`clarify`・`implement`・`worklog` は #17 以降のすべての spec で使い、`archive` はこのリポジトリ自身の出荷済み spec に対して何度もスイープしています。inception と `init` の実行で見つかったことは [`docs/verified.md`](./docs/verified.md) に記録し、Issue として起票してあります。そして #17 以降のすべての spec には、`.specs/` の下に review receipt があります。3件を除いてサブエージェントとして起動した reviewer によるレビューで、その3件は inline でレビューしたことが receipt 自体に記録されています。
 
 これから確かめる項目は、[`docs/verified.md`](./docs/verified.md) と Issue に載せています。
 
