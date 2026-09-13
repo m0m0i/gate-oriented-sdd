@@ -2152,6 +2152,67 @@ case "$err" in *"cannot be verified"*) c11=ok ;; *) c11=no ;; esac
   || report "the tree init step 3 produces passes, and bootstrap narrows nothing else" no \
      "install-green=$c1 min-still-red=$c2 full-still-red=$c3 tpl-red=$c4 names-tpl=$c5 dirs-red=$c6 says-bootstrap=$c7 names-owed=$c8 no-false-count=$c9 remote-red=$c10 remote-msg=$c11"
 
+# 69. `bootstrap` stops passing once the project starts building against documents it never
+#     wrote — otherwise it is a gate switched off with a note attached.
+#
+# #127's AC4. The grace period ends at the FIRST SPEC, because a spec is where a capability id
+# gets cited and a spec is the first moment the harness is genuinely in use. That puts the
+# failure inside the flow, with the cause one command behind the user, rather than on their
+# first turn, which is the distinction CAP-4 actually draws — it is not "never block", it is
+# "never block on a failure that predates them".
+spec_in() { mkdir -p "$1"; printf '# Spec\n' > "$1/spec.md"; }
+
+# Control FIRST: the directories init creates, empty, plus the README it will hold. A checker
+# that failed on any `.specs/` at all would satisfy every accusing half below on its own.
+r=$(init_tree ds-boot-nospec bootstrap); printf 'x\n' > "$r/.specs/README.md"; mkdir -p "$r/.specs/_archive"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c1=ok || c1=no
+
+r=$(init_tree ds-boot-spec bootstrap); spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c2=ok || c2=no
+case "$err" in *7-a-thing*) c3=ok ;; *) c3=no ;; esac
+# The message has to carry the way OUT, not just the verdict. A user who reaches this has a
+# spec in hand and three unwritten documents; "bootstrap is no longer valid" tells them
+# nothing they can act on.
+case "$err" in *minimum*) c4=ok ;; *) c4=no ;; esac
+
+# An archived spec counts. A project that shipped work and then swept it has still been built
+# against documents that do not exist, and reading only the live directory would hand it a
+# fresh grace period for tidying up.
+r=$(init_tree ds-boot-arch bootstrap); spec_in "$r/.specs/_archive/7-a-thing"
+out=$(run_docset "$r"); [ "$out" = "1" ] && c5=ok || c5=no
+
+# A directory under `.specs/` with no spec.md is not a spec. `_archive/` itself is one of
+# these, and so is anything a session left behind.
+r=$(init_tree ds-boot-bare bootstrap); mkdir -p "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c6=ok || c6=no
+
+# THIRD OUTCOME. An unreadable `.specs/` is neither "no spec" nor "a spec", and the difference
+# is invisible in the exit code unless it is made visible: `Path.glob` swallows OSError and
+# would report an unreadable directory as an empty one — reporting the grace period intact
+# because it could not look. G-1, and the #115 lesson in the same shape.
+r=$(init_tree ds-boot-unreadable bootstrap); spec_in "$r/.specs/7-a-thing"
+chmod 000 "$r/.specs" 2>/dev/null
+if ( cd "$r" && ls .specs >/dev/null 2>&1 ); then
+  chmod 755 "$r/.specs" 2>/dev/null
+  c7=ok; c8=ok            # permissions not enforced here; a case that cannot fail is worse than none
+else
+  out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+  chmod 755 "$r/.specs" 2>/dev/null
+  [ "$out" = "1" ] && c7=ok || c7=no
+  case "$err" in *"cannot be read"*) c8=ok ;; *) c8=no ;; esac
+fi
+
+# ...and the scan is `bootstrap`-only. In minimum and full a spec is the ordinary state of a
+# working project, and failing on one would fire on every repository that uses this harness.
+r=$(docset_repo ds-min-spec minimum); spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] \
+  && report "bootstrap expires at the first spec, and cannot expire quietly" ok \
+  || report "bootstrap expires at the first spec, and cannot expire quietly" no \
+     "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9"
+
 # 59. init stripped of the document-set wiring must fail.
 #
 # Out of numeric order on purpose: 60 is grouped with the other docset cases above,

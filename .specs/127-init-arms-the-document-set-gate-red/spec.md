@@ -150,7 +150,7 @@
       documents — asserted to exit 0, plus `bootstrap` rejected-when-documents-claimed and the
       `minimum`/`full` controls still failing; then `bootstrap` in `assets/check-document-set.py`
       (AC1, AC2, AC3).
-- [ ] T2: self-termination — a spec under `.specs/`, a spec under `.specs/_archive/`, and an
+- [x] T2: self-termination — a spec under `.specs/`, a spec under `.specs/_archive/`, and an
       unreadable `.specs/` as three distinct outcomes; then the scan (AC4).
 - [ ] T3: `skills/init/SKILL.md` — step 3's promise, the `- Mode:` grammar, the document-set
       bullet and the upgrade rule — and `skills/spec/SKILL.md`'s mode branch, each pinned by its

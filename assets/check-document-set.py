@@ -28,6 +28,7 @@ that branched on mode would be a switch that turns enforcement down.
 
 Run from the repository root. Exits 0 when the filesystem matches the declared mode.
 """
+import os
 import pathlib
 import re
 import sys
@@ -52,7 +53,10 @@ TEMPLATES = ("feature.md", "bug.md", "chore.md")
 TEMPLATE_DIR = pathlib.Path(".github/ISSUE_TEMPLATE")
 #: Directories the flow writes into. Their contents vary per spec and per session, so only
 #: their existence is checkable — but an absent one means the harness was never installed.
-MANDATORY_DIRS = (pathlib.Path(".specs"), pathlib.Path(".work_logs"))
+SPECS = pathlib.Path(".specs")
+MANDATORY_DIRS = (SPECS, pathlib.Path(".work_logs"))
+#: Shipped specs are swept here rather than deleted, so it is part of the same question.
+ARCHIVE = SPECS / "_archive"
 
 #: Ordered as a project moves through them. `bootstrap` is first because every project passes
 #: through it, including the ones that leave it in the same hour.
@@ -62,6 +66,25 @@ MODES = ("bootstrap", "minimum", "full")
 def fail(message):
     print(f"check-document-set: {message}", file=sys.stderr)
     raise SystemExit(1)
+
+
+def spec_slugs(directory):
+    """Directories under `directory` that hold a `spec.md`, as paths. May raise OSError.
+
+    `os.scandir`, not `Path.glob`. glob swallows OSError and yields nothing, so an unreadable
+    `.specs/` would read as "no specs" and report the grace period intact *because it could not
+    look* — G-1, and #115's lesson in the same shape one file over. The caller turns the
+    exception into its own outcome rather than letting it share one with the empty case.
+
+    A directory with no `spec.md` is not a spec: `_archive/` itself is one of those, and so is
+    anything a session left behind.
+    """
+    found = []
+    with os.scandir(directory) as entries:
+        for entry in entries:
+            if entry.is_dir(follow_symlinks=False) and (pathlib.Path(entry.path) / "spec.md").is_file():
+                found.append(entry.path)
+    return found
 
 
 def steering_value(text, key):
@@ -172,6 +195,31 @@ def main():
         fail(f"mode is `{mode}` and {len(missing)} required item(s) are not found: {listed}")
 
     if mode == "bootstrap":
+        # AC4. Without this, `bootstrap` is a gate switched off with a note attached — the
+        # exact failure `.steering/product.md` names, reached by a route that looks principled.
+        # The grace period ends at the first spec because a spec is where a capability id gets
+        # cited, and it is the first moment the harness is genuinely in use. The failure then
+        # lands INSIDE the flow with the cause one command behind the user, which is what CAP-4
+        # asks for: not "never block", but never block on a failure that predates them.
+        try:
+            started = spec_slugs(SPECS)
+            if ARCHIVE.is_dir():
+                started += spec_slugs(ARCHIVE)
+        except OSError as exc:
+            fail(
+                f"{SPECS} cannot be read ({exc.strerror}), so whether this project has begun "
+                f"building cannot be established — and `bootstrap` is only true before it has."
+            )
+        if started:
+            listed = ", ".join(sorted(started))
+            fail(
+                f"mode is `bootstrap` — documents not yet authored — but {len(started)} spec(s) "
+                f"already exist: {listed}. A spec cites the documents this mode says are "
+                f"unwritten. Write {', '.join(MANDATORY_DOCS)} (via "
+                f"{', '.join(DOC_OWNER[d] for d in MANDATORY_DOCS)}) and declare `minimum` or "
+                f"`full` in {STEERING}."
+            )
+
         owed = ", ".join(f"{name} ({DOC_OWNER[name]})" for name in MANDATORY_DOCS)
         # A separate sentence, not the line below with a smaller number in it. G-1: "the
         # documents are present" and "the documents were not looked at" cannot share an
