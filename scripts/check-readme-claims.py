@@ -19,6 +19,7 @@ back.
 Run from the repository root. Exits 0 when every claim agrees with its source.
 """
 import json
+import os
 import pathlib
 import re
 import sys
@@ -33,24 +34,76 @@ VERSION = re.compile(r"\*\*v(\d+\.\d+\.\d+)[ ,、]")
 #: How the receipts were obtained. English says "all but three"; Japanese says "3件を除いて".
 #: Both are matched as a written-out or numeric count, because #115's defect was a word.
 INLINE_EN = re.compile(r"from a spawned reviewer on all but (\w+)")
-INLINE_JA = re.compile(r"(\d+|[一二三四五六七八九十]+)件を除いて")
-WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
-         "七": 7, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6}
+#: The Japanese states the count TWICE — `3件を除いて` … `その3件は inline` — where the English
+#: states it once, so the two languages have different drift surfaces. Both occurrences are
+#: matched, and they must agree with each other as well as with the corpus.
+INLINE_JA = re.compile(r"(?:その)?(\d+|[一二三四五六七八九十]+)件")
+#: Both vocabularies reach the same ceiling. They did not: English stopped at six while the
+#: Japanese pattern accepted 八九十, so a TRUTHFUL README would have failed at seven — a gate
+#: firing on a correct repository, which is how gates get switched off. The inline count is 3 and
+#: has risen once already.
+WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
+         "eight": 8, "nine": 9, "ten": 10,
+         "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
 
-#: A count of gate behaviours must NOT appear. See the docstring: it was removed rather than
-#: guarded, and a guard that only checks what is present cannot notice it coming back.
-BEHAVIOUR_COUNT = re.compile(r"(?:guards['’]|ガードの)\s*(\d+)\s*(?:behaviours|通り)")
+#: A count of gate/guard behaviours must NOT appear ANYWHERE in the README — not merely in
+#: `## Status`. The first cut of this pattern was written around the one sentence the spec was
+#: looking at and missed the one a section above it, which said 67 while the suite said 78, in
+#: BOTH languages: the English puts the digits before the noun ("67 paths across the gates and
+#: guards") and the Japanese reads ガードを合わせた67通り. The guard then printed "no behaviour
+#: count asserted" over two files that asserted one — a certification broader than the check.
+#:
+#: So: any digit within a short window of gates/guards, in either direction, in either language,
+#: regardless of the noun. Deliberately loose — this is an ACCUSING pattern, and its failure
+#: direction is a false red on a sentence that mentions a number near "gates", which a human
+#: resolves in one edit. The opposite failure is what shipped.
+BEHAVIOUR_COUNT = re.compile(
+    r"(?:\d+\s*(?:paths?|behaviours?|behaviors?|cases?|通り|経路|挙動|ケース)"
+    r"[^.。\n]{0,45}?(?:gates?|guards?|ゲート|ガード)"
+    r"|(?:gates?|guards?|ゲート|ガード)[^.。\n]{0,45}?"
+    r"\d+\s*(?:paths?|behaviours?|behaviors?|cases?|通り|経路|挙動|ケース))"
+)
+
+
+#: `reviewed_by` is a THREE-way fact and the README's sentence has room for two. An absent field
+#: — receipts predate #105 — must not be read as `subagent`: the reviewer contract says silence is
+#: not evidence of independence, which is the whole reason the field exists.
+REVIEWED_BY = re.compile(r"^reviewed_by=(\S+)$", re.M)
 
 
 def receipts():
-    """(total, inline) across live and archived specs — the source the README describes."""
-    total = inline = 0
+    """(total, inline, unknown, problems) across live and archived specs.
+
+    Walked with `os.scandir` rather than `Path.glob`, because glob swallows the OSError from an
+    unreadable directory and returns fewer entries with no complaint — a partially scanned corpus
+    that agrees. That is #16's shape, and `test-gates.sh` already pins it for a sibling guard.
+    """
+    total = inline = unknown = 0
+    problems = []
     for d in (pathlib.Path(".specs"), pathlib.Path(".specs/_archive")):
-        for f in sorted(d.glob("*/.review-receipt")):
+        if not d.is_dir():
+            continue
+        try:
+            entries = sorted(e.path for e in os.scandir(d) if e.is_dir())
+        except OSError as exc:
+            problems.append(f"{d}: cannot be read ({exc.strerror}), so the receipt corpus is partial")
+            continue
+        for sub in entries:
+            f = pathlib.Path(sub, ".review-receipt")
+            if not f.is_file():
+                continue
             total += 1
-            if "reviewed_by=inline" in f.read_text():
+            try:
+                text = f.read_text()
+            except OSError as exc:
+                problems.append(f"{f}: cannot be read ({exc.strerror})")
+                continue
+            m = REVIEWED_BY.search(text)
+            if m is None:
+                unknown += 1
+            elif m.group(1) == "inline":
                 inline += 1
-    return total, inline
+    return total, inline, unknown, problems
 
 
 def as_int(token):
@@ -68,7 +121,14 @@ def main():
     else:
         version = json.loads(MANIFEST.read_text())["version"]
 
-    total, inline = receipts()
+    total, inline, unknown, receipt_problems = receipts()
+    problems += receipt_problems
+    if unknown:
+        problems.append(
+            f"{unknown} receipt(s) carry no `reviewed_by` field. Silence is not evidence of "
+            f"independence — the README's sentence has room for spawned and inline only, so an "
+            f"unknown receipt is a claim this guard cannot verify."
+        )
     if total == 0:
         # Not "nothing to check". Zero receipts means the source vanished, and comparing a claim
         # against an empty set would agree with anything.
@@ -85,7 +145,13 @@ def main():
             problems.append(f"{name}: cannot be read ({exc.strerror})")
             continue
 
+        found = {v for v in VERSION.findall(text)}
         m = VERSION.search(text)
+        if len(found) > 1:
+            # `README.md:41` is this repository's own proof that a Status claim gets restated
+            # outside the section anyone is watching. If that ever happens to the version, a
+            # first-match check verifies the decoy.
+            problems.append(f"{name}: states more than one version — {sorted(found)}")
         if not m:
             problems.append(f"{name}: states no version in the form `**v<x.y.z>`")
         elif version is not None and m.group(1) != version:
@@ -95,14 +161,22 @@ def main():
                 f"is not carried by that step and has drifted three releases before."
             )
 
-        if (b := BEHAVIOUR_COUNT.search(text)) is not None:
+        for b in BEHAVIOUR_COUNT.finditer(text):
             problems.append(
-                f"{name}: states `{b.group(1)}` gate/guard behaviours. That number was removed on "
+                f"{name}: counts gates/guards — `{b.group(0).strip()}`. That number was removed on "
                 f"purpose (#115) — its only source is running scripts/test-gates.sh, already the "
                 f"slowest validator. Name the suite, not a count."
             )
 
         pat = INLINE_JA if name.endswith(".ja.md") else INLINE_EN
+        if name.endswith(".ja.md"):
+            stated = {g for g in pat.findall(text)}
+            if len(stated) > 1:
+                problems.append(
+                    f"{name}: states the receipt count more than once and they disagree — "
+                    f"{sorted(stated)}. An edit that moves one and not the other passes a "
+                    f"first-match check with an internally contradictory sentence."
+                )
         w = pat.search(text)
         if not w:
             problems.append(f"{name}: does not say how many receipts were not from a spawned reviewer")

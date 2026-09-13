@@ -2570,7 +2570,10 @@ PYEOF
 [ "$?" = 0 ] && cf3=ok || cf3=no
 out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cf3" = ok ]; } && c7=ok || c7=no
-case "$err" in *README.ja.md*) c8=ok ;; *) c8=no ;; esac
+# The receipt-count message specifically: README.ja.md appears in this guard's output for a
+# missing file, a missing version, a version mismatch and a behaviour count too, so the filename
+# alone cannot tell this assertion from any of those. Every sibling here pins its own text.
+case "$err" in *"but 1 of 2 say reviewed_by=inline"*) c8=ok ;; *) c8=no ;; esac
 
 [ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "each README Status claim disagreeing with its source is named" ok \
   || report "each README Status claim disagreeing with its source is named" no \
@@ -2598,6 +2601,63 @@ case "$err" in *"does not say how many"*) c6=ok ;; *) c6=no ;; esac
 [ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] && report "a README claim whose source is missing fails rather than agreeing" ok \
   || report "a README claim whose source is missing fails rather than agreeing" no \
      "nomanifest=$c1 noreceipts-exit=$c2 says-none=$c3 nojp=$c4 silent-exit=$c5 silent-msg=$c6"
+
+
+# 67. The behaviour count in the phrasings that actually shipped, and the receipt field's third
+# state.
+#
+# The first cut of BEHAVIOUR_COUNT was written around the one sentence the spec was looking at —
+# `guards' 67 behaviours` in `## Status`. A section above it said `67 paths across the gates and
+# guards`, and the Japanese said `ゲートとガードを合わせた67通り`; the pattern matched neither, so
+# the guard printed "no behaviour count asserted" over two files that asserted one, wrong by
+# eleven. A fixture using the phrasing a regex was built around cannot catch that class, so these
+# use the phrasings that were missed.
+r=$(readme_repo rm-count-before)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.md"); src = p.read_text()
+out = src.replace("the gates and guards behaviours", "67 paths across the gates and guards")
+if out == src: raise SystemExit("fixture no-op: behaviours phrase not found")
+p.write_text(out)
+PYEOF
+then_ok=$?; [ "$then_ok" = 0 ] && cf1=ok || cf1=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf1" = ok ]; } && c1=ok || c1=no
+case "$err" in *"67 paths across the gates"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(readme_repo rm-count-ja)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md"); src = p.read_text()
+out = src.replace("ゲートとガードの挙動。", "ゲートとガードを合わせた67通りの経路。")
+if out == src: raise SystemExit("fixture no-op: JA behaviour phrase not found")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf2=ok || cf2=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf2" = ok ]; } && c3=ok || c3=no
+case "$err" in *"67通り"*) c4=ok ;; *) c4=no ;; esac
+
+# A number near "gates" that is NOT a count of them must stay green, or the accuser fires on a
+# correct file — the first widening did, eight times, on URLs and token counts.
+r=$(readme_repo rm-count-noise)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.md")
+p.write_text(p.read_text() + "\nSee github.com/m0m0i/gate-oriented-sdd — the gate reports ~1,300 tokens always-on.\n")
+PYEOF
+out=$(run_readme "$r"); [ "$out" = "0" ] && c5=ok || c5=no
+
+# reviewed_by is a three-way fact: absent is UNKNOWN, never spawned. Receipts predate the field.
+r=$(readme_repo rm-receipt-unknown)
+printf 'reviewed_sha=abc\nverdict=CLEAN\n' > "$r/.specs/9-feature/.review-receipt"
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+[ "$out" = "1" ] && c6=ok || c6=no
+case "$err" in *"Silence is not evidence"*) c7=ok ;; *) c7=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] && report "a behaviour count in any phrasing fails, ordinary numbers do not, and an absent reviewed_by is unknown" ok \
+  || report "a behaviour count in any phrasing fails, ordinary numbers do not, and an absent reviewed_by is unknown" no \
+     "count-before-exit=$c1 quotes-it=$c2 count-ja-exit=$c3 quotes-ja=$c4 noise-stays-green=$c5 unknown-exit=$c6 says-silence=$c7"
 
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
