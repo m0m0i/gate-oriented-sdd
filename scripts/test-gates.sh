@@ -33,6 +33,12 @@ report() { # report <name> <ok|no> <detail>
 # enforce G-1. Under root — any container-based CI step — four halves of case 69 stop testing
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
+#
+# TWELVE sites, not the seven the first cut of this claimed. Two of the three it missed were
+# worse than any half: they called `report ... ok` on the skip path, manufacturing a pass and
+# incrementing the counter. Those two are whole cases and now report nothing at all, which is
+# why the summary says `skipped` rather than `half-case(s) skipped`. Counting the sites was the
+# step that found them — the claim of seven was made and not checked.
 skipped=0
 note_skip() { skipped=$((skipped+1)); printf '  skip %s — %s\n' "$1" "$2"; }
 
@@ -416,7 +422,7 @@ r=$(lock_repo lk-unreadable); add_project_reviewer "$r" proj
 chmod 000 "$r/agents/shipped" 2>/dev/null
 if cat "$r/agents/shipped/rules-lock.json" >/dev/null 2>&1; then
   chmod 755 "$r/agents/shipped" 2>/dev/null
-  report "unreadable reviewer directory fails rather than being skipped" ok
+  note_skip "locks/unreadable-reviewer-dir" "permissions not enforced here (running as root?)"
 else
   out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
   chmod 755 "$r/agents/shipped" 2>/dev/null
@@ -660,7 +666,7 @@ r=$(anchor_repo anc-unreadable '- Owns: x')
 chmod 000 "$r/.steering/product.md" 2>/dev/null
 if cat "$r/.steering/product.md" >/dev/null 2>&1; then
   chmod 644 "$r/.steering/product.md" 2>/dev/null
-  report "an unreadable steering file fails rather than reading as absent" ok
+  note_skip "anchors/unreadable-product-md" "permissions not enforced here (running as root?)"
 else
   out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
   chmod 644 "$r/.steering/product.md" 2>/dev/null
@@ -1301,6 +1307,7 @@ chmod 000 "$r/doc.md" 2>/dev/null
 if cat "$r/doc.md" >/dev/null 2>&1; then
   chmod 644 "$r/doc.md" 2>/dev/null
   c11=ok; c12=ok
+  note_skip "fences/unreadable-doc" "permissions not enforced here (running as root?)"
 else
   out=$(run_fences "$r"); err=$(cat "$TMP/ferr")
   chmod 644 "$r/doc.md" 2>/dev/null
@@ -2269,7 +2276,10 @@ fi
 # `unreadable` list that a loop or a permission wall belongs in.
 r=$(init_tree ds-boot-dangling bootstrap)
 ln -s "$TMP/ds-boot-dangling-nowhere" "$r/.specs/7-dangling" 2>/dev/null
-if [ -L "$r/.specs/7-dangling" ]; then
+# `-L` alone is true of ANY symlink, so a future fixture creating that target would turn this
+# into "a symlinked directory holding no spec.md" — still green, for a different reason, and
+# nothing would say so. The target's absence is the precondition, so it is asserted.
+if [ -L "$r/.specs/7-dangling" ] && [ ! -e "$r/.specs/7-dangling" ]; then
   out=$(run_docset "$r"); [ "$out" = "0" ] && c14=ok || c14=no
 else
   c14=ok
@@ -2978,5 +2988,5 @@ case "$err" in *"states the receipt count twice and they disagree"*) c15=ok ;; *
      "count-before-exit=$c1 quotes-it=$c2 count-ja-exit=$c3 quotes-ja=$c4 noise-stays-green=$c5 unknown-exit=$c6 says-silence=$c7 ja-particle-exit=$c8 quotes-particle=$c9 ja-eval-noise-green=$c10 ja-unrelated-green=$c11 ja-silent-exit=$c12 ja-silent-msg=$c13 ja-echo-exit=$c14 ja-echo-msg=$c15"
 
 
-printf '\ntest-gates: %d passed, %d failed, %d half-case(s) skipped\n' "$pass" "$fail" "$skipped"
+printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
