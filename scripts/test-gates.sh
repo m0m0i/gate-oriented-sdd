@@ -2655,9 +2655,83 @@ out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 [ "$out" = "1" ] && c6=ok || c6=no
 case "$err" in *"Silence is not evidence"*) c7=ok ;; *) c7=no ;; esac
 
-[ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] && report "a behaviour count in any phrasing fails, ordinary numbers do not, and an absent reviewed_by is unknown" ok \
+# The idiomatic Japanese form, which the flush-noun pattern could not see. Japanese rarely puts
+# the noun against the digits — a counter or a particle sits between — so the ONE form the first
+# cut caught was the one that happened to ship, and a rewrite in the most natural phrasing would
+# have gone unnoticed under a guard printing "no behaviour count asserted".
+r=$(readme_repo rm-count-ja-particle)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md"); src = p.read_text()
+out = src.replace("ゲートとガードの挙動。", "ゲートとガードを合わせて67の経路。")
+if out == src: raise SystemExit("fixture no-op: JA behaviour phrase not found")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf3=ok || cf3=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf3" = ok ]; } && c8=ok || c8=no
+case "$err" in *"67の経路"*) c9=ok ;; *) c9=no ;; esac
+
+# …and the no-false-block half, which the widening is only safe with. The real README.ja.md says
+# 「4つのケースは書いてあり」 about the eval suite, and the English says "its four cases are
+# authored" — both are counts near nothing to do with gates, and both must stay green. The
+# widening that caught the six missed forms must not reach these.
+r=$(readme_repo rm-count-ja-noise)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md")
+p.write_text(p.read_text() + "\n[eval スイート](./evals/) は開発中です。4つのケースは書いてあります。\n")
+q = pathlib.Path(sys.argv[1], "README.md")
+q.write_text(q.read_text() + "\nThe eval suite is under development: its four cases are authored, and 2 of them are new.\n")
+PYEOF
+then cf4=ok; else cf4=no; fi
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cf4" = ok ]; } && c10=ok || c10=no
+
+# The Japanese receipt anchor. Dropping it to reach the echo matched any N件 in the file — a
+# false red on an unrelated counter, and a fail-open if the receipt sentence is deleted while a
+# stray one remains. Both directions pinned.
+r=$(readme_repo rm-ja-unrelated-counter)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md")
+p.write_text(p.read_text() + "\n未対応の issue が2件あります。\n")
+PYEOF
+then cf5=ok; else cf5=no; fi
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cf5" = ok ]; } && c11=ok || c11=no
+
+r=$(readme_repo rm-ja-silent)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md")
+p.write_text("## Status\n\n**v1.2.3、pre-release です。**\n\nゲートとガードの挙動。未対応の issue が2件あります。\n")
+PYEOF
+then cf6=ok; else cf6=no; fi
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf6" = ok ]; } && c12=ok || c12=no
+case "$err" in *"does not say how many"*) c13=ok ;; *) c13=no ;; esac
+
+# The Japanese states the count twice. The anchored one carries the value; the echo must agree
+# with it, and nothing pinned that until mutating the comparison produced zero failures.
+r=$(readme_repo rm-ja-echo)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md")
+src = p.read_text()
+out = src.replace("1件を除いて", "1件を除いて") + "その5件は inline でレビューしました。\n"
+if out == src:
+    raise SystemExit("fixture no-op: JA receipt sentence not found")
+p.write_text(out)
+PYEOF
+then cf7=ok; else cf7=no; fi
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf7" = ok ]; } && c14=ok || c14=no
+case "$err" in *"states the receipt count twice and they disagree"*) c15=ok ;; *) c15=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15" = "okokokokokokokokokokokokokokok" ] && report "a behaviour count in any phrasing fails, ordinary numbers do not, and an absent reviewed_by is unknown" ok \
   || report "a behaviour count in any phrasing fails, ordinary numbers do not, and an absent reviewed_by is unknown" no \
-     "count-before-exit=$c1 quotes-it=$c2 count-ja-exit=$c3 quotes-ja=$c4 noise-stays-green=$c5 unknown-exit=$c6 says-silence=$c7"
+     "count-before-exit=$c1 quotes-it=$c2 count-ja-exit=$c3 quotes-ja=$c4 noise-stays-green=$c5 unknown-exit=$c6 says-silence=$c7 ja-particle-exit=$c8 quotes-particle=$c9 ja-eval-noise-green=$c10 ja-unrelated-green=$c11 ja-silent-exit=$c12 ja-silent-msg=$c13 ja-echo-exit=$c14 ja-echo-msg=$c15"
 
 
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"

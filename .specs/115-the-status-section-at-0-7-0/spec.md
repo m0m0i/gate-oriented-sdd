@@ -60,7 +60,7 @@ Why not wider — deriving the whole section, or generating the README: the othe
 
 _Amended after review round 1: an earlier wording here said the version becomes **derived** rather than asserted. It does not. It is asserted in two files and **checked** against `plugin.json` — which closes the defect for **detection** and not for **prevention**. `skills/implement/SKILL.md`'s post-receipt step still bumps the two manifests and says nothing about the README, so the line must still be hand-edited at every release; what changed is that forgetting now fails loudly in CI instead of silently for eight days. Tying the README to the bump step would touch `skills/`, a shipped path, and owe a version bump that AC8 says this spec does not carry — so it is filed rather than smuggled in._
 
-**The guard reads the receipts the way the README describes them** — counting `reviewed_by=inline` against `subagent` — so a future reviewer changing how receipts are written breaks the guard loudly rather than making the README quietly wrong.
+**The guard reads the receipts the way the README describes them** — so a future change to how receipts are written breaks the guard loudly rather than making the README quietly wrong. _Amended after review round 1: an earlier wording called this `inline` against `subagent`, a two-way split. It is three-way. An **absent** `reviewed_by` is `unknown` and is its own reported problem, because the contract says silence is not evidence of independence — and the README's sentence has room for two states only, so an unknown receipt is a claim the guard cannot verify rather than one it may round in the favourable direction._
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit.

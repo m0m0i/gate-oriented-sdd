@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """The README's Status claims must agree with what they describe.
 
+**The subject is the README, not `## Status`.** Scoping to the section is what shipped the defect
+this guard exists for: the behaviour count was removed from `## Status` and left standing a section
+above, in both languages, while the guard certified its absence over the whole file. A scope drawn
+from where a defect was reported is not a scope drawn around where that defect lives.
+
 #115: three claims in `## Status` were false at once. They drifted by different mechanisms, and
 only one of those mechanisms was a reviewer missing a count.
 
@@ -9,7 +14,8 @@ only one of those mechanisms was a reviewer missing a count.
 verifies the two manifests agree with each other while knowing nothing about the README. So the
 claim could only be corrected by someone noticing, which took eight days.
 
-**What this guard deliberately does not check: a count of gate behaviours.** That number's only
+**What this guard deliberately does not check: the VALUE of a count of gate behaviours** — it
+enforces that no such count appears at all. That number's only
 source is running `scripts/test-gates.sh`, already the slowest validator, so guarding it would
 double it on every turn to check one integer. The number was removed from the README instead —
 one claim made checkable, the other made unnecessary, and the second is the stronger fix wherever
@@ -35,13 +41,19 @@ VERSION = re.compile(r"\*\*v(\d+\.\d+\.\d+)[ ,、]")
 #: Both are matched as a written-out or numeric count, because #115's defect was a word.
 INLINE_EN = re.compile(r"from a spawned reviewer on all but (\w+)")
 #: The Japanese states the count TWICE — `3件を除いて` … `その3件は inline` — where the English
-#: states it once, so the two languages have different drift surfaces. Both occurrences are
-#: matched, and they must agree with each other as well as with the corpus.
-INLINE_JA = re.compile(r"(?:その)?(\d+|[一二三四五六七八九十]+)件")
-#: Both vocabularies reach the same ceiling. They did not: English stopped at six while the
-#: Japanese pattern accepted 八九十, so a TRUTHFUL README would have failed at seven — a gate
-#: firing on a correct repository, which is how gates get switched off. The inline count is 3 and
-#: has risen once already.
+#: states it once, so the two languages have different drift surfaces. Both are read, but the
+#: VALUE comes only from the anchored one.
+#:
+#: The anchor is not optional. An earlier cut dropped it to reach the second occurrence and
+#: matched any `N件` in the file — and 件 is one of the most common counters in Japanese. That is
+#: a false red on a sentence about anything else, and a fail-open if the receipt sentence is ever
+#: deleted while some unrelated `N件` remains: `search` would find it, it would happen to equal
+#: the corpus, and the guard would pass over a README that no longer makes the claim. The English
+#: kept its anchor throughout; this restores the symmetry.
+INLINE_JA = re.compile(r"(\d+|[一二三四五六七八九十]+)件(?=を除いて)")
+#: The echo, which must agree with the anchored value. Checked only once the anchor matched.
+JA_ECHO = re.compile(r"その(\d+|[一二三四五六七八九十]+)件")
+
 WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
          "eight": 8, "nine": 9, "ten": 10,
          "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9, "十": 10}
@@ -58,10 +70,12 @@ WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven"
 #: direction is a false red on a sentence that mentions a number near "gates", which a human
 #: resolves in one edit. The opposite failure is what shipped.
 BEHAVIOUR_COUNT = re.compile(
-    r"(?:\d+\s*(?:paths?|behaviours?|behaviors?|cases?|通り|経路|挙動|ケース)"
+    r"(?:\d+\s*(?:[つ本件個]|通り|パターン|種類|種)?\s*(?:の|もの)?\s*"
+    r"(?:paths?|behaviours?|behaviors?|通り|経路|挙動|パス|パターン|分岐)"
     r"[^.。\n]{0,45}?(?:gates?|guards?|ゲート|ガード)"
     r"|(?:gates?|guards?|ゲート|ガード)[^.。\n]{0,45}?"
-    r"\d+\s*(?:paths?|behaviours?|behaviors?|cases?|通り|経路|挙動|ケース))"
+    r"\d+\s*(?:[つ本件個]|通り|パターン|種類|種)?\s*(?:の|もの)?\s*"
+    r"(?:paths?|behaviours?|behaviors?|通り|経路|挙動|パス|パターン|分岐))"
 )
 
 
@@ -169,15 +183,15 @@ def main():
             )
 
         pat = INLINE_JA if name.endswith(".ja.md") else INLINE_EN
-        if name.endswith(".ja.md"):
-            stated = {g for g in pat.findall(text)}
-            if len(stated) > 1:
-                problems.append(
-                    f"{name}: states the receipt count more than once and they disagree — "
-                    f"{sorted(stated)}. An edit that moves one and not the other passes a "
-                    f"first-match check with an internally contradictory sentence."
-                )
         w = pat.search(text)
+        if name.endswith(".ja.md") and w is not None:
+            echo = JA_ECHO.search(text)
+            if echo is not None and echo.group(1) != w.group(1):
+                problems.append(
+                    f"{name}: states the receipt count twice and they disagree — "
+                    f"`{w.group(1)}件を除いて` against `その{echo.group(1)}件`. An edit that moves "
+                    f"one and not the other leaves an internally contradictory sentence."
+                )
         if not w:
             problems.append(f"{name}: does not say how many receipts were not from a spawned reviewer")
         elif (claimed := as_int(w.group(1))) is None:

@@ -80,3 +80,87 @@ agreed with each other and all disagreed with the README.
 The boundary was drawn by `## Status` because that is where the issue pointed. The falsehood was one
 anchor above it. **A scope drawn from where a defect was reported is not a scope drawn around where
 that defect lives.**
+
+## Review round 2 — BLOCKED, 0 blockers, 2 HIGH, 1 MEDIUM, 4 LOW
+
+Round 1's HIGH is fixed at the right level. **Both new HIGHs were introduced by that fix**, and both
+in the half I had asked the reviewer to attack.
+
+### HIGH — I replaced a falsifiable claim with an unfalsifiable one
+
+Removing the count, I wrote *"every path across the gates and guards, tested deterministically"* and
+「ゲートとガードのすべての経路」. `67 paths` was **false but falsifiable** — a number with a source.
+**`every path` is unfalsifiable and unsourced**: there is no coverage artifact for shell gates, the
+suite reports named behaviours and not a proportion, and this repository's own G-4 records case 7
+passing for three releases while the gate did nothing — its own evidence that coverage is not
+exhaustive.
+
+So the drift surface was not removed. It was **converted into a form the guard has no digit to
+catch**, which would have been certified forever.
+
+The fix was already written, twenty lines further down: `README.md:174` — the sentence the spec
+composed carefully — says *"the gates' and guards' behaviours … (the count is the suite's, not a
+number maintained here)"*. That **defers** scope; line 41 **asserted totality**. Both lines now
+defer.
+
+**A claim the guard can check is worth more than a universal it cannot** — and a weaker true
+statement beats a stronger unverifiable one, which is the whole argument this repository makes
+about receipts.
+
+### HIGH — the Japanese widening only reached the phrasing that shipped
+
+Both alternatives required the counting noun **flush against the digits**, which is the least common
+way Japanese writes a count — a counter or a particle almost always intervenes:
+
+```
+ゲートとガードを合わせた67通りの経路   caught  (通り happens to sit flush)
+ゲートとガードを合わせて67の経路       MISSED  (の)
+ゲートとガードの67もの経路             MISSED  (もの)
+ゲートとガードの67種類の挙動           MISSED  (種類の)
+ゲートとガードの67パターンの挙動       MISSED  (パターン, and の)
+```
+
+The one form caught was **the one that shipped** — so `rm-count-ja` reproduced the historical string
+and passed while the pattern behind it could not hold AC2 for the forms a future edit would more
+likely use. That is round 1's defect surviving in one language, under a case that looked like
+coverage.
+
+**And the gap was self-concealing**, which is why my end-to-end check missed it: the same flush-noun
+requirement is what keeps `README.ja.md`'s 「4つのケース」 green. The blind spot and the safety margin
+were one mechanism, so widening one moved the other. The fix therefore had to come with **both**
+directions pinned — 「ゲートとガードを合わせて67の経路」 red, 「4つのケース」 and "its four cases are
+authored" green — and it does.
+
+### MEDIUM — the Japanese anchor was traded away to reach the echo
+
+Closing round 1's LOW (the count stated twice), I dropped `を除いて` from `INLINE_JA` so it would
+find both occurrences. 件 is one of the most common counters in Japanese, so that matched **any**
+`N件` in the file: a false red on 「issue が2件」, and a **fail-open** if the receipt sentence were
+ever deleted while a stray `N件` remained — `search` would find it, it would happen to equal the
+corpus, and the guard would pass over a README that no longer makes the claim.
+
+The anchored pattern now carries the **value**, and a separate `JA_ECHO` checks the second
+occurrence agrees — which is what the LOW actually asked for. The English kept its anchor
+throughout; this restores the symmetry rather than trading one language's rigour for the other's
+coverage.
+
+### And the same fixture failure, for the third time in two days
+
+Three of the fixtures I added this round had their Python string literals **split by literal
+newlines** — `\n` written into the heredoc as an actual line break. Python died on a `SyntaxError`,
+the fixtures no-op'd, and `rm-ja-silent` went red **for the wrong reason**. I found it only by
+reproducing the scenario by hand.
+
+This is the failure #124 was filed for, and the rule was written down *yesterday*: escape the
+sequence, and **bind the fixture's exit status into the assertion**. I did neither. All three are
+repaired and all three now report their status.
+
+The mutation round after that found one more: the echo-consistency check was pinned by nothing —
+mutating it produced **zero** failures. A case now covers it.
+
+### What both rounds have in common
+
+Round 1: a scope drawn from where the defect was reported, not around where it lived. Round 2: a
+pattern built around the phrasing in front of me, and a universal substituted for a number because
+it was easier than checking one. **Every one of these was a check narrowed to the example that
+prompted it** — and the example is always the case that is already fixed.
