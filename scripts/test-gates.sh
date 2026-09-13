@@ -2203,15 +2203,33 @@ else
   case "$err" in *"cannot be read"*) c8=ok ;; *) c8=no ;; esac
 fi
 
+# The SAME third outcome one level in. `Path.is_file()` delegates to `os.path.isfile`, which
+# swallows every OSError including PermissionError — so a slug directory the process cannot
+# traverse reads as "no spec.md here", and the grace period is reported intact because the
+# checker could not look. The outer scandir being guarded does not cover this: found in review,
+# and it is the file's own docstring promise delivered for the outer directory only. It was
+# also interpreter-dependent, which means it was not a verdict.
+r=$(init_tree ds-boot-slug-unreadable bootstrap); spec_in "$r/.specs/7-a-thing"
+chmod 000 "$r/.specs/7-a-thing" 2>/dev/null
+if ( cd "$r" && cat .specs/7-a-thing/spec.md >/dev/null 2>&1 ); then
+  chmod 755 "$r/.specs/7-a-thing" 2>/dev/null
+  c10=ok; c11=ok          # permissions not enforced here; a case that cannot fail is worse than none
+else
+  out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+  chmod 755 "$r/.specs/7-a-thing" 2>/dev/null
+  [ "$out" = "1" ] && c10=ok || c10=no
+  case "$err" in *7-a-thing*) c11=ok ;; *) c11=no ;; esac
+fi
+
 # ...and the scan is `bootstrap`-only. In minimum and full a spec is the ordinary state of a
 # working project, and failing on one would fire on every repository that uses this harness.
 r=$(docset_repo ds-min-spec minimum); spec_in "$r/.specs/7-a-thing"
 out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
 
-[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] \
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokok" ] \
   && report "bootstrap expires at the first spec, and cannot expire quietly" ok \
   || report "bootstrap expires at the first spec, and cannot expire quietly" no \
-     "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9"
+     "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9 slug-unreadable-red=$c10 names-slug=$c11"
 
 # 59. init stripped of the document-set wiring must fail.
 #

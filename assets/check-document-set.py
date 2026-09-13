@@ -31,6 +31,7 @@ Run from the repository root. Exits 0 when the filesystem matches the declared m
 import os
 import pathlib
 import re
+import stat
 import sys
 
 #: Read exactly as hooks/gate-lib.sh's gate_steering_value does — `sed -n "s/^ *- *KEY: *//p"`
@@ -69,22 +70,40 @@ def fail(message):
 
 
 def spec_slugs(directory):
-    """Directories under `directory` that hold a `spec.md`, as paths. May raise OSError.
+    """`(found, unreadable)` for the directories under `directory`. May raise OSError.
 
-    `os.scandir`, not `Path.glob`. glob swallows OSError and yields nothing, so an unreadable
-    `.specs/` would read as "no specs" and report the grace period intact *because it could not
-    look* — G-1, and #115's lesson in the same shape one file over. The caller turns the
-    exception into its own outcome rather than letting it share one with the empty case.
+    Three outcomes at BOTH levels, which is the whole of this function. `os.scandir`, not
+    `Path.glob`: glob swallows OSError and yields nothing, so an unreadable `.specs/` would read
+    as "no specs" and report the grace period intact *because it could not look* — G-1, and
+    #115's lesson in the same shape one file over. The scandir failure propagates; the caller
+    names the directory it was scanning.
+
+    The per-entry test is `os.stat`, NOT `Path.is_file()`, and that is not a stylistic choice.
+    `Path.is_file()` delegates to `os.path.isfile`, which swallows every OSError — so a slug
+    directory the process cannot traverse read as "no spec.md here" and the guard exited 0 with
+    a real spec on disk: this docstring's own promise, honoured for the outer directory and
+    broken one level in, and interpreter-dependent besides. Found in review of this file.
 
     A directory with no `spec.md` is not a spec: `_archive/` itself is one of those, and so is
-    anything a session left behind.
+    anything a session left behind. FileNotFoundError is that answer and nothing more, which is
+    why it is caught separately from the OSErrors that mean "could not tell".
     """
     found = []
+    unreadable = []
     with os.scandir(directory) as entries:
         for entry in entries:
-            if entry.is_dir(follow_symlinks=False) and (pathlib.Path(entry.path) / "spec.md").is_file():
+            try:
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                mode = os.stat(os.path.join(entry.path, "spec.md")).st_mode
+            except FileNotFoundError:
+                continue
+            except OSError:
+                unreadable.append(entry.path)
+                continue
+            if stat.S_ISREG(mode):
                 found.append(entry.path)
-    return found
+    return found, unreadable
 
 
 def steering_value(text, key):
@@ -201,14 +220,29 @@ def main():
         # cited, and it is the first moment the harness is genuinely in use. The failure then
         # lands INSIDE the flow with the cause one command behind the user, which is what CAP-4
         # asks for: not "never block", but never block on a failure that predates them.
-        try:
-            started = spec_slugs(SPECS)
-            if ARCHIVE.is_dir():
-                started += spec_slugs(ARCHIVE)
-        except OSError as exc:
+        started = []
+        unreadable = []
+        for directory in (SPECS, ARCHIVE):
+            if directory is ARCHIVE and not ARCHIVE.is_dir():
+                continue
+            try:
+                found, unread = spec_slugs(directory)
+            except OSError as exc:
+                # The scanned directory, not always `.specs` — a failure in `_archive/` that
+                # sent the reader to the parent would be a diagnosis they cannot act on.
+                fail(
+                    f"{directory} cannot be read ({exc.strerror}), so whether this project has "
+                    f"begun building cannot be established — and `bootstrap` is only true "
+                    f"before it has."
+                )
+            started += found
+            unreadable += unread
+        if unreadable:
+            listed = ", ".join(sorted(unreadable))
             fail(
-                f"{SPECS} cannot be read ({exc.strerror}), so whether this project has begun "
-                f"building cannot be established — and `bootstrap` is only true before it has."
+                f"{len(unreadable)} director(ies) under {SPECS} cannot be read: {listed}. "
+                f"Whether they hold a spec is unknown, and `bootstrap` is only true while none "
+                f"does — so this is neither `no specs` nor `a spec`, and not a pass."
             )
         if started:
             listed = ", ".join(sorted(started))
