@@ -1,5 +1,5 @@
 # Spec: init and the checker disagree on a template's filename
-- Slug: 130-init-and-the-checker-disagree-on-a-filename   Issue: 130   Type: bug   Status: approved
+- Slug: 130-init-and-the-checker-disagree-on-a-filename   Issue: 130   Type: bug   Status: done
 - Author: Claude Opus 5   Date: 2026-09-13
 
 ## 1. Requirements (WHAT / WHY)
@@ -111,6 +111,7 @@
   | `scripts/check-skill-contracts.py` | the eighteenth pin, on the argument above |
   | `scripts/test-gates.sh` | the post-init tree with an absorbed template; the message assertion; the mutation case for the new pin |
   | `plugin.json`, `.claude-plugin/plugin.json` | 0.9.0 (C-6) |
+  | `README.md`, `README.ja.md` | the `## Status` version, which every bump carries. **Added at T3**: this row was missing from the table above, and `check-readme-claims.py` — #115's guard — caught it on the first run after the manifests moved. Recorded rather than backfilled silently, because the guard working is the thing worth knowing |
 
 - **Blast radius.** `TEMPLATES` is read in four places in `check-document-set.py` — the
   `wanted` list and three counted output lines — and none of them changes. `init` step 1 already
@@ -141,4 +142,4 @@
       the remedy (AC1, AC2, AC3).
 - [x] T2: `skills/init/SKILL.md`'s absorb instruction, pinned as the eighteenth entry on the
       argument in Design, with its mutation case (AC4, AC5, AC6).
-- [ ] T3: both manifests at 0.9.0; assert the full validator set green.
+- [x] T3: both manifests at 0.9.0; assert the full validator set green.
