@@ -1,5 +1,5 @@
 # Spec: The README's Status section, true at 0.7.0
-- Slug: 115-the-status-section-at-0-7-0   Issue: 115   Type: bug   Status: approved
+- Slug: 115-the-status-section-at-0-7-0   Issue: 115   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-09-13
 
 ## 1. Requirements (WHAT / WHY)
