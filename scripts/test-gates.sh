@@ -502,7 +502,7 @@ anchor_repo() {
 # "exit=127" — what sh returns for a missing script — so the first draft of case 23 reported
 # ok while the script did not exist.
 #
-# THREE older uses of that glob remain, at :347, :359 and :411. They are safe, but not for the
+# THREE older uses of that glob remain, at :372, :384 and :436. They are safe, but not for the
 # reason first written here: "the subject always exists" does not hold, since a python3 that
 # is missing (127) or that dies on a traceback (1) both satisfy the glob. What saves them is
 # that each is corroborated by an assertion a crash cannot satisfy — a stderr substring, or a
@@ -773,7 +773,7 @@ else
   # `= "1"` would read ok against the UNFIXED script on any interpreter where PYTHONOPTIMIZE
   # did not really strip assertions. Each half therefore needs a diagnostic naming the path
   # (which is AC1, and what AC2 asks to hold under both invocations) and an absence of
-  # "Traceback", which no crash can satisfy. That pairing is this file's own rule at :481-484.
+  # "Traceback", which no crash can satisfy. That pairing is this file's own rule at :506-509.
   stripped_fails() { # stripped_fails <exit-code> <stderr-file> -> ok|no
     [ "$1" = "1" ] || { echo no; return; }
     serr=$(cat "$2" 2>/dev/null)
@@ -813,7 +813,7 @@ fi
 # operands, any one directory alone holds well over three files, and its non-zero status is
 # never read. `grep -rnE` then exits 2 on the missing operand, and a trailing `|| true`
 # flattens that into the same silence as "no matches". That is precisely the confusion this
-# file records at :640-644, so the comment named the failure mode while the check did not
+# file records at :664-668, so the comment named the failure mode while the check did not
 # reach it — the guard-shaped hole this whole spec is about, in the case pinning it.
 missing_dirs=
 for d in scripts assets hooks; do
@@ -1368,7 +1368,7 @@ else
   cerr=$(cat "$TMP/cerr" 2>/dev/null)
   [ "$out" = "1" ] && c2=ok || c2=no
   # Exit 1 is also what a traceback returns, so the code alone is not the check — this file's
-  # rule at :481-484. The path is required because a finding that does not say WHICH reviewer
+  # rule at :506-509. The path is required because a finding that does not say WHICH reviewer
   # is unactionable across five of them, and the phrase unique to this branch is required
   # because two sibling branches of the same guard also exit 1 naming a path.
   case "$cerr" in *Traceback*) c3=no ;; *) c3=ok ;; esac
@@ -1757,7 +1757,7 @@ chmod 000 "$r/.specs/9-feature/spec.md" 2>/dev/null
 if cat "$r/.specs/9-feature/spec.md" >/dev/null 2>&1; then
   chmod 644 "$r/.specs/9-feature/spec.md" 2>/dev/null
   c1=ok; c2=ok
-  note_skip "receipt/unreadable" "chmod does not deny access here (running as root?)"
+  note_skip "templates/unreadable-spec-file" "chmod does not deny access here (running as root?)"
 else
   out=$(run_templates "$r"); err=$(cat "$TMP/terr")
   chmod 644 "$r/.specs/9-feature/spec.md" 2>/dev/null
