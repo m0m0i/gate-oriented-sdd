@@ -164,7 +164,7 @@
       (AC1, AC2, AC3).
 - [x] T2: self-termination — a spec under `.specs/`, a spec under `.specs/_archive/`, and an
       unreadable `.specs/` as three distinct outcomes; then the scan (AC4).
-- [ ] T3: `skills/init/SKILL.md` — step 3's promise, the `- Mode:` grammar and the upgrade rule
+- [x] T3: `skills/init/SKILL.md` — step 3's promise, the `- Mode:` grammar and the upgrade rule
       — and `skills/spec/SKILL.md`'s mode branch; the `- Mode:` pin moved to its new literal and
       the seventeenth pin added on the argument above (AC5, AC6, AC7).
 - [ ] T4: both READMEs' mode vocabulary and `## Status` version, the two manifests at 0.8.0;
