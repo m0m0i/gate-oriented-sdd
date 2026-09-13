@@ -2446,9 +2446,29 @@ case "$err" in *"skills/spec/SKILL.md"*) c10=ok ;; *) c10=no ;; esac
 # shipped defect, and case 54 asserts both halves for the same reason.
 case "$err" in *"has neither, so read it as"*) c11=ok ;; *) c11=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokokok" ] && report "init stripped of the mode line, its wiring, its upgrade path or its destination — or spec of its bootstrap reading — fails" ok \
+# #130's pin, the eighteenth. The sentence it replaced read as considerate — keep what the team
+# wrote, add only what is missing — and this one reads as destructive, because it renames their
+# file. Restoring the kinder wording undoes the fix while looking like a softened overreach, and
+# every check here stays green: the damage lands only in installs that had templates of their
+# own, which is to say never in this repository.
+r=$(contracts_repo contracts-nomerge)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "`git mv` each existing template to the canonical filename for its type"
+src = p.read_text()
+if needle not in src:
+    raise SystemExit("fixture no-op: the absorb instruction is not where this expects it")
+p.write_text(src.replace(needle, "keep their wording and add only the missing types"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c12=ok || c12=no
+case "$err" in *"skills/init/SKILL.md"*) c13=ok ;; *) c13=no ;; esac
+case "$err" in *"canonical filename for its type"*) c14=ok ;; *) c14=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14" = "okokokokokokokokokokokokokokok" ] && report "init stripped of the mode line, its wiring, its upgrade path or its destination — or spec of its bootstrap reading — fails" ok \
   || report "init stripped of the mode line, its wiring, its upgrade path or its destination — or spec of its bootstrap reading — fails" no \
-     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8 nobootstrap-exit=$c9 names-spec-skill=$c10 names-needle=$c11"
+     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8 nobootstrap-exit=$c9 names-spec-skill=$c10 names-needle=$c11 nomerge-exit=$c12 names-init=$c13 names-merge-needle=$c14"
 
 
 # --- shipped reviewers: the contract path they name -----------------------------------

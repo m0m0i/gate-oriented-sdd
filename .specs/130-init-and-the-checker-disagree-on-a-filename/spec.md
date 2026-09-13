@@ -139,6 +139,6 @@
       project's own body and labels — asserted green, with the pre-fix shape (`bug_report.md`
       kept, no `bug.md`) still red and still naming the path; then the checker's message gains
       the remedy (AC1, AC2, AC3).
-- [ ] T2: `skills/init/SKILL.md`'s absorb instruction, pinned as the eighteenth entry on the
+- [x] T2: `skills/init/SKILL.md`'s absorb instruction, pinned as the eighteenth entry on the
       argument in Design, with its mutation case (AC4, AC5, AC6).
 - [ ] T3: both manifests at 0.9.0; assert the full validator set green.
