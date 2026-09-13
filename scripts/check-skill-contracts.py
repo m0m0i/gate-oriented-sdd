@@ -94,9 +94,10 @@ CONTRACTS = (
         "defend it for the same reason as the `- Mode:` entry — an init that stops doing this "
         "still installs a working harness everywhere the author can see, and the gate it arms "
         "then fails on a file the instruction told the installer not to create. The needle covers the "
-        "ORDER as well as the rename: swapping them back leaves the rename intact and every check here "
-        "green, while a second template survives for a type that already had one — invisible to every "
-        "guard in the repository, and only in installs that had templates of their own.",
+        "ORDER as well as the rename: swapping them back WOULD leave the rename intact and, before this "
+        "needle was widened, every check here green, while a second template survives for a type that "
+        "already had one — invisible to every guard in the repository, and only in installs that had "
+        "templates of their own. Mutation-tested: the swap now reddens this check.",
     ),
     (
         "skills/spec/SKILL.md",
