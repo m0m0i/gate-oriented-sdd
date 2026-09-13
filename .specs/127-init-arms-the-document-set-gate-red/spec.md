@@ -130,7 +130,7 @@
   | `skills/init/SKILL.md` | step 3's opening sentence and its `- Mode:` paragraph, the `- Mode:` grammar at `:49`, the document-set bullet, and the upgrade rule at `:81` which today knows only `minimum`→`full` (AC5, AC6) |
   | `skills/spec/SKILL.md` | step 1's mode branch reads `full` and not-`full`; a declared `bootstrap` must have a defined reading rather than falling through prose that never names it (AC7) |
   | `scripts/check-skill-contracts.py` | `:75` pins the literal `` `- Mode: minimum` or `- Mode: full` on one physical line `` — the pin is part of the guard (G-8), so it moves with the sentence |
-  | `scripts/test-gates.sh` | `docset_repo` gains a no-documents variant; the bootstrap cases |
+  | `scripts/test-gates.sh` | a standalone `init_tree` fixture modelling step 3's output — deliberately **not** derived from `docset_repo`, which would make it a model of the other fixture instead; the bootstrap cases |
   | `README.md`, `README.ja.md` | the mode vocabulary at `:106` / `:73`, and the `## Status` version. The JA is a mirror, claims identical (C-3) |
   | `plugin.json`, `.claude-plugin/plugin.json` | 0.8.0 (C-6) |
 
@@ -173,10 +173,12 @@
     and the expiry message — three documents owed without saying what writes them leaves the
     user to search the skill list.
   - **A skipped half-assertion is not a passed one.** `test-gates.sh` gained `note_skip`, and
-    the summary now counts skips beside passes. Twelve sites self-disable; the first cut
-    converted nine of them and claimed seven, and two of the three it missed called `report`
+    the summary now counts skips beside passes. **Thirteen** sites self-disable; the first
+    cut converted ten of them and claimed seven, and two of the three it missed called `report`
     directly on the skip path — manufacturing a pass, in the environment the mechanism exists
-    for.
+    for. The recount that caught that then wrote down twelve and nine, in the paragraph whose
+    subject is not counting; this is the third statement of the number and the first that was
+    derived rather than recalled.
 
 - **Armed but unexercised.** `init` step 3 arms two validators and this spec's fixture proves
   one. `check-steering-anchors.sh` needs a `.steering/product.md` with an `- Owns:` line, which

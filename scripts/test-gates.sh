@@ -34,17 +34,18 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# THIRTEEN sites, not the seven the first cut of this claimed, and not the twelve the second cut
-# then wrote down: the first converted ten and said nine, and the recount that caught it was
-# itself recorded wrong, in the paragraph whose subject is not counting. Two of the three the
-# first cut missed were worse than any half: they called `report ... ok` on the skip path,
+# THIRTEEN sites. The first cut converted ten and said seven; the recount that caught that said
+# twelve and nine, in the paragraph whose subject is not counting. Two of the three the first
+# cut missed were worse than any half: they called `report ... ok` on the skip path,
 # manufacturing a pass and incrementing the counter. Those two are whole cases and now report
 # nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
 #
-# Count the GUARDS, not the `chmod 000` lines — there are twelve of those, and case 14 at :202
-# is the one with no self-disabling branch at all. Under root it goes red rather than skipping,
-# which is the safe direction and deliberately left alone; do not "fix" the asymmetry by adding
-# a skip to the one case that currently fails closed.
+# How to get thirteen, since two recounts did not: count the GUARDS, not the `chmod 000` lines.
+# There are twelve of those and ELEVEN guards among them, because case 14 (the unguarded
+# `chmod 000` at :209) has no self-disabling branch — under root it goes red rather than
+# skipping, which is the safe direction and deliberately left alone; do not "fix" that
+# asymmetry. The last two guards are not permission-based at all: `bootstrap/symlinked-slug`
+# and `bootstrap/dangling-symlink` self-disable when `ln -s` fails. 11 + 2 = 13.
 skipped=0
 note_skip() { skipped=$((skipped+1)); printf '  skip %s — %s\n' "$1" "$2"; }
 
