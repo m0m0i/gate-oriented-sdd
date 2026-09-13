@@ -224,7 +224,21 @@ def main():
 
     if missing:
         listed = ", ".join(str(p) for p in missing)
-        fail(f"mode is `{mode}` and {len(missing)} required item(s) are not found: {listed}")
+        # A project reaching this because of a TEMPLATE usually believes it has one — under its
+        # own name. Naming only the absent path reads to them as a false accusation, and a guard
+        # that looks wrong is a guard that gets switched off. So the remedy travels with the
+        # verdict: the remediation text is part of the guard (#127), and this is the sentence
+        # that tells them `init` renames rather than duplicates. #130.
+        note = ""
+        if any(TEMPLATE_DIR in path.parents for path in missing):
+            note = (
+                " A template of that type may already exist under another name — `init` step 3 "
+                "renames an existing template into the canonical filename rather than adding a "
+                "second one, so the picker keeps one entry per type."
+            )
+        fail(
+            f"mode is `{mode}` and {len(missing)} required item(s) are not found: {listed}.{note}"
+        )
 
     if mode == "bootstrap":
         # AC4. Without this, `bootstrap` is a gate switched off with a note attached — the

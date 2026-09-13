@@ -135,7 +135,7 @@
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: a fixture holding the tree step 3 produces under the new rule — `bug.md` carrying a
+- [x] T1: a fixture holding the tree step 3 produces under the new rule — `bug.md` carrying a
       project's own body and labels — asserted green, with the pre-fix shape (`bug_report.md`
       kept, no `bug.md`) still red and still naming the path; then the checker's message gains
       the remedy (AC1, AC2, AC3).

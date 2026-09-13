@@ -2303,6 +2303,57 @@ out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
   || report "bootstrap expires at the first spec, and cannot expire quietly" no \
      "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9 slug-unreadable-red=$c10 names-slug=$c11 symlink-red=$c12 names-symlink=$c13 dangling-stays-green=$c14"
 
+# 70. A project that already had a bug template under its own name must pass after init.
+#
+# #130. Two bullets of step 3 disagreed: the merge rule said "add only the missing types", so a
+# project with `bug_report.md` never got `bug.md` — and the checker requires that literal name.
+# Following the instruction correctly produced a red gate. #127 masked it entirely, because the
+# `- Docs:` check failed before the template check was reached.
+#
+# The fix is on init's side: absorb the project's template into the canonical filename. So what
+# this case pins is that the CHECKER is indifferent to everything except the name — the body and
+# labels below are the project's own, not the plugin's, and they must not matter.
+docset_repo_tpl() {
+  r=$(docset_repo "$1" "${2:-minimum}")
+  rm -f "$r/.github/ISSUE_TEMPLATE/bug.md"
+  echo "$r"
+}
+
+# Absorbed: the team's wording and labels, at the canonical name. Green.
+r=$(docset_repo_tpl ds-tpl-absorbed)
+printf -- '---\nname: Bug Report\nabout: Something is broken\nlabels: defect, needs-triage\n---\n\n## What happened\n' \
+  > "$r/.github/ISSUE_TEMPLATE/bug.md"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c1=ok || c1=no
+
+# Not absorbed: the shape the old instruction produced. Red, and it must still NAME the path —
+# the fix narrows nothing about the verdict.
+r=$(docset_repo_tpl ds-tpl-kept)
+printf 'x\n' > "$r/.github/ISSUE_TEMPLATE/bug_report.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c2=ok || c2=no
+case "$err" in *"ISSUE_TEMPLATE/bug.md"*) c3=ok ;; *) c3=no ;; esac
+# ...and it must say what to DO. A project in this state believes it HAS a bug template, so a
+# message naming only the absent path reads as a false accusation and gets the guard switched
+# off. The remediation text is part of the guard — #127's round-2 lesson, one file over.
+case "$err" in *"renames an existing template"*) c4=ok ;; *) c4=no ;; esac
+
+# A type with no template at all is the control for that message: still red, still named, and
+# the remedy is as true for it as for the renamed case (AC3).
+r=$(docset_repo_tpl ds-tpl-absent)
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *"ISSUE_TEMPLATE/bug.md"*) c6=ok ;; *) c6=no ;; esac
+
+# The control that keeps the above honest: the unmodified fixture, all three canonical names,
+# must stay green. Without it a checker that failed on every template set would satisfy c2-c6.
+r=$(docset_repo ds-tpl-control minimum)
+out=$(run_docset "$r"); [ "$out" = "0" ] && c7=ok || c7=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] \
+  && report "an absorbed template passes, a kept one fails and says what to do" ok \
+  || report "an absorbed template passes, a kept one fails and says what to do" no \
+     "absorbed-green=$c1 kept-red=$c2 names-path=$c3 says-remedy=$c4 absent-red=$c5 absent-names=$c6 control-green=$c7"
+
 # 59. init stripped of the document-set wiring must fail.
 #
 # Out of numeric order on purpose: 60 is grouped with the other docset cases above,
