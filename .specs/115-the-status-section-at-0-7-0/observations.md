@@ -164,3 +164,57 @@ Round 1: a scope drawn from where the defect was reported, not around where it l
 pattern built around the phrasing in front of me, and a universal substituted for a number because
 it was easier than checking one. **Every one of these was a check narrowed to the example that
 prompted it** — and the example is always the case that is already fixed.
+
+## Review round 3 — CLEAN, 0 blockers, 0 HIGH, 1 MEDIUM, 3 LOW
+
+Both round-2 HIGHs closed, and the reviewer checked they were closed **for the right reason rather
+than for the reported example** — which is the test this record's own closing line asks for.
+
+### MEDIUM — a no-op detector that could not fire
+
+`rm-ja-echo` read:
+
+```python
+out = src.replace("1件を除いて", "1件を除いて") + "その5件は inline …"
+if out == src:
+    raise SystemExit("fixture no-op: …")
+```
+
+`str.replace(x, x)` is the identity function and the concatenation then guarantees `out != src`, so
+the `if` was unreachable. Every sibling in the block uses that idiom for real; this one reproduced
+the **shape** of a no-op detector with the substance removed.
+
+That is #124's failure one level further in. Yesterday's instances were fixtures that no-op'd
+silently; this was a fixture whose **no-op detector** was silent — the guard against the guard,
+inert. The fixture appends rather than substitutes, so the precondition is now the check, and
+breaking it turns `ja-echo-exit` red, verified.
+
+_The first probe of that fix reported nothing, because I wrote the needle with single quotes where
+the file uses double, so the mutation never applied. Caught by asking whether it had — which is the
+same question this whole thread keeps turning on._
+
+### The three LOWs
+
+- **`JA_ECHO` was unanchored** where its sibling had just been re-anchored — the same asymmetry,
+  one notch down. Now `(?=は\s*inline)`, which both the real sentence and the fixture satisfy.
+- **`ケース` moved to the counter group.** Dropping it from the *noun* list was right for 「4つのケース」,
+  but it left 「ゲートとガードの67ケースの挙動」 uncatchable. In counter position a list-noun must
+  follow, so the gate form is caught and the eval form stays green **by construction rather than by
+  margin** — which is the difference worth having.
+- **Two gaps recorded rather than closed.** A trailing bare counter (「挙動を67件」) is missed,
+  because letting a counter terminate a match re-opens 「3件を除いて」 and 「13個の skill」 whose only
+  remaining protection would be the proximity window. This pattern has been wrong in **both**
+  directions on this branch, and this is where the two failure modes sit closest, so it is a named
+  limitation instead of a third swing. English `cases` is likewise a chosen trade — there is no safe
+  counter position in English, and the eval sentence lives in the same paragraph.
+
+**An unrecorded known gap is how round 1's defect survived. A recorded one is a decision.**
+
+### Where the margin actually sits, from the reviewer
+
+`README.ja.md` carries at least five `<digits><counter>の` constructions — 13個の skill, 3つの
+reviewer, 6つの skill, 2種類のファイル, 2つのハーネス間 — whose only protection is that the following
+word is not one of the nine nouns, and each also needs a gate word within 45 characters. 「2種類の
+ファイル」 is closest, because 種類 is in the counter group *specifically* to catch 「67種類の挙動」.
+Recorded because the false-positive direction is an accepted trade, and this is where it would
+surface first.

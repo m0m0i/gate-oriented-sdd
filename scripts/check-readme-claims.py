@@ -52,7 +52,7 @@ INLINE_EN = re.compile(r"from a spawned reviewer on all but (\w+)")
 #: kept its anchor throughout; this restores the symmetry.
 INLINE_JA = re.compile(r"(\d+|[一二三四五六七八九十]+)件(?=を除いて)")
 #: The echo, which must agree with the anchored value. Checked only once the anchor matched.
-JA_ECHO = re.compile(r"その(\d+|[一二三四五六七八九十]+)件")
+JA_ECHO = re.compile(r"その(\d+|[一二三四五六七八九十]+)件(?=は\s*inline)")
 
 WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
          "eight": 8, "nine": 9, "ten": 10,
@@ -70,13 +70,27 @@ WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven"
 #: direction is a false red on a sentence that mentions a number near "gates", which a human
 #: resolves in one edit. The opposite failure is what shipped.
 BEHAVIOUR_COUNT = re.compile(
-    r"(?:\d+\s*(?:[つ本件個]|通り|パターン|種類|種)?\s*(?:の|もの)?\s*"
+    r"(?:\d+\s*(?:[つ本件個]|通り|パターン|種類|種|ケース)?\s*(?:の|もの)?\s*"
     r"(?:paths?|behaviours?|behaviors?|通り|経路|挙動|パス|パターン|分岐)"
     r"[^.。\n]{0,45}?(?:gates?|guards?|ゲート|ガード)"
     r"|(?:gates?|guards?|ゲート|ガード)[^.。\n]{0,45}?"
-    r"\d+\s*(?:[つ本件個]|通り|パターン|種類|種)?\s*(?:の|もの)?\s*"
+    r"\d+\s*(?:[つ本件個]|通り|パターン|種類|種|ケース)?\s*(?:の|もの)?\s*"
     r"(?:paths?|behaviours?|behaviors?|通り|経路|挙動|パス|パターン|分岐))"
 )
+
+#: Two gaps, named because an unrecorded one is how the round-1 defect survived.
+#:
+#: 1. **A trailing bare counter is missed** — 「…挙動を67件」, 「…を67個」 — because a counter can
+#:    never terminate a match; a list-noun must follow. Letting it terminate would re-open
+#:    「3件を除いて」 and 「13個の skill」, whose only remaining protection would be the 45-character
+#:    proximity window. This pattern has already been wrong in BOTH directions on this branch, and
+#:    here the two failure modes are closest together, so this is recorded rather than swung at a
+#:    third time.
+#: 2. **English `cases` is not matched**, deliberately. `ケース` lives in the counter group above,
+#:    where a list-noun must follow it, so 「4つのケース」 stays green by construction. English has
+#:    no equivalent safe position — `cases` can only be a noun — and the eval sentence in the same
+#:    `## Status` paragraph says "its four cases are authored". So "the gates' 67 cases" is missed,
+#:    and that is a chosen trade rather than an oversight.
 
 
 #: `reviewed_by` is a THREE-way fact and the README's sentence has room for two. An absent field

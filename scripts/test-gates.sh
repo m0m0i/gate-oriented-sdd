@@ -2719,10 +2719,13 @@ if python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "README.ja.md")
 src = p.read_text()
-out = src.replace("1件を除いて", "1件を除いて") + "その5件は inline でレビューしました。\n"
-if out == src:
+# This fixture APPENDS rather than substitutes, so `out != src` is guaranteed and an
+# out-vs-src test cannot fail. The precondition is the guard: an earlier cut wrote
+# `src.replace(x, x)` — the identity function — and reproduced the SHAPE of a no-op detector
+# with the substance removed. #124's failure with the detector itself inert.
+if "1件を除いて" not in src:
     raise SystemExit("fixture no-op: JA receipt sentence not found")
-p.write_text(out)
+p.write_text(src + "その5件は inline でレビューしました。\n")
 PYEOF
 then cf7=ok; else cf7=no; fi
 out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
