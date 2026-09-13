@@ -130,6 +130,18 @@
   | `README.md`, `README.ja.md` | the mode vocabulary at `:106` / `:73`, and the `## Status` version. The JA is a mirror, claims identical (C-3) |
   | `plugin.json`, `.claude-plugin/plugin.json` | 0.8.0 (C-6) |
 
+- **A seventeenth `check-skill-contracts.py` entry, argued** — its docstring caps the list at
+  sixteen and requires the argument to be made here, because a check that grows to police every
+  sentence makes prose uneditable, which rots worse than the drift it prevents. The entry is
+  `skills/spec/SKILL.md`'s reading of `bootstrap`. What review cannot defend: step 1 branches on
+  `full` versus not-`full` and has an explicit rule for the line being **absent** — a value it
+  does not recognise falls through both, and falls through *silently*, so the model picks a
+  reading and the user never learns a choice was made. Deleting the clause reads as removing a
+  redundant case, since `bootstrap` is "obviously" minimum-like; what it removes is the only
+  sentence that makes that obviousness written down. The existing sixteenth entry — the
+  `- Mode:` needle — is **updated, not added**: this spec changes the literal it pins, and a
+  pin left behind its sentence is a guard that passes on the absence it exists to catch (G-8).
+
 - **Blast radius.** Three readers consume `- Mode:`: this checker, `skills/spec/SKILL.md`'s
   step 1, and `skills/contract/SKILL.md`'s "installed in `minimum` mode" sentence. The last is
   an example rather than a branch and stays correct. Nothing in `hooks/` reads the mode, by
@@ -152,8 +164,8 @@
       (AC1, AC2, AC3).
 - [x] T2: self-termination — a spec under `.specs/`, a spec under `.specs/_archive/`, and an
       unreadable `.specs/` as three distinct outcomes; then the scan (AC4).
-- [ ] T3: `skills/init/SKILL.md` — step 3's promise, the `- Mode:` grammar, the document-set
-      bullet and the upgrade rule — and `skills/spec/SKILL.md`'s mode branch, each pinned by its
-      `check-skill-contracts.py` entry (AC5, AC6, AC7).
+- [ ] T3: `skills/init/SKILL.md` — step 3's promise, the `- Mode:` grammar and the upgrade rule
+      — and `skills/spec/SKILL.md`'s mode branch; the `- Mode:` pin moved to its new literal and
+      the seventeenth pin added on the argument above (AC5, AC6, AC7).
 - [ ] T4: both READMEs' mode vocabulary and `## Status` version, the two manifests at 0.8.0;
       assert the full validator set green.
