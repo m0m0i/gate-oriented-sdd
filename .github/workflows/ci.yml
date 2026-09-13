@@ -62,6 +62,12 @@ jobs:
       - name: Steering anchors are readable
         run: ./assets/check-steering-anchors.sh
 
+      # The README's Status section is the repository's claim about itself, and it went stale
+      # three ways at once — including a version that survived three releases AND an edit to the
+      # same file, because nothing tied it to the manifest bump.
+      - name: The README's Status claims agree with their sources
+        run: ./scripts/check-readme-claims.py
+
       # One fact — where the reviewer contract lives — was written in five places and nothing
       # compared them, so it drifted into four forms and survived months of review. It surfaced
       # only when init was run against a real project. A shipped reviewer whose first
