@@ -2495,5 +2495,110 @@ case "$err" in *"sits in SUFFIX"*) c13b=ok ;; *) c13b=no ;; esac
      "shipped-exit=$c1 says-floor=$c2 no-success-line=$c3 suffix-exit=$c4 installed-exit=$c5 dupe-exit=$c6 says-dupe=$c7 misgrouped-exit=$c8 says-group=$c9 pad-shipped=$c10 says-prefix=$c11 reviewer-in-suffix=$c12b says-suffix=$c13b"
 
 
+# --- guards: scripts/check-readme-claims.py -------------------------------------------
+#
+# #115. Three claims in the README's Status section were false at once, by three different
+# mechanisms. The version is the instructive one: it survived three releases AND an edit to the
+# same file, because nothing tied it to the manifest bump — check-manifests.py verifies the two
+# manifests against each other and knows nothing about the README.
+#
+# The guard deliberately does NOT check a count of gate behaviours. That number's only source is
+# running test-gates.sh, already the slowest validator, so it was removed from the README instead
+# — and the guard fails if it comes back, because a check that only verifies what is present
+# cannot notice a removed claim returning.
+
+# $1 = name. A repo whose README agrees with its sources.
+readme_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/.specs/9-feature" "$r/.specs/_archive/8-old"
+  cp "$ROOT/scripts/check-readme-claims.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-readme-claims.py"
+  printf '{\n  "version": "1.2.3"\n}\n' > "$r/plugin.json"
+  printf 'reviewed_by=subagent\n' > "$r/.specs/9-feature/.review-receipt"
+  printf 'reviewed_by=inline\n' > "$r/.specs/_archive/8-old/.review-receipt"
+  printf '## Status\n\n**v1.2.3 — pre-release.**\n\nthe gates and guards behaviours, tested deterministically; and a receipt on every spec from a spawned reviewer on all but one, which were reviewed inline.\n' > "$r/README.md"
+  printf '## Status\n\n**v1.2.3、pre-release です。**\n\nゲートとガードの挙動。1件を除いてサブエージェントとして起動した reviewer によるレビューです。\n' > "$r/README.ja.md"
+  echo "$r"
+}
+run_readme() { ( cd "$1" && python3 scripts/check-readme-claims.py >/dev/null 2>"$TMP/rmerr"; printf '%s' "$?" ) }
+
+# 65. Each of the three claims, in each language, and the control first.
+r=$(readme_repo rm-control)
+out=$(run_readme "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(readme_repo rm-version)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.md"); src = p.read_text()
+out = src.replace("**v1.2.3 —", "**v1.0.0 —")
+if out == src: raise SystemExit("fixture no-op: version string not found")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf1=ok || cf1=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf1" = ok ]; } && c1=ok || c1=no
+case "$err" in *"plugin.json says 1.2.3"*) c2=ok ;; *) c2=no ;; esac
+
+# The removed number coming back — the half a presence-only check cannot see.
+r=$(readme_repo rm-count)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.md"); src = p.read_text()
+out = src.replace("the gates and guards behaviours", "the gates and guards' 99 behaviours")
+if out == src: raise SystemExit("fixture no-op: behaviours phrase not found")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf2=ok || cf2=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf2" = ok ]; } && c3=ok || c3=no
+case "$err" in *"removed on purpose"*) c4=ok ;; *) c4=no ;; esac
+
+# The receipt count, in each language independently.
+r=$(readme_repo rm-receipts-en)
+printf 'reviewed_by=inline\n' > "$r/.specs/9-feature/.review-receipt"   # now 2 inline, README says one
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *"2 of 2 say reviewed_by=inline"*) c6=ok ;; *) c6=no ;; esac
+
+r=$(readme_repo rm-receipts-ja)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md"); src = p.read_text()
+out = src.replace("1件を除いて", "5件を除いて")
+if out == src: raise SystemExit("fixture no-op: JA receipt phrase not found")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf3=ok || cf3=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf3" = ok ]; } && c7=ok || c7=no
+case "$err" in *README.ja.md*) c8=ok ;; *) c8=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "each README Status claim disagreeing with its source is named" ok \
+  || report "each README Status claim disagreeing with its source is named" no \
+     "control=$c0 version-exit=$c1 names-manifest=$c2 count-exit=$c3 says-removed=$c4 receipts-en=$c5 names-count=$c6 receipts-ja=$c7 names-file=$c8"
+
+# 66. A source the guard cannot read is a THIRD outcome, never agreement.
+r=$(readme_repo rm-nomanifest); rm "$r/plugin.json"
+out=$(run_readme "$r"); [ "$out" = "1" ] && c1=ok || c1=no
+
+r=$(readme_repo rm-noreceipts); rm -rf "$r/.specs"
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+[ "$out" = "1" ] && c2=ok || c2=no
+case "$err" in *"no review receipts"*) c3=ok ;; *) c3=no ;; esac   # not "nothing to check"
+
+r=$(readme_repo rm-nojp); rm "$r/README.ja.md"
+out=$(run_readme "$r"); [ "$out" = "1" ] && c4=ok || c4=no
+
+# A README that stops making the claim at all — the quiet half.
+r=$(readme_repo rm-silent)
+printf '## Status\n\n**v1.2.3 — pre-release.**\n\nnothing about receipts here.\n' > "$r/README.md"
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *"does not say how many"*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] && report "a README claim whose source is missing fails rather than agreeing" ok \
+  || report "a README claim whose source is missing fails rather than agreeing" no \
+     "nomanifest=$c1 noreceipts-exit=$c2 says-none=$c3 nojp=$c4 silent-exit=$c5 silent-msg=$c6"
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1

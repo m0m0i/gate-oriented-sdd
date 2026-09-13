@@ -1,5 +1,5 @@
 # Spec: The README's Status section, true at 0.7.0
-- Slug: 115-the-status-section-at-0-7-0   Issue: 115   Type: bug   Status: draft
+- Slug: 115-the-status-section-at-0-7-0   Issue: 115   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-09-13
 
 ## 1. Requirements (WHAT / WHY)
@@ -63,6 +63,6 @@ Why not wider — deriving the whole section, or generating the README: the othe
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] T1: `scripts/check-readme-claims.py` and its cases — red against `main`'s README for the version and the receipt count, green on a corrected fixture — then correct all three claims in `README.md`, which is what turns the real repository green (AC1, AC2, AC3, AC6).
+- [x] T1: `scripts/check-readme-claims.py` and its cases — red against `main`'s README for the version and the receipt count, green on a corrected fixture — then correct all three claims in `README.md`, which is what turns the real repository green (AC1, AC2, AC3, AC6).
 - [ ] T2: `README.ja.md` as a mirror, and the guard extended to check it too; assert AC4 and that both languages state the same three things.
 - [ ] T3: the guard onto `- Validators:` and into CI; assert AC7's diff confinement, AC8's no-bump, and the full validator set green.
