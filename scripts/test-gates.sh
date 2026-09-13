@@ -2495,5 +2495,247 @@ case "$err" in *"sits in SUFFIX"*) c13b=ok ;; *) c13b=no ;; esac
      "shipped-exit=$c1 says-floor=$c2 no-success-line=$c3 suffix-exit=$c4 installed-exit=$c5 dupe-exit=$c6 says-dupe=$c7 misgrouped-exit=$c8 says-group=$c9 pad-shipped=$c10 says-prefix=$c11 reviewer-in-suffix=$c12b says-suffix=$c13b"
 
 
+# --- guards: scripts/check-readme-claims.py -------------------------------------------
+#
+# #115. Three claims in the README's Status section were false at once, by three different
+# mechanisms. The version is the instructive one: it survived three releases AND an edit to the
+# same file, because nothing tied it to the manifest bump — check-manifests.py verifies the two
+# manifests against each other and knows nothing about the README.
+#
+# The guard deliberately does NOT check a count of gate behaviours. That number's only source is
+# running test-gates.sh, already the slowest validator, so it was removed from the README instead
+# — and the guard fails if it comes back, because a check that only verifies what is present
+# cannot notice a removed claim returning.
+
+# $1 = name. A repo whose README agrees with its sources.
+readme_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/.specs/9-feature" "$r/.specs/_archive/8-old"
+  cp "$ROOT/scripts/check-readme-claims.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-readme-claims.py"
+  printf '{\n  "version": "1.2.3"\n}\n' > "$r/plugin.json"
+  printf 'reviewed_by=subagent\n' > "$r/.specs/9-feature/.review-receipt"
+  printf 'reviewed_by=inline\n' > "$r/.specs/_archive/8-old/.review-receipt"
+  printf '## Status\n\n**v1.2.3 — pre-release.**\n\nthe gates and guards behaviours, tested deterministically; and a receipt on every spec from a spawned reviewer on all but one, which were reviewed inline.\n' > "$r/README.md"
+  printf '## Status\n\n**v1.2.3、pre-release です。**\n\nゲートとガードの挙動。1件を除いてサブエージェントとして起動した reviewer によるレビューです。\n' > "$r/README.ja.md"
+  echo "$r"
+}
+run_readme() { ( cd "$1" && python3 scripts/check-readme-claims.py >/dev/null 2>"$TMP/rmerr"; printf '%s' "$?" ) }
+
+# 65. Each of the three claims, in each language, and the control first.
+r=$(readme_repo rm-control)
+out=$(run_readme "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(readme_repo rm-version)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.md"); src = p.read_text()
+out = src.replace("**v1.2.3 —", "**v1.0.0 —")
+if out == src: raise SystemExit("fixture no-op: version string not found")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf1=ok || cf1=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf1" = ok ]; } && c1=ok || c1=no
+case "$err" in *"plugin.json says 1.2.3"*) c2=ok ;; *) c2=no ;; esac
+
+# The removed number coming back — the half a presence-only check cannot see.
+r=$(readme_repo rm-count)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.md"); src = p.read_text()
+out = src.replace("the gates and guards behaviours", "the gates and guards' 99 behaviours")
+if out == src: raise SystemExit("fixture no-op: behaviours phrase not found")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf2=ok || cf2=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf2" = ok ]; } && c3=ok || c3=no
+case "$err" in *"removed on purpose"*) c4=ok ;; *) c4=no ;; esac
+
+# The receipt count, in each language independently.
+r=$(readme_repo rm-receipts-en)
+printf 'reviewed_by=inline\n' > "$r/.specs/9-feature/.review-receipt"   # now 2 inline, README says one
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *"2 of 2 say reviewed_by=inline"*) c6=ok ;; *) c6=no ;; esac
+
+r=$(readme_repo rm-receipts-ja)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md"); src = p.read_text()
+out = src.replace("1件を除いて", "5件を除いて")
+if out == src: raise SystemExit("fixture no-op: JA receipt phrase not found")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf3=ok || cf3=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf3" = ok ]; } && c7=ok || c7=no
+# The receipt-count message specifically: README.ja.md appears in this guard's output for a
+# missing file, a missing version, a version mismatch and a behaviour count too, so the filename
+# alone cannot tell this assertion from any of those. Every sibling here pins its own text.
+case "$err" in *"but 1 of 2 say reviewed_by=inline"*) c8=ok ;; *) c8=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "each README Status claim disagreeing with its source is named" ok \
+  || report "each README Status claim disagreeing with its source is named" no \
+     "control=$c0 version-exit=$c1 names-manifest=$c2 count-exit=$c3 says-removed=$c4 receipts-en=$c5 names-count=$c6 receipts-ja=$c7 names-file=$c8"
+
+# 66. A source the guard cannot read is a THIRD outcome, never agreement.
+r=$(readme_repo rm-nomanifest); rm "$r/plugin.json"
+out=$(run_readme "$r"); [ "$out" = "1" ] && c1=ok || c1=no
+
+r=$(readme_repo rm-noreceipts); rm -rf "$r/.specs"
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+[ "$out" = "1" ] && c2=ok || c2=no
+case "$err" in *"no review receipts"*) c3=ok ;; *) c3=no ;; esac   # not "nothing to check"
+
+r=$(readme_repo rm-nojp); rm "$r/README.ja.md"
+out=$(run_readme "$r"); [ "$out" = "1" ] && c4=ok || c4=no
+
+# A README that stops making the claim at all — the quiet half.
+r=$(readme_repo rm-silent)
+printf '## Status\n\n**v1.2.3 — pre-release.**\n\nnothing about receipts here.\n' > "$r/README.md"
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *"does not say how many"*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] && report "a README claim whose source is missing fails rather than agreeing" ok \
+  || report "a README claim whose source is missing fails rather than agreeing" no \
+     "nomanifest=$c1 noreceipts-exit=$c2 says-none=$c3 nojp=$c4 silent-exit=$c5 silent-msg=$c6"
+
+
+# 67. The behaviour count in the phrasings that actually shipped, and the receipt field's third
+# state.
+#
+# The first cut of BEHAVIOUR_COUNT was written around the one sentence the spec was looking at —
+# `guards' 67 behaviours` in `## Status`. A section above it said `67 paths across the gates and
+# guards`, and the Japanese said `ゲートとガードを合わせた67通り`; the pattern matched neither, so
+# the guard printed "no behaviour count asserted" over two files that asserted one, wrong by
+# eleven. A fixture using the phrasing a regex was built around cannot catch that class, so these
+# use the phrasings that were missed.
+r=$(readme_repo rm-count-before)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.md"); src = p.read_text()
+out = src.replace("the gates and guards behaviours", "67 paths across the gates and guards")
+if out == src: raise SystemExit("fixture no-op: behaviours phrase not found")
+p.write_text(out)
+PYEOF
+then_ok=$?; [ "$then_ok" = 0 ] && cf1=ok || cf1=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf1" = ok ]; } && c1=ok || c1=no
+case "$err" in *"67 paths across the gates"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(readme_repo rm-count-ja)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md"); src = p.read_text()
+out = src.replace("ゲートとガードの挙動。", "ゲートとガードを合わせた67通りの経路。")
+if out == src: raise SystemExit("fixture no-op: JA behaviour phrase not found")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf2=ok || cf2=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf2" = ok ]; } && c3=ok || c3=no
+case "$err" in *"67通り"*) c4=ok ;; *) c4=no ;; esac
+
+# A number near "gates" that is NOT a count of them must stay green, or the accuser fires on a
+# correct file — the first widening did, eight times, on URLs and token counts.
+r=$(readme_repo rm-count-noise)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.md")
+p.write_text(p.read_text() + "\nSee github.com/m0m0i/gate-oriented-sdd — the gate reports ~1,300 tokens always-on.\n")
+PYEOF
+out=$(run_readme "$r"); [ "$out" = "0" ] && c5=ok || c5=no
+
+# reviewed_by is a three-way fact: absent is UNKNOWN, never spawned. Receipts predate the field.
+r=$(readme_repo rm-receipt-unknown)
+printf 'reviewed_sha=abc\nverdict=CLEAN\n' > "$r/.specs/9-feature/.review-receipt"
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+[ "$out" = "1" ] && c6=ok || c6=no
+case "$err" in *"Silence is not evidence"*) c7=ok ;; *) c7=no ;; esac
+
+# The idiomatic Japanese form, which the flush-noun pattern could not see. Japanese rarely puts
+# the noun against the digits — a counter or a particle sits between — so the ONE form the first
+# cut caught was the one that happened to ship, and a rewrite in the most natural phrasing would
+# have gone unnoticed under a guard printing "no behaviour count asserted".
+r=$(readme_repo rm-count-ja-particle)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md"); src = p.read_text()
+out = src.replace("ゲートとガードの挙動。", "ゲートとガードを合わせて67の経路。")
+if out == src: raise SystemExit("fixture no-op: JA behaviour phrase not found")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf3=ok || cf3=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf3" = ok ]; } && c8=ok || c8=no
+case "$err" in *"67の経路"*) c9=ok ;; *) c9=no ;; esac
+
+# …and the no-false-block half, which the widening is only safe with. The real README.ja.md says
+# 「4つのケースは書いてあり」 about the eval suite, and the English says "its four cases are
+# authored" — both are counts near nothing to do with gates, and both must stay green. The
+# widening that caught the six missed forms must not reach these.
+r=$(readme_repo rm-count-ja-noise)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md")
+p.write_text(p.read_text() + "\n[eval スイート](./evals/) は開発中です。4つのケースは書いてあります。\n")
+q = pathlib.Path(sys.argv[1], "README.md")
+q.write_text(q.read_text() + "\nThe eval suite is under development: its four cases are authored, and 2 of them are new.\n")
+PYEOF
+then cf4=ok; else cf4=no; fi
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cf4" = ok ]; } && c10=ok || c10=no
+
+# The Japanese receipt anchor. Dropping it to reach the echo matched any N件 in the file — a
+# false red on an unrelated counter, and a fail-open if the receipt sentence is deleted while a
+# stray one remains. Both directions pinned.
+r=$(readme_repo rm-ja-unrelated-counter)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md")
+p.write_text(p.read_text() + "\n未対応の issue が2件あります。\n")
+PYEOF
+then cf5=ok; else cf5=no; fi
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cf5" = ok ]; } && c11=ok || c11=no
+
+r=$(readme_repo rm-ja-silent)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md")
+p.write_text("## Status\n\n**v1.2.3、pre-release です。**\n\nゲートとガードの挙動。未対応の issue が2件あります。\n")
+PYEOF
+then cf6=ok; else cf6=no; fi
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf6" = ok ]; } && c12=ok || c12=no
+case "$err" in *"does not say how many"*) c13=ok ;; *) c13=no ;; esac
+
+# The Japanese states the count twice. The anchored one carries the value; the echo must agree
+# with it, and nothing pinned that until mutating the comparison produced zero failures.
+r=$(readme_repo rm-ja-echo)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md")
+src = p.read_text()
+# This fixture APPENDS rather than substitutes, so `out != src` is guaranteed and an
+# out-vs-src test cannot fail. The precondition is the guard: an earlier cut wrote
+# `src.replace(x, x)` — the identity function — and reproduced the SHAPE of a no-op detector
+# with the substance removed. #124's failure with the detector itself inert.
+if "1件を除いて" not in src:
+    raise SystemExit("fixture no-op: JA receipt sentence not found")
+p.write_text(src + "その5件は inline でレビューしました。\n")
+PYEOF
+then cf7=ok; else cf7=no; fi
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf7" = ok ]; } && c14=ok || c14=no
+case "$err" in *"states the receipt count twice and they disagree"*) c15=ok ;; *) c15=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15" = "okokokokokokokokokokokokokokok" ] && report "a behaviour count in any phrasing fails, ordinary numbers do not, and an absent reviewed_by is unknown" ok \
+  || report "a behaviour count in any phrasing fails, ordinary numbers do not, and an absent reviewed_by is unknown" no \
+     "count-before-exit=$c1 quotes-it=$c2 count-ja-exit=$c3 quotes-ja=$c4 noise-stays-green=$c5 unknown-exit=$c6 says-silence=$c7 ja-particle-exit=$c8 quotes-particle=$c9 ja-eval-noise-green=$c10 ja-unrelated-green=$c11 ja-silent-exit=$c12 ja-silent-msg=$c13 ja-echo-exit=$c14 ja-echo-msg=$c15"
+
+
 printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
