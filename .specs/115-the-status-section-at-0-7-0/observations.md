@@ -218,3 +218,46 @@ word is not one of the nine nouns, and each also needs a gate word within 45 cha
 ファイル」 is closest, because 種類 is in the counter group *specifically* to catch 「67種類の挙動」.
 Recorded because the false-positive direction is an accepted trade, and this is where it would
 surface first.
+
+## Review round 4 — APPROVE, zero findings at every level
+
+Reviewed at `4ef9529`; receipt written, and it is the **first** receipt for this spec. Waiting for
+the shipping SHA rather than writing one per round was deliberate: a receipt is a claim about a
+diff, and there were three diffs before this one.
+
+The reviewer traced the `ケース` move by **backtracking** rather than by trusting the suite, and
+confirmed the property that made it the one safe widening left: 「4つのケース」 stays green because
+`ケース` cannot occupy noun position at all, so every backtracking path fails — not because the
+following word happens to be off a list.
+
+It also named one consequence of the anchoring I had asked for and did not see: a Japanese rewrite
+keeping the echo but dropping 「は inline」 leaves `JA_ECHO` unmatched, so the consistency check goes
+quiet while the anchored value still verifies the count. That is the correct trade — the English has
+no echo check at all, and requiring the echo to exist would block a legitimate rewrite — and it is
+recorded rather than raised.
+
+### What ships, stated so the merge commit is not misread
+
+The reviewer's closing note, carried because it is the thing a reader would otherwise get wrong:
+**this branch closed the version drift for detection, not for prevention.** #133 owns the
+prevention half. And it added a twelfth validator the reviewer's own allow-list cannot run, which
+#131 owns. Both were filed rather than folded in, on AC8's boundary.
+
+So the honest summary is not *the version claim can no longer go stale*. It is: **it can no longer
+go stale quietly.**
+
+### Four rounds, and what the record carries
+
+Every miss, including three the reviewer never saw and I reported against myself: the widening that
+fired eight times on a correct file and was caught before shipping; three fixtures whose Python
+string literals were split by literal newlines, against a rule written down the day before; and the
+mis-quoted probe that reported nothing and was found by asking whether the mutation had applied.
+
+The synthesis, which is the part that outlives this spec: **every one of these was a check narrowed
+to the example that prompted it — and the example is always the case that is already fixed.**
+
+Round 1 scoped to the section the issue pointed at, and the falsehood was one anchor above it.
+Round 2 built a pattern around the phrasing in front of it, and substituted an unfalsifiable
+universal for a number because it was easier than checking one. Round 3's no-op detector reproduced
+the shape of a guard with the substance removed. Each was written from the instance, and each was
+blind to the class.
