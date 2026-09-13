@@ -29,9 +29,13 @@
   The `- Mode:` line was built to separate a deliberate omission from an abandonment; it has no
   value for the state every project passes through first.
 - Acceptance criteria:
-  - [x] **AC1:** WHEN `init` completes on a project with no inception documents THEN every
-        validator it placed on the `- Validators:` line exits 0 on the resulting tree,
-        `check-document-set.py` included.
+  - [x] **AC1:** WHEN `init` completes on a project with no inception documents THEN
+        `check-document-set.py`, as `init` step 3 placed it on the `- Validators:` line, exits 0
+        on the resulting tree. **Narrowed at review round 4**, from "every validator it placed"
+        — step 3 also arms `assets/check-steering-anchors.sh` (`skills/init/SKILL.md:56`), and
+        the fixture neither installs nor runs it. The wider claim was true of the intent and
+        false of the evidence, and a criterion is the artifact that outlives the branch, so the
+        code comment saying so was not enough. The unexercised axis is recorded in Design.
   - [x] **AC2:** the regression test fails before the fix and passes after.
   - [x] **AC3:** WHEN the document set is genuinely incomplete in a state that claims the
         documents exist THEN `check-document-set.py` still exits non-zero — the fix narrows
@@ -147,6 +151,38 @@
   an example rather than a branch and stays correct. Nothing in `hooks/` reads the mode, by
   #110's AC5, so no gate branches on it and none can be weakened by a new value. Projects
   already on `minimum` or `full` are unaffected — no existing tree changes verdict.
+
+- **What the review rounds settled**, recorded here rather than left in commit messages:
+  - **Three outcomes at *both* levels.** The per-entry test is `os.stat`, deliberately not
+    `Path.is_file()`, which delegates to `os.path.isfile` and swallows every `OSError`: the
+    docstring's promise honoured for the outer directory and broken one level in, and
+    interpreter-dependent besides, which is not a verdict at all.
+  - **"Spec directory" follows symlinks.** `entry.is_dir()` over `follow_symlinks=False`,
+    because the narrower reading produced a *fourth* outcome — an entry in neither list — in
+    the fail-open direction. A dangling link is a definite ENOENT and stays green; a loop is an
+    `OSError` and is `unreadable`.
+  - **`ARCHIVE.is_dir()`'s swallow is safe by an invariant that lives in another function.**
+    `_archive` is itself an entry of `.specs`, already classified with error-visible stats.
+    Skipping it by name in that loop — the natural way to stop it being listed twice — would
+    activate the swallow with nothing left to catch it.
+  - **The remediation text is part of the guard.** The absent-`- Mode:` message offers all
+    three values; naming only the two document sets sent a project with no documents to declare
+    one it had not written, which is this issue's own defect spoken by the checker that closes
+    it.
+  - **`DOC_OWNER`** names the skill that writes each owed document, in both the success line
+    and the expiry message — three documents owed without saying what writes them leaves the
+    user to search the skill list.
+  - **A skipped half-assertion is not a passed one.** `test-gates.sh` gained `note_skip`, and
+    the summary now counts skips beside passes. Twelve sites self-disable; the first cut
+    converted nine of them and claimed seven, and two of the three it missed called `report`
+    directly on the skip path — manufacturing a pass, in the environment the mechanism exists
+    for.
+
+- **Armed but unexercised.** `init` step 3 arms two validators and this spec's fixture proves
+  one. `check-steering-anchors.sh` needs a `.steering/product.md` with an `- Owns:` line, which
+  `init_tree` does not write; extending the fixture to the whole armed set is worth doing and is
+  not done here. That gap is the shape of this very issue one axis over, and it is stated rather
+  than closed.
 
 - **Why this cannot recur.** The class is *`init` arms a validator whose precondition `init`
   does not establish*, and it survived #110's review because nothing runs the checker against
