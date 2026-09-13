@@ -6,6 +6,16 @@ so the harness could not tell *"minimum, deliberately"* from *"full, half-abando
 that is exactly the distinction a checker needs before it can call a missing `CONTRACT.md` a
 hole rather than a choice.
 
+A third value, `bootstrap`, was added by #127: the harness is installed and the inception
+documents are not written yet. It exists because this checker was asking two questions through
+one exit code — *is the harness installed correctly* (directories, issue templates, a readable
+mode), which `init` can make true, and *has this project authored its documents*, which `init`
+cannot make true without writing the user's thinking for them. Arming the second at install
+time made every first install start red, which is CAP-4's falsifier exactly. `bootstrap` claims
+only the first and says so in its own success line; it is **declared**, not inferred from an
+empty `docs/`, for the same reason the other two are. It is also self-terminating: it stops
+passing once `.specs/` holds a spec, so it cannot become a gate switched off and left off.
+
 The mode is DECLARED on `.steering/tech.md`'s `- Mode:` line and verified here against the
 filesystem. Declared rather than derived on purpose: the mode is *almost* computable from
 which files exist, but derivation cannot distinguish a deliberate omission from an
@@ -28,8 +38,12 @@ import sys
 #: yields nothing, the file looks right, and nobody finds out.
 STEERING = pathlib.Path(".steering/tech.md")
 
-#: Documents every mode requires, relative to the `- Docs:` directory.
+#: Documents `minimum` and `full` require, relative to the `- Docs:` directory. Not `bootstrap`,
+#: which is the state of not having written them yet.
 MANDATORY_DOCS = ("PRD.md", "DESIGN.md", "BACKLOG.md")
+#: The skill that writes each. `bootstrap` names them in its output: telling a user three
+#: documents are owed without naming what writes them leaves them to search the skill list.
+DOC_OWNER = {"PRD.md": "prd", "DESIGN.md": "design-doc", "BACKLOG.md": "backlog"}
 #: What `full` adds. One document per opt-in skill: northstar, epics, contract.
 FULL_ONLY_DOCS = ("NORTH_STAR.md", "EPICS.md", "CONTRACT.md")
 #: The issue templates sit INSIDE the chain rather than beside it — the Issue step is where
@@ -40,7 +54,9 @@ TEMPLATE_DIR = pathlib.Path(".github/ISSUE_TEMPLATE")
 #: their existence is checkable — but an absent one means the harness was never installed.
 MANDATORY_DIRS = (pathlib.Path(".specs"), pathlib.Path(".work_logs"))
 
-MODES = ("minimum", "full")
+#: Ordered as a project moves through them. `bootstrap` is first because every project passes
+#: through it, including the ones that leave it in the same hour.
+MODES = ("bootstrap", "minimum", "full")
 
 
 def fail(message):
@@ -124,13 +140,21 @@ def main():
             f"install, or point `- Docs:` at a local directory."
         )
 
+    # The URL branch above stays AHEAD of this one in all three modes. A `- Docs:` value that is
+    # not a path is a misconfiguration whatever the mode, and reading it under `bootstrap` as
+    # "nothing to check yet" would be the false GREEN that branch exists to refuse, reached
+    # again through the new value.
     docs = pathlib.Path(docs_value)
-    if not docs.is_dir():
-        fail(f"`- Docs: {docs_value}` does not name a directory that exists.")
 
-    wanted = [docs / name for name in MANDATORY_DOCS]
-    if mode == "full":
-        wanted += [docs / name for name in FULL_ONLY_DOCS]
+    wanted = []
+    if mode != "bootstrap":
+        if not docs.is_dir():
+            fail(f"`- Docs: {docs_value}` does not name a directory that exists.")
+        wanted += [docs / name for name in MANDATORY_DOCS]
+        if mode == "full":
+            wanted += [docs / name for name in FULL_ONLY_DOCS]
+    # `docs/` itself is not required under `bootstrap`: nothing has been written into it, and a
+    # directory created to hold nothing is the placeholder `init` step 3 forbids one level up.
     wanted += [TEMPLATE_DIR / name for name in TEMPLATES]
 
     missing = []
@@ -146,6 +170,20 @@ def main():
     if missing:
         listed = ", ".join(str(p) for p in missing)
         fail(f"mode is `{mode}` and {len(missing)} required item(s) are not found: {listed}")
+
+    if mode == "bootstrap":
+        owed = ", ".join(f"{name} ({DOC_OWNER[name]})" for name in MANDATORY_DOCS)
+        # A separate sentence, not the line below with a smaller number in it. G-1: "the
+        # documents are present" and "the documents were not looked at" cannot share an
+        # outcome, and exit 0 is already shared between them — so the words carry the whole
+        # difference, and a count of documents this run never examined must not appear in them.
+        print(
+            f"check-document-set: mode `{mode}` — the harness is installed "
+            f"({len(TEMPLATES)} issue template(s) and {len(MANDATORY_DIRS)} directory(ies) "
+            f"present). {len(MANDATORY_DOCS)} document(s) not yet authored: {owed}. "
+            f"Declare `minimum` or `full` in {STEERING} once they are written."
+        )
+        return
 
     # Never reachable on an empty work-set: `wanted` is built from module constants, so it is
     # non-empty by construction, and the count is printed rather than the word "all" so that a

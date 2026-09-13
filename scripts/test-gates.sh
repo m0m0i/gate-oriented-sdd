@@ -2066,6 +2066,92 @@ case "$err" in *PRD.md*) c6=no ;; *) c6=ok ;; esac
   || report "trailing whitespace is strict on Mode, tolerant on Docs, and blank Docs never means the repo root" no \
      "mode-exit=$c1 mode-names-whitespace=$c2 mode-not-generic=$c3 docs-tolerant=$c4 blank-falls-back=$c5 not-root-scanned=$c6"
 
+# 68. The tree `init` step 3 actually produces must pass every validator step 3 arms.
+#
+# #127. `init` writes `- Mode:` and `- Docs: docs/`, copies this checker into the project and
+# adds it to `- Validators:` — and creates no `docs/` and none of PRD/DESIGN/BACKLOG, which the
+# checker required in BOTH modes. So every first install armed its own gate red. CAP-4's
+# falsifier stated literally, and DORMANT: quality-gate.sh runs the Validators line only when a
+# `- Source globs:` path changed, and a document is never source, so it fired on the user's
+# first real edit with the cause a day behind them.
+#
+# The fixture is built from what step 3 writes rather than by deleting from docset_repo, and
+# that is the point of it: it is a model of the installer's output, so it goes red again the
+# next time a validator's requirements outgrow what step 3 creates. Deriving it by `rm` would
+# make it a model of the OTHER fixture instead.
+init_tree() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/.steering" "$r/.github/ISSUE_TEMPLATE" "$r/.specs" "$r/.work_logs"
+  cp "$ROOT/assets/check-document-set.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-document-set.py"
+  {
+    printf '# Tech\n\n'
+    printf -- '- Validators: ./scripts/check-document-set.py\n'
+    printf -- '- Reviewer: some-reviewer\n'
+    printf -- '- Docs: docs/\n'
+    printf -- '- Mode: %s\n' "${2-}"
+  } > "$r/.steering/tech.md"
+  for t in feature bug chore; do printf 'x\n' > "$r/.github/ISSUE_TEMPLATE/$t.md"; done
+  # Deliberately NOT created: docs/, PRD.md, DESIGN.md, BACKLOG.md. Step 3 writes none of them.
+  echo "$r"
+}
+
+r=$(init_tree ds-boot-install bootstrap)
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "0" ] && c1=ok || c1=no
+
+# The same tree under the two modes that CLAIM the documents must still fail — this is the
+# half that keeps the fix a narrowing rather than a hole. Without it, "bootstrap passes" is
+# satisfiable by a checker that stopped looking at documents altogether.
+r=$(init_tree ds-boot-min-red minimum)
+out=$(run_docset "$r"); [ "$out" = "1" ] && c2=ok || c2=no
+r=$(init_tree ds-boot-full-red full)
+out=$(run_docset "$r"); [ "$out" = "1" ] && c3=ok || c3=no
+
+# bootstrap asserts the INSTALL-time invariant and must still fail on it. A missing issue
+# template is step 3's own output going absent, which is a different fact from an unwritten
+# PRD and must not be waved through with it.
+r=$(init_tree ds-boot-tpl bootstrap); rm "$r/.github/ISSUE_TEMPLATE/chore.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c4=ok || c4=no
+case "$err" in *chore.md*) c5=ok ;; *) c5=no ;; esac
+
+r=$(init_tree ds-boot-dirs bootstrap); rmdir "$r/.work_logs"
+out=$(run_docset "$r"); [ "$out" = "1" ] && c6=ok || c6=no
+
+# Its success line must not be the other modes' success line. G-1: "the documents are present"
+# and "the documents were not looked at" cannot share an outcome, and exit 0 is already shared,
+# so the words are the only place the difference can live.
+r=$(init_tree ds-boot-says bootstrap)
+sout=$( cd "$r" && python3 scripts/check-document-set.py 2>/dev/null )
+case "$sout" in *bootstrap*) c7=ok ;; *) c7=no ;; esac
+case "$sout" in *PRD.md*) c8=ok ;; *) c8=no ;; esac
+# ...and it must not claim a count of documents it never checked.
+case "$sout" in *"document(s), "*) c9=no ;; *) c9=ok ;; esac
+
+# A remote `- Docs:` is still its own outcome under bootstrap. The URL branch sits ahead of the
+# document set in all three modes: a value that is not a path is a misconfiguration whatever
+# the mode, and reading it as "nothing to check yet" would be the false GREEN case 58 exists
+# to forbid, reachable again through the new value.
+r=$(init_tree ds-boot-remote bootstrap)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], ".steering", "tech.md")
+src = p.read_text()
+out = src.replace("- Docs: docs/\n", "- Docs: https://example.invalid/docs\n")
+if out == src:
+    raise SystemExit("fixture no-op: the `- Docs:` needle no longer matches init_tree's format")
+p.write_text(out)
+PYEOF
+then cf1=ok; else cf1=no; fi
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+{ [ "$out" = "1" ] && [ "$cf1" = ok ]; } && c10=ok || c10=no
+case "$err" in *"cannot be verified"*) c11=ok ;; *) c11=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokok" ] \
+  && report "the tree init step 3 produces passes, and bootstrap narrows nothing else" ok \
+  || report "the tree init step 3 produces passes, and bootstrap narrows nothing else" no \
+     "install-green=$c1 min-still-red=$c2 full-still-red=$c3 tpl-red=$c4 names-tpl=$c5 dirs-red=$c6 says-bootstrap=$c7 names-owed=$c8 no-false-count=$c9 remote-red=$c10 remote-msg=$c11"
+
 # 59. init stripped of the document-set wiring must fail.
 #
 # Out of numeric order on purpose: 60 is grouped with the other docset cases above,

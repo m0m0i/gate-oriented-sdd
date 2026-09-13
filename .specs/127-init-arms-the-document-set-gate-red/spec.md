@@ -146,7 +146,7 @@
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: a fixture holding exactly what `init` step 3 creates — no `docs/`, no inception
+- [x] T1: a fixture holding exactly what `init` step 3 creates — no `docs/`, no inception
       documents — asserted to exit 0, plus `bootstrap` rejected-when-documents-claimed and the
       `minimum`/`full` controls still failing; then `bootstrap` in `assets/check-document-set.py`
       (AC1, AC2, AC3).
