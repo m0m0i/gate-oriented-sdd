@@ -34,11 +34,17 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# TWELVE sites, not the seven the first cut of this claimed. Two of the three it missed were
-# worse than any half: they called `report ... ok` on the skip path, manufacturing a pass and
-# incrementing the counter. Those two are whole cases and now report nothing at all, which is
-# why the summary says `skipped` rather than `half-case(s) skipped`. Counting the sites was the
-# step that found them — the claim of seven was made and not checked.
+# THIRTEEN sites, not the seven the first cut of this claimed, and not the twelve the second cut
+# then wrote down: the first converted ten and said nine, and the recount that caught it was
+# itself recorded wrong, in the paragraph whose subject is not counting. Two of the three the
+# first cut missed were worse than any half: they called `report ... ok` on the skip path,
+# manufacturing a pass and incrementing the counter. Those two are whole cases and now report
+# nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
+#
+# Count the GUARDS, not the `chmod 000` lines — there are twelve of those, and case 14 at :202
+# is the one with no self-disabling branch at all. Under root it goes red rather than skipping,
+# which is the safe direction and deliberately left alone; do not "fix" the asymmetry by adding
+# a skip to the one case that currently fails closed.
 skipped=0
 note_skip() { skipped=$((skipped+1)); printf '  skip %s — %s\n' "$1" "$2"; }
 

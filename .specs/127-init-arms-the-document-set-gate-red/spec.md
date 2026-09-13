@@ -186,9 +186,9 @@
 
 - **Why this cannot recur.** The class is *`init` arms a validator whose precondition `init`
   does not establish*, and it survived #110's review because nothing runs the checker against
-  the tree `init` actually produces. The regression test is exactly that tree: a fixture built
-  to hold what step 3 creates and nothing else, asserted green. It fails today for the reason
-  the issue names, and it fails again the next time a validator's requirements outgrow what
+  the tree `init` actually produces. The regression test is exactly that tree: a fixture
+  holding the part of step 3's output this checker reads, asserted green. It fails today for
+  the reason the issue names, and it fails again the next time a validator's requirements outgrow what
   step 3 writes. `check-skill-contracts.py`'s pin covers the second half — the vocabulary in
   `init`'s prose and the vocabulary in `MODES` cannot drift apart silently.
 
