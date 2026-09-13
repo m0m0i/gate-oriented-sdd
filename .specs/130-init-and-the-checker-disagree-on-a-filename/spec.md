@@ -1,5 +1,5 @@
 # Spec: init and the checker disagree on a template's filename
-- Slug: 130-init-and-the-checker-disagree-on-a-filename   Issue: 130   Type: bug   Status: draft
+- Slug: 130-init-and-the-checker-disagree-on-a-filename   Issue: 130   Type: bug   Status: approved
 - Author: Claude Opus 5   Date: 2026-09-13
 
 ## 1. Requirements (WHAT / WHY)
@@ -68,3 +68,77 @@
   `.specs/`, or `AGENTS.md` without showing a diff and getting agreement"*, and renaming a file
   the project owns is the same class of act. **`git mv` rather than copy-and-delete**, so the
   template's history follows it.
+
+## 2. Design (HOW)
+
+- **Fix approach, and why this rather than the narrower or wider fix.** The disagreement is
+  settled on `init`'s side: its merge bullet stops saying *"add only the missing types"* and
+  starts saying *absorb what is there into the canonical filename*. The checker's
+  `TEMPLATES` tuple is left exactly as it is, and that is the point — a filename it can check by
+  literal comparison is the cheapest correct guard available, and it only misfired because the
+  installer was told to produce something else.
+
+  The narrower fix — teach the checker to accept `bug_report.md` — makes the guard guess which
+  file is the bug template, which is the inference #128 argues against and #110 already settled
+  against for the mode. The wider fix — a declared `- Issue types:` line — is #128's, and taking
+  it here would make this spec the larger of the two and close neither cleanly.
+
+- **The checker does change, in one place: its failure message.** Today a project in this state
+  reads `1 required item(s) are not found: .github/ISSUE_TEMPLATE/bug.md` and is told nothing
+  about *why* a file it believes it has is missing, or what to do. The remedy belongs in the
+  guard's own output (the round-2 lesson from #127: *the remediation text is part of the
+  guard*), so a missing template now says that `init` step 3 renames an existing template of
+  that type rather than adding a second one. **AC3 is unaffected: the exit code and the named
+  path are unchanged, and only the sentence after them is new.**
+
+- **An eighteenth `check-skill-contracts.py` entry, argued** — its docstring caps the list at
+  seventeen and requires the argument here, because a check that grows to police every sentence
+  makes prose uneditable. The entry is `skills/init/SKILL.md`'s absorb instruction. What review
+  cannot defend: the sentence it replaces read as *considerate* — keep what the team wrote,
+  add only what is missing — and its replacement reads as *destructive*, because it renames
+  their file. A future editor restoring the kinder-sounding wording would be undoing the fix
+  while believing they were softening an overreach, and every check in the repository would stay
+  green, because the damage lands only in installs that have templates of their own. That is
+  the same shape as the `- Mode:` pin: an `init` that stops doing it still installs a working
+  harness everywhere the author can see.
+
+- **Affected files:**
+
+  | File | Change |
+  | :-- | :-- |
+  | `skills/init/SKILL.md` | the issue-templates bullet: absorb into the canonical name via `git mv`, keeping body, front matter and labels; the diff shown and agreed first (AC4, AC5, AC6) |
+  | `assets/check-document-set.py` | the missing-template message names the remedy, not just the path (AC6) |
+  | `scripts/check-skill-contracts.py` | the eighteenth pin, on the argument above |
+  | `scripts/test-gates.sh` | the post-init tree with an absorbed template; the message assertion; the mutation case for the new pin |
+  | `plugin.json`, `.claude-plugin/plugin.json` | 0.9.0 (C-6) |
+
+- **Blast radius.** `TEMPLATES` is read in four places in `check-document-set.py` — the
+  `wanted` list and three counted output lines — and none of them changes. `init` step 1 already
+  reads `.github/ISSUE_TEMPLATE/` to detect *the issue taxonomy already in use*; that detection
+  is what supplies the body being absorbed, and it is unchanged. Both READMEs mention issue
+  templates only as `feature / bug / chore` inside the minimum-set diagram, which stays true.
+  Nothing in `hooks/` reads templates.
+
+- **What this deliberately does not fix.** After the rename, `spec` can take an issue's type
+  from *the template used*, because the filename is now canonical. It still cannot take it from
+  *the label applied* — a project keeping `labels: defect, needs-triage` has nothing that maps
+  `defect` to `bug`. That is **#128**, and the rename dissolves one of its two halves rather
+  than the issue. #128's eventual spec is smaller because of this one; it is not obviated.
+
+- **Why this cannot recur.** The class is *two instructions in one step disagreeing about the
+  same artifact*, and it survived because nothing reads both. The pin makes the instruction's
+  deletion loud; the fixture asserts the tree the instruction produces against the checker that
+  judges it, which is the pairing #127 established and the only one that catches this class.
+  What remains uncovered is honest to state: a presence pin asserts the sentence is **written**,
+  not that a model **follows** it — `check-skill-contracts.py`'s own docstring says so, and only
+  an eval could close that, which `evals/` is not yet able to do.
+
+## 3. Tasks (TDD-ordered)
+> One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
+- [ ] T1: a fixture holding the tree step 3 produces under the new rule — `bug.md` carrying a
+      project's own body and labels — asserted green, with the pre-fix shape (`bug_report.md`
+      kept, no `bug.md`) still red and still naming the path; then the checker's message gains
+      the remedy (AC1, AC2, AC3).
+- [ ] T2: `skills/init/SKILL.md`'s absorb instruction, pinned as the eighteenth entry on the
+      argument in Design, with its mutation case (AC4, AC5, AC6).
+- [ ] T3: both manifests at 0.9.0; assert the full validator set green.
