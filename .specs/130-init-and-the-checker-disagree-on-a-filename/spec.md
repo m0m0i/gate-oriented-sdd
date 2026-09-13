@@ -98,7 +98,12 @@
   add only what is missing — and its replacement reads as *destructive*, because it renames
   their file. A future editor restoring the kinder-sounding wording would be undoing the fix
   while believing they were softening an overreach, and every check in the repository would stay
-  green, because the damage lands only in installs that have templates of their own. That is
+  green, because the damage lands only in installs that have templates of their own. **That is not
+  hypothetical:** the wording this replaces was reviewed in this repository and shipped through
+  0.8.0, and the defect it caused was found by running `init` against a real project, not by
+  reading the bullet. A sentence review has demonstrably waved through once is the strongest case
+  a presence pin can have, and it answers the standing objection to every pin — *review would
+  catch that* — with evidence rather than assertion. That is
   the same shape as the `- Mode:` pin: an `init` that stops doing it still installs a working
   harness everywhere the author can see.
 

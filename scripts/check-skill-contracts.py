@@ -85,7 +85,7 @@ CONTRACTS = (
     ),
     (
         "skills/init/SKILL.md",
-        "`git mv` each existing template to the canonical filename for its type",
+        "and do it first: for each of the three types the project already has a template for, `git mv` each existing template to the canonical filename for its type",
         "The sentence it replaced read as CONSIDERATE — keep what the team wrote, add only "
         "what is missing — and this one reads as destructive, because it renames their file. "
         "A future editor restoring the kinder wording would be undoing the fix while believing "
@@ -93,7 +93,10 @@ CONTRACTS = (
         "lands only in installs that already had templates of their own. #130. Review cannot "
         "defend it for the same reason as the `- Mode:` entry — an init that stops doing this "
         "still installs a working harness everywhere the author can see, and the gate it arms "
-        "then fails on a file the instruction told the installer not to create.",
+        "then fails on a file the instruction told the installer not to create. The needle covers the "
+        "ORDER as well as the rename: swapping them back leaves the rename intact and every check here "
+        "green, while a second template survives for a type that already had one — invisible to every "
+        "guard in the repository, and only in installs that had templates of their own.",
     ),
     (
         "skills/spec/SKILL.md",

@@ -2455,7 +2455,7 @@ r=$(contracts_repo contracts-nomerge)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
-needle = "`git mv` each existing template to the canonical filename for its type"
+needle = "and do it first: for each of the three types the project already has a template for, `git mv` each existing template to the canonical filename for its type"
 src = p.read_text()
 if needle not in src:
     raise SystemExit("fixture no-op: the absorb instruction is not where this expects it")
