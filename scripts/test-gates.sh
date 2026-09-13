@@ -24,6 +24,31 @@ report() { # report <name> <ok|no> <detail>
   else fail=$((fail+1)); printf '  FAIL %s — %s\n' "$1" "$3" >&2; fi
 }
 
+# A half that could not run is not a half that passed.
+#
+# Several cases below self-disable when the environment cannot produce the state they need —
+# `chmod 000` under root is the live one, and skipping beats a case that silently cannot fail.
+# But those branches then set their variable to `ok`, the aggregate matches, and `report` prints
+# the same line it prints for a real pass: G-1 one layer out, in the suite that exists to
+# enforce G-1. Under root — any container-based CI step — four halves of case 69 stop testing
+# anything and the output is identical. So the skip is spoken, and the count is printed at the
+# end beside the passes.
+#
+# THIRTEEN sites. The first cut converted ten and said seven; the recount that caught that said
+# twelve and nine, in the paragraph whose subject is not counting. Two of the three the first
+# cut missed were worse than any half: they called `report ... ok` on the skip path,
+# manufacturing a pass and incrementing the counter. Those two are whole cases and now report
+# nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
+#
+# How to get thirteen, since two recounts did not: count the GUARDS, not the `chmod 000` lines.
+# There are twelve of those and ELEVEN guards among them, because case 14 (the unguarded
+# `chmod 000` at :209) has no self-disabling branch — under root it goes red rather than
+# skipping, which is the safe direction and deliberately left alone; do not "fix" that
+# asymmetry. The last two guards are not permission-based at all: `bootstrap/symlinked-slug`
+# and `bootstrap/dangling-symlink` self-disable when `ln -s` fails. 11 + 2 = 13.
+skipped=0
+note_skip() { skipped=$((skipped+1)); printf '  skip %s — %s\n' "$1" "$2"; }
+
 # A repo with the harness installed and one spec branch.
 #
 # Source lives one directory down, in src/, and the glob defaults to the quoted form the
@@ -404,7 +429,7 @@ r=$(lock_repo lk-unreadable); add_project_reviewer "$r" proj
 chmod 000 "$r/agents/shipped" 2>/dev/null
 if cat "$r/agents/shipped/rules-lock.json" >/dev/null 2>&1; then
   chmod 755 "$r/agents/shipped" 2>/dev/null
-  report "unreadable reviewer directory fails rather than being skipped" ok
+  note_skip "locks/unreadable-reviewer-dir" "permissions not enforced here (running as root?)"
 else
   out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
   chmod 755 "$r/agents/shipped" 2>/dev/null
@@ -477,7 +502,7 @@ anchor_repo() {
 # "exit=127" — what sh returns for a missing script — so the first draft of case 23 reported
 # ok while the script did not exist.
 #
-# THREE older uses of that glob remain, at :347, :359 and :411. They are safe, but not for the
+# THREE older uses of that glob remain, at :372, :384 and :436. They are safe, but not for the
 # reason first written here: "the subject always exists" does not hold, since a python3 that
 # is missing (127) or that dies on a traceback (1) both satisfy the glob. What saves them is
 # that each is corroborated by an assertion a crash cannot satisfy — a stderr substring, or a
@@ -648,7 +673,7 @@ r=$(anchor_repo anc-unreadable '- Owns: x')
 chmod 000 "$r/.steering/product.md" 2>/dev/null
 if cat "$r/.steering/product.md" >/dev/null 2>&1; then
   chmod 644 "$r/.steering/product.md" 2>/dev/null
-  report "an unreadable steering file fails rather than reading as absent" ok
+  note_skip "anchors/unreadable-product-md" "permissions not enforced here (running as root?)"
 else
   out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
   chmod 644 "$r/.steering/product.md" 2>/dev/null
@@ -748,7 +773,7 @@ else
   # `= "1"` would read ok against the UNFIXED script on any interpreter where PYTHONOPTIMIZE
   # did not really strip assertions. Each half therefore needs a diagnostic naming the path
   # (which is AC1, and what AC2 asks to hold under both invocations) and an absence of
-  # "Traceback", which no crash can satisfy. That pairing is this file's own rule at :481-484.
+  # "Traceback", which no crash can satisfy. That pairing is this file's own rule at :506-509.
   stripped_fails() { # stripped_fails <exit-code> <stderr-file> -> ok|no
     [ "$1" = "1" ] || { echo no; return; }
     serr=$(cat "$2" 2>/dev/null)
@@ -788,7 +813,7 @@ fi
 # operands, any one directory alone holds well over three files, and its non-zero status is
 # never read. `grep -rnE` then exits 2 on the missing operand, and a trailing `|| true`
 # flattens that into the same silence as "no matches". That is precisely the confusion this
-# file records at :640-644, so the comment named the failure mode while the check did not
+# file records at :664-668, so the comment named the failure mode while the check did not
 # reach it — the guard-shaped hole this whole spec is about, in the case pinning it.
 missing_dirs=
 for d in scripts assets hooks; do
@@ -920,6 +945,7 @@ chmod 000 "$r/skills/spec/templates.md" 2>/dev/null
 if cat "$r/skills/spec/templates.md" >/dev/null 2>&1; then
   chmod 644 "$r/skills/spec/templates.md" 2>/dev/null
   c3=ok; c4=ok
+  note_skip "templates/unreadable-templates-md" "permissions not enforced here (running as root?)"
 else
   out2=$(run_templates "$r"); err2=$(cat "$TMP/terr")
   chmod 644 "$r/skills/spec/templates.md" 2>/dev/null
@@ -1288,6 +1314,7 @@ chmod 000 "$r/doc.md" 2>/dev/null
 if cat "$r/doc.md" >/dev/null 2>&1; then
   chmod 644 "$r/doc.md" 2>/dev/null
   c11=ok; c12=ok
+  note_skip "fences/unreadable-doc" "permissions not enforced here (running as root?)"
 else
   out=$(run_fences "$r"); err=$(cat "$TMP/ferr")
   chmod 644 "$r/doc.md" 2>/dev/null
@@ -1341,7 +1368,7 @@ else
   cerr=$(cat "$TMP/cerr" 2>/dev/null)
   [ "$out" = "1" ] && c2=ok || c2=no
   # Exit 1 is also what a traceback returns, so the code alone is not the check — this file's
-  # rule at :481-484. The path is required because a finding that does not say WHICH reviewer
+  # rule at :506-509. The path is required because a finding that does not say WHICH reviewer
   # is unactionable across five of them, and the phrase unique to this branch is required
   # because two sibling branches of the same guard also exit 1 naming a path.
   case "$cerr" in *Traceback*) c3=no ;; *) c3=ok ;; esac
@@ -1729,7 +1756,8 @@ write_spec "$r" "9-feature" "- [ ] T1: failing test for the thing — then the i
 chmod 000 "$r/.specs/9-feature/spec.md" 2>/dev/null
 if cat "$r/.specs/9-feature/spec.md" >/dev/null 2>&1; then
   chmod 644 "$r/.specs/9-feature/spec.md" 2>/dev/null
-  c1=ok; c2=ok                      # chmod does not deny access here; a case that cannot fail is worse than none
+  c1=ok; c2=ok
+  note_skip "templates/unreadable-spec-file" "chmod does not deny access here (running as root?)"
 else
   out=$(run_templates "$r"); err=$(cat "$TMP/terr")
   chmod 644 "$r/.specs/9-feature/spec.md" 2>/dev/null
@@ -1805,7 +1833,8 @@ write_spec "$r" "9-feature" "- [x] T5: **after the reviewer gate is CLEAN** — 
 chmod 000 "$r/.specs/9-feature" 2>/dev/null
 if ls "$r/.specs/9-feature" >/dev/null 2>&1; then
   chmod 755 "$r/.specs/9-feature" 2>/dev/null
-  c1=ok; c2=ok                     # permissions not enforced here; a case that cannot fail is worse than none
+  c1=ok; c2=ok
+  note_skip "templates/unreadable-spec-dir" "permissions not enforced here (running as root?)"
 else
   out=$(run_templates "$r"); err=$(cat "$TMP/terr")
   chmod 755 "$r/.specs/9-feature" 2>/dev/null
@@ -1819,6 +1848,7 @@ chmod 000 "$r/.specs" 2>/dev/null
 if ls "$r/.specs" >/dev/null 2>&1; then
   chmod 755 "$r/.specs" 2>/dev/null
   c3=ok; c4=ok
+  note_skip "templates/unreadable-specs-root" "permissions not enforced here (running as root?)"
 else
   out=$(run_templates "$r"); err=$(cat "$TMP/terr")
   chmod 755 "$r/.specs" 2>/dev/null
@@ -1950,7 +1980,8 @@ r=$(docset_repo ds-unreadable full); add_full_docs "$r"
 chmod 000 "$r/.steering/tech.md" 2>/dev/null
 if cat "$r/.steering/tech.md" >/dev/null 2>&1; then
   chmod 644 "$r/.steering/tech.md" 2>/dev/null
-  c6=ok; c7=ok                     # permissions not enforced here; a case that cannot fail is worse than none
+  c6=ok; c7=ok
+  note_skip "docset/unreadable-tech-md" "permissions not enforced here (running as root?)"
 else
   out=$(run_docset "$r"); err=$(cat "$TMP/derr")
   chmod 644 "$r/.steering/tech.md" 2>/dev/null
@@ -2066,6 +2097,212 @@ case "$err" in *PRD.md*) c6=no ;; *) c6=ok ;; esac
   || report "trailing whitespace is strict on Mode, tolerant on Docs, and blank Docs never means the repo root" no \
      "mode-exit=$c1 mode-names-whitespace=$c2 mode-not-generic=$c3 docs-tolerant=$c4 blank-falls-back=$c5 not-root-scanned=$c6"
 
+# 68. The tree `init` step 3 actually produces must pass the document-set checker step 3 arms.
+#
+# #127. `init` writes `- Mode:` and `- Docs: docs/`, copies this checker into the project and
+# adds it to `- Validators:` — and creates no `docs/` and none of PRD/DESIGN/BACKLOG, which the
+# checker required in BOTH modes. So every first install armed its own gate red. CAP-4's
+# falsifier stated literally, and DORMANT: quality-gate.sh runs the Validators line only when a
+# `- Source globs:` path changed, and a document is never source, so it fired on the user's
+# first real edit with the cause a day behind them.
+#
+# The fixture is built from what step 3 writes rather than by deleting from docset_repo, and
+# that is the point of it: it is a model of the installer's output, so it goes red again the
+# next time THIS checker's requirements outgrow what step 3 creates. Deriving it by `rm` would
+# make it a model of the OTHER fixture instead.
+#
+# Scoped to one validator, and the scope is stated because the claim is otherwise larger than
+# the case: step 3 also arms check-steering-anchors.sh, which this fixture neither installs nor
+# runs. Extending it to the whole armed set is worth doing and is not done here.
+init_tree() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/.steering" "$r/.github/ISSUE_TEMPLATE" "$r/.specs" "$r/.work_logs"
+  cp "$ROOT/assets/check-document-set.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-document-set.py"
+  {
+    printf '# Tech\n\n'
+    printf -- '- Validators: ./scripts/check-document-set.py\n'
+    printf -- '- Reviewer: some-reviewer\n'
+    printf -- '- Docs: docs/\n'
+    printf -- '- Mode: %s\n' "${2-}"
+  } > "$r/.steering/tech.md"
+  for t in feature bug chore; do printf 'x\n' > "$r/.github/ISSUE_TEMPLATE/$t.md"; done
+  # Deliberately NOT created: docs/, PRD.md, DESIGN.md, BACKLOG.md. Step 3 writes none of them.
+  echo "$r"
+}
+
+r=$(init_tree ds-boot-install bootstrap)
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "0" ] && c1=ok || c1=no
+
+# The same tree under the two modes that CLAIM the documents must still fail — this is the
+# half that keeps the fix a narrowing rather than a hole. Without it, "bootstrap passes" is
+# satisfiable by a checker that stopped looking at documents altogether.
+r=$(init_tree ds-boot-min-red minimum)
+out=$(run_docset "$r"); [ "$out" = "1" ] && c2=ok || c2=no
+r=$(init_tree ds-boot-full-red full)
+out=$(run_docset "$r"); [ "$out" = "1" ] && c3=ok || c3=no
+
+# bootstrap asserts the INSTALL-time invariant and must still fail on it. A missing issue
+# template is step 3's own output going absent, which is a different fact from an unwritten
+# PRD and must not be waved through with it.
+r=$(init_tree ds-boot-tpl bootstrap); rm "$r/.github/ISSUE_TEMPLATE/chore.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c4=ok || c4=no
+case "$err" in *chore.md*) c5=ok ;; *) c5=no ;; esac
+
+r=$(init_tree ds-boot-dirs bootstrap); rmdir "$r/.work_logs"
+out=$(run_docset "$r"); [ "$out" = "1" ] && c6=ok || c6=no
+
+# Its success line must not be the other modes' success line. G-1: "the documents are present"
+# and "the documents were not looked at" cannot share an outcome, and exit 0 is already shared,
+# so the words are the only place the difference can live.
+r=$(init_tree ds-boot-says bootstrap)
+sout=$( cd "$r" && python3 scripts/check-document-set.py 2>/dev/null )
+case "$sout" in *bootstrap*) c7=ok ;; *) c7=no ;; esac
+case "$sout" in *PRD.md*) c8=ok ;; *) c8=no ;; esac
+# ...and it must not claim a count of documents it never checked.
+case "$sout" in *"document(s), "*) c9=no ;; *) c9=ok ;; esac
+
+# A remote `- Docs:` is still its own outcome under bootstrap. The URL branch sits ahead of the
+# document set in all three modes: a value that is not a path is a misconfiguration whatever
+# the mode, and reading it as "nothing to check yet" would be the false GREEN case 58 exists
+# to forbid, reachable again through the new value.
+r=$(init_tree ds-boot-remote bootstrap)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], ".steering", "tech.md")
+src = p.read_text()
+out = src.replace("- Docs: docs/\n", "- Docs: https://example.invalid/docs\n")
+if out == src:
+    raise SystemExit("fixture no-op: the `- Docs:` needle no longer matches init_tree's format")
+p.write_text(out)
+PYEOF
+then cf1=ok; else cf1=no; fi
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+{ [ "$out" = "1" ] && [ "$cf1" = ok ]; } && c10=ok || c10=no
+case "$err" in *"cannot be verified"*) c11=ok ;; *) c11=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokok" ] \
+  && report "the tree init step 3 produces passes check-document-set, and bootstrap narrows nothing else" ok \
+  || report "the tree init step 3 produces passes check-document-set, and bootstrap narrows nothing else" no \
+     "install-green=$c1 min-still-red=$c2 full-still-red=$c3 tpl-red=$c4 names-tpl=$c5 dirs-red=$c6 says-bootstrap=$c7 names-owed=$c8 no-false-count=$c9 remote-red=$c10 remote-msg=$c11"
+
+# 69. `bootstrap` stops passing once the project starts building against documents it never
+#     wrote — otherwise it is a gate switched off with a note attached.
+#
+# #127's AC4. The grace period ends at the FIRST SPEC, because a spec is where a capability id
+# gets cited and a spec is the first moment the harness is genuinely in use. That puts the
+# failure inside the flow, with the cause one command behind the user, rather than on their
+# first turn, which is the distinction CAP-4 actually draws — it is not "never block", it is
+# "never block on a failure that predates them".
+spec_in() { mkdir -p "$1"; printf '# Spec\n' > "$1/spec.md"; }
+
+# Control FIRST: the directories init creates, empty, plus the README it will hold. A checker
+# that failed on any `.specs/` at all would satisfy every accusing half below on its own.
+r=$(init_tree ds-boot-nospec bootstrap); printf 'x\n' > "$r/.specs/README.md"; mkdir -p "$r/.specs/_archive"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c1=ok || c1=no
+
+r=$(init_tree ds-boot-spec bootstrap); spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c2=ok || c2=no
+case "$err" in *7-a-thing*) c3=ok ;; *) c3=no ;; esac
+# The message has to carry the way OUT, not just the verdict. A user who reaches this has a
+# spec in hand and three unwritten documents; "bootstrap is no longer valid" tells them
+# nothing they can act on.
+case "$err" in *minimum*) c4=ok ;; *) c4=no ;; esac
+
+# An archived spec counts. A project that shipped work and then swept it has still been built
+# against documents that do not exist, and reading only the live directory would hand it a
+# fresh grace period for tidying up.
+r=$(init_tree ds-boot-arch bootstrap); spec_in "$r/.specs/_archive/7-a-thing"
+out=$(run_docset "$r"); [ "$out" = "1" ] && c5=ok || c5=no
+
+# A directory under `.specs/` with no spec.md is not a spec. `_archive/` itself is one of
+# these, and so is anything a session left behind.
+r=$(init_tree ds-boot-bare bootstrap); mkdir -p "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c6=ok || c6=no
+
+# THIRD OUTCOME. An unreadable `.specs/` is neither "no spec" nor "a spec", and the difference
+# is invisible in the exit code unless it is made visible: `Path.glob` swallows OSError and
+# would report an unreadable directory as an empty one — reporting the grace period intact
+# because it could not look. G-1, and the #115 lesson in the same shape.
+r=$(init_tree ds-boot-unreadable bootstrap); spec_in "$r/.specs/7-a-thing"
+chmod 000 "$r/.specs" 2>/dev/null
+if ( cd "$r" && ls .specs >/dev/null 2>&1 ); then
+  chmod 755 "$r/.specs" 2>/dev/null
+  c7=ok; c8=ok
+  note_skip "bootstrap/unreadable-.specs" "permissions not enforced here (running as root?)"
+else
+  out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+  chmod 755 "$r/.specs" 2>/dev/null
+  [ "$out" = "1" ] && c7=ok || c7=no
+  case "$err" in *"cannot be read"*) c8=ok ;; *) c8=no ;; esac
+fi
+
+# The SAME third outcome one level in. `Path.is_file()` delegates to `os.path.isfile`, which
+# swallows every OSError including PermissionError — so a slug directory the process cannot
+# traverse reads as "no spec.md here", and the grace period is reported intact because the
+# checker could not look. The outer scandir being guarded does not cover this: found in review,
+# and it is the file's own docstring promise delivered for the outer directory only. It was
+# also interpreter-dependent, which means it was not a verdict.
+r=$(init_tree ds-boot-slug-unreadable bootstrap); spec_in "$r/.specs/7-a-thing"
+chmod 000 "$r/.specs/7-a-thing" 2>/dev/null
+if ( cd "$r" && cat .specs/7-a-thing/spec.md >/dev/null 2>&1 ); then
+  chmod 755 "$r/.specs/7-a-thing" 2>/dev/null
+  c10=ok; c11=ok
+  note_skip "bootstrap/unreadable-slug" "permissions not enforced here (running as root?)"
+else
+  out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+  chmod 755 "$r/.specs/7-a-thing" 2>/dev/null
+  [ "$out" = "1" ] && c10=ok || c10=no
+  case "$err" in *7-a-thing*) c11=ok ;; *) c11=no ;; esac
+fi
+
+# A FOURTH outcome the function admitted to having three of: a symlinked slug directory was
+# neither found nor unreadable, because `follow_symlinks=False` skipped it before the stat.
+# The entry landed in no list, the caller saw no specs, and the grace period was reported
+# intact with a spec on disk — the fail-open direction, reached by a definition of "spec
+# directory" narrower than the design's. Found in review of the fix for the permission case.
+r=$(init_tree ds-boot-symlink bootstrap); spec_in "$TMP/ds-boot-symlink-elsewhere/7-a-thing"
+ln -s "$TMP/ds-boot-symlink-elsewhere/7-a-thing" "$r/.specs/7-a-thing" 2>/dev/null
+if [ -L "$r/.specs/7-a-thing" ]; then
+  out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+  [ "$out" = "1" ] && c12=ok || c12=no
+  # The MESSAGE, not just the exit code. `*7-a-thing*` alone is satisfied by the unreadable
+  # branch as well, which would pin "not green" rather than the outcome following symlinks
+  # exists to produce — the link was resolved and the spec behind it counted.
+  case "$err" in *"already exist"*7-a-thing*) c13=ok ;; *) c13=no ;; esac
+else
+  c12=ok; c13=ok
+  note_skip "bootstrap/symlinked-slug" "symlink creation unavailable on this filesystem"
+fi
+
+# The green control for that widening. G-6: a condition that widens when a gate fires needs a
+# case proving it does not fire on a correct repo. A dangling link holds no spec, and `is_dir()`
+# answers a definite ENOENT rather than an unknown — so it must stay silent, not join the
+# `unreadable` list that a loop or a permission wall belongs in.
+r=$(init_tree ds-boot-dangling bootstrap)
+ln -s "$TMP/ds-boot-dangling-nowhere" "$r/.specs/7-dangling" 2>/dev/null
+# `-L` alone is true of ANY symlink, so a future fixture creating that target would turn this
+# into "a symlinked directory holding no spec.md" — still green, for a different reason, and
+# nothing would say so. The target's absence is the precondition, so it is asserted.
+if [ -L "$r/.specs/7-dangling" ] && [ ! -e "$r/.specs/7-dangling" ]; then
+  out=$(run_docset "$r"); [ "$out" = "0" ] && c14=ok || c14=no
+else
+  c14=ok
+  note_skip "bootstrap/dangling-symlink" "symlink creation unavailable on this filesystem"
+fi
+
+# ...and the scan is `bootstrap`-only. In minimum and full a spec is the ordinary state of a
+# working project, and failing on one would fire on every repository that uses this harness.
+r=$(docset_repo ds-min-spec minimum); spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14" = "okokokokokokokokokokokokokok" ] \
+  && report "bootstrap expires at the first spec, and cannot expire quietly" ok \
+  || report "bootstrap expires at the first spec, and cannot expire quietly" no \
+     "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9 slug-unreadable-red=$c10 names-slug=$c11 symlink-red=$c12 names-symlink=$c13 dangling-stays-green=$c14"
+
 # 59. init stripped of the document-set wiring must fail.
 #
 # Out of numeric order on purpose: 60 is grouped with the other docset cases above,
@@ -2091,7 +2328,7 @@ r=$(contracts_repo contracts-nomode)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
-needle = "`- Mode: minimum` or `- Mode: full` on one physical line"
+needle = "`- Mode: bootstrap`, `- Mode: minimum` or `- Mode: full` on one physical line"
 p.write_text(p.read_text().replace(needle, "a mode line somewhere"))
 PYEOF
 out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
@@ -2138,9 +2375,29 @@ out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
 [ "$out" = "1" ] && c7=ok || c7=no
 case "$err" in *"agents directory"*) c8=ok ;; *) c8=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "init stripped of the mode line, its wiring, its upgrade path or its destination fails" ok \
-  || report "init stripped of the mode line, its wiring, its upgrade path or its destination fails" no \
-     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8"
+# #127's pin, the seventeenth. `spec` step 1 branches on `full` versus not-`full` and has an
+# explicit rule for the line being ABSENT; a value it does not recognise falls through both,
+# silently, so the model picks a reading and the user never learns a choice was made. Deleting
+# the clause reads as removing a redundant case — `bootstrap` is "obviously" minimum-like — and
+# what it removes is the only sentence that makes that obviousness written down.
+r=$(contracts_repo contracts-nobootstrap)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "spec", "SKILL.md")
+needle = "A project still in `bootstrap` has neither, so read it as `minimum` here"
+p.write_text(p.read_text().replace(needle, "Read the mode and use your judgement"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *"skills/spec/SKILL.md"*) c10=ok ;; *) c10=no ;; esac
+# The needle too: that file carries two pins now, and the file name alone is satisfied by the
+# OTHER one firing. check-skill-contracts.py's own docstring records this ambiguity as a
+# shipped defect, and case 54 asserts both halves for the same reason.
+case "$err" in *"has neither, so read it as"*) c11=ok ;; *) c11=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokokok" ] && report "init stripped of the mode line, its wiring, its upgrade path or its destination — or spec of its bootstrap reading — fails" ok \
+  || report "init stripped of the mode line, its wiring, its upgrade path or its destination — or spec of its bootstrap reading — fails" no \
+     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8 nobootstrap-exit=$c9 names-spec-skill=$c10 names-needle=$c11"
 
 
 # --- shipped reviewers: the contract path they name -----------------------------------
@@ -2338,7 +2595,8 @@ r=$(cpath_repo cp-unreadable)
 chmod 000 "$r/docs/layout.md" 2>/dev/null
 if cat "$r/docs/layout.md" >/dev/null 2>&1; then
   chmod 644 "$r/docs/layout.md" 2>/dev/null
-  c5=ok; c6=ok                     # permissions not enforced here; a case that cannot fail is worse than none
+  c5=ok; c6=ok
+  note_skip "contract-path/unreadable" "permissions not enforced here (running as root?)"
 else
   out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
   chmod 644 "$r/docs/layout.md" 2>/dev/null
@@ -2737,5 +2995,5 @@ case "$err" in *"states the receipt count twice and they disagree"*) c15=ok ;; *
      "count-before-exit=$c1 quotes-it=$c2 count-ja-exit=$c3 quotes-ja=$c4 noise-stays-green=$c5 unknown-exit=$c6 says-silence=$c7 ja-particle-exit=$c8 quotes-particle=$c9 ja-eval-noise-green=$c10 ja-unrelated-green=$c11 ja-silent-exit=$c12 ja-silent-msg=$c13 ja-echo-exit=$c14 ja-echo-msg=$c15"
 
 
-printf '\ntest-gates: %d passed, %d failed\n' "$pass" "$fail"
+printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1

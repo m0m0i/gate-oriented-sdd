@@ -103,9 +103,9 @@ Opt-in, and worth adding when the project justifies it — three skills, each fo
 
 **Every skill is always available.** `init` installs `.steering/`, `.specs/`, `.work_logs/`, the issue templates, the reviewer and the hooks — never the skills themselves, which ship with the plugin. The choice above governs which documents get created and which skills are in the flow, never whether one can be run.
 
-**The choice is recorded, not inferred.** `init` writes `- Mode: minimum` or `- Mode: full` into `.steering/tech.md`, and a checker on the `- Validators:` line verifies the filesystem against it whenever the quality gate runs — and in CI, which is where it actually bites, because the gate runs that line only when source changed and a document is never source. Declared rather than worked out later from which files happen to exist, because that derivation cannot tell a deliberate omission from an abandoned install — and telling those two apart is the only reason the line exists.
+**The choice is recorded, not inferred.** `init` writes `- Mode: bootstrap`, `- Mode: minimum` or `- Mode: full` into `.steering/tech.md`, and a checker on the `- Validators:` line verifies the filesystem against it whenever the quality gate runs — and in CI, which is where it actually bites, because the gate runs that line only when source changed and a document is never source. Declared rather than worked out later from which files happen to exist, because that derivation cannot tell a deliberate omission from an abandoned install — and telling those two apart is the only reason the line exists. **A fresh install is `bootstrap`** — the harness is in place and the inception documents are not written yet, which is neither of the other two and used to be recorded as one of them, so every first install armed its own gate red (#127). It expires at the first spec, because that is where a document starts being cited: a state that never ended would be a switch-off with a note attached.
 
-**Nothing about enforcement differs between the modes.** Same gates, same reviewer, same receipt, same TDD loop. What differs is how much planning is written before the first spec. The mode is also not a one-way door: a `minimum` project runs `contract` the moment review findings start repeating, and `init` re-run against a project that already declared a mode offers the upgrade instead of reinstalling.
+**Nothing about enforcement differs between the modes.** Same gates, same reviewer, same receipt, same TDD loop. What differs is how much planning is written before the first spec. The mode is also not a final choice: a `minimum` project runs `contract` the moment review findings start repeating, and `init` re-run against a project that already declared a mode offers the upgrade instead of reinstalling. It moves up, never down.
 
 The middle of that chain is not this plugin's invention — it is **GitHub's**. Issues, branches, pull requests, closed by their PR. They work from pair-programming scale upward; a team of thirty is not the threshold.
 
@@ -167,7 +167,7 @@ The last row is a real gap, not a rounding error. `PreInvocation` is the candida
 
 ## Status
 
-**v0.7.0 — pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, and `claude plugin eval` is still in early access on this account.
+**v0.8.0 — pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, and `claude plugin eval` is still in early access on this account.
 
 Tested against: Claude Code 2.1.252 (2026-09-05) · Antigravity CLI 1.1.17 and IDE 2.3.1 (2026-08-21) · macOS.
 

@@ -14,7 +14,7 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Sixteen today. A seventeenth needs an argument, in the spec that proposes it, for why review cannot
+Seventeen today. An eighteenth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time.
 """
@@ -72,13 +72,26 @@ CONTRACTS = (
     ),
     (
         "skills/init/SKILL.md",
-        "`- Mode: minimum` or `- Mode: full` on one physical line",
+        "`- Mode: bootstrap`, `- Mode: minimum` or `- Mode: full` on one physical line",
         "Without the line, nothing downstream can tell a deliberate omission from an "
         "abandoned install, and check-document-set.py has nothing to verify against. The "
         "mode is declared, never derived — derivation cannot distinguish the two, which is "
         "the whole of #110. Review cannot defend it: an init that stops writing the line "
         "still installs a working harness, and every check stays green — the loss shows up "
-        "only in a project nobody is reviewing, on the day someone asks which set it chose.",
+        "only in a project nobody is reviewing, on the day someone asks which set it chose. "
+        "#127 added `bootstrap` to the literal: an init that offers only the other two makes "
+        "a fresh install declare a document set it did not write, which is the red gate that "
+        "issue exists to close.",
+    ),
+    (
+        "skills/spec/SKILL.md",
+        "A project still in `bootstrap` has neither, so read it as `minimum` here",
+        "Step 1 branches on `full` versus not-`full` and has an explicit rule for the line "
+        "being ABSENT; a value it does not recognise falls through both, silently — the "
+        "model picks a reading and the user never learns a choice was made. #127 AC7. "
+        "Review cannot defend it: deleting the clause reads as removing a redundant case, "
+        "since `bootstrap` is obviously minimum-like, and what it removes is the only "
+        "sentence that makes that obviousness written down.",
     ),
     (
         "skills/init/SKILL.md",
