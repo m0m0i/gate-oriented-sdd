@@ -88,13 +88,20 @@ def spec_slugs(directory):
     A directory with no `spec.md` is not a spec: `_archive/` itself is one of those, and so is
     anything a session left behind. FileNotFoundError is that answer and nothing more, which is
     why it is caught separately from the OSErrors that mean "could not tell".
+
+    `entry.is_dir()` FOLLOWS symlinks, and that is the third deliberate choice here. With
+    `follow_symlinks=False` a symlinked slug directory was skipped before the stat and landed
+    in neither list — a fourth outcome, in the fail-open direction, from a definition of "spec
+    directory" narrower than the design's *a directory containing `spec.md`*. Following makes a
+    loop an OSError, which is `unreadable`, and a dangling link a plain False, which is the
+    honest "no spec here".
     """
     found = []
     unreadable = []
     with os.scandir(directory) as entries:
         for entry in entries:
             try:
-                if not entry.is_dir(follow_symlinks=False):
+                if not entry.is_dir():
                     continue
                 mode = os.stat(os.path.join(entry.path, "spec.md")).st_mode
             except FileNotFoundError:
@@ -139,9 +146,14 @@ def main():
         # NOT a default. Reading an absent line as `minimum` would verify the smaller set and
         # report success, which is indistinguishable from a project that chose minimum — and
         # it makes the declaration optional in practice, which is the one thing it cannot be.
+        # The remediation text is part of the guard. Naming only the two document sets sent a
+        # project with no documents to declare one it had not written, which is the red gate
+        # #127 closes — the checker contradicting its own advice one run later.
+        offered = ", ".join(f"`- Mode: {m}`" for m in MODES)
         fail(
-            f"{STEERING} carries no readable `- Mode:` line. Add `- Mode: minimum` or "
-            f"`- Mode: full` on one physical line. A mode is declared, never assumed."
+            f"{STEERING} carries no readable `- Mode:` line. Add one of {offered} on one "
+            f"physical line — `bootstrap` if the inception documents are not written yet. "
+            f"A mode is declared, never assumed."
         )
     if mode not in MODES:
         if mode.strip() in MODES:

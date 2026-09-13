@@ -2225,15 +2225,30 @@ else
   case "$err" in *7-a-thing*) c11=ok ;; *) c11=no ;; esac
 fi
 
+# A FOURTH outcome the function admitted to having three of: a symlinked slug directory was
+# neither found nor unreadable, because `follow_symlinks=False` skipped it before the stat.
+# The entry landed in no list, the caller saw no specs, and the grace period was reported
+# intact with a spec on disk — the fail-open direction, reached by a definition of "spec
+# directory" narrower than the design's. Found in review of the fix for the permission case.
+r=$(init_tree ds-boot-symlink bootstrap); spec_in "$TMP/ds-boot-symlink-elsewhere/7-a-thing"
+ln -s "$TMP/ds-boot-symlink-elsewhere/7-a-thing" "$r/.specs/7-a-thing" 2>/dev/null
+if [ -L "$r/.specs/7-a-thing" ]; then
+  out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+  [ "$out" = "1" ] && c12=ok || c12=no
+  case "$err" in *7-a-thing*) c13=ok ;; *) c13=no ;; esac
+else
+  c12=ok; c13=ok          # symlinks unavailable; a case that cannot fail is worse than none
+fi
+
 # ...and the scan is `bootstrap`-only. In minimum and full a spec is the ordinary state of a
 # working project, and failing on one would fire on every repository that uses this harness.
 r=$(docset_repo ds-min-spec minimum); spec_in "$r/.specs/7-a-thing"
 out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
 
-[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokok" ] \
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13" = "okokokokokokokokokokokokok" ] \
   && report "bootstrap expires at the first spec, and cannot expire quietly" ok \
   || report "bootstrap expires at the first spec, and cannot expire quietly" no \
-     "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9 slug-unreadable-red=$c10 names-slug=$c11"
+     "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9 slug-unreadable-red=$c10 names-slug=$c11 symlink-red=$c12 names-symlink=$c13"
 
 # 59. init stripped of the document-set wiring must fail.
 #
@@ -2322,10 +2337,14 @@ PYEOF
 out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
 [ "$out" = "1" ] && c9=ok || c9=no
 case "$err" in *"skills/spec/SKILL.md"*) c10=ok ;; *) c10=no ;; esac
+# The needle too: that file carries two pins now, and the file name alone is satisfied by the
+# OTHER one firing. check-skill-contracts.py's own docstring records this ambiguity as a
+# shipped defect, and case 54 asserts both halves for the same reason.
+case "$err" in *"has neither, so read it as"*) c11=ok ;; *) c11=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10" = "okokokokokokokokokokok" ] && report "init stripped of the mode line, its wiring, its upgrade path or its destination fails" ok \
-  || report "init stripped of the mode line, its wiring, its upgrade path or its destination fails" no \
-     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8 nobootstrap-exit=$c9 names-spec-skill=$c10"
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokokok" ] && report "init stripped of the mode line, its wiring, its upgrade path or its destination — or spec of its bootstrap reading — fails" ok \
+  || report "init stripped of the mode line, its wiring, its upgrade path or its destination — or spec of its bootstrap reading — fails" no \
+     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8 nobootstrap-exit=$c9 names-spec-skill=$c10 names-needle=$c11"
 
 
 # --- shipped reviewers: the contract path they name -----------------------------------
