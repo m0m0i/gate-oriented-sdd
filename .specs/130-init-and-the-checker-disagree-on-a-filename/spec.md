@@ -143,3 +143,9 @@
 - [x] T2: `skills/init/SKILL.md`'s absorb instruction, pinned as the eighteenth entry on the
       argument in Design, with its mutation case (AC4, AC5, AC6).
 - [x] T3: both manifests at 0.9.0; assert the full validator set green.
+      **This task should not have carried the bump.** `.steering/tech.md:21` already says a
+      version bump lands after the review, as a *step* of `implement` rather than as a task —
+      that is #113, and #127's T4 broke it the same way one spec earlier. `check-templates.py`
+      catches only deferral *phrasing*, so the rule has an unguarded half and two consecutive
+      specs have fallen into it. Left as it landed rather than rewritten, and filed as its own
+      issue; the record of the mistake is worth more than a tidy task list.
