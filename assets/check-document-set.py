@@ -49,7 +49,8 @@ DOC_OWNER = {"PRD.md": "prd", "DESIGN.md": "design-doc", "BACKLOG.md": "backlog"
 #: What `full` adds. One document per opt-in skill: northstar, epics, contract.
 FULL_ONLY_DOCS = ("NORTH_STAR.md", "EPICS.md", "CONTRACT.md")
 #: The issue templates sit INSIDE the chain rather than beside it — the Issue step is where
-#: the type is decided, and the type decides the spec's shape. Required in both modes.
+#: the type is decided, and the type decides the spec's shape. Required in every mode —
+#: they are part of the install-time invariant, which is the half `bootstrap` still claims.
 TEMPLATES = ("feature.md", "bug.md", "chore.md")
 TEMPLATE_DIR = pathlib.Path(".github/ISSUE_TEMPLATE")
 #: Directories the flow writes into. Their contents vary per spec and per session, so only

@@ -2066,7 +2066,7 @@ case "$err" in *PRD.md*) c6=no ;; *) c6=ok ;; esac
   || report "trailing whitespace is strict on Mode, tolerant on Docs, and blank Docs never means the repo root" no \
      "mode-exit=$c1 mode-names-whitespace=$c2 mode-not-generic=$c3 docs-tolerant=$c4 blank-falls-back=$c5 not-root-scanned=$c6"
 
-# 68. The tree `init` step 3 actually produces must pass every validator step 3 arms.
+# 68. The tree `init` step 3 actually produces must pass the document-set checker step 3 arms.
 #
 # #127. `init` writes `- Mode:` and `- Docs: docs/`, copies this checker into the project and
 # adds it to `- Validators:` — and creates no `docs/` and none of PRD/DESIGN/BACKLOG, which the
@@ -2077,8 +2077,12 @@ case "$err" in *PRD.md*) c6=no ;; *) c6=ok ;; esac
 #
 # The fixture is built from what step 3 writes rather than by deleting from docset_repo, and
 # that is the point of it: it is a model of the installer's output, so it goes red again the
-# next time a validator's requirements outgrow what step 3 creates. Deriving it by `rm` would
+# next time THIS checker's requirements outgrow what step 3 creates. Deriving it by `rm` would
 # make it a model of the OTHER fixture instead.
+#
+# Scoped to one validator, and the scope is stated because the claim is otherwise larger than
+# the case: step 3 also arms check-steering-anchors.sh, which this fixture neither installs nor
+# runs. Extending it to the whole armed set is worth doing and is not done here.
 init_tree() {
   r="$TMP/$1"; mkdir -p "$r/scripts" "$r/.steering" "$r/.github/ISSUE_TEMPLATE" "$r/.specs" "$r/.work_logs"
   cp "$ROOT/assets/check-document-set.py" "$r/scripts/"
@@ -2148,8 +2152,8 @@ out=$(run_docset "$r"); err=$(cat "$TMP/derr")
 case "$err" in *"cannot be verified"*) c11=ok ;; *) c11=no ;; esac
 
 [ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokok" ] \
-  && report "the tree init step 3 produces passes, and bootstrap narrows nothing else" ok \
-  || report "the tree init step 3 produces passes, and bootstrap narrows nothing else" no \
+  && report "the tree init step 3 produces passes check-document-set, and bootstrap narrows nothing else" ok \
+  || report "the tree init step 3 produces passes check-document-set, and bootstrap narrows nothing else" no \
      "install-green=$c1 min-still-red=$c2 full-still-red=$c3 tpl-red=$c4 names-tpl=$c5 dirs-red=$c6 says-bootstrap=$c7 names-owed=$c8 no-false-count=$c9 remote-red=$c10 remote-msg=$c11"
 
 # 69. `bootstrap` stops passing once the project starts building against documents it never
@@ -2256,7 +2260,7 @@ r=$(contracts_repo contracts-nomode)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
-needle = "`- Mode: minimum` or `- Mode: full` on one physical line"
+needle = "`- Mode: bootstrap`, `- Mode: minimum` or `- Mode: full` on one physical line"
 p.write_text(p.read_text().replace(needle, "a mode line somewhere"))
 PYEOF
 out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
@@ -2303,9 +2307,25 @@ out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
 [ "$out" = "1" ] && c7=ok || c7=no
 case "$err" in *"agents directory"*) c8=ok ;; *) c8=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "init stripped of the mode line, its wiring, its upgrade path or its destination fails" ok \
+# #127's pin, the seventeenth. `spec` step 1 branches on `full` versus not-`full` and has an
+# explicit rule for the line being ABSENT; a value it does not recognise falls through both,
+# silently, so the model picks a reading and the user never learns a choice was made. Deleting
+# the clause reads as removing a redundant case — `bootstrap` is "obviously" minimum-like — and
+# what it removes is the only sentence that makes that obviousness written down.
+r=$(contracts_repo contracts-nobootstrap)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "spec", "SKILL.md")
+needle = "A project still in `bootstrap` has neither, so read it as `minimum` here"
+p.write_text(p.read_text().replace(needle, "Read the mode and use your judgement"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *"skills/spec/SKILL.md"*) c10=ok ;; *) c10=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10" = "okokokokokokokokokokok" ] && report "init stripped of the mode line, its wiring, its upgrade path or its destination fails" ok \
   || report "init stripped of the mode line, its wiring, its upgrade path or its destination fails" no \
-     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8"
+     "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8 nobootstrap-exit=$c9 names-spec-skill=$c10"
 
 
 # --- shipped reviewers: the contract path they name -----------------------------------
