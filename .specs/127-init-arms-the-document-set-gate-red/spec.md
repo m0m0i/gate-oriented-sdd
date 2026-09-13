@@ -1,5 +1,5 @@
 # Spec: init arms the document-set gate red on a fresh install
-- Slug: 127-init-arms-the-document-set-gate-red   Issue: 127   Type: bug   Status: draft
+- Slug: 127-init-arms-the-document-set-gate-red   Issue: 127   Type: bug   Status: done
 - Author: Claude Opus 5   Date: 2026-09-13
 
 ## 1. Requirements (WHAT / WHY)
@@ -29,23 +29,23 @@
   The `- Mode:` line was built to separate a deliberate omission from an abandonment; it has no
   value for the state every project passes through first.
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN `init` completes on a project with no inception documents THEN every
+  - [x] **AC1:** WHEN `init` completes on a project with no inception documents THEN every
         validator it placed on the `- Validators:` line exits 0 on the resulting tree,
         `check-document-set.py` included.
-  - [ ] **AC2:** the regression test fails before the fix and passes after.
-  - [ ] **AC3:** WHEN the document set is genuinely incomplete in a state that claims the
+  - [x] **AC2:** the regression test fails before the fix and passes after.
+  - [x] **AC3:** WHEN the document set is genuinely incomplete in a state that claims the
         documents exist THEN `check-document-set.py` still exits non-zero — the fix narrows
         what is claimed, and narrows it in a declared state, never by tolerating absence in the
         states that exist today.
-  - [ ] **AC4:** the state in which documents are not required is **self-terminating**: it
+  - [x] **AC4:** the state in which documents are not required is **self-terminating**: it
         stops passing once the project starts building against documents it never wrote, so it
         cannot become a permanent switch-off.
-  - [ ] **AC5:** whatever `init` writes, no inception document contains a `TODO` placeholder —
+  - [x] **AC5:** whatever `init` writes, no inception document contains a `TODO` placeholder —
         `skills/init/SKILL.md` step 3's closing rule, and its reason (an unpopulated document
         teaches that documents are noise) applies past `.steering/`.
-  - [ ] **AC6:** `init`'s own text no longer promises what it does not do: step 3's *"Scaffold
+  - [x] **AC6:** `init`'s own text no longer promises what it does not do: step 3's *"Scaffold
         the mandatory set"* and its bullet list agree about the inception documents.
-  - [ ] **AC7:** every reader of `- Mode:` has a defined reading for the new value. A declared
+  - [x] **AC7:** every reader of `- Mode:` has a defined reading for the new value. A declared
         state that one reader understands and another falls through is the drift the line was
         added to prevent.
 - Out of scope:
@@ -167,5 +167,5 @@
 - [x] T3: `skills/init/SKILL.md` — step 3's promise, the `- Mode:` grammar and the upgrade rule
       — and `skills/spec/SKILL.md`'s mode branch; the `- Mode:` pin moved to its new literal and
       the seventeenth pin added on the argument above (AC5, AC6, AC7).
-- [ ] T4: both READMEs' mode vocabulary and `## Status` version, the two manifests at 0.8.0;
+- [x] T4: both READMEs' mode vocabulary and `## Status` version, the two manifests at 0.8.0;
       assert the full validator set green.
