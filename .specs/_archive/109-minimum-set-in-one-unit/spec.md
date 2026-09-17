@@ -1,6 +1,6 @@
 # Spec: The minimum set, stated in one unit
-- Slug: 109-minimum-set-in-one-unit   Issue: 109   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-09-11
+- Slug: 109-minimum-set-in-one-unit   Issue: 109   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-09-11   Archived: 2026-09-17
 
 ## 1. Requirements (WHAT / WHY)
 - Reproduction: read `README.md:78-92` — the section "The minimum set" — and answer the question it exists to answer: which skills does a minimum install run? The section opens by counting **documents** ("Six documents and three templates are mandatory"), renders a six-node document chain, then closes by naming four **skills** as optional. Stacked, the two read as one comparison, so the minimum set reads as six skills. `README.ja.md:47-57` mirrors it sentence for sentence, and `skills/init/SKILL.md:40` is the upstream sentence both render.

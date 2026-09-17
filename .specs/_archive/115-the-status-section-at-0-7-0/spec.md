@@ -1,6 +1,6 @@
 # Spec: The README's Status section, true at 0.7.0
-- Slug: 115-the-status-section-at-0-7-0   Issue: 115   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-09-13
+- Slug: 115-the-status-section-at-0-7-0   Issue: 115   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-09-13   Archived: 2026-09-17
 
 ## 1. Requirements (WHAT / WHY)
 - Reproduction: read `## Status` in either README and compare each of its claims to the repository. Three are false.

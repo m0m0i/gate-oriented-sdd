@@ -1,6 +1,6 @@
 # Spec: init arms the document-set gate red on a fresh install
-- Slug: 127-init-arms-the-document-set-gate-red   Issue: 127   Type: bug   Status: done
-- Author: Claude Opus 5   Date: 2026-09-13
+- Slug: 127-init-arms-the-document-set-gate-red   Issue: 127   Type: bug   Status: archived
+- Author: Claude Opus 5   Date: 2026-09-13   Archived: 2026-09-17
 
 ## 1. Requirements (WHAT / WHY)
 
