@@ -250,7 +250,9 @@ def main():
                 )
         if not dynamic:
             # Absence and substitution are different causes and must not share a message.
-            # "Carries no version badge" sends an author who is looking at one to add a second.
+            # "Carries no badge labelled `gate-sdd`" sends an author who is looking at one to
+            # add a second — so the two causes carry different remedies as well as different
+            # words.
             baked = [b for b in badges if BAKED_VERSION.search(b.rsplit("/", 1)[-1])]
             if baked:
                 problems.append(

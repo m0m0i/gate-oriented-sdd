@@ -21,6 +21,17 @@ Reviewed at `9e8c78e83ed460ecfcaffb74a74c2d7dee292fb7`. The first non-clean verd
 - **LOW — a relabelled badge was reported as an absent one.** The routing is fail-closed and correct, but the message told an author looking at a correctly-rendering badge that the file "states no version at all". That is the wrong-remedy harm the static-badge branch was split out to avoid, reappearing one branch over. `label=` had become load-bearing and no message said so; the absence message now names it.
 - **LOW — the new limit was filed under the wrong name.** Round 1's textual-detection note landed after `BADGE =` with no blank line before `DYNAMIC`'s comment, so it read as documentation of `DYNAMIC`. Separated.
 
+## Review round 3 — BLOCKED, 0 blockers, 1 HIGH, 1 LOW
+
+Reviewed at `ceacdcbe5a8345a9a7b85a0ba8f3844b0a744f3b`. The round-2 HIGH was confirmed closed, and a new one was found in the commit that closed it.
+
+- **HIGH — an assertion that could no longer go red.** Round 2's fix reworded the absence message and updated the two assertions that matched the old wording *positively*. Case 65b's `not-called-absent` matched it **negatively** — `case "$err" in *"carries no version badge"*) s3=no` — so once the string no longer existed anywhere the guard can emit, `s3` was permanently `ok` while the failure line still printed it as though it had been checked. That is the same class as the round-2 HIGH, one assertion over, inside the commit that fixed it: the reword was treated as a text change when it was a change to what the suite is capable of noticing.
+  Repaired to match the substring the other two use, and **mutation-verified**: making the static branch also emit the absence message turns `not-called-absent` red and leaves the other three halves green.
+- **LOW — a comment quoting the deleted message.** The rationale for splitting the branch quoted `"Carries no version badge"`, so anyone grepping for it to find what the branch prints landed on comments only. Requoted.
+- **INFO taken rather than recorded** — `rm-bare-version` was byte-identical to `rm-control`, so it was one assertion under two names, which is duplication that later reads as independent evidence. It now adds a bare number **equal to the manifest version**, which is the hardest input for a broadened pattern because the digits are exactly the ones the badge renders. Mutation-verified too: broadening `VERSION` to a bare `\d+\.\d+\.\d+` turns `bare-number-green` red and nothing else.
+
+Three rounds, and the pattern across them is worth naming: every finding after round 1 was **introduced by the previous round's fix**, and each was a check that had quietly stopped being able to fail. None was reachable by running the suite, because a suite that cannot fail is green. The mutation runs are now part of the record for exactly that reason — a green assertion proves nothing on its own.
+
 ## Recorded rather than fixed
 
 - **`Status: done` was flipped before the review, not after.** `skills/implement/SKILL.md` lists that flip among the commits landing after the receipt. No mechanical effect — `hooks/review-gate.sh` arms on unticked tasks and never reads `Status` — but the spec did read `done` while its receipt was still being written. Same slip as #141, which makes it a habit rather than an accident and worth naming here.

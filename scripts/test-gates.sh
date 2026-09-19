@@ -3203,7 +3203,7 @@ out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cf5" = ok ]; } && s1=ok || s1=no
 case "$err" in *static*) s2=ok ;; *) s2=no ;; esac
 # It must NOT be diagnosed as absence — that is the wrong remedy for a badge that is present.
-case "$err" in *"carries no version badge"*) s3=no ;; *) s3=ok ;; esac
+case "$err" in *"no badge labelled"*) s3=no ;; *) s3=ok ;; esac
 
 # A non-version shields badge alongside the real one is fine. Without this, "a static badge
 # fails" is satisfiable by a guard that rejects every badge but one, and a licence or CI badge
@@ -3357,11 +3357,27 @@ out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cff" = ok ]; } && l6=ok || l6=no
 case "$err" in *"states a version"*) l7=ok ;; *) l7=no ;; esac
 
-# ...and the other direction, which is why the pattern keeps its `**v` prefix. `rm-control`
-# now carries a `Tested against: … 1.1.17` line: a prohibition broadened to any bare version
-# number would fire on it, and that is a different claim about a different thing.
+# ...and the other direction, which is why the pattern keeps its `**v` prefix. `readme_repo`
+# now carries a `Tested against: … 1.1.17` line, and this fixture adds a bare number EQUAL to
+# the manifest version — the hardest case for a broadened pattern, because the digits are
+# exactly the ones the badge renders. Both must stay green: a version stated about something
+# else is a different claim, and a prohibition that fired on them would be a gate people
+# switch off. Distinct from `rm-control`, which carries only the first of the two.
 r=$(readme_repo rm-bare-version)
-out=$(run_readme "$r"); [ "$out" = "0" ] && l8=ok || l8=no
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("Tested against:", "Built from 1.2.3 of the compiler. Tested against:")
+if out == src:
+    raise SystemExit("fixture no-op: the tested-against line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfg=ok || cfg=no
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cfg" = ok ]; } && l8=ok || l8=no
 
 [ "$l1$l2$l3$l4$l5$l6$l7$l8" = "okokokokokokokok" ] \
   && report "a version literal returning to either README fails, even when it happens to agree" ok \
