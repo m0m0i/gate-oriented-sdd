@@ -3227,6 +3227,66 @@ out=$(run_readme "$r")
   || report "a static version badge fails as a substitution, and an unrelated badge does not" no \
      "static-red=$s1 says-static=$s2 not-called-absent=$s3 other-badge-green=$s4"
 
+# 65c. The dynamic badge must read THIS repository's manifest, and must survive reordering.
+#
+# #133 AC4. "Dynamic" alone is not the property that matters — a dynamic badge pointed at a
+# fork, at another branch, or at `.claude-plugin/plugin.json` still renders a number, and a
+# wrong number rendered confidently is worse than none. The guard therefore parses the URL.
+#
+# The green half is the one that keeps this from being a gate people switch off: query strings
+# get reordered by editors and by hand, and a guard matching the whole URL literally would fail
+# on a change that alters nothing. LV-2 — a gate that fires on an ordinary edit gets disabled.
+mutate_badge() {   # $1 = repo, $2 = replacement URL
+  python3 - "$1" "$2" <<'PYEOF'
+import pathlib, re, sys
+root, repl = sys.argv[1], sys.argv[2]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = re.sub(r"https://img\.shields\.io/[^\s)\]]+", repl.replace("\\", "\\\\"), src)
+if out == src:
+    raise SystemExit("fixture no-op: no shields badge to replace")
+p.write_text(out)
+PYEOF
+}
+
+base="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&prefix=v&label=gate-sdd&color=blue"
+
+# Another owner's manifest.
+r=$(readme_repo rm-badge-fork)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsomeone-else%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&label=gate-sdd"
+[ "$?" = 0 ] && cf7=ok || cf7=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf7" = ok ]; } && u1=ok || u1=no
+case "$err" in *someone-else*) u2=ok ;; *) u2=no ;; esac
+
+# The right repo, the wrong file — the near miss a human eye slides over.
+r=$(readme_repo rm-badge-path)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=gate-sdd"
+[ "$?" = 0 ] && cf8=ok || cf8=no
+out=$(run_readme "$r")
+{ [ "$out" = "1" ] && [ "$cf8" = ok ]; } && u3=ok || u3=no
+
+# Asking for the wrong FIELD renders someone else's value under a version label.
+r=$(readme_repo rm-badge-query)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.name&label=gate-sdd"
+[ "$?" = 0 ] && cf9=ok || cf9=no
+out=$(run_readme "$r")
+{ [ "$out" = "1" ] && [ "$cf9" = ok ]; } && u4=ok || u4=no
+
+# GREEN: the same badge with its parameters in a different order must pass.
+r=$(readme_repo rm-badge-reorder)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?label=gate-sdd&color=blue&query=%24.version&prefix=v&url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json"
+[ "$?" = 0 ] && cfa=ok || cfa=no
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cfa" = ok ]; } && u5=ok || u5=no
+
+[ "$u1$u2$u3$u4$u5" = "okokokokok" ] \
+  && report "a dynamic badge reading the wrong source fails, and reordering its parameters does not" ok \
+  || report "a dynamic badge reading the wrong source fails, and reordering its parameters does not" no \
+     "fork-red=$u1 names-owner=$u2 wrong-path-red=$u3 wrong-query-red=$u4 reorder-green=$u5"
+
+
 # 66. A source the guard cannot read is a THIRD outcome, never agreement.
 r=$(readme_repo rm-nomanifest); rm "$r/plugin.json"
 out=$(run_readme "$r"); [ "$out" = "1" ] && c1=ok || c1=no

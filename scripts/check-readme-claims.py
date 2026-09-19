@@ -29,6 +29,7 @@ import os
 import pathlib
 import re
 import sys
+import urllib.parse
 
 READMES = ("README.md", "README.ja.md")
 MANIFEST = pathlib.Path("plugin.json")
@@ -50,6 +51,12 @@ DYNAMIC = "/badge/dynamic/"
 #: A version baked into a badge's own URL. Three components deliberately: `Apache_2.0` in a
 #: licence badge has two, and failing on that would be a gate firing on an ordinary edit.
 BAKED_VERSION = re.compile(r"v?\d+\.\d+\.\d+")
+#: What the badge must read. "Dynamic" on its own is not the property that matters — a dynamic
+#: badge pointed at a fork or at `.claude-plugin/plugin.json` still renders a number, and a
+#: wrong number rendered confidently is worse than no number at all.
+BADGE_SOURCE = "https://raw.githubusercontent.com/m0m0i/gate-oriented-sdd/main/plugin.json"
+#: The field it must ask for. `$.name` under a version label renders "gate-sdd" as the version.
+BADGE_QUERY = "$.version"
 
 #: How the receipts were obtained. English says "all but three"; Japanese says "3件を除いて".
 #: Both are matched as a written-out or numeric count, because #115's defect was a word.
@@ -189,6 +196,26 @@ def main():
 
         badges = BADGE.findall(text)
         dynamic = [b for b in badges if DYNAMIC in b]
+        for b in dynamic:
+            # Parsed, not string-matched. A guard comparing the whole URL literally fails when
+            # someone reorders the query string, which changes nothing — and a gate that fires
+            # on an ordinary edit is one people switch off (LV-2).
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(b).query)
+            got = (q.get("url") or [""])[0]
+            if got != BADGE_SOURCE:
+                problems.append(
+                    f"{name}: the version badge reads `{got or '(no url parameter)'}`, not "
+                    f"`{BADGE_SOURCE}`. A badge pointed at another repository, another branch "
+                    f"or another file still renders a number, and a confident wrong version is "
+                    f"worse than none."
+                )
+            asked = (q.get("query") or [""])[0]
+            if asked != BADGE_QUERY:
+                problems.append(
+                    f"{name}: the version badge asks for `{asked or '(no query parameter)'}`, "
+                    f"not `{BADGE_QUERY}` — so whatever it renders under a version label is "
+                    f"some other field of the manifest."
+                )
         if not dynamic:
             # Absence and substitution are different causes and must not share a message.
             # "Carries no version badge" sends an author who is looking at one to add a second.
