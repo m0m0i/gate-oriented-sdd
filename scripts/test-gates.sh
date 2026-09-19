@@ -3095,6 +3095,8 @@ readme_repo() {
 **Pre-release.**
 
 the gates and guards behaviours, tested deterministically; and a receipt on every spec from a spawned reviewer on all but one, which were reviewed inline.
+
+Tested against: Antigravity CLI 1.1.17, Antigravity IDE 2.3.1.
 RMEOF
   cat > "$r/README.ja.md" <<'RMEOF'
 # fixture
@@ -3131,7 +3133,7 @@ PYEOF
 [ "$?" = 0 ] && cf1=ok || cf1=no
 out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cf1" = ok ]; } && c1=ok || c1=no
-case "$err" in *"no version badge"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"no badge labelled \`gate-sdd\`"*) c2=ok ;; *) c2=no ;; esac
 
 # The removed number coming back — the half a presence-only check cannot see.
 r=$(readme_repo rm-count)
@@ -3333,10 +3335,38 @@ out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cfc" = ok ]; } && l4=ok || l4=no
 case "$err" in *README.ja.md*) l5=ok ;; *) l5=no ;; esac
 
-[ "$l1$l2$l3$l4$l5" = "okokokokok" ] \
+# The literal WITHOUT a trailing delimiter. The first cut of the prohibition required a space
+# or a Japanese comma after the number, so `**v1.2.3**` walked straight through — the root
+# cause returning in a slightly different costume. Dropping that requirement is a behaviour
+# change, and a behaviour change with no case that reddens when it is reverted is a check that
+# can stop checking in silence. G-4, found in review.
+r=$(readme_repo rm-literal-bold)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("**Pre-release.**", "**v1.2.3**")
+if out == src:
+    raise SystemExit("fixture no-op: the Status line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cff=ok || cff=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cff" = ok ]; } && l6=ok || l6=no
+case "$err" in *"states a version"*) l7=ok ;; *) l7=no ;; esac
+
+# ...and the other direction, which is why the pattern keeps its `**v` prefix. `rm-control`
+# now carries a `Tested against: … 1.1.17` line: a prohibition broadened to any bare version
+# number would fire on it, and that is a different claim about a different thing.
+r=$(readme_repo rm-bare-version)
+out=$(run_readme "$r"); [ "$out" = "0" ] && l8=ok || l8=no
+
+[ "$l1$l2$l3$l4$l5$l6$l7$l8" = "okokokokokokokok" ] \
   && report "a version literal returning to either README fails, even when it happens to agree" ok \
   || report "a version literal returning to either README fails, even when it happens to agree" no \
-     "en-red=$l1 says-states=$l2 names-value=$l3 ja-red=$l4 names-ja-file=$l5"
+     "en-red=$l1 says-states=$l2 names-value=$l3 ja-red=$l4 names-ja-file=$l5 bold-no-delimiter-red=$l6 says-states-bold=$l7 bare-number-green=$l8"
 
 # 65e. A dynamic badge that is not the VERSION badge must not be judged as one.
 #
@@ -3383,14 +3413,12 @@ PYEOF
 [ "$?" = 0 ] && cfe=ok || cfe=no
 out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cfe" = ok ]; } && d3=ok || d3=no
-case "$err" in *"no version badge"*) d4=ok ;; *) d4=no ;; esac
+case "$err" in *"no badge labelled \`gate-sdd\`"*) d4=ok ;; *) d4=no ;; esac
 
 [ "$d1$d2$d3$d4" = "okokokok" ] \
   && report "an unrelated dynamic badge passes, and relabelling the version badge fails closed" ok \
   || report "an unrelated dynamic badge passes, and relabelling the version badge fails closed" no \
      "other-dynamic-green=$d1 not-accused=$d2 relabel-red=$d3 says-absent=$d4"
-
-
 
 
 # 66. A source the guard cannot read is a THIRD outcome, never agreement.

@@ -53,6 +53,7 @@ BADGE = re.compile(r"https://img\.shields\.io/[^\s)\]]+")
 #: comment or a fenced example still counts as present here, while the rendered page shows no
 #: version at all. Left as a limit rather than closed, because stripping comments buys a
 #: false-block risk for a hazard that takes a deliberate edit and is visible to any reader.
+
 #: The dynamic form, which is the only one that cannot drift. Matched on the path rather than
 #: the whole URL so that reordering query parameters is not a failure.
 DYNAMIC = "/badge/dynamic/"
@@ -259,10 +260,12 @@ def main():
                 )
             else:
                 problems.append(
-                    f"{name}: carries no version badge. The version is rendered from "
-                    f"{MANIFEST} rather than written here (#133), so with the badge gone the "
-                    f"file states no version at all — and this guard would otherwise pass a "
-                    f"README that had quietly stopped making the claim."
+                    f"{name}: carries no badge labelled `{BADGE_LABEL}`. The version is "
+                    f"rendered from {MANIFEST} by that badge (#133), and the label is how it "
+                    f"is identified — so this fires both when the badge is gone and when it "
+                    f"is present under another label, which renders a version nothing here "
+                    f"has checked. Without it the file states no version at all, and this "
+                    f"guard would pass a README that had quietly stopped making the claim."
                 )
 
         for b in BEHAVIOUR_COUNT.finditer(text):
