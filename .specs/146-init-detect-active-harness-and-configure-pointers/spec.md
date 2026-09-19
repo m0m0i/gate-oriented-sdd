@@ -1,5 +1,5 @@
 # Spec: Detect active harness and configure rule pointers and contracts accordingly
-- Slug: 146-init-detect-active-harness-and-configure-pointers   Issue: 146   Type: feature   Status: approved
+- Slug: 146-init-detect-active-harness-and-configure-pointers   Issue: 146   Type: feature   Status: done
 - Author: Hiroyuki   Date: 2026-09-19
 
 ## 1. Requirements (WHAT / WHY)
@@ -13,22 +13,22 @@ So that the appropriate canonical rule pointers (`CLAUDE.md`, `GEMINI.md`, or bo
 Dual-target parity: automated harness detection, proper rule pointer generation, and consistent reviewer contract placement across Claude Code and Google Antigravity (#146).
 
 ### Acceptance criteria
-- [ ] **AC1 (Step 1 Detection)**: WHEN `init` runs in Step 1 THE SYSTEM SHALL inspect:
+- [x] **AC1 (Step 1 Detection)**: WHEN `init` runs in Step 1 THE SYSTEM SHALL inspect:
   (a) Filesystem markers: `.claude/` or `CLAUDE.md` -> Claude Code targeted; `.agents/` or `GEMINI.md` -> Antigravity targeted. If both present -> Dual-target project.
   (b) Runtime environment signals: environment variables (`CLAUDE_CODE`, `ANTIGRAVITY`) or agent tool availability.
   If signals are unambiguous, proceed with the detected target harness(es) without asking.
-- [ ] **AC2 (Step 2 Interview)**: WHEN target harness signals are ambiguous or neither harness is detected THE SYSTEM SHALL prompt the operator:
+- [x] **AC2 (Step 2 Interview)**: WHEN target harness signals are ambiguous or neither harness is detected THE SYSTEM SHALL prompt the operator:
   `"Which harness(es) should this project configure? [1] Claude Code, [2] Antigravity, [3] Both"`
-- [ ] **AC3 (Step 3 Rule Pointers)**: WHEN scaffolding rule files THE SYSTEM SHALL always create canonical `AGENTS.md` and configure pointers:
+- [x] **AC3 (Step 3 Rule Pointers)**: WHEN scaffolding rule files THE SYSTEM SHALL always create canonical `AGENTS.md` and configure pointers:
   - Claude Code: create `CLAUDE.md` referencing `AGENTS.md`.
   - Antigravity: create `GEMINI.md` referencing `AGENTS.md`.
   - Dual: create both pointer files.
-- [ ] **AC4 (Step 3 Reviewers & Hooks)**: WHEN scaffolding reviewers and hooks THE SYSTEM SHALL configure the directory matching the chosen harness(es):
+- [x] **AC4 (Step 3 Reviewers & Hooks)**: WHEN scaffolding reviewers and hooks THE SYSTEM SHALL configure the directory matching the chosen harness(es):
   - Claude Code: `.claude/settings.json`, `.claude/hooks/`, and `.claude/agents/_shared/reviewer-contract.md`.
   - Antigravity: `.agents/hooks.json`, `.agents/hooks/`, and `.agents/agents/_shared/reviewer-contract.md` (aligning with `check-locks.py` candidate directory `.agents/agents`).
-- [ ] **AC5 (Contract Pinning)**: WHEN `scripts/check-skill-contracts.py` runs THE SYSTEM SHALL verify that `skills/init/SKILL.md` contains the harness interview question and the pointer instruction, failing closed if either is missing, with the total contract count moved from 21 to 23 and justified in the docstring.
-- [ ] **AC6 (Guard Tests)**: WHEN `scripts/test-gates.sh` runs THE SYSTEM SHALL include guard tests confirming `scripts/check-skill-contracts.py` fails if `skills/init/SKILL.md` is stripped of the harness interview question or pointer instructions.
-- [ ] **AC7 (Documentation)**: WHEN `docs/fidelity.md` and `docs/layout.md` are inspected THE SYSTEM SHALL document the active harness detection logic, `CLAUDE.md`/`GEMINI.md` rule pointers, and `.agents/agents/_shared/reviewer-contract.md` structure.
+- [x] **AC5 (Contract Pinning)**: WHEN `scripts/check-skill-contracts.py` runs THE SYSTEM SHALL verify that `skills/init/SKILL.md` contains the harness interview question and the pointer instruction, failing closed if either is missing, with the total contract count moved from 21 to 23 and justified in the docstring.
+- [x] **AC6 (Guard Tests)**: WHEN `scripts/test-gates.sh` runs THE SYSTEM SHALL include guard tests confirming `scripts/check-skill-contracts.py` fails if `skills/init/SKILL.md` is stripped of the harness interview question or pointer instructions.
+- [x] **AC7 (Documentation)**: WHEN `docs/fidelity.md` and `docs/layout.md` are inspected THE SYSTEM SHALL document the active harness detection logic, `CLAUDE.md`/`GEMINI.md` rule pointers, and `.agents/agents/_shared/reviewer-contract.md` structure.
 
 ### Out of scope
 - Automatic platform installation or CLI bootstrapping outside the repository.
@@ -83,4 +83,4 @@ Adds contracts #22 and #23 to `scripts/check-skill-contracts.py`. Verified by CI
 
 - [x] T1: add guard test in `scripts/test-gates.sh` and contracts #22 & #23 in `scripts/check-skill-contracts.py` asserting `init` harness interview question and pointer instructions exist — verify red (stripped test fails, control passes) — then implement Step 1 detection, Step 2 interview, and Step 3 scaffolding in `skills/init/SKILL.md` to pass green
 - [x] T2: update `docs/fidelity.md` and `docs/layout.md` to document active harness detection, `CLAUDE.md`/`GEMINI.md` pointers, and `.agents/agents/_shared/reviewer-contract.md` layout, and verify all validators pass
-- [ ] T3: refactor and run full validator suite (`quality-gate.sh` and `test-gates.sh`), confirming clean baseline
+- [x] T3: refactor and run full validator suite (`quality-gate.sh` and `test-gates.sh`), confirming clean baseline
