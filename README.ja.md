@@ -1,5 +1,7 @@
 # gate-oriented-sdd
 
+[![gate-sdd](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&prefix=v&label=gate-sdd&color=blue)](./plugin.json)
+
 _[English →](./README.md)_
 
 **レビューのゲートを、フックで強制するスペック駆動開発セットアップです。**
@@ -168,7 +170,7 @@ agy plugin install ./gate-oriented-sdd
 
 ## ステータス
 
-**v0.10.0、pre-release です。** 検証済みバージョンの一覧を添えた reference implementation であって、サポート付きのプロダクトではありません。[eval スイート](./evals/) は開発中です。4つのケースは書いてあり、`claude plugin eval` はこのアカウントではまだ early access のままです。
+**pre-release です。** 検証済みバージョンの一覧を添えた reference implementation であって、サポート付きのプロダクトではありません。[eval スイート](./evals/) は開発中です。4つのケースは書いてあり、`claude plugin eval` はこのアカウントではまだ early access のままです。
 
 検証環境: Claude Code 2.1.252（2026-09-05）· Antigravity CLI 1.1.17 / IDE 2.3.1（2026-08-21）· macOS
 

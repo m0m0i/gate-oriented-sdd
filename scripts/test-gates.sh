@@ -3081,8 +3081,31 @@ readme_repo() {
   printf '{\n  "version": "1.2.3"\n}\n' > "$r/plugin.json"
   printf 'reviewed_by=subagent\n' > "$r/.specs/9-feature/.review-receipt"
   printf 'reviewed_by=inline\n' > "$r/.specs/_archive/8-old/.review-receipt"
-  printf '## Status\n\n**v1.2.3 — pre-release.**\n\nthe gates and guards behaviours, tested deterministically; and a receipt on every spec from a spawned reviewer on all but one, which were reviewed inline.\n' > "$r/README.md"
-  printf '## Status\n\n**v1.2.3、pre-release です。**\n\nゲートとガードの挙動。1件を除いてサブエージェントとして起動した reviewer によるレビューです。\n' > "$r/README.ja.md"
+  # Heredocs, not printf: the badge URL is full of `%` escapes and printf would eat them, which
+  # is a fixture quietly writing a DIFFERENT badge than the one under test. #141 shipped a `case`
+  # glob with the same class of bug — unquoted backticks — and it cost a red run to find.
+  cat > "$r/README.md" <<'RMEOF'
+# fixture
+
+[![gate-sdd](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&prefix=v&label=gate-sdd&color=blue)](./plugin.json)
+
+## Status
+
+**Pre-release.**
+
+the gates and guards behaviours, tested deterministically; and a receipt on every spec from a spawned reviewer on all but one, which were reviewed inline.
+RMEOF
+  cat > "$r/README.ja.md" <<'RMEOF'
+# fixture
+
+[![gate-sdd](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&prefix=v&label=gate-sdd&color=blue)](./plugin.json)
+
+## Status
+
+**Pre-release です。**
+
+ゲートとガードの挙動。1件を除いてサブエージェントとして起動した reviewer によるレビューです。
+RMEOF
   echo "$r"
 }
 run_readme() { ( cd "$1" && python3 scripts/check-readme-claims.py >/dev/null 2>"$TMP/rmerr"; printf '%s' "$?" ) }
@@ -3091,18 +3114,23 @@ run_readme() { ( cd "$1" && python3 scripts/check-readme-claims.py >/dev/null 2>
 r=$(readme_repo rm-control)
 out=$(run_readme "$r"); [ "$out" = "0" ] && c0=ok || c0=no
 
-r=$(readme_repo rm-version)
+# #133. The version is no longer a claim the README makes, so there is no mismatch to detect.
+# There is a BADGE, and the guard's job is now that the badge is still the thing that makes a
+# mismatch impossible. Removing it must fail: a README carrying neither a version nor a badge
+# tells the reader nothing, and a guard that shrugged at that would have stopped covering this
+# claim while still exiting 0.
+r=$(readme_repo rm-nobadge)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "README.md"); src = p.read_text()
-out = src.replace("**v1.2.3 —", "**v1.0.0 —")
-if out == src: raise SystemExit("fixture no-op: version string not found")
+out = "\n".join(l for l in src.split("\n") if "img.shields.io" not in l)
+if out == src: raise SystemExit("fixture no-op: no badge line to remove")
 p.write_text(out)
 PYEOF
 [ "$?" = 0 ] && cf1=ok || cf1=no
 out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cf1" = ok ]; } && c1=ok || c1=no
-case "$err" in *"plugin.json says 1.2.3"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"no version badge"*) c2=ok ;; *) c2=no ;; esac
 
 # The removed number coming back — the half a presence-only check cannot see.
 r=$(readme_repo rm-count)

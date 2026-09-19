@@ -33,9 +33,17 @@ import sys
 READMES = ("README.md", "README.ja.md")
 MANIFEST = pathlib.Path("plugin.json")
 
-#: The version, as `**v0.7.0 — pre-release.**` / `**v0.7.0、pre-release です。**`. The language
-#: differs after the number and the number does not, so one pattern serves both.
+#: The version literal this guard used to verify, as `**v0.7.0 — pre-release.**` /
+#: `**v0.7.0、pre-release です。**`. #133 removed it: the README no longer states a version, it
+#: renders one from the manifest, so there is nothing left to disagree. The pattern is kept and
+#: INVERTED — it now fails when it matches — because the number coming back is the root cause
+#: returning, and an editor who reads the badge as decoration would reintroduce it.
 VERSION = re.compile(r"\*\*v(\d+\.\d+\.\d+)[ ,、]")
+
+#: Any shields.io badge in the file. Deliberately loose: the question this answers is "is there
+#: a version badge at all", and the narrower questions — is it dynamic, does it read OUR
+#: manifest — are asked separately so their failures name different causes.
+BADGE = re.compile(r"https://img\.shields\.io/[^\s)\]]+")
 
 #: How the receipts were obtained. English says "all but three"; Japanese says "3件を除いて".
 #: Both are matched as a written-out or numeric count, because #115's defect was a word.
@@ -173,20 +181,13 @@ def main():
             problems.append(f"{name}: cannot be read ({exc.strerror})")
             continue
 
-        found = {v for v in VERSION.findall(text)}
-        m = VERSION.search(text)
-        if len(found) > 1:
-            # `README.md:41` is this repository's own proof that a Status claim gets restated
-            # outside the section anyone is watching. If that ever happens to the version, a
-            # first-match check verifies the decoy.
-            problems.append(f"{name}: states more than one version — {sorted(found)}")
-        if not m:
-            problems.append(f"{name}: states no version in the form `**v<x.y.z>`")
-        elif version is not None and m.group(1) != version:
+        badges = BADGE.findall(text)
+        if not badges:
             problems.append(
-                f"{name}: says v{m.group(1)}, but plugin.json says {version}. "
-                f"The version is bumped as a step of `implement` after the receipt; this line "
-                f"is not carried by that step and has drifted three releases before."
+                f"{name}: carries no version badge. The version is rendered from "
+                f"{MANIFEST} rather than written here (#133), so with the badge gone the file "
+                f"states no version at all — and this guard would otherwise pass a README that "
+                f"had quietly stopped making the claim."
             )
 
         for b in BEHAVIOUR_COUNT.finditer(text):
@@ -222,9 +223,14 @@ def main():
             print(f"  {p}", file=sys.stderr)
         raise SystemExit(1)
 
+    # NOT "agree — v{version}". The READMEs no longer state a version, so saying they agree on
+    # one would be this guard asserting a claim it stopped checking — the shape it exists to
+    # catch, printed by the guard itself. What was verified is that each carries a version
+    # badge; the number beside it is the manifest's, named as the manifest's.
     print(
-        f"check-readme-claims: {len(READMES)} README(s) agree — v{version}, "
-        f"{inline} of {total} receipts inline, no behaviour count asserted"
+        f"check-readme-claims: {len(READMES)} README(s) carry a version badge "
+        f"({MANIFEST} is at v{version}), {inline} of {total} receipts inline, "
+        f"no behaviour count asserted"
     )
 
 
