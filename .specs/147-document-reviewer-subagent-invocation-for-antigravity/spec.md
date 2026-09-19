@@ -1,5 +1,5 @@
 # Spec: Document reviewer subagent invocation semantics for Antigravity
-- Slug: 147-document-reviewer-subagent-invocation-for-antigravity   Issue: 147   Type: feature   Status: approved
+- Slug: 147-document-reviewer-subagent-invocation-for-antigravity   Issue: 147   Type: feature   Status: done
 - Author: Hiroyuki   Date: 2026-09-19
 
 ## 1. Requirements (WHAT / WHY)
