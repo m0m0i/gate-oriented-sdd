@@ -2409,6 +2409,53 @@ out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
   || report "an unhonourable target is named, an absent one falls back, and a spent one is never read" no \
      "bogus-red=$c1 names-value=$c2 ws-green=$c3 ws-honoured=$c4 empty-red=$c5 empty-quiet-on-optional=$c6 empty-offers-both=$c7 spent-unread=$c8 spent-bogus-unread=$c9"
 
+# 73. The bootstrap ADVISORY line names the target's set too, not just the failure.
+#
+# #141 AC8. The failure at the first spec was only half the ambush. The advisory line is what
+# an operator sees on every green turn between install and that spec — so a `full` project
+# being told "3 document(s) not yet authored" for a week is the surprise arriving later rather
+# than never. The two outputs must agree about what is owed.
+#
+# G-1 still binds: the counts of templates and directories are in THEIR OWN units and must not
+# absorb the document count, which is the conflation #109 introduced and the checker's own
+# comment warns against reintroducing one layer down.
+sout_docset() { ( cd "$1" && python3 scripts/check-document-set.py 2>/dev/null ) }
+
+# Control: no target, and the line is what it is today.
+r=$(init_tree ds-adv-absent bootstrap)
+s=$(sout_docset "$r")
+case "$s" in *"3 document(s)"*) c1=ok ;; *) c1=no ;; esac
+case "$s" in *NORTH_STAR.md*) c2=no ;; *) c2=ok ;; esac
+
+# `- Target: full`: six owed, each named with the skill that writes it.
+r=$(init_tree ds-adv-full bootstrap); target_in "$r" full
+s=$(sout_docset "$r")
+case "$s" in *"6 document(s)"*) c3=ok ;; *) c3=no ;; esac
+case "$s" in *"NORTH_STAR.md (via northstar)"*) c4=ok ;; *) c4=no ;; esac
+case "$s" in *"EPICS.md (via epics)"*) c5=ok ;; *) c5=no ;; esac
+case "$s" in *"CONTRACT.md (via contract)"*) c6=ok ;; *) c6=no ;; esac
+case "$s" in *"PRD.md (via prd)"*) c7=ok ;; *) c7=no ;; esac
+# The counts that are not documents must survive the change unconflated.
+case "$s" in *"3 issue template(s)"*) c8=ok ;; *) c8=no ;; esac
+case "$s" in *"2 directory(ies)"*) c9=ok ;; *) c9=no ;; esac
+# A choice already made is not offered back.
+# Single-quoted inside the pattern: a bare backtick in an unquoted `case` glob is command
+# substitution, which ran and left the assertion comparing against a mangled string. That is a
+# fixture failure wearing a guard failure's clothes — #124's genre, caught here by the stray
+# `-: command not found` on stderr rather than by the red itself.
+case "$s" in *'`- Mode: full`'*) c10=ok ;; *) c10=no ;; esac
+
+# `- Target: minimum` owes three and must not list the opt-in three.
+r=$(init_tree ds-adv-min bootstrap); target_in "$r" minimum
+s=$(sout_docset "$r")
+case "$s" in *"3 document(s)"*) c11=ok ;; *) c11=no ;; esac
+case "$s" in *NORTH_STAR.md*|*EPICS.md*) c12=no ;; *) c12=ok ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12" = "okokokokokokokokokokokok" ] \
+  && report "the bootstrap advisory line names the target's set, in units that stay separate" ok \
+  || report "the bootstrap advisory line names the target's set, in units that stay separate" no \
+     "absent-three=$c1 absent-quiet=$c2 full-six=$c3 names-northstar=$c4 names-epics=$c5 names-contract=$c6 names-prd=$c7 templates-own-unit=$c8 dirs-own-unit=$c9 names-one-mode=$c10 min-three=$c11 min-quiet=$c12"
+
 # 70. A project that already had a bug template under its own name must pass after init.
 #
 # #130. Two bullets of step 3 disagreed: the merge rule said "add only the missing types", so a

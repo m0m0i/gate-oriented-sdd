@@ -279,6 +279,21 @@ def main():
         )
 
     if mode == "bootstrap":
+        # Computed ONCE for both outputs in this window. The failure at the first spec and the
+        # advisory line before it are the same claim at two moments, and #141 exists because
+        # they disagreed with the operator's choice; letting them disagree with each other
+        # would be the same defect between two lines of one file.
+        #
+        # The set this describes is the TARGET's. `wanted` above is the MODE's and is what the
+        # checker actually requires — the two are deliberately different quantities here, and
+        # only the mode's one decides an exit code.
+        owed_docs = MANDATORY_DOCS + (FULL_ONLY_DOCS if target == "full" else ())
+        owed = ", ".join(f"{name} (via {DOC_OWNER[name]})" for name in owed_docs)
+        # A target that was chosen is a decision already made, so the remedy names the one mode
+        # to declare rather than offering both back. Offering the choice again to someone who
+        # made it reads as the harness having lost their answer.
+        declare = f"declare `- Mode: {target}`" if target else "declare `minimum` or `full`"
+
         # AC4. Without this, `bootstrap` is a gate switched off with a note attached — the
         # exact failure `.steering/product.md` names, reached by a route that looks principled.
         # The grace period ends at the first spec because a spec is where a capability id gets
@@ -319,26 +334,12 @@ def main():
             )
         if started:
             listed = ", ".join(sorted(started))
-            # The set this names is the TARGET's, not the mode's. `wanted` above is still built
-            # from `- Mode:` alone and is untouched by any of this: the target changes what the
-            # block SAYS is owed, never what the checker requires. A target on the pass/fail
-            # path would be a second mode, and a mistyped one would then decide which documents
-            # go unchecked — the fail-open this repository owns the absence of.
-            owed_docs = MANDATORY_DOCS + (FULL_ONLY_DOCS if target == "full" else ())
-            owed = ", ".join(f"{d} (via {DOC_OWNER[d]})" for d in owed_docs)
-            # A target that was chosen is a decision already made, so the remedy names the one
-            # mode to declare rather than offering both back. Offering the choice again to
-            # someone who made it reads as the harness having lost their answer.
-            declare = (
-                f"declare `- Mode: {target}`" if target else "declare `minimum` or `full`"
-            )
             fail(
                 f"mode is `bootstrap` — documents not yet authored — but {len(started)} spec(s) "
                 f"already exist: {listed}. A spec cites the documents this mode says are "
                 f"unwritten. Write {owed}, and {declare} in {STEERING}."
             )
 
-        owed = ", ".join(f"{name} ({DOC_OWNER[name]})" for name in MANDATORY_DOCS)
         # A separate sentence, not the line below with a smaller number in it. G-1: "the
         # documents are present" and "the documents were not looked at" cannot share an
         # outcome, and exit 0 is already shared between them — so the words carry the whole
@@ -346,8 +347,8 @@ def main():
         print(
             f"check-document-set: mode `{mode}` — the harness is installed "
             f"({len(TEMPLATES)} issue template(s) and {len(MANDATORY_DIRS)} directory(ies) "
-            f"present). {len(MANDATORY_DOCS)} document(s) not yet authored: {owed}. "
-            f"Declare `minimum` or `full` in {STEERING} once they are written."
+            f"present). {len(owed_docs)} document(s) not yet authored: {owed}. "
+            f"Then {declare} in {STEERING}."
         )
         return
 
