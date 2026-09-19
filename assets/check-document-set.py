@@ -74,6 +74,10 @@ ARCHIVE = SPECS / "_archive"
 #: Ordered as a project moves through them. `bootstrap` is first because every project passes
 #: through it, including the ones that leave it in the same hour.
 MODES = ("bootstrap", "minimum", "full")
+#: What `- Target:` may name. `bootstrap` is deliberately absent: it is the state of not having
+#: decided, and a project cannot sign up for that. Derived from MODES rather than written out
+#: so the two cannot drift into disagreeing about what a document set is called.
+TARGETS = tuple(m for m in MODES if m != "bootstrap")
 
 
 def fail(message):
@@ -204,6 +208,17 @@ def main():
     # to be stricter than, exactly as for `Docs` below. Without the strip, `- Target: full `
     # would be an unrecognised value on a line that reads correctly to a human.
     target = steering_value(text, "Target").strip() if mode == "bootstrap" else ""
+    if target and target not in TARGETS:
+        # Absent is supported and silent — every project installed before this line existed is
+        # in that state, and blocking it would be a failure that predates the user, which is
+        # CAP-4's falsifier. Present-but-wrong is different in kind: somebody wrote an answer
+        # the harness cannot act on, and this is the only window in which anything reads the
+        # line, so a swallow here is a typo nobody ever learns about.
+        fail(
+            f"`- Target: {target}` is not a document set. Expected one of: "
+            f"{', '.join(TARGETS)} — or remove the line, which is a supported state and means "
+            f"the choice has not been made yet."
+        )
 
     docs_value = steering_value(text, "Docs").strip() or "docs/"
     if "://" in docs_value:

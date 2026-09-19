@@ -2354,6 +2354,61 @@ out=$(run_docset "$r"); [ "$out" = "0" ] && c12=ok || c12=no
   || report "a bootstrap block names the target's documents, and no target keeps today's wording" no \
      "absent-red=$c1 absent-quiet-on-optional=$c2 absent-names-mandatory=$c3 full-red=$c4 names-northstar=$c5 names-epics=$c6 names-contract=$c7 full-names-mandatory=$c8 min-red=$c9 min-quiet-on-optional=$c10 min-names-mandatory=$c11 no-spec-stays-green=$c12"
 
+# 72. A `- Target:` that cannot be honoured is loud; an absent one is not; a spent one is unread.
+#
+# #141 AC4/AC5/AC9. Three states that all look like "no usable target" from inside the code and
+# must not share an outcome. ABSENT is a supported configuration — every project installed
+# before the line existed is in it — so it falls back to today's wording. PRESENT-BUT-WRONG is
+# a declaration that cannot be honoured, and swallowing it would hide the typo for the whole
+# and only window the line is read in. SPENT (mode no longer `bootstrap`) must not be read at
+# all, or an upgraded project carrying a stale target goes red for a line nothing should be
+# consulting.
+
+# Wrong value, and the value itself must appear — "not a target" without the offending text is
+# a diagnosis on a one-line file the reader has to go hunting through anyway.
+r=$(init_tree ds-tgt-bogus bootstrap); target_in "$r" ful
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *ful*) c2=ok ;; *) c2=no ;; esac
+
+# Trailing whitespace is TOLERATED here, and the asymmetry with `- Mode:` is the point: Mode is
+# byte-compared against what gate_steering_value hands the shell, and Target has no shell
+# reader to be stricter than. Strict here would reject a line that reads correctly to a human.
+r=$(init_tree ds-tgt-ws bootstrap)
+printf -- '- Target: full \n' >> "$r/.steering/tech.md"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c3=ok || c3=no
+# ...and it must be honoured, not merely not-rejected. Without this the strip could be a
+# silent discard and the case would still pass.
+spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+case "$err" in *NORTH_STAR.md*) c4=ok ;; *) c4=no ;; esac
+
+# An EMPTY value is the absent case, not the wrong-value case. `- Target:` with nothing after
+# it is a line someone started and did not finish; failing on it would block an install over
+# punctuation, and CAP-4 is the falsifier.
+r=$(init_tree ds-tgt-empty bootstrap); spec_in "$r/.specs/7-a-thing"
+printf -- '- Target: \n' >> "$r/.steering/tech.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *NORTH_STAR.md*) c6=no ;; *) c6=ok ;; esac
+case "$err" in *"minimum"*) c7=ok ;; *) c7=no ;; esac
+
+# SPENT. A settled mode makes the target history, and a project that declared `minimum` after
+# targeting `full` changed its mind — a decision, not a disagreement to police.
+r=$(docset_repo ds-tgt-spent minimum); target_in "$r" full
+out=$(run_docset "$r"); [ "$out" = "0" ] && c8=ok || c8=no
+
+# The strongest half: even an UNPARSEABLE target is unread once the mode is settled. If the
+# validation ran before the mode check, this would be red — and every project that upgraded
+# past bootstrap with a typo in a line nothing reads would be blocked by it.
+r=$(docset_repo ds-tgt-spent-bogus full); add_full_docs "$r"; target_in "$r" nonsense
+out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] \
+  && report "an unhonourable target is named, an absent one falls back, and a spent one is never read" ok \
+  || report "an unhonourable target is named, an absent one falls back, and a spent one is never read" no \
+     "bogus-red=$c1 names-value=$c2 ws-green=$c3 ws-honoured=$c4 empty-red=$c5 empty-quiet-on-optional=$c6 empty-offers-both=$c7 spent-unread=$c8 spent-bogus-unread=$c9"
+
 # 70. A project that already had a bug template under its own name must pass after init.
 #
 # #130. Two bullets of step 3 disagreed: the merge rule said "add only the missing types", so a

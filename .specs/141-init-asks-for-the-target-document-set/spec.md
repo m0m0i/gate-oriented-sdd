@@ -51,7 +51,7 @@
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: failing case in `scripts/test-gates.sh` — `bootstrap` with `- Target: full` and one spec present fails naming all six documents, while the same tree with no `- Target:` line keeps today's generic wording — then the `- Target:` read and the failure-message change in `assets/check-document-set.py` (AC3, AC4)
-- [ ] T2: failing case — an unrecognised `- Target:` value fails naming the value, a trailing-space value does not, and a `- Target:` line is neither read nor required once `- Mode:` is `minimum` or `full` — then the validation and the mode guard (AC5, AC9)
+- [x] T2: failing case — an unrecognised `- Target:` value fails naming the value, a trailing-space value does not, and a `- Target:` line is neither read nor required once `- Mode:` is `minimum` or `full` — then the validation and the mode guard (AC5, AC9)
 - [ ] T3: failing case — the bootstrap advisory line names the target's documents and their owning skills, and still counts issue templates and directories in their own units — then the print change (AC8)
 - [ ] T4: failing case — `check-steering-anchors.sh` fails on `- **Target: full**` and stays silent when the line is simply absent — then the `ANCHORS` row (AC10)
 - [ ] T5: failing case — `check-skill-contracts.py` fails when the target question or its destination is removed from `skills/init/SKILL.md`, and the tree init step 3 documents still passes `check-document-set.py` — then the step 3 prose, the `- Target:` entry in the machine-read block, and the `CONTRACTS` entry (AC1, AC2, AC7)
