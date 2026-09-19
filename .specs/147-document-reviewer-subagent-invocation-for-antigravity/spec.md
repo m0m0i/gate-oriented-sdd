@@ -70,4 +70,4 @@ Adds contract #21 in `scripts/check-skill-contracts.py`. Verified by CI and turn
 
 - [x] T1: add failing test in `scripts/test-gates.sh` and contract #21 in `scripts/check-skill-contracts.py` asserting Antigravity reviewer invocation instruction exists — verify red — then implement the documentation in `skills/implement/SKILL.md` to pass green
 - [x] T2: update `docs/fidelity.md` to document the reviewer subagent invocation semantics for Antigravity, and verify all validators pass
-- [ ] T3: refactor and run full validator suite (`quality-gate.sh` and `test-gates.sh`), confirming clean baseline
+- [x] T3: refactor and run full validator suite (`quality-gate.sh` and `test-gates.sh`), confirming clean baseline
