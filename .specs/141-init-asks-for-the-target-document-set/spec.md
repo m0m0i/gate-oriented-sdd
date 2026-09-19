@@ -1,5 +1,5 @@
 # Spec: init asks for the target document set
-- Slug: 141-init-asks-for-the-target-document-set   Issue: 141   Type: feature   Status: approved
+- Slug: 141-init-asks-for-the-target-document-set   Issue: 141   Type: feature   Status: done
 - Author: Hiroyuki   Date: 2026-09-19
 
 ## 1. Requirements (WHAT / WHY)
