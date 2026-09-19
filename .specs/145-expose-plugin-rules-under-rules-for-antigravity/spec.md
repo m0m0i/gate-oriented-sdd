@@ -1,5 +1,5 @@
 # Spec: Expose plugin rules under rules/ for Antigravity plugin loader
-- Slug: 145-expose-plugin-rules-under-rules-for-antigravity   Issue: 145   Type: feature   Status: approved
+- Slug: 145-expose-plugin-rules-under-rules-for-antigravity   Issue: 145   Type: feature   Status: done
 - Author: Hiroyuki   Date: 2026-09-19
 
 ## 1. Requirements (WHAT / WHY)
