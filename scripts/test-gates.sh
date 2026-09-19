@@ -2303,6 +2303,57 @@ out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
   || report "bootstrap expires at the first spec, and cannot expire quietly" no \
      "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9 slug-unreadable-red=$c10 names-slug=$c11 symlink-red=$c12 names-symlink=$c13 dangling-stays-green=$c14"
 
+# 71. `- Target:` names what the chosen document set owes, in the bootstrap window only.
+#
+# #141. `- Mode:` records what is TRUE now; it cannot record what the operator signed up for,
+# because `- Mode: full` on day one is a claim about documents that do not exist — the claim
+# the checker exists to refuse. So the bootstrap block named three documents to an operator
+# who may have chosen six, and the set they owed first became visible at the moment it blocked
+# them. `- Target:` carries the choice through that window.
+#
+# It changes MESSAGES ONLY. `wanted` is still built from `- Mode:` alone, which is what keeps a
+# mistyped target unable to let a document go unchecked — a target on the pass/fail path would
+# be a second mode, and a wrong one would fail open.
+target_in() { printf -- '- Target: %s\n' "$2" >> "$1/.steering/tech.md"; }
+
+# Control FIRST, and it is the whole no-regression half: with no `- Target:` line the message
+# must be byte-for-byte what it is today. Every accusing half below is satisfiable by a
+# checker that simply prints all six documents always.
+r=$(init_tree ds-tgt-absent bootstrap); spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); base_err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$base_err" in *NORTH_STAR.md*) c2=no ;; *) c2=ok ;; esac
+case "$base_err" in *PRD.md*) c3=ok ;; *) c3=no ;; esac
+
+# `- Target: full` and a spec: the block must now name the three the full set adds, and still
+# name the three it never stopped owing.
+r=$(init_tree ds-tgt-full bootstrap); target_in "$r" full; spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c4=ok || c4=no
+case "$err" in *NORTH_STAR.md*) c5=ok ;; *) c5=no ;; esac
+case "$err" in *EPICS.md*) c6=ok ;; *) c6=no ;; esac
+case "$err" in *CONTRACT.md*) c7=ok ;; *) c7=no ;; esac
+case "$err" in *PRD.md*) c8=ok ;; *) c8=no ;; esac
+
+# `- Target: minimum` is not the same message as no target at all — it is a choice that was
+# made, and it must not silently produce the "you have not chosen" wording. It owes three
+# documents, and must NOT name the opt-in three.
+r=$(init_tree ds-tgt-min bootstrap); target_in "$r" minimum; spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *NORTH_STAR.md*|*EPICS.md*) c10=no ;; *) c10=ok ;; esac
+case "$err" in *PRD.md*) c11=ok ;; *) c11=no ;; esac
+
+# The target must not rescue a bootstrap project that has NOT started: no spec, still green.
+# Without this, "names six documents" is satisfiable by a checker that blocks on the target.
+r=$(init_tree ds-tgt-nospec bootstrap); target_in "$r" full
+out=$(run_docset "$r"); [ "$out" = "0" ] && c12=ok || c12=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12" = "okokokokokokokokokokokok" ] \
+  && report "a bootstrap block names the target's documents, and no target keeps today's wording" ok \
+  || report "a bootstrap block names the target's documents, and no target keeps today's wording" no \
+     "absent-red=$c1 absent-quiet-on-optional=$c2 absent-names-mandatory=$c3 full-red=$c4 names-northstar=$c5 names-epics=$c6 names-contract=$c7 full-names-mandatory=$c8 min-red=$c9 min-quiet-on-optional=$c10 min-names-mandatory=$c11 no-spec-stays-green=$c12"
+
 # 70. A project that already had a bug template under its own name must pass after init.
 #
 # #130. Two bullets of step 3 disagreed: the merge rule said "add only the missing types", so a

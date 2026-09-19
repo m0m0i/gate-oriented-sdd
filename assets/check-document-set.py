@@ -45,7 +45,18 @@ STEERING = pathlib.Path(".steering/tech.md")
 MANDATORY_DOCS = ("PRD.md", "DESIGN.md", "BACKLOG.md")
 #: The skill that writes each. `bootstrap` names them in its output: telling a user three
 #: documents are owed without naming what writes them leaves them to search the skill list.
-DOC_OWNER = {"PRD.md": "prd", "DESIGN.md": "design-doc", "BACKLOG.md": "backlog"}
+DOC_OWNER = {
+    "PRD.md": "prd",
+    "DESIGN.md": "design-doc",
+    "BACKLOG.md": "backlog",
+    # The opt-in three are here for the same reason, reached by a different route: a
+    # `- Target: full` message names them, and naming a document without naming what writes
+    # it leaves the reader to search the skill list — which is the state #127 closed for the
+    # mandatory three.
+    "NORTH_STAR.md": "northstar",
+    "EPICS.md": "epics",
+    "CONTRACT.md": "contract",
+}
 #: What `full` adds. One document per opt-in skill: northstar, epics, contract.
 FULL_ONLY_DOCS = ("NORTH_STAR.md", "EPICS.md", "CONTRACT.md")
 #: The issue templates sit INSIDE the chain rather than beside it — the Issue step is where
@@ -182,6 +193,18 @@ def main():
     # reaches this, and so does a non-breaking space pasted from a rendered page, because the
     # regex's ` *` is ASCII-space-only. Inside, a whitespace-only value falls back to `docs/`
     # exactly as an absent line does, and `Path("")` is unreachable.
+    # #141. `- Target:` is what the operator SIGNED UP FOR; `- Mode:` is what is true now.
+    # Read only under `bootstrap`, because that is the only window in which the two can
+    # differ — once a mode is declared it is the truth, and an operator who chose `full` and
+    # declared `minimum` changed their mind, which is a decision rather than a fault. Reading
+    # it later would invent a disagreement nobody asked to be policed.
+    #
+    # Stripped, unlike `mode`. The parity argument that forbids stripping there is about
+    # `gate_steering_value`, and nothing in hooks/ reads `Target` — so there is no reader here
+    # to be stricter than, exactly as for `Docs` below. Without the strip, `- Target: full `
+    # would be an unrecognised value on a line that reads correctly to a human.
+    target = steering_value(text, "Target").strip() if mode == "bootstrap" else ""
+
     docs_value = steering_value(text, "Docs").strip() or "docs/"
     if "://" in docs_value:
         # `- Docs:` may name a shared documentation repository in a multi-repo product. A URL
@@ -281,12 +304,23 @@ def main():
             )
         if started:
             listed = ", ".join(sorted(started))
+            # The set this names is the TARGET's, not the mode's. `wanted` above is still built
+            # from `- Mode:` alone and is untouched by any of this: the target changes what the
+            # block SAYS is owed, never what the checker requires. A target on the pass/fail
+            # path would be a second mode, and a mistyped one would then decide which documents
+            # go unchecked — the fail-open this repository owns the absence of.
+            owed_docs = MANDATORY_DOCS + (FULL_ONLY_DOCS if target == "full" else ())
+            owed = ", ".join(f"{d} (via {DOC_OWNER[d]})" for d in owed_docs)
+            # A target that was chosen is a decision already made, so the remedy names the one
+            # mode to declare rather than offering both back. Offering the choice again to
+            # someone who made it reads as the harness having lost their answer.
+            declare = (
+                f"declare `- Mode: {target}`" if target else "declare `minimum` or `full`"
+            )
             fail(
                 f"mode is `bootstrap` — documents not yet authored — but {len(started)} spec(s) "
                 f"already exist: {listed}. A spec cites the documents this mode says are "
-                f"unwritten. Write {', '.join(MANDATORY_DOCS)} (via "
-                f"{', '.join(DOC_OWNER[d] for d in MANDATORY_DOCS)}) and declare `minimum` or "
-                f"`full` in {STEERING}."
+                f"unwritten. Write {owed}, and {declare} in {STEERING}."
             )
 
         owed = ", ".join(f"{name} ({DOC_OWNER[name]})" for name in MANDATORY_DOCS)
