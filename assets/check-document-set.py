@@ -44,8 +44,20 @@ STEERING = pathlib.Path(".steering/tech.md")
 #: which is the state of not having written them yet.
 MANDATORY_DOCS = ("PRD.md", "DESIGN.md", "BACKLOG.md")
 #: The skill that writes each. `bootstrap` names them in its output: telling a user three
-#: documents are owed without naming what writes them leaves them to search the skill list.
-DOC_OWNER = {"PRD.md": "prd", "DESIGN.md": "design-doc", "BACKLOG.md": "backlog"}
+#: documents are owed — or six, under `- Target: full` — without naming what writes them
+#: leaves them to search the skill list.
+DOC_OWNER = {
+    "PRD.md": "prd",
+    "DESIGN.md": "design-doc",
+    "BACKLOG.md": "backlog",
+    # The opt-in three are here for the same reason, reached by a different route: a
+    # `- Target: full` message names them, and naming a document without naming what writes
+    # it leaves the reader to search the skill list — which is the state #127 closed for the
+    # mandatory three.
+    "NORTH_STAR.md": "northstar",
+    "EPICS.md": "epics",
+    "CONTRACT.md": "contract",
+}
 #: What `full` adds. One document per opt-in skill: northstar, epics, contract.
 FULL_ONLY_DOCS = ("NORTH_STAR.md", "EPICS.md", "CONTRACT.md")
 #: The issue templates sit INSIDE the chain rather than beside it — the Issue step is where
@@ -63,6 +75,10 @@ ARCHIVE = SPECS / "_archive"
 #: Ordered as a project moves through them. `bootstrap` is first because every project passes
 #: through it, including the ones that leave it in the same hour.
 MODES = ("bootstrap", "minimum", "full")
+#: What `- Target:` may name. `bootstrap` is deliberately absent: it is the state of not having
+#: decided, and a project cannot sign up for that. Derived from MODES rather than written out
+#: so the two cannot drift into disagreeing about what a document set is called.
+TARGETS = tuple(m for m in MODES if m != "bootstrap")
 
 
 def fail(message):
@@ -182,6 +198,29 @@ def main():
     # reaches this, and so does a non-breaking space pasted from a rendered page, because the
     # regex's ` *` is ASCII-space-only. Inside, a whitespace-only value falls back to `docs/`
     # exactly as an absent line does, and `Path("")` is unreachable.
+    # #141. `- Target:` is what the operator SIGNED UP FOR; `- Mode:` is what is true now.
+    # Read only under `bootstrap`, because that is the only window in which the two can
+    # differ — once a mode is declared it is the truth, and an operator who chose `full` and
+    # declared `minimum` changed their mind, which is a decision rather than a fault. Reading
+    # it later would invent a disagreement nobody asked to be policed.
+    #
+    # Stripped, unlike `mode`. The parity argument that forbids stripping there is about
+    # `gate_steering_value`, and nothing in hooks/ reads `Target` — so there is no reader here
+    # to be stricter than, exactly as for `Docs` below. Without the strip, `- Target: full `
+    # would be an unrecognised value on a line that reads correctly to a human.
+    target = steering_value(text, "Target").strip() if mode == "bootstrap" else ""
+    if target and target not in TARGETS:
+        # Absent is supported and silent — every project installed before this line existed is
+        # in that state, and blocking it would be a failure that predates the user, which is
+        # CAP-4's falsifier. Present-but-wrong is different in kind: somebody wrote an answer
+        # the harness cannot act on, and this is the only window in which anything reads the
+        # line, so a swallow here is a typo nobody ever learns about.
+        fail(
+            f"`- Target: {target}` is not a document set. Expected one of: "
+            f"{', '.join(TARGETS)} — or remove the line, which is a supported state and means "
+            f"the choice has not been made yet."
+        )
+
     docs_value = steering_value(text, "Docs").strip() or "docs/"
     if "://" in docs_value:
         # `- Docs:` may name a shared documentation repository in a multi-repo product. A URL
@@ -241,6 +280,21 @@ def main():
         )
 
     if mode == "bootstrap":
+        # Computed ONCE for both outputs in this window. The failure at the first spec and the
+        # advisory line before it are the same claim at two moments, and #141 exists because
+        # they disagreed with the operator's choice; letting them disagree with each other
+        # would be the same defect between two lines of one file.
+        #
+        # The set this describes is the TARGET's. `wanted` above is the MODE's and is what the
+        # checker actually requires — the two are deliberately different quantities here, and
+        # only the mode's one decides an exit code.
+        owed_docs = MANDATORY_DOCS + (FULL_ONLY_DOCS if target == "full" else ())
+        owed = ", ".join(f"{name} (via {DOC_OWNER[name]})" for name in owed_docs)
+        # A target that was chosen is a decision already made, so the remedy names the one mode
+        # to declare rather than offering both back. Offering the choice again to someone who
+        # made it reads as the harness having lost their answer.
+        declare = f"declare `- Mode: {target}`" if target else "declare `minimum` or `full`"
+
         # AC4. Without this, `bootstrap` is a gate switched off with a note attached — the
         # exact failure `.steering/product.md` names, reached by a route that looks principled.
         # The grace period ends at the first spec because a spec is where a capability id gets
@@ -284,12 +338,9 @@ def main():
             fail(
                 f"mode is `bootstrap` — documents not yet authored — but {len(started)} spec(s) "
                 f"already exist: {listed}. A spec cites the documents this mode says are "
-                f"unwritten. Write {', '.join(MANDATORY_DOCS)} (via "
-                f"{', '.join(DOC_OWNER[d] for d in MANDATORY_DOCS)}) and declare `minimum` or "
-                f"`full` in {STEERING}."
+                f"unwritten. Write {owed}, and {declare} in {STEERING}."
             )
 
-        owed = ", ".join(f"{name} ({DOC_OWNER[name]})" for name in MANDATORY_DOCS)
         # A separate sentence, not the line below with a smaller number in it. G-1: "the
         # documents are present" and "the documents were not looked at" cannot share an
         # outcome, and exit 0 is already shared between them — so the words carry the whole
@@ -297,8 +348,8 @@ def main():
         print(
             f"check-document-set: mode `{mode}` — the harness is installed "
             f"({len(TEMPLATES)} issue template(s) and {len(MANDATORY_DIRS)} directory(ies) "
-            f"present). {len(MANDATORY_DOCS)} document(s) not yet authored: {owed}. "
-            f"Declare `minimum` or `full` in {STEERING} once they are written."
+            f"present). {len(owed_docs)} document(s) not yet authored: {owed}. "
+            f"Then {declare} in {STEERING}."
         )
         return
 

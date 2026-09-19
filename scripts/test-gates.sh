@@ -607,6 +607,35 @@ case "$err" in *"predates the shared reader"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "a stale gate-lib.sh fails with the right diagnosis" ok \
   || report "a stale gate-lib.sh fails with the right diagnosis" no "exit=$c1 msg=$c2"
 
+# 29b. `- Target:` joins the anchors, because it is read with the same exact expression.
+#
+# #141 AC10. The table is hand-maintained, so a new machine-read line that is not added to it
+# is unguarded: `- **Target: full**` yields nothing, `check-document-set.py` sees no target and
+# falls back to the generic wording, and the operator's answer is silently discarded. That is
+# #34 exactly, reached through the line added to prevent a different silent discard.
+r=$(anchor_repo anc-tgt-bold '- Owns: x')
+printf -- '- **Target: full**\n' >> "$r/.steering/tech.md"
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"Target"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"tech.md"*) c3=ok ;; *) c3=no ;; esac
+
+# Correctly written passes — otherwise "bolded fails" is satisfiable by a row that rejects the
+# key outright, and every project writing the line properly would be blocked by it.
+r=$(anchor_repo anc-tgt-ok '- Owns: x')
+printf -- '- Target: full\n' >> "$r/.steering/tech.md"
+out=$(run_anchors "$r"); [ "$out" = "0" ] && c4=ok || c4=no
+
+# Absent stays legitimate. The line is optional by design — it is meaningless outside the
+# bootstrap window — and a guard that demanded it would fire on every settled project.
+r=$(anchor_repo anc-tgt-absent '- Owns: x')
+out=$(run_anchors "$r"); [ "$out" = "0" ] && c5=ok || c5=no
+
+[ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
+  && report "a bolded Target fails the anchor guard, a plain one passes, an absent one is silent" ok \
+  || report "a bolded Target fails the anchor guard, a plain one passes, an absent one is silent" no \
+     "bold-red=$c1 names-key=$c2 names-file=$c3 plain-green=$c4 absent-green=$c5"
+
 # 30. ANCHORS must not fall behind the hooks it mirrors.
 #
 # G-8: a guard's list is part of the guard, and "N of M anchor(s) resolved" reads the
@@ -2303,6 +2332,159 @@ out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
   || report "bootstrap expires at the first spec, and cannot expire quietly" no \
      "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9 slug-unreadable-red=$c10 names-slug=$c11 symlink-red=$c12 names-symlink=$c13 dangling-stays-green=$c14"
 
+# 71. `- Target:` names what the chosen document set owes, in the bootstrap window only.
+#
+# #141. `- Mode:` records what is TRUE now; it cannot record what the operator signed up for,
+# because `- Mode: full` on day one is a claim about documents that do not exist — the claim
+# the checker exists to refuse. So the bootstrap block named three documents to an operator
+# who may have chosen six, and the set they owed first became visible at the moment it blocked
+# them. `- Target:` carries the choice through that window.
+#
+# It changes MESSAGES ONLY. `wanted` is still built from `- Mode:` alone, which is what keeps a
+# mistyped target unable to let a document go unchecked — a target on the pass/fail path would
+# be a second mode, and a wrong one would fail open.
+target_in() { printf -- '- Target: %s\n' "$2" >> "$1/.steering/tech.md"; }
+
+# Control FIRST, and it is the whole no-regression half: with no `- Target:` line the message
+# must be byte-for-byte what it is today. Every accusing half below is satisfiable by a
+# checker that simply prints all six documents always.
+r=$(init_tree ds-tgt-absent bootstrap); spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); base_err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$base_err" in *NORTH_STAR.md*) c2=no ;; *) c2=ok ;; esac
+case "$base_err" in *PRD.md*) c3=ok ;; *) c3=no ;; esac
+
+# `- Target: full` and a spec: the block must now name the three the full set adds, and still
+# name the three it never stopped owing.
+r=$(init_tree ds-tgt-full bootstrap); target_in "$r" full; spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c4=ok || c4=no
+case "$err" in *NORTH_STAR.md*) c5=ok ;; *) c5=no ;; esac
+case "$err" in *EPICS.md*) c6=ok ;; *) c6=no ;; esac
+case "$err" in *CONTRACT.md*) c7=ok ;; *) c7=no ;; esac
+case "$err" in *PRD.md*) c8=ok ;; *) c8=no ;; esac
+
+# `- Target: minimum` is not the same message as no target at all — it is a choice that was
+# made, and it must not silently produce the "you have not chosen" wording. It owes three
+# documents, and must NOT name the opt-in three.
+r=$(init_tree ds-tgt-min bootstrap); target_in "$r" minimum; spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *NORTH_STAR.md*|*EPICS.md*) c10=no ;; *) c10=ok ;; esac
+case "$err" in *PRD.md*) c11=ok ;; *) c11=no ;; esac
+
+# The target must not rescue a bootstrap project that has NOT started: no spec, still green.
+# Without this, "names six documents" is satisfiable by a checker that blocks on the target.
+r=$(init_tree ds-tgt-nospec bootstrap); target_in "$r" full
+out=$(run_docset "$r"); [ "$out" = "0" ] && c12=ok || c12=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12" = "okokokokokokokokokokokok" ] \
+  && report "a bootstrap block names the target's documents, and no target keeps today's wording" ok \
+  || report "a bootstrap block names the target's documents, and no target keeps today's wording" no \
+     "absent-red=$c1 absent-quiet-on-optional=$c2 absent-names-mandatory=$c3 full-red=$c4 names-northstar=$c5 names-epics=$c6 names-contract=$c7 full-names-mandatory=$c8 min-red=$c9 min-quiet-on-optional=$c10 min-names-mandatory=$c11 no-spec-stays-green=$c12"
+
+# 72. A `- Target:` that cannot be honoured is loud; an absent one is not; a spent one is unread.
+#
+# #141 AC4/AC5/AC9. Three states that all look like "no usable target" from inside the code and
+# must not share an outcome. ABSENT is a supported configuration — every project installed
+# before the line existed is in it — so it falls back to today's wording. PRESENT-BUT-WRONG is
+# a declaration that cannot be honoured, and swallowing it would hide the typo for the whole
+# and only window the line is read in. SPENT (mode no longer `bootstrap`) must not be read at
+# all, or an upgraded project carrying a stale target goes red for a line nothing should be
+# consulting.
+
+# Wrong value, and the value itself must appear — "not a target" without the offending text is
+# a diagnosis on a one-line file the reader has to go hunting through anyway.
+r=$(init_tree ds-tgt-bogus bootstrap); target_in "$r" ful
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *ful*) c2=ok ;; *) c2=no ;; esac
+
+# Trailing whitespace is TOLERATED here, and the asymmetry with `- Mode:` is the point: Mode is
+# byte-compared against what gate_steering_value hands the shell, and Target has no shell
+# reader to be stricter than. Strict here would reject a line that reads correctly to a human.
+r=$(init_tree ds-tgt-ws bootstrap)
+printf -- '- Target: full \n' >> "$r/.steering/tech.md"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c3=ok || c3=no
+# ...and it must be honoured, not merely not-rejected. Without this the strip could be a
+# silent discard and the case would still pass.
+spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+case "$err" in *NORTH_STAR.md*) c4=ok ;; *) c4=no ;; esac
+
+# An EMPTY value is the absent case, not the wrong-value case. `- Target:` with nothing after
+# it is a line someone started and did not finish; failing on it would block an install over
+# punctuation, and CAP-4 is the falsifier.
+r=$(init_tree ds-tgt-empty bootstrap); spec_in "$r/.specs/7-a-thing"
+printf -- '- Target: \n' >> "$r/.steering/tech.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *NORTH_STAR.md*) c6=no ;; *) c6=ok ;; esac
+case "$err" in *"minimum"*) c7=ok ;; *) c7=no ;; esac
+
+# SPENT. A settled mode makes the target history, and a project that declared `minimum` after
+# targeting `full` changed its mind — a decision, not a disagreement to police.
+r=$(docset_repo ds-tgt-spent minimum); target_in "$r" full
+out=$(run_docset "$r"); [ "$out" = "0" ] && c8=ok || c8=no
+
+# The strongest half: even an UNPARSEABLE target is unread once the mode is settled. If the
+# validation ran before the mode check, this would be red — and every project that upgraded
+# past bootstrap with a typo in a line nothing reads would be blocked by it.
+r=$(docset_repo ds-tgt-spent-bogus full); add_full_docs "$r"; target_in "$r" nonsense
+out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] \
+  && report "an unhonourable target is named, an absent one falls back, and a spent one is never read" ok \
+  || report "an unhonourable target is named, an absent one falls back, and a spent one is never read" no \
+     "bogus-red=$c1 names-value=$c2 ws-green=$c3 ws-honoured=$c4 empty-red=$c5 empty-quiet-on-optional=$c6 empty-offers-both=$c7 spent-unread=$c8 spent-bogus-unread=$c9"
+
+# 73. The bootstrap ADVISORY line names the target's set too, not just the failure.
+#
+# #141 AC8. The failure at the first spec was only half the ambush. The advisory line is what
+# an operator sees on every green turn between install and that spec — so a `full` project
+# being told "3 document(s) not yet authored" for a week is the surprise arriving later rather
+# than never. The two outputs must agree about what is owed.
+#
+# G-1 still binds: the counts of templates and directories are in THEIR OWN units and must not
+# absorb the document count, which is the conflation #109 introduced and the checker's own
+# comment warns against reintroducing one layer down.
+sout_docset() { ( cd "$1" && python3 scripts/check-document-set.py 2>/dev/null ) }
+
+# Control: no target, and the line is what it is today.
+r=$(init_tree ds-adv-absent bootstrap)
+s=$(sout_docset "$r")
+case "$s" in *"3 document(s)"*) c1=ok ;; *) c1=no ;; esac
+case "$s" in *NORTH_STAR.md*) c2=no ;; *) c2=ok ;; esac
+
+# `- Target: full`: six owed, each named with the skill that writes it.
+r=$(init_tree ds-adv-full bootstrap); target_in "$r" full
+s=$(sout_docset "$r")
+case "$s" in *"6 document(s)"*) c3=ok ;; *) c3=no ;; esac
+case "$s" in *"NORTH_STAR.md (via northstar)"*) c4=ok ;; *) c4=no ;; esac
+case "$s" in *"EPICS.md (via epics)"*) c5=ok ;; *) c5=no ;; esac
+case "$s" in *"CONTRACT.md (via contract)"*) c6=ok ;; *) c6=no ;; esac
+case "$s" in *"PRD.md (via prd)"*) c7=ok ;; *) c7=no ;; esac
+# The counts that are not documents must survive the change unconflated.
+case "$s" in *"3 issue template(s)"*) c8=ok ;; *) c8=no ;; esac
+case "$s" in *"2 directory(ies)"*) c9=ok ;; *) c9=no ;; esac
+# A choice already made is not offered back.
+# Single-quoted inside the pattern: a bare backtick in an unquoted `case` glob is command
+# substitution, which ran and left the assertion comparing against a mangled string. That is a
+# fixture failure wearing a guard failure's clothes — #124's genre, caught here by the stray
+# `-: command not found` on stderr rather than by the red itself.
+case "$s" in *'`- Mode: full`'*) c10=ok ;; *) c10=no ;; esac
+
+# `- Target: minimum` owes three and must not list the opt-in three.
+r=$(init_tree ds-adv-min bootstrap); target_in "$r" minimum
+s=$(sout_docset "$r")
+case "$s" in *"3 document(s)"*) c11=ok ;; *) c11=no ;; esac
+case "$s" in *NORTH_STAR.md*|*EPICS.md*) c12=no ;; *) c12=ok ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12" = "okokokokokokokokokokokok" ] \
+  && report "the bootstrap advisory line names the target's set, in units that stay separate" ok \
+  || report "the bootstrap advisory line names the target's set, in units that stay separate" no \
+     "absent-three=$c1 absent-quiet=$c2 full-six=$c3 names-northstar=$c4 names-epics=$c5 names-contract=$c6 names-prd=$c7 templates-own-unit=$c8 dirs-own-unit=$c9 names-one-mode=$c10 min-three=$c11 min-quiet=$c12"
+
 # 70. A project that already had a bug template under its own name must pass after init.
 #
 # #130. Two bullets of step 3 disagreed: the merge rule said "add only the missing types", so a
@@ -2469,6 +2651,61 @@ case "$err" in *"canonical filename for its type"*) c14=ok ;; *) c14=no ;; esac
 [ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14" = "okokokokokokokokokokokokokokok" ] && report "init stripped of the mode line, its wiring, its upgrade path or its destination — or spec of its bootstrap reading — fails" ok \
   || report "init stripped of the mode line, its wiring, its upgrade path or its destination — or spec of its bootstrap reading — fails" no \
      "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8 nobootstrap-exit=$c9 names-spec-skill=$c10 names-needle=$c11 nomerge-exit=$c12 names-init=$c13 names-merge-needle=$c14"
+
+
+# 74. init stripped of the TARGET question or its destination must fail. #141's pins, the
+#     nineteenth and twentieth.
+#
+# #141 AC7. The question is the whole feature: the checker can read `- Target:` perfectly and
+# still never see one, because nothing but this sentence causes the line to be written. Its
+# deletion is the deletion that review cannot defend — asking one fewer question reads as
+# respecting the operator's attention, and step 2's own five-question budget argues for it,
+# while what it removes is the only producer of a value three guards now consume.
+r=$(contracts_repo contracts-notarget)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "ask which document set the project is signing up for and record the answer as `- Target: minimum` or `- Target: full`"
+src = p.read_text()
+if needle not in src:
+    raise SystemExit("fixture no-op: the target question is not where this expects it")
+p.write_text(src.replace(needle, "record the mode"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"skills/init/SKILL.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *Target*) c3=ok ;; *) c3=no ;; esac
+
+# The control, again first: unmutated init must pass, or the accusing half above is satisfied
+# by a guard that fails on everything.
+r=$(contracts_repo contracts-target-control)
+out=$(run_contracts "$r"); [ "$out" = "0" ] && c4=ok || c4=no
+
+# AC7 is a conjunction — question, DESTINATION, wiring — and the needle above pins only the
+# first. Delete the fenced-block line and every validator stays green while `init` is left to
+# infer where the answer goes; a `- Target:` written into the wrong file resolves to nothing
+# and is discarded in silence, which is the failure the line was added to close. Found in
+# review, in the same shape the `- Mode:` entry still carries.
+r=$(contracts_repo contracts-notarget-dest)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "- Target: <minimum|full — the set the operator chose, read only while Mode is bootstrap"
+src = p.read_text()
+if needle not in src:
+    raise SystemExit("fixture no-op: the Target line is not in the machine-read block")
+p.write_text(src.replace(needle, "- Target: <the chosen set"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c5=ok || c5=no
+# The NEEDLE, not the word "Target": this file carries two Target pins now, and the looser cue
+# is satisfied by the other one firing. Same reason case 54 asserts both halves.
+case "$err" in *"read only while Mode is bootstrap"*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] \
+  && report "init stripped of the target question or its destination fails, naming the file and the key" ok \
+  || report "init stripped of the target question or its destination fails, naming the file and the key" no \
+     "notarget-exit=$c1 names-file=$c2 names-key=$c3 control=$c4 nodest-exit=$c5 nodest-names-key=$c6"
 
 
 # --- shipped reviewers: the contract path they name -----------------------------------

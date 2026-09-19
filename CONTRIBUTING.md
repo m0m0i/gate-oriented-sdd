@@ -40,7 +40,7 @@ A paragraph is one line, and the reader's app decides the width. This applies to
 
 It is written down because nothing enforces it and it was already inferred wrongly once: a reviewer twice cited "repo convention" for a wrap width it had taken from the file it was reading, which had been written minutes earlier in the same session. A convention nothing states gets enforced from whatever happens to be nearby.
 
-Tables and YAML front matter keep their line breaks — those are structure, not wrapping. So do the machine-read `- Validators:` / `- Reviewer:` / `- Source globs:` / `- Docs:` / `- Owns:` lines in `.steering/`, which the gates read with `sed … | head -1` and which must each stay on one physical line for a different reason.
+Tables and YAML front matter keep their line breaks — those are structure, not wrapping. So do the machine-read `- Validators:` / `- Reviewer:` / `- Source globs:` / `- Docs:` / `- Owns:` / `- Mode:` / `- Target:` lines in `.steering/`, which the gates read with `sed … | head -1` and which must each stay on one physical line for a different reason.
 
 A fence keeps its line breaks when it holds literal code, output, or a line-sensitive format — and **the fence's language tag decides which, because the property that matters is the content and not the delimiter.** A ` ```markdown ` fence quotes Markdown, so the Markdown inside it follows this convention like every other Markdown in the repository. An untagged fence does not: `implement`'s `reviewed_sha=` receipt block and the reviewer contract's `[SEVERITY] <file>:<line>` format are formats where a line break is meaningful, and unwrapping either would destroy one. `scripts/check-markdown-fences.py` enforces exactly that split.
 

@@ -14,9 +14,12 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Eighteen today. A nineteenth needs an argument, in the spec that proposes it, for why review cannot
+Twenty today. A twenty-first needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
-grows one defensible entry at a time.
+grows one defensible entry at a time. #141 added two entries and moved this number only in
+review, after both had landed; a cap that is not moved with the entry reads as already
+exceeded, and the next author cannot tell whether the list is at its limit or the sentence is
+stale.
 """
 
 import pathlib
@@ -108,6 +111,26 @@ CONTRACTS = (
         "Review cannot defend it: deleting the clause reads as removing a redundant case, "
         "since `bootstrap` is obviously minimum-like, and what it removes is the only "
         "sentence that makes that obviousness written down.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "ask which document set the project is signing up for and record the answer as `- Target: minimum` or `- Target: full`",
+        "This sentence is the only producer of `- Target:`. The checker can read the line "
+        "perfectly and still never see one, because nothing else causes it to be written — so "
+        "its deletion turns three guards into code that is exercised by no install. Review "
+        "cannot defend it: asking one fewer question reads as respecting the operator's "
+        "attention, and step 2's five-question budget argues for the cut, while what it "
+        "removes is the answer the bootstrap window's every message is built from. #141 AC7.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "- Target: <minimum|full — the set the operator chose, read only while Mode is bootstrap",
+        "AC7 is a conjunction — question, destination, wiring — and the entry above pins only "
+        "the question. Without this one the fenced block can lose the line while every guard "
+        "stays green, and `init` is left to infer where the answer goes: a `- Target:` written "
+        "into product.md or into prose resolves to nothing, and the checker falls back to the "
+        "generic message having never seen it. Silent discard is the failure the line exists "
+        "to close, reached by deleting the statement of where it lives. #141 AC7.",
     ),
     (
         "skills/init/SKILL.md",
