@@ -2800,7 +2800,7 @@ done
 # $1 = name. A repo holding every file the guard compares, all in agreement.
 cpath_repo() {
   r="$TMP/$1"
-  mkdir -p "$r/scripts" "$r/agents/_shared" "$r/agents/_template" "$r/skills/init" "$r/docs" "$r/.claude/agents"
+  mkdir -p "$r/scripts" "$r/agents/_shared" "$r/agents/_template" "$r/skills/init" "$r/docs" "$r/.claude/agents" "$r/rules"
   cp "$ROOT/scripts/check-contract-path.py" "$r/scripts/"
   chmod +x "$r/scripts/check-contract-path.py"
   rv='x\n\nRead `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/_shared/reviewer-contract.md` under Antigravity.\n'
@@ -2813,6 +2813,7 @@ cpath_repo() {
   printf '"agents/_shared/reviewer-contract.md",\n' > "$r/scripts/check-receipt-schema.py"
   printf '`.claude/agents/_shared/reviewer-contract.md`\n' > "$r/docs/CONTRACT.md"
   printf '`_shared/reviewer-contract.md`\n' > "$r/AGENTS.md"
+  ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
   echo "$r"
 }
 # stdout is CAPTURED, not discarded: case 64 asserts the success line does NOT print, and
@@ -3805,6 +3806,90 @@ case "$out_rv" in *"exit=0"*) c6=ok ;; *) c6=no ;; esac
 [ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] && report "quality-gate.sh and review-gate.sh anchor to repo root when invoked from a subdirectory" ok \
   || report "quality-gate.sh and review-gate.sh anchor to repo root when invoked from a subdirectory" no \
      "qg-exit=$c1 qg-json=$c2 rv-exit=$c3 rv-json=$c4 clean-qg-exit=$c5 clean-rv-exit=$c6"
+
+
+# --- guards: scripts/check-manifests.py ---------------------------------------
+#
+# #145. Antigravity plugin loader discovers rules at rules/ (rules/AGENTS.md).
+# check-manifests.py ensures rules/AGENTS.md exists and matches root AGENTS.md.
+# Missing rules/AGENTS.md, drifted rules/AGENTS.md, or missing AGENTS.md must fail closed.
+
+manifest_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/.claude-plugin" "$r/hooks/templates" "$r/rules"
+  cp "$ROOT/scripts/check-manifests.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-manifests.py"
+  cp "$ROOT/.claude-plugin/plugin.json" "$r/.claude-plugin/"
+  cp "$ROOT/plugin.json" "$r/"
+  cp "$ROOT/.claude-plugin/marketplace.json" "$r/.claude-plugin/"
+  cp "$ROOT/hooks/templates/claude-code.settings.json" "$r/hooks/templates/"
+  cp "$ROOT/hooks/templates/antigravity.hooks.json" "$r/hooks/templates/"
+  printf '# AGENTS\n' > "$r/AGENTS.md"
+  ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
+  echo "$r"
+}
+run_manifest() { ( cd "$1" && python3 scripts/check-manifests.py >/dev/null 2>"$TMP/mferr"; printf '%s' "$?" ) }
+
+r=$(manifest_repo mf-control)
+out=$(run_manifest "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(manifest_repo mf-missing-rules)
+rm -f "$r/rules/AGENTS.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"missing: rules/AGENTS.md"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(manifest_repo mf-drift)
+rm -f "$r/rules/AGENTS.md"
+printf '# DRIFTED\n' > "$r/rules/AGENTS.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *"rules/AGENTS.md has drifted from AGENTS.md"*) c4=ok ;; *) c4=no ;; esac
+
+r=$(manifest_repo mf-missing-root)
+rm -f "$r/AGENTS.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *"missing: AGENTS.md"*|*"missing: rules/AGENTS.md"*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "check-manifests verifies rules/AGENTS.md matches AGENTS.md and fails closed" ok \
+  || report "check-manifests verifies rules/AGENTS.md matches AGENTS.md and fails closed" no \
+     "control=$c0 missing-rules-exit=$c1 missing-rules-err=$c2 drift-exit=$c3 drift-err=$c4 missing-root-exit=$c5 missing-root-err=$c6"
+
+
+# --- guards: scripts/check-version-bump.py ------------------------------------
+#
+# #145. check-version-bump.py must include rules/ in SHIPPED so any change
+# to plugin rules enforces a version bump.
+
+vbump_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/rules"
+  cp "$ROOT/scripts/check-version-bump.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-version-bump.py"
+  ( cd "$r" && git init -q && git config user.email "test@example.com" && git config user.name "test" )
+  printf '{\n  "version": "1.0.0"\n}\n' > "$r/plugin.json"
+  printf 'rules v1\n' > "$r/rules/AGENTS.md"
+  ( cd "$r" && git add -A && git commit -qm "init" )
+  printf 'rules v2\n' > "$r/rules/AGENTS.md"
+  ( cd "$r" && git add -A && git commit -qm "change rules without bump" )
+  echo "$r"
+}
+run_vbump() { ( cd "$1" && python3 scripts/check-version-bump.py HEAD~1 >/dev/null 2>"$TMP/vberr"; printf '%s' "$?" ) }
+
+r=$(vbump_repo vb-rules)
+out=$(run_vbump "$r"); err=$(cat "$TMP/vberr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"rules/AGENTS.md"*) c2=ok ;; *) c2=no ;; esac
+
+( cd "$r" && git checkout -q HEAD~1 )
+printf '{\n  "version": "1.1.0"\n}\n' > "$r/plugin.json"
+printf 'rules v2\n' > "$r/rules/AGENTS.md"
+( cd "$r" && git add -A && git commit -qm "change rules with bump" )
+out=$(run_vbump "$r")
+[ "$out" = "0" ] && c0=ok || c0=no
+
+[ "$c0$c1$c2" = "okokok" ] && report "check-version-bump includes rules/ in SHIPPED" ok \
+  || report "check-version-bump includes rules/ in SHIPPED" no \
+     "bumped-exit=$c0 unbumped-exit=$c1 unbumped-err=$c2"
 
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"

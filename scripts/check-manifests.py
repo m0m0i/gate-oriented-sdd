@@ -93,6 +93,24 @@ if cc_hooks.is_file() and agy_hooks.is_file():
             "(SessionStart is exempt — Antigravity has no such event)"
         )
 
+# Antigravity plugin loader discovers rules under rules/ (rules/AGENTS.md).
+# AGENTS.md at root is canonical context for Claude Code and this repository;
+# rules/AGENTS.md must exist and remain identical to it (typically via symlink).
+rules_agents = PLUGIN / "rules" / "AGENTS.md"
+root_agents = ROOT / "AGENTS.md"
+if not root_agents.is_file():
+    errors.append(f"missing: {root_agents.relative_to(ROOT)}")
+if not rules_agents.is_file():
+    errors.append(f"missing: {rules_agents.relative_to(ROOT)} (required for Antigravity plugin loader rules discovery)")
+elif root_agents.is_file():
+    try:
+        if rules_agents.read_text() != root_agents.read_text():
+            errors.append(
+                f"{rules_agents.relative_to(ROOT)} has drifted from {root_agents.relative_to(ROOT)}; they must be identical"
+            )
+    except OSError as e:
+        errors.append(f"cannot read {rules_agents.relative_to(ROOT)} or {root_agents.relative_to(ROOT)}: {e}")
+
 if errors:
     print("manifest check FAILED", file=sys.stderr)
     for e in errors:

@@ -81,6 +81,7 @@ SUFFIX = (
     # list is part of the guard, and an unstated omission is the defect this file exists for.
     "docs/CONTRACT.md",
     "AGENTS.md",
+    "rules/AGENTS.md",
 )
 
 SOURCES = EXACT + SUFFIX
@@ -89,7 +90,7 @@ SOURCES = EXACT + SUFFIX
 #: the success line print `0 source(s) agree` at exit 0 — a guard certifying a comparison it
 #: never made. `check-receipt-schema.py:150,256` already carries this for its two tuples and
 #: case 49 pins it; the same tuple arrived here without it one release later.
-MIN_SHIPPED, MIN_INSTALLED, MIN_SUFFIX = 4, 1, 5
+MIN_SHIPPED, MIN_INSTALLED, MIN_SUFFIX = 4, 1, 6
 
 #: Where each group's members must live. The grouping IS an exemption list — `SHIPPED` must name
 #: both destinations and `INSTALLED` only its own — so moving one entry between the tuples grants
