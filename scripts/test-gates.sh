@@ -3081,8 +3081,33 @@ readme_repo() {
   printf '{\n  "version": "1.2.3"\n}\n' > "$r/plugin.json"
   printf 'reviewed_by=subagent\n' > "$r/.specs/9-feature/.review-receipt"
   printf 'reviewed_by=inline\n' > "$r/.specs/_archive/8-old/.review-receipt"
-  printf '## Status\n\n**v1.2.3 — pre-release.**\n\nthe gates and guards behaviours, tested deterministically; and a receipt on every spec from a spawned reviewer on all but one, which were reviewed inline.\n' > "$r/README.md"
-  printf '## Status\n\n**v1.2.3、pre-release です。**\n\nゲートとガードの挙動。1件を除いてサブエージェントとして起動した reviewer によるレビューです。\n' > "$r/README.ja.md"
+  # Heredocs, not printf: the badge URL is full of `%` escapes and printf would eat them, which
+  # is a fixture quietly writing a DIFFERENT badge than the one under test. #141 shipped a `case`
+  # glob with the same class of bug — unquoted backticks — and it cost a red run to find.
+  cat > "$r/README.md" <<'RMEOF'
+# fixture
+
+[![gate-sdd](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&prefix=v&label=gate-sdd&color=blue)](./plugin.json)
+
+## Status
+
+**Pre-release.**
+
+the gates and guards behaviours, tested deterministically; and a receipt on every spec from a spawned reviewer on all but one, which were reviewed inline.
+
+Tested against: Antigravity CLI 1.1.17, Antigravity IDE 2.3.1.
+RMEOF
+  cat > "$r/README.ja.md" <<'RMEOF'
+# fixture
+
+[![gate-sdd](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&prefix=v&label=gate-sdd&color=blue)](./plugin.json)
+
+## Status
+
+**Pre-release です。**
+
+ゲートとガードの挙動。1件を除いてサブエージェントとして起動した reviewer によるレビューです。
+RMEOF
   echo "$r"
 }
 run_readme() { ( cd "$1" && python3 scripts/check-readme-claims.py >/dev/null 2>"$TMP/rmerr"; printf '%s' "$?" ) }
@@ -3091,18 +3116,23 @@ run_readme() { ( cd "$1" && python3 scripts/check-readme-claims.py >/dev/null 2>
 r=$(readme_repo rm-control)
 out=$(run_readme "$r"); [ "$out" = "0" ] && c0=ok || c0=no
 
-r=$(readme_repo rm-version)
+# #133. The version is no longer a claim the README makes, so there is no mismatch to detect.
+# There is a BADGE, and the guard's job is now that the badge is still the thing that makes a
+# mismatch impossible. Removing it must fail: a README carrying neither a version nor a badge
+# tells the reader nothing, and a guard that shrugged at that would have stopped covering this
+# claim while still exiting 0.
+r=$(readme_repo rm-nobadge)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "README.md"); src = p.read_text()
-out = src.replace("**v1.2.3 —", "**v1.0.0 —")
-if out == src: raise SystemExit("fixture no-op: version string not found")
+out = "\n".join(l for l in src.split("\n") if "img.shields.io" not in l)
+if out == src: raise SystemExit("fixture no-op: no badge line to remove")
 p.write_text(out)
 PYEOF
 [ "$?" = 0 ] && cf1=ok || cf1=no
 out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cf1" = ok ]; } && c1=ok || c1=no
-case "$err" in *"plugin.json says 1.2.3"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"no badge labelled \`gate-sdd\`"*) c2=ok ;; *) c2=no ;; esac
 
 # The removed number coming back — the half a presence-only check cannot see.
 r=$(readme_repo rm-count)
@@ -3143,7 +3173,353 @@ case "$err" in *"but 1 of 2 say reviewed_by=inline"*) c8=ok ;; *) c8=no ;; esac
 
 [ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "each README Status claim disagreeing with its source is named" ok \
   || report "each README Status claim disagreeing with its source is named" no \
-     "control=$c0 version-exit=$c1 names-manifest=$c2 count-exit=$c3 says-removed=$c4 receipts-en=$c5 names-count=$c6 receipts-ja=$c7 names-file=$c8"
+     "control=$c0 nobadge-exit=$c1 names-label=$c2 count-exit=$c3 says-removed=$c4 receipts-en=$c5 names-count=$c6 receipts-ja=$c7 names-file=$c8"
+
+# 65b. A STATIC badge is the drift returning, and must not be reported as a missing one.
+#
+# #133 AC3. This is the deletion review cannot defend: a static badge renders faster, has no
+# third-party JSON fetch, and looks like a simplification — while what it restores is exactly
+# the hand-edited number this issue removed. Reported as its own cause, because "carries no
+# version badge" sends the next author to add the badge they can already see.
+r=$(readme_repo rm-staticbadge)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+import re
+root = sys.argv[1]
+# An EMPTY root is not "the current directory" — it is a fixture that never got built, and
+# every path below then resolves against the repository itself. This case rewrote the real
+# README.md exactly that way once. Refuse rather than edit something nobody meant to edit.
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = re.sub(r"https://img\.shields\.io/[^\s)\]]+",
+             "https://img.shields.io/badge/gate--sdd-v1.2.3-blue", src)
+if out == src: raise SystemExit("fixture no-op: no shields badge to replace")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf5=ok || cf5=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf5" = ok ]; } && s1=ok || s1=no
+case "$err" in *static*) s2=ok ;; *) s2=no ;; esac
+# It must NOT be diagnosed as absence — that is the wrong remedy for a badge that is present.
+case "$err" in *"no badge labelled"*) s3=no ;; *) s3=ok ;; esac
+
+# A non-version shields badge alongside the real one is fine. Without this, "a static badge
+# fails" is satisfiable by a guard that rejects every badge but one, and a licence or CI badge
+# added later would go red for no reason — LV-2, a gate firing on an ordinary edit.
+r=$(readme_repo rm-otherbadge)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+extra = "[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)\n"
+out = src.replace("## Status", extra + "\n## Status")
+if out == src: raise SystemExit("fixture no-op: no Status heading")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf6=ok || cf6=no
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cf6" = ok ]; } && s4=ok || s4=no
+
+[ "$s1$s2$s3$s4" = "okokokok" ] \
+  && report "a static version badge fails as a substitution, and an unrelated badge does not" ok \
+  || report "a static version badge fails as a substitution, and an unrelated badge does not" no \
+     "static-red=$s1 says-static=$s2 not-called-absent=$s3 other-badge-green=$s4"
+
+# 65b-ii. shields' OTHER static form — the label as a query parameter, unescaped.
+#
+# Found in review, as a regression the label tie introduced. `/static/v1?label=gate-sdd&
+# message=v1.2.3` spells the label plainly, where `/badge/gate--sdd-v1.2.3-blue` escapes the
+# hyphen. This is the likelier substitution of the two: the badge already in the README
+# carries `label=` as a query parameter, so an author editing that URL reaches this form
+# first. Matching only the escaped spelling gave it the right verdict with the wrong remedy.
+# Inlined rather than using `mutate_badge`: that helper is defined in case 65c, BELOW this
+# point, and a call to an undefined function yields an empty `$r` whose fixture edits land on
+# the repository itself. That happened once on this branch already.
+r=$(readme_repo rm-static-query)
+python3 - "$r" <<'PYEOF'
+import pathlib, re, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = re.sub(r"https://img\.shields\.io/[^\s)\]]+",
+             "https://img.shields.io/static/v1?label=gate-sdd&message=v1.2.3&color=blue", src)
+if out == src:
+    raise SystemExit("fixture no-op: no shields badge to replace")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfi=ok || cfi=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfi" = ok ]; } && q1=ok || q1=no
+# The guard's PHRASE, not the bare word: this fixture's own URL contains `/static/v1`, so
+# `*static*` would stay green against a reworded message that quoted the badge and no longer
+# said it. An assertion coupled to text it does not own is what cost rounds 2 and 3.
+case "$err" in *"version badge is static"*) q2=ok ;; *) q2=no ;; esac
+case "$err" in *"no badge labelled"*) q3=no ;; *) q3=ok ;; esac
+
+[ "$q1$q2$q3" = "okokok" ] \
+  && report "the query-parameter static form is named as a substitution, not as an absence" ok \
+  || report "the query-parameter static form is named as a substitution, not as an absence" no \
+     "red=$q1 says-static=$q2 not-called-absent=$q3"
+
+
+# 65c. The dynamic badge must read THIS repository's manifest, and must survive reordering.
+#
+# #133 AC4. "Dynamic" alone is not the property that matters — a dynamic badge pointed at a
+# fork, at another branch, or at `.claude-plugin/plugin.json` still renders a number, and a
+# wrong number rendered confidently is worse than none. The guard therefore parses the URL.
+#
+# The green half is the one that keeps this from being a gate people switch off: query strings
+# get reordered by editors and by hand, and a guard matching the whole URL literally would fail
+# on a change that alters nothing. LV-2 — a gate that fires on an ordinary edit gets disabled.
+mutate_badge() {   # $1 = repo, $2 = replacement URL
+  python3 - "$1" "$2" <<'PYEOF'
+import pathlib, re, sys
+root, repl = sys.argv[1], sys.argv[2]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = re.sub(r"https://img\.shields\.io/[^\s)\]]+", repl.replace("\\", "\\\\"), src)
+if out == src:
+    raise SystemExit("fixture no-op: no shields badge to replace")
+p.write_text(out)
+PYEOF
+}
+
+base="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&prefix=v&label=gate-sdd&color=blue"
+
+# Another owner's manifest.
+r=$(readme_repo rm-badge-fork)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsomeone-else%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&label=gate-sdd"
+[ "$?" = 0 ] && cf7=ok || cf7=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf7" = ok ]; } && u1=ok || u1=no
+case "$err" in *someone-else*) u2=ok ;; *) u2=no ;; esac
+
+# The right repo, the wrong file — the near miss a human eye slides over.
+r=$(readme_repo rm-badge-path)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=gate-sdd"
+[ "$?" = 0 ] && cf8=ok || cf8=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf8" = ok ]; } && u3=ok || u3=no
+# The path, not just the exit code: if the label selection broke, this fixture would
+# exit 1 through the ABSENCE branch and this half would stay green for the wrong cause.
+case "$err" in *".claude-plugin"*) u3b=ok ;; *) u3b=no ;; esac
+
+# Asking for the wrong FIELD renders someone else's value under a version label.
+r=$(readme_repo rm-badge-query)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.name&label=gate-sdd"
+[ "$?" = 0 ] && cf9=ok || cf9=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf9" = ok ]; } && u4=ok || u4=no
+case "$err" in *'asks for `$.name`'*) u4b=ok ;; *) u4b=no ;; esac
+
+# GREEN: the same badge with its parameters in a different order must pass.
+r=$(readme_repo rm-badge-reorder)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?label=gate-sdd&color=blue&query=%24.version&prefix=v&url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json"
+[ "$?" = 0 ] && cfa=ok || cfa=no
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cfa" = ok ]; } && u5=ok || u5=no
+
+[ "$u1$u2$u3$u3b$u4$u4b$u5" = "okokokokokokok" ] \
+  && report "a dynamic badge reading the wrong source fails, and reordering its parameters does not" ok \
+  || report "a dynamic badge reading the wrong source fails, and reordering its parameters does not" no \
+     "fork-red=$u1 names-owner=$u2 wrong-path-red=$u3 names-path=$u3b wrong-query-red=$u4 names-query=$u4b reorder-green=$u5"
+
+# 65d. The literal coming back is the root cause returning, and must fail.
+#
+# #133 AC5. The badge removes the SECOND SOURCE; it does not stop anyone adding one. An editor
+# who reads the badge as decoration writes the number back into the prose, the two can disagree
+# again, and every check above still passes because the badge is untouched. This is the same
+# hole #115 found in a presence-only check: a guard that verifies what is there cannot notice
+# a removed claim coming back.
+r=$(readme_repo rm-literal-back)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("**Pre-release.**", "**v1.2.3 — pre-release.**")
+if out == src:
+    raise SystemExit("fixture no-op: the Status line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfb=ok || cfb=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfb" = ok ]; } && l1=ok || l1=no
+case "$err" in *"states a version"*) l2=ok ;; *) l2=no ;; esac
+# It fails even though the number happens to be RIGHT. Agreement today is not the property —
+# two sources that can diverge tomorrow is the defect, and a check that only fired on a
+# mismatch would wait for the drift it exists to prevent.
+case "$err" in *"1.2.3"*) l3=ok ;; *) l3=no ;; esac
+
+# The Japanese form differs after the number, so it needs its own case rather than an
+# assumption that one pattern covers both.
+r=$(readme_repo rm-literal-back-ja)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.ja.md"); src = p.read_text()
+out = src.replace("**Pre-release です。**", "**v1.2.3、pre-release です。**")
+if out == src:
+    raise SystemExit("fixture no-op: the JA Status line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfc=ok || cfc=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfc" = ok ]; } && l4=ok || l4=no
+case "$err" in *"README.ja.md: states a version"*) l5=ok ;; *) l5=no ;; esac
+
+# The literal WITHOUT a trailing delimiter. The first cut of the prohibition required a space
+# or a Japanese comma after the number, so `**v1.2.3**` walked straight through — the root
+# cause returning in a slightly different costume. Dropping that requirement is a behaviour
+# change, and a behaviour change with no case that reddens when it is reverted is a check that
+# can stop checking in silence. G-4, found in review.
+r=$(readme_repo rm-literal-bold)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("**Pre-release.**", "**v1.2.3**")
+if out == src:
+    raise SystemExit("fixture no-op: the Status line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cff=ok || cff=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cff" = ok ]; } && l6=ok || l6=no
+case "$err" in *"states a version"*) l7=ok ;; *) l7=no ;; esac
+
+# ...and the other direction, which is why the pattern keeps its `**v` prefix. `readme_repo`
+# now carries a `Tested against: … 1.1.17` line, and this fixture adds a bare number EQUAL to
+# the manifest version — the hardest case for a broadened pattern, because the digits are
+# exactly the ones the badge renders. Both must stay green: a version stated about something
+# else is a different claim, and a prohibition that fired on them would be a gate people
+# switch off. Distinct from `rm-control`, which carries only the first of the two.
+r=$(readme_repo rm-bare-version)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("Tested against:", "Built from 1.2.3 of the compiler. Tested against:")
+if out == src:
+    raise SystemExit("fixture no-op: the tested-against line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfg=ok || cfg=no
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cfg" = ok ]; } && l8=ok || l8=no
+
+[ "$l1$l2$l3$l4$l5$l6$l7$l8" = "okokokokokokokok" ] \
+  && report "a version literal returning to either README fails, even when it happens to agree" ok \
+  || report "a version literal returning to either README fails, even when it happens to agree" no \
+     "en-red=$l1 says-states=$l2 names-value=$l3 ja-red=$l4 names-ja-file=$l5 bold-no-delimiter-red=$l6 says-states-bold=$l7 bare-number-green=$l8"
+
+# 65e. A dynamic badge that is not the VERSION badge must not be judged as one.
+#
+# Found in review. The first cut selected every badge containing `/badge/dynamic/` and then
+# required each to read plugin.json's `$.version` — so the subject was "any dynamic badge"
+# while AC4's subject is "the version badge". C2 declined a wider badge row only for now, so
+# the next badge is a live possibility, and a dynamic one measuring anything else would have
+# gone red for an edit that broke nothing. G-6: a widening needs an argument AND a case in the
+# direction it can fire wrongly. Case 65b's unrelated badge is STATIC, so it never covered this.
+r=$(readme_repo rm-dynamic-other)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+extra = ("[![docs](https://img.shields.io/badge/dynamic/json"
+         "?url=https%3A%2F%2Fexample.invalid%2Fstats.json&query=%24.pages&label=docs)](./docs)\n")
+out = src.replace("## Status", extra + "\n## Status")
+if out == src:
+    raise SystemExit("fixture no-op: no Status heading")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfd=ok || cfd=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "0" ] && [ "$cfd" = ok ]; } && d1=ok || d1=no
+case "$err" in *example.invalid*) d2=no ;; *) d2=ok ;; esac
+
+# ...and selecting by label must still FAIL CLOSED. Renaming the version badge's label leaves
+# no version badge at all, which is the absence branch — not a silent pass because the
+# selector matched nothing. This is the half that makes the narrowing safe.
+r=$(readme_repo rm-badge-relabel)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("label=gate-sdd", "label=whatever")
+if out == src:
+    raise SystemExit("fixture no-op: the badge label is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfe=ok || cfe=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfe" = ok ]; } && d3=ok || d3=no
+case "$err" in *"no badge labelled \`gate-sdd\`"*) d4=ok ;; *) d4=no ;; esac
+
+[ "$d1$d2$d3$d4" = "okokokok" ] \
+  && report "an unrelated dynamic badge passes, and relabelling the version badge fails closed" ok \
+  || report "an unrelated dynamic badge passes, and relabelling the version badge fails closed" no \
+     "other-dynamic-green=$d1 not-accused=$d2 relabel-red=$d3 says-absent=$d4"
+
+# 65f. A foreign versioned badge is not this repo's version badge gone static.
+#
+# Found in review. `baked` selected any shields badge whose last segment carried a version, so
+# a README that had genuinely LOST its version badge while carrying, say, `node-v18.0.0-green`
+# was told the version badge had gone static — sending the author to fix a badge that was
+# never the subject. The remedy matters more than the verdict here: both outcomes are exit 1,
+# and only the message tells the reader what to do.
+r=$(readme_repo rm-foreign-version-badge)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+kept = [l for l in src.split("\n") if "img.shields.io" not in l]
+if len(kept) == len(src.split("\n")):
+    raise SystemExit("fixture no-op: no badge line to remove")
+body = "\n".join(kept)
+out = body.replace(
+    "## Status",
+    "[![node](https://img.shields.io/badge/node-v18.0.0-green)](https://nodejs.org)\n\n## Status",
+)
+# Checked, like every sibling: without this the fixture degenerates into rm-nobadge if the
+# heading ever moves, and all four halves go green having tested nothing.
+if out == body:
+    raise SystemExit("fixture no-op: no Status heading to insert before")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfh=ok || cfh=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfh" = ok ]; } && f1=ok || f1=no
+# The ABSENCE remedy, because that is what is actually wrong: this README has no gate-sdd
+# badge. Being told a badge it does not have went static is the wrong instruction.
+case "$err" in *"no badge labelled"*) f2=ok ;; *) f2=no ;; esac
+case "$err" in *static*) f3=no ;; *) f3=ok ;; esac
+# ...and the node badge must not be named as though it were the subject.
+case "$err" in *node*) f4=no ;; *) f4=ok ;; esac
+
+[ "$f1$f2$f3$f4" = "okokokok" ] \
+  && report "a foreign versioned badge is diagnosed as an absent version badge, not a static one" ok \
+  || report "a foreign versioned badge is diagnosed as an absent version badge, not a static one" no \
+     "red=$f1 says-absent=$f2 not-called-static=$f3 does-not-name-node=$f4"
+
 
 # 66. A source the guard cannot read is a THIRD outcome, never agreement.
 r=$(readme_repo rm-nomanifest); rm "$r/plugin.json"
