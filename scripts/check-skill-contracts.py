@@ -14,12 +14,11 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Twenty today. A twenty-first needs an argument, in the spec that proposes it, for why review cannot
+Twenty-one today. A twenty-second needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
-grows one defensible entry at a time. #141 added two entries and moved this number only in
-review, after both had landed; a cap that is not moved with the entry reads as already
-exceeded, and the next author cannot tell whether the list is at its limit or the sentence is
-stale.
+grows one defensible entry at a time. #147 added the twenty-first entry and moved this number
+with it; a cap that is not moved with the entry reads as already exceeded, and the next author
+cannot tell whether the list is at its limit or the sentence is stale.
 """
 
 import pathlib
@@ -225,6 +224,17 @@ CONTRACTS = (
         "but its SIGNIFICANCE is not — the flow reads correctly either way — and what its "
         "removal restores is a gate that says nothing, not a defect anyone can see. "
         "See #113.",
+    ),
+    (
+        "skills/implement/SKILL.md",
+        "register it dynamically via `define_subagent` or delegate to a `self` subagent",
+        "Under Antigravity, subagents are not auto-discovered from markdown files under "
+        ".claude/agents/ or .agents/agents/. Without explicit invocation instructions, an agent "
+        "executing implement defaults to the inline review fallback (reviewed_by=inline), "
+        "losing reviewer independence. Review cannot defend it: deleting the Antigravity "
+        "paths leaves implement reading completely normal to a Claude Code reader, while "
+        "Antigravity agents silently lose the ability to invoke an independent reviewer "
+        "subagent. See #147.",
     ),
 )
 

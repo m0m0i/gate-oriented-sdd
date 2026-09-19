@@ -256,7 +256,7 @@ Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy
 - [ ] Whether plugin-shipped `hooks.json` fires identically to the global one.
 - [x] `PreInvocation` step injection as the `SessionStart` substitute, including a once-per-session guard (#144).
 - [ ] Whether `agy plugin install` targets `~/.gemini/config/plugins/` (where the IDE's plugins live) or `~/.gemini/antigravity-cli/plugins/` (what the CLI docs describe).
-- [ ] Antigravity subagent invocation contract, for the reviewer.
+- [ ] Antigravity subagent invocation contract, for the reviewer (semantics documented in `skills/implement/SKILL.md` and `docs/fidelity.md`; runtime invocation behavior pending verification).
 - [ ] `northstar` meeting an `Owns:` line it disagrees with — the collision path #55 could not reach.
 - [ ] The cold interview: `northstar`, `prd`, `epics` answered by someone without the repository's context.
 - [ ] **`init` on a real project at 0.7.0** — #126 ran against a synthetic target, which tests CAP-4 weakly. The three findings it produced (#127, #128, #129) were all reachable on a project whose opinions were the installer's; a real one may reach more.
