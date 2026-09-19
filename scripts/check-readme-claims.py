@@ -39,12 +39,20 @@ MANIFEST = pathlib.Path("plugin.json")
 #: renders one from the manifest, so there is nothing left to disagree. The pattern is kept and
 #: INVERTED — it now fails when it matches — because the number coming back is the root cause
 #: returning, and an editor who reads the badge as decoration would reintroduce it.
-VERSION = re.compile(r"\*\*v(\d+\.\d+\.\d+)[ ,、]")
+VERSION = re.compile(r"\*\*v(\d+\.\d+\.\d+)")
+#: No trailing delimiter: the first cut required a space or a Japanese comma after the
+#: number and so let `**v1.2.3**` through — the root cause returning in a slightly
+#: different costume. Broadening to a bare `v1.2.3` is deliberately NOT done: it would
+#: fire on `Antigravity CLI 1.1.17` in the tested-against line, which is a different claim.
 
 #: Any shields.io badge in the file. Deliberately loose: the question this answers is "is there
 #: a version badge at all", and the narrower questions — is it dynamic, does it read OUR
 #: manifest — are asked separately so their failures name different causes.
 BADGE = re.compile(r"https://img\.shields\.io/[^\s)\]]+")
+#: A stated limit, like the docstring's other ones: this is TEXTUAL. A badge inside an HTML
+#: comment or a fenced example still counts as present here, while the rendered page shows no
+#: version at all. Left as a limit rather than closed, because stripping comments buys a
+#: false-block risk for a hazard that takes a deliberate edit and is visible to any reader.
 #: The dynamic form, which is the only one that cannot drift. Matched on the path rather than
 #: the whole URL so that reordering query parameters is not a failure.
 DYNAMIC = "/badge/dynamic/"
@@ -57,6 +65,11 @@ BAKED_VERSION = re.compile(r"v?\d+\.\d+\.\d+")
 BADGE_SOURCE = "https://raw.githubusercontent.com/m0m0i/gate-oriented-sdd/main/plugin.json"
 #: The field it must ask for. `$.name` under a version label renders "gate-sdd" as the version.
 BADGE_QUERY = "$.version"
+#: Which dynamic badge is the VERSION badge. Selecting on `/badge/dynamic/` alone made the
+#: subject "any dynamic badge", so a later badge measuring anything else would have failed for
+#: reading its own source — a gate firing on an edit that broke nothing (LV-2). Selecting by
+#: label fails CLOSED: rename it and no version badge is found, which is the absence branch.
+BADGE_LABEL = "gate-sdd"
 
 #: How the receipts were obtained. English says "all but three"; Japanese says "3件を除いて".
 #: Both are matched as a written-out or numeric count, because #115's defect was a word.
@@ -208,7 +221,12 @@ def main():
             )
 
         badges = BADGE.findall(text)
-        dynamic = [b for b in badges if DYNAMIC in b]
+        dynamic = [
+            b for b in badges
+            if DYNAMIC in b
+            and (urllib.parse.parse_qs(urllib.parse.urlsplit(b).query).get("label") or [""])[0]
+            == BADGE_LABEL
+        ]
         for b in dynamic:
             # Parsed, not string-matched. A guard comparing the whole URL literally fails when
             # someone reorders the query string, which changes nothing — and a gate that fires

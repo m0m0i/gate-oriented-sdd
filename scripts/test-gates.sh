@@ -3338,6 +3338,59 @@ case "$err" in *README.ja.md*) l5=ok ;; *) l5=no ;; esac
   || report "a version literal returning to either README fails, even when it happens to agree" no \
      "en-red=$l1 says-states=$l2 names-value=$l3 ja-red=$l4 names-ja-file=$l5"
 
+# 65e. A dynamic badge that is not the VERSION badge must not be judged as one.
+#
+# Found in review. The first cut selected every badge containing `/badge/dynamic/` and then
+# required each to read plugin.json's `$.version` — so the subject was "any dynamic badge"
+# while AC4's subject is "the version badge". C2 declined a wider badge row only for now, so
+# the next badge is a live possibility, and a dynamic one measuring anything else would have
+# gone red for an edit that broke nothing. G-6: a widening needs an argument AND a case in the
+# direction it can fire wrongly. Case 65b's unrelated badge is STATIC, so it never covered this.
+r=$(readme_repo rm-dynamic-other)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+extra = ("[![docs](https://img.shields.io/badge/dynamic/json"
+         "?url=https%3A%2F%2Fexample.invalid%2Fstats.json&query=%24.pages&label=docs)](./docs)\n")
+out = src.replace("## Status", extra + "\n## Status")
+if out == src:
+    raise SystemExit("fixture no-op: no Status heading")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfd=ok || cfd=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "0" ] && [ "$cfd" = ok ]; } && d1=ok || d1=no
+case "$err" in *example.invalid*) d2=no ;; *) d2=ok ;; esac
+
+# ...and selecting by label must still FAIL CLOSED. Renaming the version badge's label leaves
+# no version badge at all, which is the absence branch — not a silent pass because the
+# selector matched nothing. This is the half that makes the narrowing safe.
+r=$(readme_repo rm-badge-relabel)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("label=gate-sdd", "label=whatever")
+if out == src:
+    raise SystemExit("fixture no-op: the badge label is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfe=ok || cfe=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfe" = ok ]; } && d3=ok || d3=no
+case "$err" in *"no version badge"*) d4=ok ;; *) d4=no ;; esac
+
+[ "$d1$d2$d3$d4" = "okokokok" ] \
+  && report "an unrelated dynamic badge passes, and relabelling the version badge fails closed" ok \
+  || report "an unrelated dynamic badge passes, and relabelling the version badge fails closed" no \
+     "other-dynamic-green=$d1 not-accused=$d2 relabel-red=$d3 says-absent=$d4"
+
+
 
 
 # 66. A source the guard cannot read is a THIRD outcome, never agreement.
