@@ -23,17 +23,18 @@ A refactor that loads the rulebook into normal sessions, or turns an enforced ga
 | Hooks | `hooks/templates/claude-code.settings.json`, rendered into the project by `init` | `hooks/templates/antigravity.hooks.json`, rendered the same way (plugin-name envelope, `enabled` flag) |
 | Skills | `skills/<name>/SKILL.md` | same path, same format |
 | Subagents | `agents/<name>.md` | `agents/` |
+| Rules | `AGENTS.md` | `rules/AGENTS.md` (symlinked, auto-discovered by plugin loader) |
 | Distribution | `.claude-plugin/marketplace.json`, git-native | `agy plugin install <local path>` |
 
 Keeping the plugin at the root rather than nesting it under `plugins/<name>/` means the clone directory *is* the installable unit: `agy plugin install ./gate-oriented-sdd` takes the repository itself, and the Claude Code marketplace entry points at `"./"`. One directory, two install paths, nothing duplicated between them.
 
-Skills and agents are **one copy read by both**. There is no sync step and no templating engine, so drift between the two targets is not possible — only the two hook files and the two manifests differ, and `scripts/check-manifests.py` verifies they agree.
+Skills, agents, and rules are **one copy read by both** (rules symlinked at `rules/AGENTS.md`). There is no sync step and no templating engine, so drift between the two targets is not possible — only the two hook files and the two manifests differ, and `scripts/check-manifests.py` verifies they agree.
 
 ## Known fidelity gap
 
 Antigravity has five hook events: `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`. Both blocking gates port — `Stop` blocks on both sides, via exit code 2 on Claude Code and `{"decision": "continue"}` on Antigravity.
 
-**Antigravity has no `SessionStart`.** The steering digest has no direct equivalent; `PreInvocation` step injection is the candidate workaround and needs a once-per-session guard. Keep [`docs/fidelity.md`](./docs/fidelity.md) honest about this. A fidelity table a reader can trust is worth more than a claim of parity.
+**Antigravity has no `SessionStart`.** Steering digest delivery ports via `PreInvocation` turn 1 step injection (`hooks/steering-digest-antigravity.sh`), paired with `SessionStart` in `scripts/check-manifests.py`. Context re-injection after mid-session compaction remains the one unhooked path on Antigravity. Keep [`docs/fidelity.md`](./docs/fidelity.md) honest about this. A fidelity table a reader can trust is worth more than a claim of parity.
 
 ## Working on this repo
 

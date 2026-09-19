@@ -1,5 +1,7 @@
 # gate-oriented-sdd
 
+[![gate-sdd](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&prefix=v&label=gate-sdd&color=blue)](./plugin.json)
+
 *[日本語はこちら →](./README.ja.md)*
 
 **Spec-driven development where the review gate is enforced by a hook, not requested by prose.**
@@ -103,7 +105,7 @@ Opt-in, and worth adding when the project justifies it — three skills, each fo
 
 **Every skill is always available.** `init` installs `.steering/`, `.specs/`, `.work_logs/`, the issue templates, the reviewer and the hooks — never the skills themselves, which ship with the plugin. The choice above governs which documents get created and which skills are in the flow, never whether one can be run.
 
-**The choice is recorded, not inferred.** `init` writes `- Mode: bootstrap`, `- Mode: minimum` or `- Mode: full` into `.steering/tech.md`, and a checker on the `- Validators:` line verifies the filesystem against it whenever the quality gate runs — and in CI, which is where it actually bites, because the gate runs that line only when source changed and a document is never source. Declared rather than worked out later from which files happen to exist, because that derivation cannot tell a deliberate omission from an abandoned install — and telling those two apart is the only reason the line exists. **A fresh install is `bootstrap`** — the harness is in place and the inception documents are not written yet, which is neither of the other two and used to be recorded as one of them, so every first install armed its own gate red (#127). It expires at the first spec, because that is where a document starts being cited: a state that never ended would be a switch-off with a note attached.
+**The choice is recorded, not inferred.** `init` writes `- Mode: bootstrap`, `- Mode: minimum` or `- Mode: full` into `.steering/tech.md`, and a checker on the `- Validators:` line verifies the filesystem against it whenever the quality gate runs — and in CI, which is where it actually bites, because the gate runs that line only when source changed and a document is never source. Declared rather than worked out later from which files happen to exist, because that derivation cannot tell a deliberate omission from an abandoned install — and telling those two apart is the only reason the line exists. **A fresh install is `bootstrap`** — the harness is in place and the inception documents are not written yet, which is neither of the other two and used to be recorded as one of them, so every first install armed its own gate red (#127). It expires at the first spec, because that is where a document starts being cited: a state that never ended would be a switch-off with a note attached. **And the choice survives that window.** `init` also records `- Target: minimum` or `- Target: full` — what the operator signed up for, as distinct from what is true yet — and the checker names that target's documents, with the skill that writes each, both in the advisory line and in the block at the first spec. The target changes no verdict: what is required still comes from `- Mode:` alone, so a mistyped target can misdescribe what you owe and can never let a document go unchecked.
 
 **Nothing about enforcement differs between the modes.** Same gates, same reviewer, same receipt, same TDD loop. What differs is how much planning is written before the first spec. The mode is also not a final choice: a `minimum` project runs `contract` the moment review findings start repeating, and `init` re-run against a project that already declared a mode offers the upgrade instead of reinstalling. It moves up, never down.
 
@@ -161,13 +163,14 @@ Every row was produced by running it. Method, versions, and open questions: [`do
 | Quality gate on turn end | full — `Stop`, exit 2 | full — `Stop`, `{"decision":"continue"}` |
 | Review-receipt gate | full | full |
 | Per-edit fast feedback | full — `PostToolUse` | full — `PostToolUse`, observe-only |
-| Steering re-injection after compaction | full — `SessionStart` | **none** — no such event |
+| Steering digest | full — `SessionStart` | full — `PreInvocation` (turn 1 step injection) |
+| Context re-injection after compaction | full — `SessionStart` | **none** — no session compaction hook |
 
-The last row is a real gap, not a rounding error. `PreInvocation` is the candidate substitute and needs a once-per-session guard before it is worth shipping.
+The last row is a real gap, not a rounding error. Re-injecting steering after context compaction mid-session has no hook event on Antigravity; initial turn 1 injection is handled via `PreInvocation`.
 
 ## Status
 
-**v0.9.0 — pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, and `claude plugin eval` is still in early access on this account.
+**Pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, and `claude plugin eval` is still in early access on this account.
 
 Tested against: Claude Code 2.1.252 (2026-09-05) · Antigravity CLI 1.1.17 and IDE 2.3.1 (2026-08-21) · macOS.
 

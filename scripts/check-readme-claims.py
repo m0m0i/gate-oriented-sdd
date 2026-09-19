@@ -29,13 +29,48 @@ import os
 import pathlib
 import re
 import sys
+import urllib.parse
 
 READMES = ("README.md", "README.ja.md")
 MANIFEST = pathlib.Path("plugin.json")
 
-#: The version, as `**v0.7.0 — pre-release.**` / `**v0.7.0、pre-release です。**`. The language
-#: differs after the number and the number does not, so one pattern serves both.
-VERSION = re.compile(r"\*\*v(\d+\.\d+\.\d+)[ ,、]")
+#: The version literal this guard used to verify, as `**v0.7.0 — pre-release.**` /
+#: `**v0.7.0、pre-release です。**`. #133 removed it: the README no longer states a version, it
+#: renders one from the manifest, so there is nothing left to disagree. The pattern is kept and
+#: INVERTED — it now fails when it matches — because the number coming back is the root cause
+#: returning, and an editor who reads the badge as decoration would reintroduce it.
+VERSION = re.compile(r"\*\*v(\d+\.\d+\.\d+)")
+#: No trailing delimiter: the first cut required a space or a Japanese comma after the
+#: number and so let `**v1.2.3**` through — the root cause returning in a slightly
+#: different costume. Broadening to a bare `v1.2.3` is deliberately NOT done: it would
+#: fire on `Antigravity CLI 1.1.17` in the tested-against line, which is a different claim.
+
+#: Any shields.io badge in the file. Deliberately loose: the question this answers is "is there
+#: a version badge at all", and the narrower questions — is it dynamic, does it read OUR
+#: manifest — are asked separately so their failures name different causes.
+BADGE = re.compile(r"https://img\.shields\.io/[^\s)\]]+")
+#: A stated limit, like the docstring's other ones: this is TEXTUAL. A badge inside an HTML
+#: comment or a fenced example still counts as present here, while the rendered page shows no
+#: version at all. Left as a limit rather than closed, because stripping comments buys a
+#: false-block risk for a hazard that takes a deliberate edit and is visible to any reader.
+
+#: The dynamic form, which is the only one that cannot drift. Matched on the path rather than
+#: the whole URL so that reordering query parameters is not a failure.
+DYNAMIC = "/badge/dynamic/"
+#: A version baked into a badge's own URL. Three components deliberately: `Apache_2.0` in a
+#: licence badge has two, and failing on that would be a gate firing on an ordinary edit.
+BAKED_VERSION = re.compile(r"v?\d+\.\d+\.\d+")
+#: What the badge must read. "Dynamic" on its own is not the property that matters — a dynamic
+#: badge pointed at a fork or at `.claude-plugin/plugin.json` still renders a number, and a
+#: wrong number rendered confidently is worse than no number at all.
+BADGE_SOURCE = "https://raw.githubusercontent.com/m0m0i/gate-oriented-sdd/main/plugin.json"
+#: The field it must ask for. `$.name` under a version label renders "gate-sdd" as the version.
+BADGE_QUERY = "$.version"
+#: Which dynamic badge is the VERSION badge. Selecting on `/badge/dynamic/` alone made the
+#: subject "any dynamic badge", so a later badge measuring anything else would have failed for
+#: reading its own source — a gate firing on an edit that broke nothing (LV-2). Selecting by
+#: label fails CLOSED: rename it and no version badge is found, which is the absence branch.
+BADGE_LABEL = "gate-sdd"
 
 #: How the receipts were obtained. English says "all but three"; Japanese says "3件を除いて".
 #: Both are matched as a written-out or numeric count, because #115's defect was a word.
@@ -173,21 +208,95 @@ def main():
             problems.append(f"{name}: cannot be read ({exc.strerror})")
             continue
 
-        found = {v for v in VERSION.findall(text)}
-        m = VERSION.search(text)
-        if len(found) > 1:
-            # `README.md:41` is this repository's own proof that a Status claim gets restated
-            # outside the section anyone is watching. If that ever happens to the version, a
-            # first-match check verifies the decoy.
-            problems.append(f"{name}: states more than one version — {sorted(found)}")
-        if not m:
-            problems.append(f"{name}: states no version in the form `**v<x.y.z>`")
-        elif version is not None and m.group(1) != version:
+        # The prohibition. The badge removed the second source; it cannot stop anyone adding
+        # one back, and every badge check below still passes while the prose disagrees. Note it
+        # fails even when the number is currently CORRECT: agreement today is not the property,
+        # two sources that can diverge tomorrow is the defect, and a check that fired only on a
+        # mismatch would wait for exactly the drift #133 exists to prevent.
+        for stale in sorted(set(VERSION.findall(text))):
             problems.append(
-                f"{name}: says v{m.group(1)}, but plugin.json says {version}. "
-                f"The version is bumped as a step of `implement` after the receipt; this line "
-                f"is not carried by that step and has drifted three releases before."
+                f"{name}: states a version in prose — `v{stale}`. The version is rendered from "
+                f"{MANIFEST} by the badge (#133); writing it here restores the second source "
+                f"that drifted three releases on #115, and it fails here whether or not the "
+                f"two agree today."
             )
+
+        badges = BADGE.findall(text)
+        dynamic = [
+            b for b in badges
+            if DYNAMIC in b
+            and (urllib.parse.parse_qs(urllib.parse.urlsplit(b).query).get("label") or [""])[0]
+            == BADGE_LABEL
+        ]
+        for b in dynamic:
+            # Parsed, not string-matched. A guard comparing the whole URL literally fails when
+            # someone reorders the query string, which changes nothing — and a gate that fires
+            # on an ordinary edit is one people switch off (LV-2).
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(b).query)
+            got = (q.get("url") or [""])[0]
+            if got != BADGE_SOURCE:
+                problems.append(
+                    f"{name}: the version badge reads `{got or '(no url parameter)'}`, not "
+                    f"`{BADGE_SOURCE}`. A badge pointed at another repository, another branch "
+                    f"or another file still renders a number, and a confident wrong version is "
+                    f"worse than none."
+                )
+            asked = (q.get("query") or [""])[0]
+            if asked != BADGE_QUERY:
+                problems.append(
+                    f"{name}: the version badge asks for `{asked or '(no query parameter)'}`, "
+                    f"not `{BADGE_QUERY}` — so whatever it renders under a version label is "
+                    f"some other field of the manifest."
+                )
+        if not dynamic:
+            # Absence and substitution are different causes and must not share a message.
+            # "Carries no badge labelled `gate-sdd`" sends an author who is looking at one to
+            # add a second — so the two causes carry different remedies as well as different
+            # words.
+            # Tied to the label, not merely to "carries a version". shields escapes a hyphen
+            # in a label as `--`, so the static form of this badge reads `gate--sdd-v1.2.3`.
+            # Without the tie, a `node-v18.0.0-green` badge on a README that had lost its
+            # version badge was diagnosed as the version badge gone static — the wrong remedy,
+            # which is the harm this branch was split out of the absence branch to avoid.
+            # BOTH spellings of the label. shields escapes a hyphen as `--` in the PATH form
+            # (`/badge/gate--sdd-v1.2.3-blue`) and leaves it alone in the QUERY form
+            # (`/static/v1?label=gate-sdd&message=v1.2.3`). The query form is the likelier
+            # substitution here, because the badge already in the README carries `label=` as a
+            # query parameter — an author editing that URL reaches it first. Matching only the
+            # escaped spelling sent exactly that case to the absence branch, which is the right
+            # verdict with the wrong remedy.
+            # A stated limit, on the diagnosis rather than the verdict. The path form is a
+            # SUBSTRING test where the query form is exact, so `gate--sdd--docs-v1.2.3` is read
+            # as this badge gone static; and a non-dynamic badge genuinely labelled `gate-sdd`
+            # — the release-derived form C1 declined — lands in absence and is told the file
+            # carries no such badge, which is false of that file. Both exit 1 regardless, so
+            # neither is a fail-open; only the remedy is imprecise, and closing them means a
+            # narrowing with no case for the direction it would then miss.
+            marker = BADGE_LABEL.replace("-", "--")
+
+            def labelled(url):
+                q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+                return marker in url or (q.get("label") or [""])[0] == BADGE_LABEL
+
+            baked = [
+                b for b in badges
+                if labelled(b) and BAKED_VERSION.search(b.rsplit("/", 1)[-1])
+            ]
+            if baked:
+                problems.append(
+                    f"{name}: the version badge is static — `{baked[0]}`. A static badge bakes "
+                    f"the number into its own URL, which is the hand-edited literal #133 "
+                    f"removed, wearing a badge. Use the dynamic form that reads {MANIFEST}."
+                )
+            else:
+                problems.append(
+                    f"{name}: carries no badge labelled `{BADGE_LABEL}`. The version is "
+                    f"rendered from {MANIFEST} by that badge (#133), and the label is how it "
+                    f"is identified — so this fires both when the badge is gone and when it "
+                    f"is present under another label, which renders a version nothing here "
+                    f"has checked. Without it the file states no version at all, and this "
+                    f"guard would pass a README that had quietly stopped making the claim."
+                )
 
         for b in BEHAVIOUR_COUNT.finditer(text):
             problems.append(
@@ -222,9 +331,14 @@ def main():
             print(f"  {p}", file=sys.stderr)
         raise SystemExit(1)
 
+    # NOT "agree — v{version}". The READMEs no longer state a version, so saying they agree on
+    # one would be this guard asserting a claim it stopped checking — the shape it exists to
+    # catch, printed by the guard itself. What was verified is that each carries a version
+    # badge; the number beside it is the manifest's, named as the manifest's.
     print(
-        f"check-readme-claims: {len(READMES)} README(s) agree — v{version}, "
-        f"{inline} of {total} receipts inline, no behaviour count asserted"
+        f"check-readme-claims: {len(READMES)} README(s) carry a version badge "
+        f"({MANIFEST} is at v{version}), {inline} of {total} receipts inline, "
+        f"no behaviour count asserted"
     )
 
 

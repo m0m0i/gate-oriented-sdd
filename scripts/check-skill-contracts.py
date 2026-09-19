@@ -14,9 +14,11 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Eighteen today. A nineteenth needs an argument, in the spec that proposes it, for why review cannot
+Twenty-one today. A twenty-second needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
-grows one defensible entry at a time.
+grows one defensible entry at a time. #147 added the twenty-first entry and moved this number
+with it; a cap that is not moved with the entry reads as already exceeded, and the next author
+cannot tell whether the list is at its limit or the sentence is stale.
 """
 
 import pathlib
@@ -111,6 +113,26 @@ CONTRACTS = (
     ),
     (
         "skills/init/SKILL.md",
+        "ask which document set the project is signing up for and record the answer as `- Target: minimum` or `- Target: full`",
+        "This sentence is the only producer of `- Target:`. The checker can read the line "
+        "perfectly and still never see one, because nothing else causes it to be written — so "
+        "its deletion turns three guards into code that is exercised by no install. Review "
+        "cannot defend it: asking one fewer question reads as respecting the operator's "
+        "attention, and step 2's five-question budget argues for the cut, while what it "
+        "removes is the answer the bootstrap window's every message is built from. #141 AC7.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "- Target: <minimum|full — the set the operator chose, read only while Mode is bootstrap",
+        "AC7 is a conjunction — question, destination, wiring — and the entry above pins only "
+        "the question. Without this one the fenced block can lose the line while every guard "
+        "stays green, and `init` is left to infer where the answer goes: a `- Target:` written "
+        "into product.md or into prose resolves to nothing, and the checker falls back to the "
+        "generic message having never seen it. Silent discard is the failure the line exists "
+        "to close, reached by deleting the statement of where it lives. #141 AC7.",
+    ),
+    (
+        "skills/init/SKILL.md",
         "copy `assets/check-document-set.py` to the project's `scripts/` directory and add it to the `- Validators:` line",
         "This is the ONLY route by which the mode reaches a gate. Delete it and the mode "
         "becomes a comment: declared, never checked. It must stay on the `- Validators:` "
@@ -202,6 +224,17 @@ CONTRACTS = (
         "but its SIGNIFICANCE is not — the flow reads correctly either way — and what its "
         "removal restores is a gate that says nothing, not a defect anyone can see. "
         "See #113.",
+    ),
+    (
+        "skills/implement/SKILL.md",
+        "register it dynamically via `define_subagent` or delegate to a `self` subagent",
+        "Under Antigravity, subagents are not auto-discovered from markdown files under "
+        ".claude/agents/ or .agents/agents/. Without explicit invocation instructions, an agent "
+        "executing implement defaults to the inline review fallback (reviewed_by=inline), "
+        "losing reviewer independence. Review cannot defend it: deleting the Antigravity "
+        "paths leaves implement reading completely normal to a Claude Code reader, while "
+        "Antigravity agents silently lose the ability to invoke an independent reviewer "
+        "subagent. See #147.",
     ),
 )
 

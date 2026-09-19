@@ -607,6 +607,35 @@ case "$err" in *"predates the shared reader"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "a stale gate-lib.sh fails with the right diagnosis" ok \
   || report "a stale gate-lib.sh fails with the right diagnosis" no "exit=$c1 msg=$c2"
 
+# 29b. `- Target:` joins the anchors, because it is read with the same exact expression.
+#
+# #141 AC10. The table is hand-maintained, so a new machine-read line that is not added to it
+# is unguarded: `- **Target: full**` yields nothing, `check-document-set.py` sees no target and
+# falls back to the generic wording, and the operator's answer is silently discarded. That is
+# #34 exactly, reached through the line added to prevent a different silent discard.
+r=$(anchor_repo anc-tgt-bold '- Owns: x')
+printf -- '- **Target: full**\n' >> "$r/.steering/tech.md"
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"Target"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"tech.md"*) c3=ok ;; *) c3=no ;; esac
+
+# Correctly written passes — otherwise "bolded fails" is satisfiable by a row that rejects the
+# key outright, and every project writing the line properly would be blocked by it.
+r=$(anchor_repo anc-tgt-ok '- Owns: x')
+printf -- '- Target: full\n' >> "$r/.steering/tech.md"
+out=$(run_anchors "$r"); [ "$out" = "0" ] && c4=ok || c4=no
+
+# Absent stays legitimate. The line is optional by design — it is meaningless outside the
+# bootstrap window — and a guard that demanded it would fire on every settled project.
+r=$(anchor_repo anc-tgt-absent '- Owns: x')
+out=$(run_anchors "$r"); [ "$out" = "0" ] && c5=ok || c5=no
+
+[ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
+  && report "a bolded Target fails the anchor guard, a plain one passes, an absent one is silent" ok \
+  || report "a bolded Target fails the anchor guard, a plain one passes, an absent one is silent" no \
+     "bold-red=$c1 names-key=$c2 names-file=$c3 plain-green=$c4 absent-green=$c5"
+
 # 30. ANCHORS must not fall behind the hooks it mirrors.
 #
 # G-8: a guard's list is part of the guard, and "N of M anchor(s) resolved" reads the
@@ -1820,6 +1849,35 @@ case "$err" in *"never as a task"*) c3=ok ;; *) c3=no ;; esac
      "control=$c0 stripped-exit=$c1 names-file=$c2 names-needle=$c3"
 
 
+# 54b. implement stripped of Antigravity reviewer invocation instruction must fail.
+#
+# #147. Under Antigravity, subagents are not auto-discovered from markdown files.
+# If implement loses its instructions for dynamic registration via define_subagent or
+# self subagent delegation, Antigravity agents fall back to inline reviews and lose
+# reviewer independence.
+r=$(contracts_repo contracts-control)
+out=$(run_contracts "$r")
+[ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(contracts_repo contracts-antigravity-stripped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "implement", "SKILL.md")
+needle = "register it dynamically via `define_subagent` or delegate to a `self` subagent"
+src = p.read_text()
+p.write_text(src.replace(needle, "invoke the subagent if possible"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"skills/implement/SKILL.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"define_subagent"*) c3=ok ;; *) c3=no ;; esac
+
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "implement stripped of Antigravity reviewer invocation fails" ok \
+  || report "implement stripped of Antigravity reviewer invocation fails" no \
+     "control=$c0 stripped-exit=$c1 names-file=$c2 names-needle=$c3"
+
+
+
 # 55. A .specs/ or a spec directory that cannot be READ must fail, not scan nothing.
 #
 # Case 53 covers the unreadable spec FILE. One level up is a different state and it failed
@@ -2303,6 +2361,159 @@ out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
   || report "bootstrap expires at the first spec, and cannot expire quietly" no \
      "empty-ok=$c1 spec-red=$c2 names-spec=$c3 says-way-out=$c4 archived-red=$c5 bare-dir-ok=$c6 unreadable-red=$c7 unreadable-msg=$c8 minimum-unaffected=$c9 slug-unreadable-red=$c10 names-slug=$c11 symlink-red=$c12 names-symlink=$c13 dangling-stays-green=$c14"
 
+# 71. `- Target:` names what the chosen document set owes, in the bootstrap window only.
+#
+# #141. `- Mode:` records what is TRUE now; it cannot record what the operator signed up for,
+# because `- Mode: full` on day one is a claim about documents that do not exist — the claim
+# the checker exists to refuse. So the bootstrap block named three documents to an operator
+# who may have chosen six, and the set they owed first became visible at the moment it blocked
+# them. `- Target:` carries the choice through that window.
+#
+# It changes MESSAGES ONLY. `wanted` is still built from `- Mode:` alone, which is what keeps a
+# mistyped target unable to let a document go unchecked — a target on the pass/fail path would
+# be a second mode, and a wrong one would fail open.
+target_in() { printf -- '- Target: %s\n' "$2" >> "$1/.steering/tech.md"; }
+
+# Control FIRST, and it is the whole no-regression half: with no `- Target:` line the message
+# must be byte-for-byte what it is today. Every accusing half below is satisfiable by a
+# checker that simply prints all six documents always.
+r=$(init_tree ds-tgt-absent bootstrap); spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); base_err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$base_err" in *NORTH_STAR.md*) c2=no ;; *) c2=ok ;; esac
+case "$base_err" in *PRD.md*) c3=ok ;; *) c3=no ;; esac
+
+# `- Target: full` and a spec: the block must now name the three the full set adds, and still
+# name the three it never stopped owing.
+r=$(init_tree ds-tgt-full bootstrap); target_in "$r" full; spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c4=ok || c4=no
+case "$err" in *NORTH_STAR.md*) c5=ok ;; *) c5=no ;; esac
+case "$err" in *EPICS.md*) c6=ok ;; *) c6=no ;; esac
+case "$err" in *CONTRACT.md*) c7=ok ;; *) c7=no ;; esac
+case "$err" in *PRD.md*) c8=ok ;; *) c8=no ;; esac
+
+# `- Target: minimum` is not the same message as no target at all — it is a choice that was
+# made, and it must not silently produce the "you have not chosen" wording. It owes three
+# documents, and must NOT name the opt-in three.
+r=$(init_tree ds-tgt-min bootstrap); target_in "$r" minimum; spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *NORTH_STAR.md*|*EPICS.md*) c10=no ;; *) c10=ok ;; esac
+case "$err" in *PRD.md*) c11=ok ;; *) c11=no ;; esac
+
+# The target must not rescue a bootstrap project that has NOT started: no spec, still green.
+# Without this, "names six documents" is satisfiable by a checker that blocks on the target.
+r=$(init_tree ds-tgt-nospec bootstrap); target_in "$r" full
+out=$(run_docset "$r"); [ "$out" = "0" ] && c12=ok || c12=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12" = "okokokokokokokokokokokok" ] \
+  && report "a bootstrap block names the target's documents, and no target keeps today's wording" ok \
+  || report "a bootstrap block names the target's documents, and no target keeps today's wording" no \
+     "absent-red=$c1 absent-quiet-on-optional=$c2 absent-names-mandatory=$c3 full-red=$c4 names-northstar=$c5 names-epics=$c6 names-contract=$c7 full-names-mandatory=$c8 min-red=$c9 min-quiet-on-optional=$c10 min-names-mandatory=$c11 no-spec-stays-green=$c12"
+
+# 72. A `- Target:` that cannot be honoured is loud; an absent one is not; a spent one is unread.
+#
+# #141 AC4/AC5/AC9. Three states that all look like "no usable target" from inside the code and
+# must not share an outcome. ABSENT is a supported configuration — every project installed
+# before the line existed is in it — so it falls back to today's wording. PRESENT-BUT-WRONG is
+# a declaration that cannot be honoured, and swallowing it would hide the typo for the whole
+# and only window the line is read in. SPENT (mode no longer `bootstrap`) must not be read at
+# all, or an upgraded project carrying a stale target goes red for a line nothing should be
+# consulting.
+
+# Wrong value, and the value itself must appear — "not a target" without the offending text is
+# a diagnosis on a one-line file the reader has to go hunting through anyway.
+r=$(init_tree ds-tgt-bogus bootstrap); target_in "$r" ful
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *ful*) c2=ok ;; *) c2=no ;; esac
+
+# Trailing whitespace is TOLERATED here, and the asymmetry with `- Mode:` is the point: Mode is
+# byte-compared against what gate_steering_value hands the shell, and Target has no shell
+# reader to be stricter than. Strict here would reject a line that reads correctly to a human.
+r=$(init_tree ds-tgt-ws bootstrap)
+printf -- '- Target: full \n' >> "$r/.steering/tech.md"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c3=ok || c3=no
+# ...and it must be honoured, not merely not-rejected. Without this the strip could be a
+# silent discard and the case would still pass.
+spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+case "$err" in *NORTH_STAR.md*) c4=ok ;; *) c4=no ;; esac
+
+# An EMPTY value is the absent case, not the wrong-value case. `- Target:` with nothing after
+# it is a line someone started and did not finish; failing on it would block an install over
+# punctuation, and CAP-4 is the falsifier.
+r=$(init_tree ds-tgt-empty bootstrap); spec_in "$r/.specs/7-a-thing"
+printf -- '- Target: \n' >> "$r/.steering/tech.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *NORTH_STAR.md*) c6=no ;; *) c6=ok ;; esac
+case "$err" in *"minimum"*) c7=ok ;; *) c7=no ;; esac
+
+# SPENT. A settled mode makes the target history, and a project that declared `minimum` after
+# targeting `full` changed its mind — a decision, not a disagreement to police.
+r=$(docset_repo ds-tgt-spent minimum); target_in "$r" full
+out=$(run_docset "$r"); [ "$out" = "0" ] && c8=ok || c8=no
+
+# The strongest half: even an UNPARSEABLE target is unread once the mode is settled. If the
+# validation ran before the mode check, this would be red — and every project that upgraded
+# past bootstrap with a typo in a line nothing reads would be blocked by it.
+r=$(docset_repo ds-tgt-spent-bogus full); add_full_docs "$r"; target_in "$r" nonsense
+out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] \
+  && report "an unhonourable target is named, an absent one falls back, and a spent one is never read" ok \
+  || report "an unhonourable target is named, an absent one falls back, and a spent one is never read" no \
+     "bogus-red=$c1 names-value=$c2 ws-green=$c3 ws-honoured=$c4 empty-red=$c5 empty-quiet-on-optional=$c6 empty-offers-both=$c7 spent-unread=$c8 spent-bogus-unread=$c9"
+
+# 73. The bootstrap ADVISORY line names the target's set too, not just the failure.
+#
+# #141 AC8. The failure at the first spec was only half the ambush. The advisory line is what
+# an operator sees on every green turn between install and that spec — so a `full` project
+# being told "3 document(s) not yet authored" for a week is the surprise arriving later rather
+# than never. The two outputs must agree about what is owed.
+#
+# G-1 still binds: the counts of templates and directories are in THEIR OWN units and must not
+# absorb the document count, which is the conflation #109 introduced and the checker's own
+# comment warns against reintroducing one layer down.
+sout_docset() { ( cd "$1" && python3 scripts/check-document-set.py 2>/dev/null ) }
+
+# Control: no target, and the line is what it is today.
+r=$(init_tree ds-adv-absent bootstrap)
+s=$(sout_docset "$r")
+case "$s" in *"3 document(s)"*) c1=ok ;; *) c1=no ;; esac
+case "$s" in *NORTH_STAR.md*) c2=no ;; *) c2=ok ;; esac
+
+# `- Target: full`: six owed, each named with the skill that writes it.
+r=$(init_tree ds-adv-full bootstrap); target_in "$r" full
+s=$(sout_docset "$r")
+case "$s" in *"6 document(s)"*) c3=ok ;; *) c3=no ;; esac
+case "$s" in *"NORTH_STAR.md (via northstar)"*) c4=ok ;; *) c4=no ;; esac
+case "$s" in *"EPICS.md (via epics)"*) c5=ok ;; *) c5=no ;; esac
+case "$s" in *"CONTRACT.md (via contract)"*) c6=ok ;; *) c6=no ;; esac
+case "$s" in *"PRD.md (via prd)"*) c7=ok ;; *) c7=no ;; esac
+# The counts that are not documents must survive the change unconflated.
+case "$s" in *"3 issue template(s)"*) c8=ok ;; *) c8=no ;; esac
+case "$s" in *"2 directory(ies)"*) c9=ok ;; *) c9=no ;; esac
+# A choice already made is not offered back.
+# Single-quoted inside the pattern: a bare backtick in an unquoted `case` glob is command
+# substitution, which ran and left the assertion comparing against a mangled string. That is a
+# fixture failure wearing a guard failure's clothes — #124's genre, caught here by the stray
+# `-: command not found` on stderr rather than by the red itself.
+case "$s" in *'`- Mode: full`'*) c10=ok ;; *) c10=no ;; esac
+
+# `- Target: minimum` owes three and must not list the opt-in three.
+r=$(init_tree ds-adv-min bootstrap); target_in "$r" minimum
+s=$(sout_docset "$r")
+case "$s" in *"3 document(s)"*) c11=ok ;; *) c11=no ;; esac
+case "$s" in *NORTH_STAR.md*|*EPICS.md*) c12=no ;; *) c12=ok ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12" = "okokokokokokokokokokokok" ] \
+  && report "the bootstrap advisory line names the target's set, in units that stay separate" ok \
+  || report "the bootstrap advisory line names the target's set, in units that stay separate" no \
+     "absent-three=$c1 absent-quiet=$c2 full-six=$c3 names-northstar=$c4 names-epics=$c5 names-contract=$c6 names-prd=$c7 templates-own-unit=$c8 dirs-own-unit=$c9 names-one-mode=$c10 min-three=$c11 min-quiet=$c12"
+
 # 70. A project that already had a bug template under its own name must pass after init.
 #
 # #130. Two bullets of step 3 disagreed: the merge rule said "add only the missing types", so a
@@ -2471,6 +2682,61 @@ case "$err" in *"canonical filename for its type"*) c14=ok ;; *) c14=no ;; esac
      "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8 nobootstrap-exit=$c9 names-spec-skill=$c10 names-needle=$c11 nomerge-exit=$c12 names-init=$c13 names-merge-needle=$c14"
 
 
+# 74. init stripped of the TARGET question or its destination must fail. #141's pins, the
+#     nineteenth and twentieth.
+#
+# #141 AC7. The question is the whole feature: the checker can read `- Target:` perfectly and
+# still never see one, because nothing but this sentence causes the line to be written. Its
+# deletion is the deletion that review cannot defend — asking one fewer question reads as
+# respecting the operator's attention, and step 2's own five-question budget argues for it,
+# while what it removes is the only producer of a value three guards now consume.
+r=$(contracts_repo contracts-notarget)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "ask which document set the project is signing up for and record the answer as `- Target: minimum` or `- Target: full`"
+src = p.read_text()
+if needle not in src:
+    raise SystemExit("fixture no-op: the target question is not where this expects it")
+p.write_text(src.replace(needle, "record the mode"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"skills/init/SKILL.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *Target*) c3=ok ;; *) c3=no ;; esac
+
+# The control, again first: unmutated init must pass, or the accusing half above is satisfied
+# by a guard that fails on everything.
+r=$(contracts_repo contracts-target-control)
+out=$(run_contracts "$r"); [ "$out" = "0" ] && c4=ok || c4=no
+
+# AC7 is a conjunction — question, DESTINATION, wiring — and the needle above pins only the
+# first. Delete the fenced-block line and every validator stays green while `init` is left to
+# infer where the answer goes; a `- Target:` written into the wrong file resolves to nothing
+# and is discarded in silence, which is the failure the line was added to close. Found in
+# review, in the same shape the `- Mode:` entry still carries.
+r=$(contracts_repo contracts-notarget-dest)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "- Target: <minimum|full — the set the operator chose, read only while Mode is bootstrap"
+src = p.read_text()
+if needle not in src:
+    raise SystemExit("fixture no-op: the Target line is not in the machine-read block")
+p.write_text(src.replace(needle, "- Target: <the chosen set"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c5=ok || c5=no
+# The NEEDLE, not the word "Target": this file carries two Target pins now, and the looser cue
+# is satisfied by the other one firing. Same reason case 54 asserts both halves.
+case "$err" in *"read only while Mode is bootstrap"*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] \
+  && report "init stripped of the target question or its destination fails, naming the file and the key" ok \
+  || report "init stripped of the target question or its destination fails, naming the file and the key" no \
+     "notarget-exit=$c1 names-file=$c2 names-key=$c3 control=$c4 nodest-exit=$c5 nodest-names-key=$c6"
+
+
 # --- shipped reviewers: the contract path they name -----------------------------------
 #
 # #82. A reference reviewer's FIRST instruction is "Read the reviewer contract first", and the
@@ -2563,7 +2829,7 @@ done
 # $1 = name. A repo holding every file the guard compares, all in agreement.
 cpath_repo() {
   r="$TMP/$1"
-  mkdir -p "$r/scripts" "$r/agents/_shared" "$r/agents/_template" "$r/skills/init" "$r/docs" "$r/.claude/agents"
+  mkdir -p "$r/scripts" "$r/agents/_shared" "$r/agents/_template" "$r/skills/init" "$r/docs" "$r/.claude/agents" "$r/rules"
   cp "$ROOT/scripts/check-contract-path.py" "$r/scripts/"
   chmod +x "$r/scripts/check-contract-path.py"
   rv='x\n\nRead `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/_shared/reviewer-contract.md` under Antigravity.\n'
@@ -2576,6 +2842,7 @@ cpath_repo() {
   printf '"agents/_shared/reviewer-contract.md",\n' > "$r/scripts/check-receipt-schema.py"
   printf '`.claude/agents/_shared/reviewer-contract.md`\n' > "$r/docs/CONTRACT.md"
   printf '`_shared/reviewer-contract.md`\n' > "$r/AGENTS.md"
+  ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
   echo "$r"
 }
 # stdout is CAPTURED, not discarded: case 64 asserts the success line does NOT print, and
@@ -2844,8 +3111,33 @@ readme_repo() {
   printf '{\n  "version": "1.2.3"\n}\n' > "$r/plugin.json"
   printf 'reviewed_by=subagent\n' > "$r/.specs/9-feature/.review-receipt"
   printf 'reviewed_by=inline\n' > "$r/.specs/_archive/8-old/.review-receipt"
-  printf '## Status\n\n**v1.2.3 — pre-release.**\n\nthe gates and guards behaviours, tested deterministically; and a receipt on every spec from a spawned reviewer on all but one, which were reviewed inline.\n' > "$r/README.md"
-  printf '## Status\n\n**v1.2.3、pre-release です。**\n\nゲートとガードの挙動。1件を除いてサブエージェントとして起動した reviewer によるレビューです。\n' > "$r/README.ja.md"
+  # Heredocs, not printf: the badge URL is full of `%` escapes and printf would eat them, which
+  # is a fixture quietly writing a DIFFERENT badge than the one under test. #141 shipped a `case`
+  # glob with the same class of bug — unquoted backticks — and it cost a red run to find.
+  cat > "$r/README.md" <<'RMEOF'
+# fixture
+
+[![gate-sdd](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&prefix=v&label=gate-sdd&color=blue)](./plugin.json)
+
+## Status
+
+**Pre-release.**
+
+the gates and guards behaviours, tested deterministically; and a receipt on every spec from a spawned reviewer on all but one, which were reviewed inline.
+
+Tested against: Antigravity CLI 1.1.17, Antigravity IDE 2.3.1.
+RMEOF
+  cat > "$r/README.ja.md" <<'RMEOF'
+# fixture
+
+[![gate-sdd](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&prefix=v&label=gate-sdd&color=blue)](./plugin.json)
+
+## Status
+
+**Pre-release です。**
+
+ゲートとガードの挙動。1件を除いてサブエージェントとして起動した reviewer によるレビューです。
+RMEOF
   echo "$r"
 }
 run_readme() { ( cd "$1" && python3 scripts/check-readme-claims.py >/dev/null 2>"$TMP/rmerr"; printf '%s' "$?" ) }
@@ -2854,18 +3146,23 @@ run_readme() { ( cd "$1" && python3 scripts/check-readme-claims.py >/dev/null 2>
 r=$(readme_repo rm-control)
 out=$(run_readme "$r"); [ "$out" = "0" ] && c0=ok || c0=no
 
-r=$(readme_repo rm-version)
+# #133. The version is no longer a claim the README makes, so there is no mismatch to detect.
+# There is a BADGE, and the guard's job is now that the badge is still the thing that makes a
+# mismatch impossible. Removing it must fail: a README carrying neither a version nor a badge
+# tells the reader nothing, and a guard that shrugged at that would have stopped covering this
+# claim while still exiting 0.
+r=$(readme_repo rm-nobadge)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "README.md"); src = p.read_text()
-out = src.replace("**v1.2.3 —", "**v1.0.0 —")
-if out == src: raise SystemExit("fixture no-op: version string not found")
+out = "\n".join(l for l in src.split("\n") if "img.shields.io" not in l)
+if out == src: raise SystemExit("fixture no-op: no badge line to remove")
 p.write_text(out)
 PYEOF
 [ "$?" = 0 ] && cf1=ok || cf1=no
 out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cf1" = ok ]; } && c1=ok || c1=no
-case "$err" in *"plugin.json says 1.2.3"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"no badge labelled \`gate-sdd\`"*) c2=ok ;; *) c2=no ;; esac
 
 # The removed number coming back — the half a presence-only check cannot see.
 r=$(readme_repo rm-count)
@@ -2906,7 +3203,353 @@ case "$err" in *"but 1 of 2 say reviewed_by=inline"*) c8=ok ;; *) c8=no ;; esac
 
 [ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "each README Status claim disagreeing with its source is named" ok \
   || report "each README Status claim disagreeing with its source is named" no \
-     "control=$c0 version-exit=$c1 names-manifest=$c2 count-exit=$c3 says-removed=$c4 receipts-en=$c5 names-count=$c6 receipts-ja=$c7 names-file=$c8"
+     "control=$c0 nobadge-exit=$c1 names-label=$c2 count-exit=$c3 says-removed=$c4 receipts-en=$c5 names-count=$c6 receipts-ja=$c7 names-file=$c8"
+
+# 65b. A STATIC badge is the drift returning, and must not be reported as a missing one.
+#
+# #133 AC3. This is the deletion review cannot defend: a static badge renders faster, has no
+# third-party JSON fetch, and looks like a simplification — while what it restores is exactly
+# the hand-edited number this issue removed. Reported as its own cause, because "carries no
+# version badge" sends the next author to add the badge they can already see.
+r=$(readme_repo rm-staticbadge)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+import re
+root = sys.argv[1]
+# An EMPTY root is not "the current directory" — it is a fixture that never got built, and
+# every path below then resolves against the repository itself. This case rewrote the real
+# README.md exactly that way once. Refuse rather than edit something nobody meant to edit.
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = re.sub(r"https://img\.shields\.io/[^\s)\]]+",
+             "https://img.shields.io/badge/gate--sdd-v1.2.3-blue", src)
+if out == src: raise SystemExit("fixture no-op: no shields badge to replace")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf5=ok || cf5=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf5" = ok ]; } && s1=ok || s1=no
+case "$err" in *static*) s2=ok ;; *) s2=no ;; esac
+# It must NOT be diagnosed as absence — that is the wrong remedy for a badge that is present.
+case "$err" in *"no badge labelled"*) s3=no ;; *) s3=ok ;; esac
+
+# A non-version shields badge alongside the real one is fine. Without this, "a static badge
+# fails" is satisfiable by a guard that rejects every badge but one, and a licence or CI badge
+# added later would go red for no reason — LV-2, a gate firing on an ordinary edit.
+r=$(readme_repo rm-otherbadge)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+extra = "[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)\n"
+out = src.replace("## Status", extra + "\n## Status")
+if out == src: raise SystemExit("fixture no-op: no Status heading")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf6=ok || cf6=no
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cf6" = ok ]; } && s4=ok || s4=no
+
+[ "$s1$s2$s3$s4" = "okokokok" ] \
+  && report "a static version badge fails as a substitution, and an unrelated badge does not" ok \
+  || report "a static version badge fails as a substitution, and an unrelated badge does not" no \
+     "static-red=$s1 says-static=$s2 not-called-absent=$s3 other-badge-green=$s4"
+
+# 65b-ii. shields' OTHER static form — the label as a query parameter, unescaped.
+#
+# Found in review, as a regression the label tie introduced. `/static/v1?label=gate-sdd&
+# message=v1.2.3` spells the label plainly, where `/badge/gate--sdd-v1.2.3-blue` escapes the
+# hyphen. This is the likelier substitution of the two: the badge already in the README
+# carries `label=` as a query parameter, so an author editing that URL reaches this form
+# first. Matching only the escaped spelling gave it the right verdict with the wrong remedy.
+# Inlined rather than using `mutate_badge`: that helper is defined in case 65c, BELOW this
+# point, and a call to an undefined function yields an empty `$r` whose fixture edits land on
+# the repository itself. That happened once on this branch already.
+r=$(readme_repo rm-static-query)
+python3 - "$r" <<'PYEOF'
+import pathlib, re, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = re.sub(r"https://img\.shields\.io/[^\s)\]]+",
+             "https://img.shields.io/static/v1?label=gate-sdd&message=v1.2.3&color=blue", src)
+if out == src:
+    raise SystemExit("fixture no-op: no shields badge to replace")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfi=ok || cfi=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfi" = ok ]; } && q1=ok || q1=no
+# The guard's PHRASE, not the bare word: this fixture's own URL contains `/static/v1`, so
+# `*static*` would stay green against a reworded message that quoted the badge and no longer
+# said it. An assertion coupled to text it does not own is what cost rounds 2 and 3.
+case "$err" in *"version badge is static"*) q2=ok ;; *) q2=no ;; esac
+case "$err" in *"no badge labelled"*) q3=no ;; *) q3=ok ;; esac
+
+[ "$q1$q2$q3" = "okokok" ] \
+  && report "the query-parameter static form is named as a substitution, not as an absence" ok \
+  || report "the query-parameter static form is named as a substitution, not as an absence" no \
+     "red=$q1 says-static=$q2 not-called-absent=$q3"
+
+
+# 65c. The dynamic badge must read THIS repository's manifest, and must survive reordering.
+#
+# #133 AC4. "Dynamic" alone is not the property that matters — a dynamic badge pointed at a
+# fork, at another branch, or at `.claude-plugin/plugin.json` still renders a number, and a
+# wrong number rendered confidently is worse than none. The guard therefore parses the URL.
+#
+# The green half is the one that keeps this from being a gate people switch off: query strings
+# get reordered by editors and by hand, and a guard matching the whole URL literally would fail
+# on a change that alters nothing. LV-2 — a gate that fires on an ordinary edit gets disabled.
+mutate_badge() {   # $1 = repo, $2 = replacement URL
+  python3 - "$1" "$2" <<'PYEOF'
+import pathlib, re, sys
+root, repl = sys.argv[1], sys.argv[2]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = re.sub(r"https://img\.shields\.io/[^\s)\]]+", repl.replace("\\", "\\\\"), src)
+if out == src:
+    raise SystemExit("fixture no-op: no shields badge to replace")
+p.write_text(out)
+PYEOF
+}
+
+base="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&prefix=v&label=gate-sdd&color=blue"
+
+# Another owner's manifest.
+r=$(readme_repo rm-badge-fork)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsomeone-else%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.version&label=gate-sdd"
+[ "$?" = 0 ] && cf7=ok || cf7=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf7" = ok ]; } && u1=ok || u1=no
+case "$err" in *someone-else*) u2=ok ;; *) u2=no ;; esac
+
+# The right repo, the wrong file — the near miss a human eye slides over.
+r=$(readme_repo rm-badge-path)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=gate-sdd"
+[ "$?" = 0 ] && cf8=ok || cf8=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf8" = ok ]; } && u3=ok || u3=no
+# The path, not just the exit code: if the label selection broke, this fixture would
+# exit 1 through the ABSENCE branch and this half would stay green for the wrong cause.
+case "$err" in *".claude-plugin"*) u3b=ok ;; *) u3b=no ;; esac
+
+# Asking for the wrong FIELD renders someone else's value under a version label.
+r=$(readme_repo rm-badge-query)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.name&label=gate-sdd"
+[ "$?" = 0 ] && cf9=ok || cf9=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf9" = ok ]; } && u4=ok || u4=no
+case "$err" in *'asks for `$.name`'*) u4b=ok ;; *) u4b=no ;; esac
+
+# GREEN: the same badge with its parameters in a different order must pass.
+r=$(readme_repo rm-badge-reorder)
+mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?label=gate-sdd&color=blue&query=%24.version&prefix=v&url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json"
+[ "$?" = 0 ] && cfa=ok || cfa=no
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cfa" = ok ]; } && u5=ok || u5=no
+
+[ "$u1$u2$u3$u3b$u4$u4b$u5" = "okokokokokokok" ] \
+  && report "a dynamic badge reading the wrong source fails, and reordering its parameters does not" ok \
+  || report "a dynamic badge reading the wrong source fails, and reordering its parameters does not" no \
+     "fork-red=$u1 names-owner=$u2 wrong-path-red=$u3 names-path=$u3b wrong-query-red=$u4 names-query=$u4b reorder-green=$u5"
+
+# 65d. The literal coming back is the root cause returning, and must fail.
+#
+# #133 AC5. The badge removes the SECOND SOURCE; it does not stop anyone adding one. An editor
+# who reads the badge as decoration writes the number back into the prose, the two can disagree
+# again, and every check above still passes because the badge is untouched. This is the same
+# hole #115 found in a presence-only check: a guard that verifies what is there cannot notice
+# a removed claim coming back.
+r=$(readme_repo rm-literal-back)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("**Pre-release.**", "**v1.2.3 — pre-release.**")
+if out == src:
+    raise SystemExit("fixture no-op: the Status line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfb=ok || cfb=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfb" = ok ]; } && l1=ok || l1=no
+case "$err" in *"states a version"*) l2=ok ;; *) l2=no ;; esac
+# It fails even though the number happens to be RIGHT. Agreement today is not the property —
+# two sources that can diverge tomorrow is the defect, and a check that only fired on a
+# mismatch would wait for the drift it exists to prevent.
+case "$err" in *"1.2.3"*) l3=ok ;; *) l3=no ;; esac
+
+# The Japanese form differs after the number, so it needs its own case rather than an
+# assumption that one pattern covers both.
+r=$(readme_repo rm-literal-back-ja)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.ja.md"); src = p.read_text()
+out = src.replace("**Pre-release です。**", "**v1.2.3、pre-release です。**")
+if out == src:
+    raise SystemExit("fixture no-op: the JA Status line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfc=ok || cfc=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfc" = ok ]; } && l4=ok || l4=no
+case "$err" in *"README.ja.md: states a version"*) l5=ok ;; *) l5=no ;; esac
+
+# The literal WITHOUT a trailing delimiter. The first cut of the prohibition required a space
+# or a Japanese comma after the number, so `**v1.2.3**` walked straight through — the root
+# cause returning in a slightly different costume. Dropping that requirement is a behaviour
+# change, and a behaviour change with no case that reddens when it is reverted is a check that
+# can stop checking in silence. G-4, found in review.
+r=$(readme_repo rm-literal-bold)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("**Pre-release.**", "**v1.2.3**")
+if out == src:
+    raise SystemExit("fixture no-op: the Status line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cff=ok || cff=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cff" = ok ]; } && l6=ok || l6=no
+case "$err" in *"states a version"*) l7=ok ;; *) l7=no ;; esac
+
+# ...and the other direction, which is why the pattern keeps its `**v` prefix. `readme_repo`
+# now carries a `Tested against: … 1.1.17` line, and this fixture adds a bare number EQUAL to
+# the manifest version — the hardest case for a broadened pattern, because the digits are
+# exactly the ones the badge renders. Both must stay green: a version stated about something
+# else is a different claim, and a prohibition that fired on them would be a gate people
+# switch off. Distinct from `rm-control`, which carries only the first of the two.
+r=$(readme_repo rm-bare-version)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("Tested against:", "Built from 1.2.3 of the compiler. Tested against:")
+if out == src:
+    raise SystemExit("fixture no-op: the tested-against line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfg=ok || cfg=no
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cfg" = ok ]; } && l8=ok || l8=no
+
+[ "$l1$l2$l3$l4$l5$l6$l7$l8" = "okokokokokokokok" ] \
+  && report "a version literal returning to either README fails, even when it happens to agree" ok \
+  || report "a version literal returning to either README fails, even when it happens to agree" no \
+     "en-red=$l1 says-states=$l2 names-value=$l3 ja-red=$l4 names-ja-file=$l5 bold-no-delimiter-red=$l6 says-states-bold=$l7 bare-number-green=$l8"
+
+# 65e. A dynamic badge that is not the VERSION badge must not be judged as one.
+#
+# Found in review. The first cut selected every badge containing `/badge/dynamic/` and then
+# required each to read plugin.json's `$.version` — so the subject was "any dynamic badge"
+# while AC4's subject is "the version badge". C2 declined a wider badge row only for now, so
+# the next badge is a live possibility, and a dynamic one measuring anything else would have
+# gone red for an edit that broke nothing. G-6: a widening needs an argument AND a case in the
+# direction it can fire wrongly. Case 65b's unrelated badge is STATIC, so it never covered this.
+r=$(readme_repo rm-dynamic-other)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+extra = ("[![docs](https://img.shields.io/badge/dynamic/json"
+         "?url=https%3A%2F%2Fexample.invalid%2Fstats.json&query=%24.pages&label=docs)](./docs)\n")
+out = src.replace("## Status", extra + "\n## Status")
+if out == src:
+    raise SystemExit("fixture no-op: no Status heading")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfd=ok || cfd=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "0" ] && [ "$cfd" = ok ]; } && d1=ok || d1=no
+case "$err" in *example.invalid*) d2=no ;; *) d2=ok ;; esac
+
+# ...and selecting by label must still FAIL CLOSED. Renaming the version badge's label leaves
+# no version badge at all, which is the absence branch — not a silent pass because the
+# selector matched nothing. This is the half that makes the narrowing safe.
+r=$(readme_repo rm-badge-relabel)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("label=gate-sdd", "label=whatever")
+if out == src:
+    raise SystemExit("fixture no-op: the badge label is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfe=ok || cfe=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfe" = ok ]; } && d3=ok || d3=no
+case "$err" in *"no badge labelled \`gate-sdd\`"*) d4=ok ;; *) d4=no ;; esac
+
+[ "$d1$d2$d3$d4" = "okokokok" ] \
+  && report "an unrelated dynamic badge passes, and relabelling the version badge fails closed" ok \
+  || report "an unrelated dynamic badge passes, and relabelling the version badge fails closed" no \
+     "other-dynamic-green=$d1 not-accused=$d2 relabel-red=$d3 says-absent=$d4"
+
+# 65f. A foreign versioned badge is not this repo's version badge gone static.
+#
+# Found in review. `baked` selected any shields badge whose last segment carried a version, so
+# a README that had genuinely LOST its version badge while carrying, say, `node-v18.0.0-green`
+# was told the version badge had gone static — sending the author to fix a badge that was
+# never the subject. The remedy matters more than the verdict here: both outcomes are exit 1,
+# and only the message tells the reader what to do.
+r=$(readme_repo rm-foreign-version-badge)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+kept = [l for l in src.split("\n") if "img.shields.io" not in l]
+if len(kept) == len(src.split("\n")):
+    raise SystemExit("fixture no-op: no badge line to remove")
+body = "\n".join(kept)
+out = body.replace(
+    "## Status",
+    "[![node](https://img.shields.io/badge/node-v18.0.0-green)](https://nodejs.org)\n\n## Status",
+)
+# Checked, like every sibling: without this the fixture degenerates into rm-nobadge if the
+# heading ever moves, and all four halves go green having tested nothing.
+if out == body:
+    raise SystemExit("fixture no-op: no Status heading to insert before")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfh=ok || cfh=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfh" = ok ]; } && f1=ok || f1=no
+# The ABSENCE remedy, because that is what is actually wrong: this README has no gate-sdd
+# badge. Being told a badge it does not have went static is the wrong instruction.
+case "$err" in *"no badge labelled"*) f2=ok ;; *) f2=no ;; esac
+case "$err" in *static*) f3=no ;; *) f3=ok ;; esac
+# ...and the node badge must not be named as though it were the subject.
+case "$err" in *node*) f4=no ;; *) f4=ok ;; esac
+
+[ "$f1$f2$f3$f4" = "okokokok" ] \
+  && report "a foreign versioned badge is diagnosed as an absent version badge, not a static one" ok \
+  || report "a foreign versioned badge is diagnosed as an absent version badge, not a static one" no \
+     "red=$f1 says-absent=$f2 not-called-static=$f3 does-not-name-node=$f4"
+
 
 # 66. A source the guard cannot read is a THIRD outcome, never agreement.
 r=$(readme_repo rm-nomanifest); rm "$r/plugin.json"
@@ -3064,6 +3707,356 @@ case "$err" in *"states the receipt count twice and they disagree"*) c15=ok ;; *
 [ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15" = "okokokokokokokokokokokokokokok" ] && report "a behaviour count in any phrasing fails, ordinary numbers do not, and an absent reviewed_by is unknown" ok \
   || report "a behaviour count in any phrasing fails, ordinary numbers do not, and an absent reviewed_by is unknown" no \
      "count-before-exit=$c1 quotes-it=$c2 count-ja-exit=$c3 quotes-ja=$c4 noise-stays-green=$c5 unknown-exit=$c6 says-silence=$c7 ja-particle-exit=$c8 quotes-particle=$c9 ja-eval-noise-green=$c10 ja-unrelated-green=$c11 ja-silent-exit=$c12 ja-silent-msg=$c13 ja-echo-exit=$c14 ja-echo-msg=$c15"
+
+
+# --- Antigravity hook command execution ------------------------------------------
+#
+# #143. Antigravity executes hooks with cwd set to the directory containing hooks.json
+# (<project>/.agents/). If commands in antigravity.hooks.json assume cwd is the repo root,
+# `[ -f .agents/hooks/quality-gate.sh ]` checks .agents/.agents/hooks/quality-gate.sh,
+# fails, and executes `|| exit 0`. Both gates silently pass on every turn, and
+# {{FAST_CHECK}} runs inside .agents/.
+#
+# Any test verifying Antigravity hook execution MUST run the rendered command string
+# with cwd set to .agents/, or it passes for the wrong reason.
+
+agy_get_cmd() {
+  # $1 = hooks.json, $2 = event, $3 = index
+  python3 -c "
+import json, sys
+data = json.load(open(sys.argv[1]))
+pkg = data.get('gate-sdd', {})
+ev = pkg.get(sys.argv[2], [])
+idx = int(sys.argv[3])
+if sys.argv[2] == 'PostToolUse':
+    print(ev[idx]['hooks'][0]['command'])
+else:
+    print(ev[idx]['command'])
+" "$1" "$2" "$3"
+}
+
+antigravity_repo() {
+  r="$TMP/$1"; mkdir -p "$r/.agents/hooks" "$r/.steering" "$r/.specs/9-feature" "$r/src"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/review-gate.sh" "$r/.agents/hooks/"
+  sed -e 's|{{HOOKS_DIR}}|.agents/hooks|g' -e 's|{{FAST_CHECK}}|pwd > fast_check.txt|g' \
+    "$ROOT/hooks/templates/antigravity.hooks.json" > "$r/.agents/hooks.json"
+  printf -- '- Reviewer: test-reviewer\n- Source globs: :(glob)**/*.txt\n' > "$r/.steering/tech.md"
+  if [ "${2:-0}" = 0 ]; then box='- [x]'; else box='- [ ]'; fi
+  cat > "$r/.specs/9-feature/spec.md" <<EOF
+# Spec: feature
+- Slug: 9-feature   Status: approved
+
+## 3. Tasks (TDD-ordered)
+$box T1: do the thing
+EOF
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && echo one > src/main.txt && git add -A && git commit -qm init \
+    && git checkout -q -b 9-feature && echo two >> src/main.txt && git commit -qam work ) >/dev/null 2>&1
+  echo "$r"
+}
+
+# 1. Quality gate blocks when a validator fails and cwd is .agents/
+r=$(antigravity_repo agy-qg-fail 1)
+echo '- Validators: false' >> "$r/.steering/tech.md"
+( cd "$r" && git commit -qam "add failing validator" ) >/dev/null 2>&1
+echo dirty >> "$r/src/main.txt"
+cmd=$(agy_get_cmd "$r/.agents/hooks.json" Stop 0)
+out=$( ( cd "$r/.agents" && sh -c "$cmd" 2>"$TMP/agy_qg_err"; echo "exit=$?" ) )
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+
+# 2. Review gate blocks when unreviewed spec is completed and cwd is .agents/
+r=$(antigravity_repo agy-rv-fail 0)
+cmd=$(agy_get_cmd "$r/.agents/hooks.json" Stop 1)
+out=$( ( cd "$r/.agents" && sh -c "$cmd" 2>"$TMP/agy_rv_err"; echo "exit=$?" ) )
+case "$out" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+case "$out" in *'"decision":"continue"'*) c4=ok ;; *) c4=no ;; esac
+
+# 3. PostToolUse fast-check runs with cwd anchored to repo root
+r=$(antigravity_repo agy-fast-check 1)
+cmd=$(agy_get_cmd "$r/.agents/hooks.json" PostToolUse 0)
+( cd "$r/.agents" && sh -c "$cmd" ) >/dev/null 2>&1
+if [ -f "$r/fast_check.txt" ] && [ ! -f "$r/.agents/fast_check.txt" ]; then
+  c5=ok
+else
+  c5=no
+fi
+
+# 4. Clean repo passes both gates when cwd is .agents/
+r=$(antigravity_repo agy-clean 0)
+echo '- Validators: true' >> "$r/.steering/tech.md"
+head=$(git -C "$r" rev-parse HEAD)
+printf 'verdict=CLEAN\nreviewed_sha=%s\nreviewed_by=inline\n' "$head" > "$r/.specs/9-feature/.review-receipt"
+( cd "$r" && git add -A && git commit -qm "clean" ) >/dev/null 2>&1
+cmd_qg=$(agy_get_cmd "$r/.agents/hooks.json" Stop 0)
+cmd_rv=$(agy_get_cmd "$r/.agents/hooks.json" Stop 1)
+out_qg=$( ( cd "$r/.agents" && sh -c "$cmd_qg"; echo "exit=$?" ) )
+out_rv=$( ( cd "$r/.agents" && sh -c "$cmd_rv"; echo "exit=$?" ) )
+case "$out_qg" in *"exit=0"*) c6=ok ;; *) c6=no ;; esac
+case "$out_rv" in *"exit=0"*) c7=ok ;; *) c7=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] && report "Antigravity hooks execute from repo root when cwd is .agents/" ok \
+  || report "Antigravity hooks execute from repo root when cwd is .agents/" no \
+     "qg-exit=$c1 qg-json=$c2 rv-exit=$c3 rv-json=$c4 fast-check-root=$c5 clean-qg-exit=$c6 clean-rv-exit=$c7"
+
+
+# --- Hooks invoked directly from a subdirectory (defense in depth) ----------------
+#
+# #143. If a gate script is invoked directly from a subdirectory (such as .agents/),
+# relative references to .steering/ and .specs/ must still resolve against the
+# git repository root rather than failing open.
+
+# 1. Quality gate blocks when invoked directly from .agents/ with a failing validator
+r=$(antigravity_repo agy-direct-qg 1)
+echo '- Validators: false' >> "$r/.steering/tech.md"
+( cd "$r" && git commit -qam "add failing validator" ) >/dev/null 2>&1
+echo dirty >> "$r/src/main.txt"
+out=$( ( cd "$r/.agents" && sh hooks/quality-gate.sh 2>"$TMP/agy_direct_qg_err"; echo "exit=$?" ) )
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+
+# 2. Review gate blocks when invoked directly from .agents/ without a receipt
+r=$(antigravity_repo agy-direct-rv 0)
+out=$( ( cd "$r/.agents" && sh hooks/review-gate.sh 2>"$TMP/agy_direct_rv_err"; echo "exit=$?" ) )
+case "$out" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+case "$out" in *'"decision":"continue"'*) c4=ok ;; *) c4=no ;; esac
+
+# 3. Clean repo passes both gates when invoked directly from .agents/
+r=$(antigravity_repo agy-direct-clean 0)
+echo '- Validators: true' >> "$r/.steering/tech.md"
+head=$(git -C "$r" rev-parse HEAD)
+printf 'verdict=CLEAN\nreviewed_sha=%s\nreviewed_by=inline\n' "$head" > "$r/.specs/9-feature/.review-receipt"
+( cd "$r" && git add -A && git commit -qm "clean" ) >/dev/null 2>&1
+out_qg=$( ( cd "$r/.agents" && sh hooks/quality-gate.sh; echo "exit=$?" ) )
+out_rv=$( ( cd "$r/.agents" && sh hooks/review-gate.sh; echo "exit=$?" ) )
+case "$out_qg" in *"exit=0"*) c5=ok ;; *) c5=no ;; esac
+case "$out_rv" in *"exit=0"*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] && report "quality-gate.sh and review-gate.sh anchor to repo root when invoked from a subdirectory" ok \
+  || report "quality-gate.sh and review-gate.sh anchor to repo root when invoked from a subdirectory" no \
+     "qg-exit=$c1 qg-json=$c2 rv-exit=$c3 rv-json=$c4 clean-qg-exit=$c5 clean-rv-exit=$c6"
+
+
+# --- hooks: hooks/steering-digest-antigravity.sh ------------------------------
+#
+# #144. PreInvocation hook on Antigravity:
+# - When invocationNum == 1, emit {"injectSteps": [{"ephemeralMessage": "<digest>"}]}
+# - When invocationNum != 1 or missing/malformed, emit {}
+# - Anchor to git repository root if invoked from a subdirectory
+# - Handle missing .steering/ cleanly without malformed JSON
+
+agy_digest_repo() {
+  r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering" "$r/.specs/9-feature" "$r/.agents"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+  [ -f "$ROOT/hooks/steering-digest-antigravity.sh" ] && cp "$ROOT/hooks/steering-digest-antigravity.sh" "$r/hooks/"
+  printf -- '- Reviewer: test-reviewer\n- Validators: true\n' > "$r/.steering/tech.md"
+  printf -- '# Product\n- Owns: safety and correctness\n' > "$r/.steering/product.md"
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && echo init > file.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+  echo "$r"
+}
+
+# 1. Turn 1 injects steering digest in injectSteps ephemeralMessage with exit 0
+r=$(agy_digest_repo agy-digest-turn1)
+raw=$(printf '{"invocationNum": 1}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+exit_code=$?
+c1_exit=no; c1_json=no
+[ "$exit_code" -eq 0 ] && c1_exit=ok
+if python3 -c '
+import json, sys
+data = json.loads(sys.argv[1])
+msg = data["injectSteps"][0]["ephemeralMessage"]
+if not ("## Repo facts" in msg and "safety and correctness" in msg and "test-reviewer" in msg):
+    sys.exit(1)
+' "$raw" 2>/dev/null; then
+  c1_json=ok
+fi
+
+# 2. Turn 2 emits empty object {} with exit 0
+r=$(agy_digest_repo agy-digest-turn2)
+raw=$(printf '{"invocationNum": 2}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+exit_code=$?
+c2_exit=no; c2_json=no
+[ "$exit_code" -eq 0 ] && c2_exit=ok
+if python3 -c '
+import json, sys
+if json.loads(sys.argv[1]) != {}:
+    sys.exit(1)
+' "$raw" 2>/dev/null; then
+  c2_json=ok
+fi
+
+# 3. Missing, empty, or malformed stdin emits {} with exit 0
+r=$(agy_digest_repo agy-digest-invalid)
+out_empty=$(printf '' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>/dev/null ))
+ex_empty=$?
+out_missing=$(printf '{"conversationId":"abc"}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>/dev/null ))
+ex_missing=$?
+out_malformed=$(printf '{not valid json' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>/dev/null ))
+ex_malformed=$?
+c3=no
+if [ "$ex_empty$ex_missing$ex_malformed" = "000" ] && \
+   python3 -c '
+import json, sys
+if json.loads(sys.argv[1]) != {} or json.loads(sys.argv[2]) != {} or json.loads(sys.argv[3]) != {}:
+    sys.exit(1)
+' "$out_empty" "$out_missing" "$out_malformed" 2>/dev/null; then
+  c3=ok
+fi
+
+# 4. Subdirectory invocation (.agents) anchors to repository root
+r=$(agy_digest_repo agy-digest-subdir)
+raw=$(printf '{"invocationNum": 1}' | ( cd "$r/.agents" && sh ../hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+exit_code=$?
+c4=no
+if [ "$exit_code" -eq 0 ] && python3 -c '
+import json, sys
+data = json.loads(sys.argv[1])
+msg = data["injectSteps"][0]["ephemeralMessage"]
+if not ("## Repo facts" in msg and "safety and correctness" in msg):
+    sys.exit(1)
+' "$raw" 2>/dev/null; then
+  c4=ok
+fi
+
+# 5. Missing .steering directory outputs fallback digest without error
+r=$(agy_digest_repo agy-digest-nosteering)
+rm -rf "$r/.steering"
+raw=$(printf '{"invocationNum": 1}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+exit_code=$?
+c5=no
+if [ "$exit_code" -eq 0 ] && python3 -c '
+import json, sys
+data = json.loads(sys.argv[1])
+msg = data["injectSteps"][0]["ephemeralMessage"]
+if "## Repo facts" not in msg:
+    sys.exit(1)
+' "$raw" 2>/dev/null; then
+  c5=ok
+fi
+
+[ "$c1_exit$c1_json$c2_exit$c2_json$c3$c4$c5" = "okokokokokokok" ] \
+  && report "steering-digest-antigravity.sh injects on turn 1, passes on later turns, and anchors to root" ok \
+  || report "steering-digest-antigravity.sh injects on turn 1, passes on later turns, and anchors to root" no \
+     "turn1-exit=$c1_exit turn1-json=$c1_json turn2-exit=$c2_exit turn2-json=$c2_json invalid=$c3 subdir=$c4 nosteering=$c5"
+
+
+# --- guards: scripts/check-manifests.py ---------------------------------------
+#
+# #145. Antigravity plugin loader discovers rules at rules/ (rules/AGENTS.md).
+# check-manifests.py ensures rules/AGENTS.md exists and matches root AGENTS.md.
+# Missing rules/AGENTS.md, drifted rules/AGENTS.md, or missing AGENTS.md must fail closed.
+
+manifest_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/.claude-plugin" "$r/hooks/templates" "$r/rules"
+  cp "$ROOT/scripts/check-manifests.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-manifests.py"
+  cp "$ROOT/.claude-plugin/plugin.json" "$r/.claude-plugin/"
+  cp "$ROOT/plugin.json" "$r/"
+  cp "$ROOT/.claude-plugin/marketplace.json" "$r/.claude-plugin/"
+  cp "$ROOT/hooks/templates/claude-code.settings.json" "$r/hooks/templates/"
+  cp "$ROOT/hooks/templates/antigravity.hooks.json" "$r/hooks/templates/"
+  printf '# AGENTS\n' > "$r/AGENTS.md"
+  ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
+  echo "$r"
+}
+run_manifest() { ( cd "$1" && python3 scripts/check-manifests.py >/dev/null 2>"$TMP/mferr"; printf '%s' "$?" ) }
+
+r=$(manifest_repo mf-control)
+out=$(run_manifest "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(manifest_repo mf-missing-rules)
+rm -f "$r/rules/AGENTS.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"missing: rules/AGENTS.md"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(manifest_repo mf-drift)
+rm -f "$r/rules/AGENTS.md"
+printf '# DRIFTED\n' > "$r/rules/AGENTS.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *"rules/AGENTS.md has drifted from AGENTS.md"*) c4=ok ;; *) c4=no ;; esac
+
+r=$(manifest_repo mf-missing-root)
+rm -f "$r/AGENTS.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *"missing: AGENTS.md"*|*"missing: rules/AGENTS.md"*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "check-manifests verifies rules/AGENTS.md matches AGENTS.md and fails closed" ok \
+  || report "check-manifests verifies rules/AGENTS.md matches AGENTS.md and fails closed" no \
+     "control=$c0 missing-rules-exit=$c1 missing-rules-err=$c2 drift-exit=$c3 drift-err=$c4 missing-root-exit=$c5 missing-root-err=$c6"
+
+# #144. check-manifests.py pairs Claude Code SessionStart with Antigravity PreInvocation
+# for steering digest injection. Omitting PreInvocation, or writing it in tool-style nested
+# form, must fail closed.
+
+r=$(manifest_repo mf-missing-preinv)
+python3 -c "
+import json
+p = '$r/hooks/templates/antigravity.hooks.json'
+d = json.load(open(p))
+if 'PreInvocation' in d.get('gate-sdd', {}):
+    del d['gate-sdd']['PreInvocation']
+json.dump(d, open(p, 'w'), indent=2)
+"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c7=ok || c7=no
+case "$err" in *"Antigravity hooks template is missing PreInvocation"*|*"hook events differ"*) c8=ok ;; *) c8=no ;; esac
+
+r=$(manifest_repo mf-nested-preinv)
+python3 -c "
+import json
+p = '$r/hooks/templates/antigravity.hooks.json'
+d = json.load(open(p))
+d['gate-sdd']['PreInvocation'] = [{'matcher': '.*', 'hooks': [{'type': 'command', 'command': 'exit 0'}]}]
+json.dump(d, open(p, 'w'), indent=2)
+"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *"antigravity PreInvocation: non-tool events need the flat {type, command} form"*) c10=ok ;; *) c10=no ;; esac
+
+[ "$c7$c8$c9$c10" = "okokokok" ] && report "check-manifests enforces PreInvocation on Antigravity in flat form" ok \
+  || report "check-manifests enforces PreInvocation on Antigravity in flat form" no \
+     "missing-preinv-exit=$c7 missing-preinv-err=$c8 nested-preinv-exit=$c9 nested-preinv-err=$c10"
+
+
+
+# --- guards: scripts/check-version-bump.py ------------------------------------
+#
+# #145. check-version-bump.py must include rules/ in SHIPPED so any change
+# to plugin rules enforces a version bump.
+
+vbump_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/rules"
+  cp "$ROOT/scripts/check-version-bump.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-version-bump.py"
+  ( cd "$r" && git init -q && git config user.email "test@example.com" && git config user.name "test" )
+  printf '{\n  "version": "1.0.0"\n}\n' > "$r/plugin.json"
+  printf 'rules v1\n' > "$r/rules/AGENTS.md"
+  ( cd "$r" && git add -A && git commit -qm "init" )
+  printf 'rules v2\n' > "$r/rules/AGENTS.md"
+  ( cd "$r" && git add -A && git commit -qm "change rules without bump" )
+  echo "$r"
+}
+run_vbump() { ( cd "$1" && python3 scripts/check-version-bump.py HEAD~1 >/dev/null 2>"$TMP/vberr"; printf '%s' "$?" ) }
+
+r=$(vbump_repo vb-rules)
+out=$(run_vbump "$r"); err=$(cat "$TMP/vberr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"rules/AGENTS.md"*) c2=ok ;; *) c2=no ;; esac
+
+( cd "$r" && git checkout -q HEAD~1 )
+printf '{\n  "version": "1.1.0"\n}\n' > "$r/plugin.json"
+printf 'rules v2\n' > "$r/rules/AGENTS.md"
+( cd "$r" && git add -A && git commit -qm "change rules with bump" )
+out=$(run_vbump "$r")
+[ "$out" = "0" ] && c0=ok || c0=no
+
+[ "$c0$c1$c2" = "okokok" ] && report "check-version-bump includes rules/ in SHIPPED" ok \
+  || report "check-version-bump includes rules/ in SHIPPED" no \
+     "bumped-exit=$c0 unbumped-exit=$c1 unbumped-err=$c2"
 
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"

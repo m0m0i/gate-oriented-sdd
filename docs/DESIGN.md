@@ -13,7 +13,7 @@ Three layers, chosen by how much each can be talked out of (`AGENTS.md`): determ
 | Guards — the validators on the `- Validators:` line, and `check-version-bump.py` | deterministic, at turn end and in CI | `scripts/`, `assets/` | CAP-5, CAP-7, and the gates' own correctness |
 | Reviewer — agent file, rulebook, lock, shared contract | judgment | `agents/<name>.md`, `agents/<name>/`, `agents/_shared/` | CAP-3 |
 | Skills — one copy read by both harnesses | process | `skills/` | CAP-4, CAP-6 |
-| Steering — three files, five machine-read lines | bridge | `.steering/` in a project | every capability; it is what the layers agree through |
+| Steering — three files, seven machine-read lines | bridge | `.steering/` in a project | every capability; it is what the layers agree through |
 | Manifests and hook wiring — two of each | packaging | `.claude-plugin/plugin.json`, `plugin.json`, `hooks/templates/claude-code.settings.json`, `hooks/templates/antigravity.hooks.json` | CAP-5 |
 | Tracker — issues typed feature, bug, chore | external | the project's tracker, via templates `init` installs | CAP-6 |
 | `evals/` | none yet | `evals/` | no capability. Under development — authored, unverified; kept because CAP-1's claim needs it to run one day |
@@ -26,7 +26,7 @@ What crosses, who produces it, who consumes it, and what happens when they disag
 
 | Seam | Crosses | Producer → consumer | On disagreement | Guard |
 | :-- | :-- | :-- | :-- | :-- |
-| Steering lines | `- Owns:`, `- Validators:`, `- Reviewer:`, `- Source globs:`, `- Docs:`, one physical line each | `init`, `northstar`, `contract` → `quality-gate.sh`, `review-gate.sh`, `steering-digest.sh`, the reviewer, the inception skills | a wrapped value is truncated at the first newline; an absent anchor is not a failure, an unreadable one is (#34) | `check-steering-anchors.sh` |
+| Steering lines | `- Owns:`, `- Validators:`, `- Reviewer:`, `- Source globs:`, `- Docs:`, `- Mode:`, `- Target:`, one physical line each | `init`, `northstar`, `contract` → `quality-gate.sh`, `review-gate.sh`, `steering-digest.sh`, the reviewer, the inception skills | a wrapped value is truncated at the first newline; an absent anchor is not a failure, an unreadable one is (#34) | `check-steering-anchors.sh` |
 | Receipt | the Receipt block's fields | reviewer → `implement` copies verbatim → `review-gate.sh` reads | the gate blocks on a missing, non-CLEAN or stale `reviewed_sha`; an absent `reviewed_by` means not independent | `check-receipt-schema.py` keeps the copies of the schema agreeing |
 | Rulebook and lock | `rules/*.md` and the hashes in `rules-lock.json` | `contract`, `init`, a human → `check-locks.py`; the reviewer loads rules on demand | drift fails closed since #16; a reviewer with no lock is invisible to `--update` (#19) | `check-locks.py` |
 | Slug | `<issue-number>-<kebab-title>` | tracker → branch, `.specs/<slug>/`, PR | a spec directory without an issue number blocks the turn | `review-gate.sh` |
