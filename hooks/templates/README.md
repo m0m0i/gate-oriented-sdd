@@ -22,4 +22,5 @@ The two files are **not** the same shape, and Antigravity's own shape is not int
 
 Mixing them up invalidates the *entire file* with `invalid hook "<name>": command hook must specify 'command'`, which reads like a missing field rather than a wrong shape. `scripts/check-manifests.py` checks these templates agree on which events they cover so the mistake cannot ship.
 
-There is no `SessionStart` on Antigravity. The steering digest is Claude Code only; `PreInvocation` is the candidate substitute and needs a once-per-session guard before it is worth shipping.
+Antigravity has no `SessionStart`; it delivers the steering digest via `PreInvocation` with turn 1 step injection (`hooks/steering-digest-antigravity.sh`). `scripts/check-manifests.py` enforces that `SessionStart` on Claude Code pairs with `PreInvocation` on Antigravity.
+

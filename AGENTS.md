@@ -34,7 +34,7 @@ Skills, agents, and rules are **one copy read by both** (rules symlinked at `rul
 
 Antigravity has five hook events: `PreToolUse`, `PostToolUse`, `PreInvocation`, `PostInvocation`, `Stop`. Both blocking gates port — `Stop` blocks on both sides, via exit code 2 on Claude Code and `{"decision": "continue"}` on Antigravity.
 
-**Antigravity has no `SessionStart`.** The steering digest has no direct equivalent; `PreInvocation` step injection is the candidate workaround and needs a once-per-session guard. Keep [`docs/fidelity.md`](./docs/fidelity.md) honest about this. A fidelity table a reader can trust is worth more than a claim of parity.
+**Antigravity has no `SessionStart`.** Steering digest delivery ports via `PreInvocation` turn 1 step injection (`hooks/steering-digest-antigravity.sh`), paired with `SessionStart` in `scripts/check-manifests.py`. Context re-injection after mid-session compaction remains the one unhooked path on Antigravity. Keep [`docs/fidelity.md`](./docs/fidelity.md) honest about this. A fidelity table a reader can trust is worth more than a claim of parity.
 
 ## Working on this repo
 

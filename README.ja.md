@@ -164,9 +164,10 @@ agy plugin install ./gate-oriented-sdd
 | ターン終了時の品質ゲート        | 完全（`Stop`, exit 2） | 完全（`Stop`, `{"decision":"continue"}`） |
 | review receipt のゲート         | 完全                   | 完全                                      |
 | 編集ごとの高速フィードバック    | 完全（`PostToolUse`）  | 完全（`PostToolUse`、観測のみ）           |
+| steering digest の注入          | 完全（`SessionStart`） | 完全（`PreInvocation`、ターン1のステップ注入） |
 | compaction 後の steering 再注入 | 完全（`SessionStart`） | **なし**（該当するイベントが存在しない）  |
 
-最後の行は誤差ではなく、本物の欠落です。`PreInvocation` が代替の候補ですが、セッションに一度だけ発火させるガードを入れないかぎり、出荷するには足りません。
+最後の行は誤差ではなく、本物の欠落です。Antigravity にはセッション途中の compaction を検知するイベントが存在しないため、初回ターン（turn 1）での注入は `PreInvocation` で行いますが、途中でコンテキストが圧縮された場合の再注入は行われません。
 
 ## ステータス
 

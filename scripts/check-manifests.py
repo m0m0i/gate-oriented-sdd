@@ -86,12 +86,17 @@ if cc_hooks.is_file() and agy_hooks.is_file():
                 errors.append(f"antigravity {event}: tool events need the nested {{matcher, hooks:[...]}} form")
             if event not in TOOL_EVENTS and nested:
                 errors.append(f"antigravity {event}: non-tool events need the flat {{type, command}} form")
-    # SessionStart has no Antigravity equivalent; it is a documented gap, not drift.
-    if (a_events - {"SessionStart"}) != b_events:
+    # Claude Code uses SessionStart for steering digest injection; Antigravity uses PreInvocation (turn 1).
+    if (a_events - {"SessionStart"}) != (b_events - {"PreInvocation"}):
         errors.append(
             f"hook events differ: Claude Code {sorted(a_events)} vs Antigravity {sorted(b_events)} "
-            "(SessionStart is exempt — Antigravity has no such event)"
+            "(SessionStart on Claude Code pairs with PreInvocation on Antigravity for steering digest)"
         )
+    if "SessionStart" not in a_events:
+        errors.append("Claude Code hooks template is missing SessionStart for steering digest")
+    if "PreInvocation" not in b_events:
+        errors.append("Antigravity hooks template is missing PreInvocation for steering digest")
+
 
 # Antigravity plugin loader discovers rules under rules/ (rules/AGENTS.md).
 # AGENTS.md at root is canonical context for Claude Code and this repository;
