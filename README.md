@@ -167,7 +167,7 @@ The last row is a real gap, not a rounding error. `PreInvocation` is the candida
 
 ## Status
 
-**v0.9.0 — pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, and `claude plugin eval` is still in early access on this account.
+**v0.10.0 — pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, and `claude plugin eval` is still in early access on this account.
 
 Tested against: Claude Code 2.1.252 (2026-09-05) · Antigravity CLI 1.1.17 and IDE 2.3.1 (2026-08-21) · macOS.
 
