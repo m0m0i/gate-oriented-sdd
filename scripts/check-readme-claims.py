@@ -258,10 +258,22 @@ def main():
             # Without the tie, a `node-v18.0.0-green` badge on a README that had lost its
             # version badge was diagnosed as the version badge gone static — the wrong remedy,
             # which is the harm this branch was split out of the absence branch to avoid.
+            # BOTH spellings of the label. shields escapes a hyphen as `--` in the PATH form
+            # (`/badge/gate--sdd-v1.2.3-blue`) and leaves it alone in the QUERY form
+            # (`/static/v1?label=gate-sdd&message=v1.2.3`). The query form is the likelier
+            # substitution here, because the badge already in the README carries `label=` as a
+            # query parameter — an author editing that URL reaches it first. Matching only the
+            # escaped spelling sent exactly that case to the absence branch, which is the right
+            # verdict with the wrong remedy.
             marker = BADGE_LABEL.replace("-", "--")
+
+            def labelled(url):
+                q = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)
+                return marker in url or (q.get("label") or [""])[0] == BADGE_LABEL
+
             baked = [
                 b for b in badges
-                if marker in b and BAKED_VERSION.search(b.rsplit("/", 1)[-1])
+                if labelled(b) and BAKED_VERSION.search(b.rsplit("/", 1)[-1])
             ]
             if baked:
                 problems.append(

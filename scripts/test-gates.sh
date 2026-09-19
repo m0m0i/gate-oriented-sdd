@@ -2126,7 +2126,6 @@ case "$err" in *PRD.md*) c6=no ;; *) c6=ok ;; esac
   || report "trailing whitespace is strict on Mode, tolerant on Docs, and blank Docs never means the repo root" no \
      "mode-exit=$c1 mode-names-whitespace=$c2 mode-not-generic=$c3 docs-tolerant=$c4 blank-falls-back=$c5 not-root-scanned=$c6"
 
-
 # 68. The tree `init` step 3 actually produces must pass the document-set checker step 3 arms.
 #
 # #127. `init` writes `- Mode:` and `- Docs: docs/`, copies this checker into the project and
@@ -3229,6 +3228,41 @@ out=$(run_readme "$r")
   || report "a static version badge fails as a substitution, and an unrelated badge does not" no \
      "static-red=$s1 says-static=$s2 not-called-absent=$s3 other-badge-green=$s4"
 
+# 65b-ii. shields' OTHER static form — the label as a query parameter, unescaped.
+#
+# Found in review, as a regression the label tie introduced. `/static/v1?label=gate-sdd&
+# message=v1.2.3` spells the label plainly, where `/badge/gate--sdd-v1.2.3-blue` escapes the
+# hyphen. This is the likelier substitution of the two: the badge already in the README
+# carries `label=` as a query parameter, so an author editing that URL reaches this form
+# first. Matching only the escaped spelling gave it the right verdict with the wrong remedy.
+# Inlined rather than using `mutate_badge`: that helper is defined in case 65c, BELOW this
+# point, and a call to an undefined function yields an empty `$r` whose fixture edits land on
+# the repository itself. That happened once on this branch already.
+r=$(readme_repo rm-static-query)
+python3 - "$r" <<'PYEOF'
+import pathlib, re, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = re.sub(r"https://img\.shields\.io/[^\s)\]]+",
+             "https://img.shields.io/static/v1?label=gate-sdd&message=v1.2.3&color=blue", src)
+if out == src:
+    raise SystemExit("fixture no-op: no shields badge to replace")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfi=ok || cfi=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfi" = ok ]; } && q1=ok || q1=no
+case "$err" in *static*) q2=ok ;; *) q2=no ;; esac
+case "$err" in *"no badge labelled"*) q3=no ;; *) q3=ok ;; esac
+
+[ "$q1$q2$q3" = "okokok" ] \
+  && report "the query-parameter static form is named as a substitution, not as an absence" ok \
+  || report "the query-parameter static form is named as a substitution, not as an absence" no \
+     "red=$q1 says-static=$q2 not-called-absent=$q3"
+
+
 # 65c. The dynamic badge must read THIS repository's manifest, and must survive reordering.
 #
 # #133 AC4. "Dynamic" alone is not the property that matters — a dynamic badge pointed at a
@@ -3278,7 +3312,7 @@ mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fr
 [ "$?" = 0 ] && cf9=ok || cf9=no
 out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cf9" = ok ]; } && u4=ok || u4=no
-case "$err" in *"asks for"*) u4b=ok ;; *) u4b=no ;; esac
+case "$err" in *'asks for `$.name`'*) u4b=ok ;; *) u4b=no ;; esac
 
 # GREEN: the same badge with its parameters in a different order must pass.
 r=$(readme_repo rm-badge-reorder)
@@ -3457,10 +3491,15 @@ p = pathlib.Path(root, "README.md"); src = p.read_text()
 kept = [l for l in src.split("\n") if "img.shields.io" not in l]
 if len(kept) == len(src.split("\n")):
     raise SystemExit("fixture no-op: no badge line to remove")
-out = "\n".join(kept).replace(
+body = "\n".join(kept)
+out = body.replace(
     "## Status",
     "[![node](https://img.shields.io/badge/node-v18.0.0-green)](https://nodejs.org)\n\n## Status",
 )
+# Checked, like every sibling: without this the fixture degenerates into rm-nobadge if the
+# heading ever moves, and all four halves go green having tested nothing.
+if out == body:
+    raise SystemExit("fixture no-op: no Status heading to insert before")
 p.write_text(out)
 PYEOF
 [ "$?" = 0 ] && cfh=ok || cfh=no
@@ -3477,7 +3516,6 @@ case "$err" in *node*) f4=no ;; *) f4=ok ;; esac
   && report "a foreign versioned badge is diagnosed as an absent version badge, not a static one" ok \
   || report "a foreign versioned badge is diagnosed as an absent version badge, not a static one" no \
      "red=$f1 says-absent=$f2 not-called-static=$f3 does-not-name-node=$f4"
-
 
 
 # 66. A source the guard cannot read is a THIRD outcome, never agreement.

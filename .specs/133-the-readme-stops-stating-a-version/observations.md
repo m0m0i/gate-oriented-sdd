@@ -41,6 +41,17 @@ Reviewed at `f1b2df58a7e29c3676605b26521a80ac2153f237`. The round-3 HIGH is clos
 - **LOW — three halves asserted an exit code where the convention is to pin the cause.** `wrong-path-red`, `wrong-query-red` and `names-ja-file` would each have stayed green if the label selection broke, because all three fixtures would then exit 1 through the absence branch. Each now pins its own message.
 - **LOW — a failure label that stopped describing its assertion.** Round 2's reword left `names-manifest=$c2` printed for a half that now checks the badge label. A mis-describing failure line is what let round 3's dead assertion look checked for a round, so it is renamed rather than left.
 
+## Review round 5 — CLEAN, 0 blockers, 0 HIGH, 2 MEDIUM, 2 LOW
+
+Reviewed at `c7f3444f6e3e1b8d095e064f88e937e9d0f0b30f`. All four round-4 findings closed, and the reviewer answered the four questions it was asked directly — including confirming that two assertions (`other-badge-green`, `not-accused`) can only redden under a *widening*, which is correct for the G-6 direction they exist to hold rather than a defect.
+
+- **MEDIUM — the label tie was a coverage regression.** Round 4 tied `baked` to `gate--sdd`, shields' escaped **path** spelling. Shields also accepts the label as a **query parameter**, unescaped — `/static/v1?label=gate-sdd&message=v1.2.3` — and that is the likelier substitution of the two, because the badge already in the README carries `label=` as a query parameter, so an author editing that URL reaches it first. The previous, looser `baked` caught it; the fix for a wrong-remedy LOW created a wrong remedy for the input AC3 actually exists for. Both spellings are now accepted, with case 65b-ii covering the query form. Mutation-verified by reverting to the escaped-only tie: that one report reddens, `says-static` and `not-called-absent` both.
+- **MEDIUM — a fixture that could degenerate silently.** 65f's insertion step had no no-op check, so if `readme_repo`'s heading ever moved, the fixture would become `rm-nobadge`, all four halves would go green, and the case would test nothing — the round-2/round-3 defect class, pre-installed in the commit that fixed it. Guarded, and mutation-verified: breaking the insertion now reddens the case immediately.
+- **LOW — `names-query` pinned the branch, not the value.** Its two siblings pin the offending value; it matched only `asks for`, so it would have stayed green if the query extraction broke and the guard reported `(no query parameter)` about a badge that plainly has one. Now pins `asks for \`$.name\``.
+- **LOW — two blank-line hunks**, one of them 1,300 lines from the work. Debris from the first, misplaced insertion of case 65b. Removed.
+
+While adding 65b-ii I hit the ordering trap a third time: `mutate_badge` is defined in case 65c, *below* 65b, so the first draft called an undefined function and the fixture would have edited the repository. Caught by the case going red rather than by the damage this time, and the mutation is inlined so the case no longer depends on definition order.
+
 ## Recorded rather than fixed
 
 - **`Status: done` was flipped before the review, not after.** `skills/implement/SKILL.md` lists that flip among the commits landing after the receipt. No mechanical effect — `hooks/review-gate.sh` arms on unticked tasks and never reads `Status` — but the spec did read `done` while its receipt was still being written. Same slip as #141, which makes it a habit rather than an accident and worth naming here.
