@@ -22,6 +22,12 @@ set -u
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$DIR/gate-lib.sh"
 
+# Anchor to the repository root so relative paths (.steering/, .specs/) resolve
+# correctly regardless of the working directory the hook was invoked from.
+if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+  cd "$repo_root"
+fi
+
 # The validator list is read through gate_steering_value. If this hooks/ directory is a mix of
 # versions the function is undefined — and `set -u` does not catch an undefined FUNCTION, so
 # the read yields empty, the "no validators configured" branch below fires, and the gate exits

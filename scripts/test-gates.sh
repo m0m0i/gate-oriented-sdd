@@ -3679,5 +3679,133 @@ case "$err" in *"states the receipt count twice and they disagree"*) c15=ok ;; *
      "count-before-exit=$c1 quotes-it=$c2 count-ja-exit=$c3 quotes-ja=$c4 noise-stays-green=$c5 unknown-exit=$c6 says-silence=$c7 ja-particle-exit=$c8 quotes-particle=$c9 ja-eval-noise-green=$c10 ja-unrelated-green=$c11 ja-silent-exit=$c12 ja-silent-msg=$c13 ja-echo-exit=$c14 ja-echo-msg=$c15"
 
 
+# --- Antigravity hook command execution ------------------------------------------
+#
+# #143. Antigravity executes hooks with cwd set to the directory containing hooks.json
+# (<project>/.agents/). If commands in antigravity.hooks.json assume cwd is the repo root,
+# `[ -f .agents/hooks/quality-gate.sh ]` checks .agents/.agents/hooks/quality-gate.sh,
+# fails, and executes `|| exit 0`. Both gates silently pass on every turn, and
+# {{FAST_CHECK}} runs inside .agents/.
+#
+# Any test verifying Antigravity hook execution MUST run the rendered command string
+# with cwd set to .agents/, or it passes for the wrong reason.
+
+agy_get_cmd() {
+  # $1 = hooks.json, $2 = event, $3 = index
+  python3 -c "
+import json, sys
+data = json.load(open(sys.argv[1]))
+pkg = data.get('gate-sdd', {})
+ev = pkg.get(sys.argv[2], [])
+idx = int(sys.argv[3])
+if sys.argv[2] == 'PostToolUse':
+    print(ev[idx]['hooks'][0]['command'])
+else:
+    print(ev[idx]['command'])
+" "$1" "$2" "$3"
+}
+
+antigravity_repo() {
+  r="$TMP/$1"; mkdir -p "$r/.agents/hooks" "$r/.steering" "$r/.specs/9-feature" "$r/src"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/review-gate.sh" "$r/.agents/hooks/"
+  sed -e 's|{{HOOKS_DIR}}|.agents/hooks|g' -e 's|{{FAST_CHECK}}|pwd > fast_check.txt|g' \
+    "$ROOT/hooks/templates/antigravity.hooks.json" > "$r/.agents/hooks.json"
+  printf -- '- Reviewer: test-reviewer\n- Source globs: :(glob)**/*.txt\n' > "$r/.steering/tech.md"
+  if [ "${2:-0}" = 0 ]; then box='- [x]'; else box='- [ ]'; fi
+  cat > "$r/.specs/9-feature/spec.md" <<EOF
+# Spec: feature
+- Slug: 9-feature   Status: approved
+
+## 3. Tasks (TDD-ordered)
+$box T1: do the thing
+EOF
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && echo one > src/main.txt && git add -A && git commit -qm init \
+    && git checkout -q -b 9-feature && echo two >> src/main.txt && git commit -qam work ) >/dev/null 2>&1
+  echo "$r"
+}
+
+# 1. Quality gate blocks when a validator fails and cwd is .agents/
+r=$(antigravity_repo agy-qg-fail 1)
+echo '- Validators: false' >> "$r/.steering/tech.md"
+( cd "$r" && git commit -qam "add failing validator" ) >/dev/null 2>&1
+echo dirty >> "$r/src/main.txt"
+cmd=$(agy_get_cmd "$r/.agents/hooks.json" Stop 0)
+out=$( ( cd "$r/.agents" && sh -c "$cmd" 2>"$TMP/agy_qg_err"; echo "exit=$?" ) )
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+
+# 2. Review gate blocks when unreviewed spec is completed and cwd is .agents/
+r=$(antigravity_repo agy-rv-fail 0)
+cmd=$(agy_get_cmd "$r/.agents/hooks.json" Stop 1)
+out=$( ( cd "$r/.agents" && sh -c "$cmd" 2>"$TMP/agy_rv_err"; echo "exit=$?" ) )
+case "$out" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+case "$out" in *'"decision":"continue"'*) c4=ok ;; *) c4=no ;; esac
+
+# 3. PostToolUse fast-check runs with cwd anchored to repo root
+r=$(antigravity_repo agy-fast-check 1)
+cmd=$(agy_get_cmd "$r/.agents/hooks.json" PostToolUse 0)
+( cd "$r/.agents" && sh -c "$cmd" ) >/dev/null 2>&1
+if [ -f "$r/fast_check.txt" ] && [ ! -f "$r/.agents/fast_check.txt" ]; then
+  c5=ok
+else
+  c5=no
+fi
+
+# 4. Clean repo passes both gates when cwd is .agents/
+r=$(antigravity_repo agy-clean 0)
+echo '- Validators: true' >> "$r/.steering/tech.md"
+head=$(git -C "$r" rev-parse HEAD)
+printf 'verdict=CLEAN\nreviewed_sha=%s\nreviewed_by=inline\n' "$head" > "$r/.specs/9-feature/.review-receipt"
+( cd "$r" && git add -A && git commit -qm "clean" ) >/dev/null 2>&1
+cmd_qg=$(agy_get_cmd "$r/.agents/hooks.json" Stop 0)
+cmd_rv=$(agy_get_cmd "$r/.agents/hooks.json" Stop 1)
+out_qg=$( ( cd "$r/.agents" && sh -c "$cmd_qg"; echo "exit=$?" ) )
+out_rv=$( ( cd "$r/.agents" && sh -c "$cmd_rv"; echo "exit=$?" ) )
+case "$out_qg" in *"exit=0"*) c6=ok ;; *) c6=no ;; esac
+case "$out_rv" in *"exit=0"*) c7=ok ;; *) c7=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] && report "Antigravity hooks execute from repo root when cwd is .agents/" ok \
+  || report "Antigravity hooks execute from repo root when cwd is .agents/" no \
+     "qg-exit=$c1 qg-json=$c2 rv-exit=$c3 rv-json=$c4 fast-check-root=$c5 clean-qg-exit=$c6 clean-rv-exit=$c7"
+
+
+# --- Hooks invoked directly from a subdirectory (defense in depth) ----------------
+#
+# #143. If a gate script is invoked directly from a subdirectory (such as .agents/),
+# relative references to .steering/ and .specs/ must still resolve against the
+# git repository root rather than failing open.
+
+# 1. Quality gate blocks when invoked directly from .agents/ with a failing validator
+r=$(antigravity_repo agy-direct-qg 1)
+echo '- Validators: false' >> "$r/.steering/tech.md"
+( cd "$r" && git commit -qam "add failing validator" ) >/dev/null 2>&1
+echo dirty >> "$r/src/main.txt"
+out=$( ( cd "$r/.agents" && sh hooks/quality-gate.sh 2>"$TMP/agy_direct_qg_err"; echo "exit=$?" ) )
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+
+# 2. Review gate blocks when invoked directly from .agents/ without a receipt
+r=$(antigravity_repo agy-direct-rv 0)
+out=$( ( cd "$r/.agents" && sh hooks/review-gate.sh 2>"$TMP/agy_direct_rv_err"; echo "exit=$?" ) )
+case "$out" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+case "$out" in *'"decision":"continue"'*) c4=ok ;; *) c4=no ;; esac
+
+# 3. Clean repo passes both gates when invoked directly from .agents/
+r=$(antigravity_repo agy-direct-clean 0)
+echo '- Validators: true' >> "$r/.steering/tech.md"
+head=$(git -C "$r" rev-parse HEAD)
+printf 'verdict=CLEAN\nreviewed_sha=%s\nreviewed_by=inline\n' "$head" > "$r/.specs/9-feature/.review-receipt"
+( cd "$r" && git add -A && git commit -qm "clean" ) >/dev/null 2>&1
+out_qg=$( ( cd "$r/.agents" && sh hooks/quality-gate.sh; echo "exit=$?" ) )
+out_rv=$( ( cd "$r/.agents" && sh hooks/review-gate.sh; echo "exit=$?" ) )
+case "$out_qg" in *"exit=0"*) c5=ok ;; *) c5=no ;; esac
+case "$out_rv" in *"exit=0"*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] && report "quality-gate.sh and review-gate.sh anchor to repo root when invoked from a subdirectory" ok \
+  || report "quality-gate.sh and review-gate.sh anchor to repo root when invoked from a subdirectory" no \
+     "qg-exit=$c1 qg-json=$c2 rv-exit=$c3 rv-json=$c4 clean-qg-exit=$c5 clean-rv-exit=$c6"
+
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1

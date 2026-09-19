@@ -13,6 +13,9 @@ DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$DIR/gate-lib.sh"
 
 git rev-parse --git-dir >/dev/null 2>&1 || gate_pass
+if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+  cd "$repo_root"
+fi
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || gate_pass
 
 spec=".specs/$branch/spec.md"
