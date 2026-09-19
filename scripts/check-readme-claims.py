@@ -253,7 +253,16 @@ def main():
             # "Carries no badge labelled `gate-sdd`" sends an author who is looking at one to
             # add a second — so the two causes carry different remedies as well as different
             # words.
-            baked = [b for b in badges if BAKED_VERSION.search(b.rsplit("/", 1)[-1])]
+            # Tied to the label, not merely to "carries a version". shields escapes a hyphen
+            # in a label as `--`, so the static form of this badge reads `gate--sdd-v1.2.3`.
+            # Without the tie, a `node-v18.0.0-green` badge on a README that had lost its
+            # version badge was diagnosed as the version badge gone static — the wrong remedy,
+            # which is the harm this branch was split out of the absence branch to avoid.
+            marker = BADGE_LABEL.replace("-", "--")
+            baked = [
+                b for b in badges
+                if marker in b and BAKED_VERSION.search(b.rsplit("/", 1)[-1])
+            ]
             if baked:
                 problems.append(
                     f"{name}: the version badge is static — `{baked[0]}`. A static badge bakes "

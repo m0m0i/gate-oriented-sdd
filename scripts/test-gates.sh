@@ -3174,7 +3174,7 @@ case "$err" in *"but 1 of 2 say reviewed_by=inline"*) c8=ok ;; *) c8=no ;; esac
 
 [ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "each README Status claim disagreeing with its source is named" ok \
   || report "each README Status claim disagreeing with its source is named" no \
-     "control=$c0 version-exit=$c1 names-manifest=$c2 count-exit=$c3 says-removed=$c4 receipts-en=$c5 names-count=$c6 receipts-ja=$c7 names-file=$c8"
+     "control=$c0 nobadge-exit=$c1 names-label=$c2 count-exit=$c3 says-removed=$c4 receipts-en=$c5 names-count=$c6 receipts-ja=$c7 names-file=$c8"
 
 # 65b. A STATIC badge is the drift returning, and must not be reported as a missing one.
 #
@@ -3266,15 +3266,19 @@ case "$err" in *someone-else*) u2=ok ;; *) u2=no ;; esac
 r=$(readme_repo rm-badge-path)
 mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2F.claude-plugin%2Fplugin.json&query=%24.version&label=gate-sdd"
 [ "$?" = 0 ] && cf8=ok || cf8=no
-out=$(run_readme "$r")
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cf8" = ok ]; } && u3=ok || u3=no
+# The path, not just the exit code: if the label selection broke, this fixture would
+# exit 1 through the ABSENCE branch and this half would stay green for the wrong cause.
+case "$err" in *".claude-plugin"*) u3b=ok ;; *) u3b=no ;; esac
 
 # Asking for the wrong FIELD renders someone else's value under a version label.
 r=$(readme_repo rm-badge-query)
 mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fraw.githubusercontent.com%2Fm0m0i%2Fgate-oriented-sdd%2Fmain%2Fplugin.json&query=%24.name&label=gate-sdd"
 [ "$?" = 0 ] && cf9=ok || cf9=no
-out=$(run_readme "$r")
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cf9" = ok ]; } && u4=ok || u4=no
+case "$err" in *"asks for"*) u4b=ok ;; *) u4b=no ;; esac
 
 # GREEN: the same badge with its parameters in a different order must pass.
 r=$(readme_repo rm-badge-reorder)
@@ -3283,10 +3287,10 @@ mutate_badge "$r" "https://img.shields.io/badge/dynamic/json?label=gate-sdd&colo
 out=$(run_readme "$r")
 { [ "$out" = "0" ] && [ "$cfa" = ok ]; } && u5=ok || u5=no
 
-[ "$u1$u2$u3$u4$u5" = "okokokokok" ] \
+[ "$u1$u2$u3$u3b$u4$u4b$u5" = "okokokokokokok" ] \
   && report "a dynamic badge reading the wrong source fails, and reordering its parameters does not" ok \
   || report "a dynamic badge reading the wrong source fails, and reordering its parameters does not" no \
-     "fork-red=$u1 names-owner=$u2 wrong-path-red=$u3 wrong-query-red=$u4 reorder-green=$u5"
+     "fork-red=$u1 names-owner=$u2 wrong-path-red=$u3 names-path=$u3b wrong-query-red=$u4 names-query=$u4b reorder-green=$u5"
 
 # 65d. The literal coming back is the root cause returning, and must fail.
 #
@@ -3333,7 +3337,7 @@ PYEOF
 [ "$?" = 0 ] && cfc=ok || cfc=no
 out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cfc" = ok ]; } && l4=ok || l4=no
-case "$err" in *README.ja.md*) l5=ok ;; *) l5=no ;; esac
+case "$err" in *"README.ja.md: states a version"*) l5=ok ;; *) l5=no ;; esac
 
 # The literal WITHOUT a trailing delimiter. The first cut of the prohibition required a space
 # or a Japanese comma after the number, so `**v1.2.3**` walked straight through — the root
@@ -3435,6 +3439,45 @@ case "$err" in *"no badge labelled \`gate-sdd\`"*) d4=ok ;; *) d4=no ;; esac
   && report "an unrelated dynamic badge passes, and relabelling the version badge fails closed" ok \
   || report "an unrelated dynamic badge passes, and relabelling the version badge fails closed" no \
      "other-dynamic-green=$d1 not-accused=$d2 relabel-red=$d3 says-absent=$d4"
+
+# 65f. A foreign versioned badge is not this repo's version badge gone static.
+#
+# Found in review. `baked` selected any shields badge whose last segment carried a version, so
+# a README that had genuinely LOST its version badge while carrying, say, `node-v18.0.0-green`
+# was told the version badge had gone static — sending the author to fix a badge that was
+# never the subject. The remedy matters more than the verdict here: both outcomes are exit 1,
+# and only the message tells the reader what to do.
+r=$(readme_repo rm-foreign-version-badge)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+kept = [l for l in src.split("\n") if "img.shields.io" not in l]
+if len(kept) == len(src.split("\n")):
+    raise SystemExit("fixture no-op: no badge line to remove")
+out = "\n".join(kept).replace(
+    "## Status",
+    "[![node](https://img.shields.io/badge/node-v18.0.0-green)](https://nodejs.org)\n\n## Status",
+)
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfh=ok || cfh=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfh" = ok ]; } && f1=ok || f1=no
+# The ABSENCE remedy, because that is what is actually wrong: this README has no gate-sdd
+# badge. Being told a badge it does not have went static is the wrong instruction.
+case "$err" in *"no badge labelled"*) f2=ok ;; *) f2=no ;; esac
+case "$err" in *static*) f3=no ;; *) f3=ok ;; esac
+# ...and the node badge must not be named as though it were the subject.
+case "$err" in *node*) f4=no ;; *) f4=ok ;; esac
+
+[ "$f1$f2$f3$f4" = "okokokok" ] \
+  && report "a foreign versioned badge is diagnosed as an absent version badge, not a static one" ok \
+  || report "a foreign versioned badge is diagnosed as an absent version badge, not a static one" no \
+     "red=$f1 says-absent=$f2 not-called-static=$f3 does-not-name-node=$f4"
+
 
 
 # 66. A source the guard cannot read is a THIRD outcome, never agreement.
