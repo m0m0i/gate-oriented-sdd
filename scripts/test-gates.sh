@@ -3807,5 +3807,53 @@ case "$out_rv" in *"exit=0"*) c6=ok ;; *) c6=no ;; esac
      "qg-exit=$c1 qg-json=$c2 rv-exit=$c3 rv-json=$c4 clean-qg-exit=$c5 clean-rv-exit=$c6"
 
 
+# --- guards: scripts/check-manifests.py ---------------------------------------
+#
+# #145. Antigravity plugin loader discovers rules at rules/ (rules/AGENTS.md).
+# check-manifests.py ensures rules/AGENTS.md exists and matches root AGENTS.md.
+# Missing rules/AGENTS.md, drifted rules/AGENTS.md, or missing AGENTS.md must fail closed.
+
+manifest_repo() {
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/.claude-plugin" "$r/hooks/templates" "$r/rules"
+  cp "$ROOT/scripts/check-manifests.py" "$r/scripts/"
+  chmod +x "$r/scripts/check-manifests.py"
+  cp "$ROOT/.claude-plugin/plugin.json" "$r/.claude-plugin/"
+  cp "$ROOT/plugin.json" "$r/"
+  cp "$ROOT/.claude-plugin/marketplace.json" "$r/.claude-plugin/"
+  cp "$ROOT/hooks/templates/claude-code.settings.json" "$r/hooks/templates/"
+  cp "$ROOT/hooks/templates/antigravity.hooks.json" "$r/hooks/templates/"
+  printf '# AGENTS\n' > "$r/AGENTS.md"
+  ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
+  echo "$r"
+}
+run_manifest() { ( cd "$1" && python3 scripts/check-manifests.py >/dev/null 2>"$TMP/mferr"; printf '%s' "$?" ) }
+
+r=$(manifest_repo mf-control)
+out=$(run_manifest "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(manifest_repo mf-missing-rules)
+rm -f "$r/rules/AGENTS.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"missing: rules/AGENTS.md"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(manifest_repo mf-drift)
+rm -f "$r/rules/AGENTS.md"
+printf '# DRIFTED\n' > "$r/rules/AGENTS.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *"rules/AGENTS.md has drifted from AGENTS.md"*) c4=ok ;; *) c4=no ;; esac
+
+r=$(manifest_repo mf-missing-root)
+rm -f "$r/AGENTS.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *"missing: AGENTS.md"*|*"missing: rules/AGENTS.md"*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "check-manifests verifies rules/AGENTS.md matches AGENTS.md and fails closed" ok \
+  || report "check-manifests verifies rules/AGENTS.md matches AGENTS.md and fails closed" no \
+     "control=$c0 missing-rules-exit=$c1 missing-rules-err=$c2 drift-exit=$c3 drift-err=$c4 missing-root-exit=$c5 missing-root-err=$c6"
+
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
