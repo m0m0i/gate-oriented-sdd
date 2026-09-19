@@ -64,7 +64,7 @@ Reviewed at `3f28500e73ce1a58c1dc35a5c4da5004bd98a3ee`. Asked directly whether t
 
 | AC | Status | Evidence |
 | :-- | :-- | :-- |
-| AC1 | **verified for form; not exercised for render** | Both READMEs' badge URLs byte-compared against `BADGE_SOURCE`, `BADGE_QUERY` and `BADGE_LABEL`; no version literal remains in either file. **Nothing observes shields.io actually rendering the number** — the Design states that limit deliberately, and no case can close it without a network call the validators must not make. |
+| AC1 | **verified for form; not exercised for render** | CI's unconditional `check-readme-claims.py` run on the real files, plus the reviewer byte comparison recorded below; no version literal remains in either file. **Nothing observes shields.io actually rendering the number** — the Design states that limit deliberately, and no case can close it without a network call the validators must not make. |
 | AC2 | verified | Case 65 `rm-nobadge`, case 65e `rm-badge-relabel` (relabelling fails closed into absence) |
 | AC3 | verified | Case 65b (path form), 65b-ii (query form), 65f (the negative direction — a foreign versioned badge is not this one gone static) |
 | AC4 | verified | Case 65c: fork, wrong path, wrong field, plus `reorder-green` for the LV-2 direction |
@@ -72,6 +72,16 @@ Reviewed at `3f28500e73ce1a58c1dc35a5c4da5004bd98a3ee`. Asked directly whether t
 | AC6 | verified | Case 65's receipt and count halves, plus cases 66 and 67, green and untouched |
 
 AC1's unexercised half is the honest counterpart to #141's AC1/AC2/AC6: there, three criteria described what a model does and no test could watch it; here, one criterion describes what a third-party service renders and no validator may reach it. In both, the guard verifies the *form* of the claim and the record says so rather than letting form read as proof.
+
+## Review round 7 — CLEAN, 0 blockers, 0 HIGH, 3 MEDIUM, 2 LOW
+
+Reviewed at `0924f11b1d0bd1d9bbbb72fc196bc8ce19d01361`. The receipt is written from this round. The reviewer's own triage: nothing here should block the merge. One finding is taken below; the rest are recorded with their fixes named, because a seventh round of repairs on message precision buys less than writing down what is left.
+
+- **Taken — the statements this change made false.** `docs/decisions/ADR-5-…md:14` says "The READMEs are exempt, so the version they state drifts from the manifests (#48)". The first clause still holds; the second is now false, because the READMEs state no version. `docs/EPICS.md:66` carries the same premise. Both are read as **historical records that stand by their date** rather than amended: an ADR records what was decided and why at the time, and #48's entry describes the state that motivated the epic. Neither is edited; this bullet is the reread C-9 asks for, and it is what a future reader following ADR-5 to its consequence line will need.
+- **Recorded — the success line is a behaviour change with no case.** `run_readme()` sends stdout to `/dev/null`, and no case in the suite reads this guard's stdout, so restoring `README(s) agree — v{version}` leaves all 93 green. The argument that a guard must not certify a claim it stopped checking lives only in a comment. This is the branch's own recurring shape on the one output stream the suite never looks at, and it is the finding most worth not losing. Not a fail-open: the verdict, the exit code and every check are unaffected; only CI's summary sentence would lie. **The fix is named:** capture stdout for `rm-control` and assert it says `carry a version badge` and does not say `agree —`.
+- **Recorded — AC2's "naming the file" clause is unpinned.** `c2`, `d4` and `f2` all match the label phrase only, so dropping the `{name}: ` prefix would leave them green while the guard stopped saying which README is at fault. The branch, its exit code and its remedy text are all covered; this is a sliver. **Fix:** widen `c2` to `*"README.md: carries no badge labelled \`gate-sdd\`"*` — `rm-nobadge` strips the badge from `README.md` only, so exactly one absence problem is emitted.
+- **Recorded — case 65b's `says-static` still matches the bare word** while its sibling was tightened. It discriminates today, because `rm-staticbadge`'s URL contains no `static` and the match is case-sensitive, so this is robustness rather than a G-4 violation. One fixture edit from the coupling round 6 found next door. **Fix:** the same six words as line 3260. Correcting this record while I am here: round 6's note that "both static halves redden" is true of the mutation, but only `q2` was tightened.
+- **Recorded — `receipts()` swallows a PermissionError** on a spec directory it cannot traverse, so a receipt inside one disappears silently. Outside this diff and untouched by this branch; it belongs on #137's pile.
 
 ## Recorded rather than fixed
 
