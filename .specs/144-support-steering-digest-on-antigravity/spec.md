@@ -1,5 +1,5 @@
 # Spec: Support steering digest on Antigravity via PreInvocation hook
-- Slug: 144-support-steering-digest-on-antigravity   Issue: 144   Type: feature   Status: approved
+- Slug: 144-support-steering-digest-on-antigravity   Issue: 144   Type: feature   Status: done
 - Author: Hiroyuki   Date: 2026-09-19
 
 ## 1. Requirements (WHAT / WHY)
