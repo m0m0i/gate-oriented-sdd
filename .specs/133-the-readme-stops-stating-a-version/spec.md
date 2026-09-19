@@ -1,5 +1,5 @@
 # Spec: the README stops stating a version
-- Slug: 133-the-readme-stops-stating-a-version   Issue: 133   Type: bug   Status: approved
+- Slug: 133-the-readme-stops-stating-a-version   Issue: 133   Type: bug   Status: done
 - Author: Hiroyuki   Date: 2026-09-19
 
 ## 1. Requirements (WHAT / WHY)
