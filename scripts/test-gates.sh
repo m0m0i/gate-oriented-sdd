@@ -2736,6 +2736,50 @@ case "$err" in *"read only while Mode is bootstrap"*) c6=ok ;; *) c6=no ;; esac
   || report "init stripped of the target question or its destination fails, naming the file and the key" no \
      "notarget-exit=$c1 names-file=$c2 names-key=$c3 control=$c4 nodest-exit=$c5 nodest-names-key=$c6"
 
+# 75. init stripped of the harness question or pointer instructions fails.
+#     #146's pins, the twenty-second and twenty-third.
+#
+# When harness detection is ambiguous or neither is detected, init must interview the operator
+# rather than silently defaulting to Claude Code. Furthermore, init must configure pointers
+# (CLAUDE.md for Claude Code, GEMINI.md for Antigravity, or both) so canonical AGENTS.md is reachable.
+r=$(contracts_repo contracts-noharness)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "Which harness(es) should this project configure? [1] Claude Code, [2] Antigravity, [3] Both"
+src = p.read_text()
+if needle not in src:
+    raise SystemExit("fixture no-op: the harness question is not where this expects it")
+p.write_text(src.replace(needle, "configure your harness"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"skills/init/SKILL.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"Which harness(es) should this project configure?"*) c3=ok ;; *) c3=no ;; esac
+
+r=$(contracts_repo contracts-harness-control)
+out=$(run_contracts "$r"); [ "$out" = "0" ] && c4=ok || c4=no
+
+r=$(contracts_repo contracts-nopointers)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "CLAUDE.md for Claude Code, GEMINI.md for Antigravity, or both"
+src = p.read_text()
+if needle not in src:
+    raise SystemExit("fixture no-op: pointer instruction needle not found")
+p.write_text(src.replace(needle, "CLAUDE.md for Claude Code"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *"skills/init/SKILL.md"*) c6=ok ;; *) c6=no ;; esac
+case "$err" in *"GEMINI.md for Antigravity"*) c7=ok ;; *) c7=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] \
+  && report "init stripped of the harness question or pointer instructions fails" ok \
+  || report "init stripped of the harness question or pointer instructions fails" no \
+     "noharness-exit=$c1 names-file=$c2 names-needle=$c3 control=$c4 nopointers-exit=$c5 names-file2=$c6 names-needle2=$c7"
+
 
 # --- shipped reviewers: the contract path they name -----------------------------------
 #

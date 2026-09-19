@@ -14,9 +14,9 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Twenty-one today. A twenty-second needs an argument, in the spec that proposes it, for why review cannot
+Twenty-three today. A twenty-fourth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
-grows one defensible entry at a time. #147 added the twenty-first entry and moved this number
+grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
 with it; a cap that is not moved with the entry reads as already exceeded, and the next author
 cannot tell whether the list is at its limit or the sentence is stale.
 """
@@ -235,6 +235,21 @@ CONTRACTS = (
         "paths leaves implement reading completely normal to a Claude Code reader, while "
         "Antigravity agents silently lose the ability to invoke an independent reviewer "
         "subagent. See #147.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "Which harness(es) should this project configure? [1] Claude Code, [2] Antigravity, [3] Both",
+        "When harness detection is ambiguous or neither is detected, init must interview the "
+        "operator rather than silently defaulting to Claude Code. Review cannot defend it: "
+        "silently defaulting reads as zero-friction onboarding, while what it actually causes "
+        "is Antigravity users getting an incomplete or Claude-polluted installation. #146.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "CLAUDE.md for Claude Code, GEMINI.md for Antigravity, or both",
+        "The harness pointer must match the active target so canonical AGENTS.md is reachable. "
+        "Review cannot defend it: generating only CLAUDE.md reads as normal legacy behavior, "
+        "leaving Antigravity agents without GEMINI.md root rule context. #146.",
     ),
 )
 
