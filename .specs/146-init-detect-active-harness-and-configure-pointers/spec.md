@@ -82,5 +82,5 @@ Adds contracts #22 and #23 to `scripts/check-skill-contracts.py`. Verified by CI
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
 - [x] T1: add guard test in `scripts/test-gates.sh` and contracts #22 & #23 in `scripts/check-skill-contracts.py` asserting `init` harness interview question and pointer instructions exist — verify red (stripped test fails, control passes) — then implement Step 1 detection, Step 2 interview, and Step 3 scaffolding in `skills/init/SKILL.md` to pass green
-- [ ] T2: update `docs/fidelity.md` and `docs/layout.md` to document active harness detection, `CLAUDE.md`/`GEMINI.md` pointers, and `.agents/agents/_shared/reviewer-contract.md` layout, and verify all validators pass
+- [x] T2: update `docs/fidelity.md` and `docs/layout.md` to document active harness detection, `CLAUDE.md`/`GEMINI.md` pointers, and `.agents/agents/_shared/reviewer-contract.md` layout, and verify all validators pass
 - [ ] T3: refactor and run full validator suite (`quality-gate.sh` and `test-gates.sh`), confirming clean baseline

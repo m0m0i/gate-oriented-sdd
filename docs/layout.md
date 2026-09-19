@@ -36,6 +36,10 @@ your-project/
 ├── .work_logs/
 │   └── 2026-08-21.md              ← worklog      append-only session log
 │
+├── AGENTS.md                      ← init         canonical rulebook, always generated
+├── CLAUDE.md                      ← init         pointer for Claude Code (points to AGENTS.md)
+├── GEMINI.md                      ← init         pointer for Antigravity (points to AGENTS.md)
+│
 ├── .claude/                       ← init         Claude Code wiring
 │   ├── settings.json              ←   the three hook layers
 │   ├── hooks/                     ←   gate-lib.sh, quality-gate.sh, review-gate.sh, steering-digest.sh
@@ -47,7 +51,14 @@ your-project/
 │           └── rules-lock.json    ←   hashes, and what each rule is grounded in
 │
 ├── .agents/                       ← init         Antigravity wiring (same scripts)
-│   └── hooks.json
+│   ├── hooks.json                 ←   the hook layers (flat & matcher schema)
+│   ├── hooks/                     ←   gate-lib.sh, quality-gate.sh, review-gate.sh, steering-digest-antigravity.sh
+│   └── agents/
+│       ├── _shared/reviewer-contract.md ←  severity, output format, the receipt
+│       ├── <name>-reviewer.md     ←   the project's reviewer
+│       └── <name>-reviewer/
+│           ├── rules/*.md         ←   the rulebook — never enters a normal session
+│           └── rules-lock.json    ←   hashes, and what each rule is grounded in
 │
 └── <your source>                  ← untouched by the harness
 ```
