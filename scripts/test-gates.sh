@@ -2653,7 +2653,8 @@ case "$err" in *"canonical filename for its type"*) c14=ok ;; *) c14=no ;; esac
      "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8 nobootstrap-exit=$c9 names-spec-skill=$c10 names-needle=$c11 nomerge-exit=$c12 names-init=$c13 names-merge-needle=$c14"
 
 
-# 74. init stripped of the TARGET question must fail.
+# 74. init stripped of the TARGET question or its destination must fail. #141's pins, the
+#     nineteenth and twentieth.
 #
 # #141 AC7. The question is the whole feature: the checker can read `- Target:` perfectly and
 # still never see one, because nothing but this sentence causes the line to be written. Its
@@ -2697,7 +2698,9 @@ p.write_text(src.replace(needle, "- Target: <the chosen set"))
 PYEOF
 out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
 [ "$out" = "1" ] && c5=ok || c5=no
-case "$err" in *Target*) c6=ok ;; *) c6=no ;; esac
+# The NEEDLE, not the word "Target": this file carries two Target pins now, and the looser cue
+# is satisfied by the other one firing. Same reason case 54 asserts both halves.
+case "$err" in *"read only while Mode is bootstrap"*) c6=ok ;; *) c6=no ;; esac
 
 [ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] \
   && report "init stripped of the target question or its destination fails, naming the file and the key" ok \

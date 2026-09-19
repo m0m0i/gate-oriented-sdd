@@ -14,9 +14,11 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Eighteen today. A nineteenth needs an argument, in the spec that proposes it, for why review cannot
+Twenty today. A twenty-first needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
-grows one defensible entry at a time.
+grows one defensible entry at a time. #141 added two and moved this number twice; a cap that
+is not moved with the entry reads as already exceeded, and the next author cannot tell whether
+the list is at its limit or the sentence is stale.
 """
 
 import pathlib

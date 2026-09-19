@@ -33,6 +33,15 @@ An `init` run against a scratch project would move AC1, AC2 and AC6 from pinned 
 - **LOW-2** — `DOC_OWNER`'s docstring said "three documents" while the dict now holds six and the message can name six. Fixed.
 - **LOW-4** — the ask was unconditional while AC1 scopes it to a project with no `- Mode:` line. The only thing preventing a re-ask was a Rules line two sections away. Now stated where the ask is, and it admits the `bootstrap` re-run case, which is the one upgrade where a target is still useful.
 
+## Review round 2 — CLEAN, 0 blockers, 0 HIGH, 2 MEDIUM, 1 LOW
+
+Reviewed at `4ff120a68188f59e21038b7c9cbe6c6652229f17`. All five round-1 fixes confirmed real, C1 re-verified in the code. Two defects the round-1 fixes introduced or widened, both addressed:
+
+- **MEDIUM-1** — `scripts/check-skill-contracts.py`'s docstring capped the list at "Eighteen today" while `CONTRACTS` had reached twenty; this branch added the nineteenth and twentieth without moving the number either time, so the file's own growth cap read as already exceeded. The suite's running count stopped in the same place. Both moved, and the count is now named in case 74's header where the next author will see it. This is LOW-2's defect one file over, which is the argument for fixing it rather than recording it.
+- **MEDIUM-2** — the scoping clause added for round 1's LOW-4 admitted a case AC6 does not. A project at `- Mode: bootstrap` carries a `- Mode:` line, so on the literal reading it is an upgrade that must "change nothing else" — and the clause told `init` to ask and write `- Target:` in exactly that case, citing the Rules bullet it contradicted. The clause is now narrowed to AC1's own condition: ask only where no `- Mode:` line exists.
+  The widening was tempting and is not free to keep: a `bootstrap` re-run is the one upgrade where a target is still useful, and a project that re-runs `init` before writing any document gets no chance to record its choice. Taking it would mean amending AC6 in its own commit, which is a scope change this spec did not agree. Left as the narrower behaviour, and worth its own issue.
+- **LOW** — case 74's destination half asserted `*Target*`, a cue both Target pins print. Now asserts the needle, matching the precedent one case above.
+
 ## Findings recorded rather than fixed
 
 - **MEDIUM-2 (version size)** — the reviewer argues `0.10.0` on #110's precedent, recorded at `.work_logs/2026-09-13.md:121`: a value on a machine-read line that `init` writes was sized minor. C4 in the spec anticipated the re-check. This is the operator's call and is not the reviewer's to settle; raised rather than applied.
