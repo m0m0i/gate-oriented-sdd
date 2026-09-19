@@ -3286,6 +3286,59 @@ out=$(run_readme "$r")
   || report "a dynamic badge reading the wrong source fails, and reordering its parameters does not" no \
      "fork-red=$u1 names-owner=$u2 wrong-path-red=$u3 wrong-query-red=$u4 reorder-green=$u5"
 
+# 65d. The literal coming back is the root cause returning, and must fail.
+#
+# #133 AC5. The badge removes the SECOND SOURCE; it does not stop anyone adding one. An editor
+# who reads the badge as decoration writes the number back into the prose, the two can disagree
+# again, and every check above still passes because the badge is untouched. This is the same
+# hole #115 found in a presence-only check: a guard that verifies what is there cannot notice
+# a removed claim coming back.
+r=$(readme_repo rm-literal-back)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = src.replace("**Pre-release.**", "**v1.2.3 — pre-release.**")
+if out == src:
+    raise SystemExit("fixture no-op: the Status line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfb=ok || cfb=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfb" = ok ]; } && l1=ok || l1=no
+case "$err" in *"states a version"*) l2=ok ;; *) l2=no ;; esac
+# It fails even though the number happens to be RIGHT. Agreement today is not the property —
+# two sources that can diverge tomorrow is the defect, and a check that only fired on a
+# mismatch would wait for the drift it exists to prevent.
+case "$err" in *"1.2.3"*) l3=ok ;; *) l3=no ;; esac
+
+# The Japanese form differs after the number, so it needs its own case rather than an
+# assumption that one pattern covers both.
+r=$(readme_repo rm-literal-back-ja)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.ja.md"); src = p.read_text()
+out = src.replace("**Pre-release です。**", "**v1.2.3、pre-release です。**")
+if out == src:
+    raise SystemExit("fixture no-op: the JA Status line is not where this expects it")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cfc=ok || cfc=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cfc" = ok ]; } && l4=ok || l4=no
+case "$err" in *README.ja.md*) l5=ok ;; *) l5=no ;; esac
+
+[ "$l1$l2$l3$l4$l5" = "okokokokok" ] \
+  && report "a version literal returning to either README fails, even when it happens to agree" ok \
+  || report "a version literal returning to either README fails, even when it happens to agree" no \
+     "en-red=$l1 says-states=$l2 names-value=$l3 ja-red=$l4 names-ja-file=$l5"
+
+
 
 # 66. A source the guard cannot read is a THIRD outcome, never agreement.
 r=$(readme_repo rm-nomanifest); rm "$r/plugin.json"

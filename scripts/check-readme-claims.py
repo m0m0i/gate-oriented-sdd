@@ -194,6 +194,19 @@ def main():
             problems.append(f"{name}: cannot be read ({exc.strerror})")
             continue
 
+        # The prohibition. The badge removed the second source; it cannot stop anyone adding
+        # one back, and every badge check below still passes while the prose disagrees. Note it
+        # fails even when the number is currently CORRECT: agreement today is not the property,
+        # two sources that can diverge tomorrow is the defect, and a check that fired only on a
+        # mismatch would wait for exactly the drift #133 exists to prevent.
+        for stale in sorted(set(VERSION.findall(text))):
+            problems.append(
+                f"{name}: states a version in prose — `v{stale}`. The version is rendered from "
+                f"{MANIFEST} by the badge (#133); writing it here restores the second source "
+                f"that drifted three releases on #115, and it fails here whether or not the "
+                f"two agree today."
+            )
+
         badges = BADGE.findall(text)
         dynamic = [b for b in badges if DYNAMIC in b]
         for b in dynamic:
