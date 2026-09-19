@@ -3808,6 +3808,110 @@ case "$out_rv" in *"exit=0"*) c6=ok ;; *) c6=no ;; esac
      "qg-exit=$c1 qg-json=$c2 rv-exit=$c3 rv-json=$c4 clean-qg-exit=$c5 clean-rv-exit=$c6"
 
 
+# --- hooks: hooks/steering-digest-antigravity.sh ------------------------------
+#
+# #144. PreInvocation hook on Antigravity:
+# - When invocationNum == 1, emit {"injectSteps": [{"ephemeralMessage": "<digest>"}]}
+# - When invocationNum != 1 or missing/malformed, emit {}
+# - Anchor to git repository root if invoked from a subdirectory
+# - Handle missing .steering/ cleanly without malformed JSON
+
+agy_digest_repo() {
+  r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering" "$r/.specs/9-feature" "$r/.agents"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+  [ -f "$ROOT/hooks/steering-digest-antigravity.sh" ] && cp "$ROOT/hooks/steering-digest-antigravity.sh" "$r/hooks/"
+  printf -- '- Reviewer: test-reviewer\n- Validators: true\n' > "$r/.steering/tech.md"
+  printf -- '# Product\n- Owns: safety and correctness\n' > "$r/.steering/product.md"
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && echo init > file.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+  echo "$r"
+}
+
+# 1. Turn 1 injects steering digest in injectSteps ephemeralMessage with exit 0
+r=$(agy_digest_repo agy-digest-turn1)
+raw=$(printf '{"invocationNum": 1}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+exit_code=$?
+c1_exit=no; c1_json=no
+[ "$exit_code" -eq 0 ] && c1_exit=ok
+if python3 -c '
+import json, sys
+data = json.loads(sys.argv[1])
+msg = data["injectSteps"][0]["ephemeralMessage"]
+if not ("## Repo facts" in msg and "safety and correctness" in msg and "test-reviewer" in msg):
+    sys.exit(1)
+' "$raw" 2>/dev/null; then
+  c1_json=ok
+fi
+
+# 2. Turn 2 emits empty object {} with exit 0
+r=$(agy_digest_repo agy-digest-turn2)
+raw=$(printf '{"invocationNum": 2}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+exit_code=$?
+c2_exit=no; c2_json=no
+[ "$exit_code" -eq 0 ] && c2_exit=ok
+if python3 -c '
+import json, sys
+if json.loads(sys.argv[1]) != {}:
+    sys.exit(1)
+' "$raw" 2>/dev/null; then
+  c2_json=ok
+fi
+
+# 3. Missing, empty, or malformed stdin emits {} with exit 0
+r=$(agy_digest_repo agy-digest-invalid)
+out_empty=$(printf '' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>/dev/null ))
+ex_empty=$?
+out_missing=$(printf '{"conversationId":"abc"}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>/dev/null ))
+ex_missing=$?
+out_malformed=$(printf '{not valid json' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>/dev/null ))
+ex_malformed=$?
+c3=no
+if [ "$ex_empty$ex_missing$ex_malformed" = "000" ] && \
+   python3 -c '
+import json, sys
+if json.loads(sys.argv[1]) != {} or json.loads(sys.argv[2]) != {} or json.loads(sys.argv[3]) != {}:
+    sys.exit(1)
+' "$out_empty" "$out_missing" "$out_malformed" 2>/dev/null; then
+  c3=ok
+fi
+
+# 4. Subdirectory invocation (.agents) anchors to repository root
+r=$(agy_digest_repo agy-digest-subdir)
+raw=$(printf '{"invocationNum": 1}' | ( cd "$r/.agents" && sh ../hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+exit_code=$?
+c4=no
+if [ "$exit_code" -eq 0 ] && python3 -c '
+import json, sys
+data = json.loads(sys.argv[1])
+msg = data["injectSteps"][0]["ephemeralMessage"]
+if not ("## Repo facts" in msg and "safety and correctness" in msg):
+    sys.exit(1)
+' "$raw" 2>/dev/null; then
+  c4=ok
+fi
+
+# 5. Missing .steering directory outputs fallback digest without error
+r=$(agy_digest_repo agy-digest-nosteering)
+rm -rf "$r/.steering"
+raw=$(printf '{"invocationNum": 1}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+exit_code=$?
+c5=no
+if [ "$exit_code" -eq 0 ] && python3 -c '
+import json, sys
+data = json.loads(sys.argv[1])
+msg = data["injectSteps"][0]["ephemeralMessage"]
+if "## Repo facts" not in msg:
+    sys.exit(1)
+' "$raw" 2>/dev/null; then
+  c5=ok
+fi
+
+[ "$c1_exit$c1_json$c2_exit$c2_json$c3$c4$c5" = "okokokokokokok" ] \
+  && report "steering-digest-antigravity.sh injects on turn 1, passes on later turns, and anchors to root" ok \
+  || report "steering-digest-antigravity.sh injects on turn 1, passes on later turns, and anchors to root" no \
+     "turn1-exit=$c1_exit turn1-json=$c1_json turn2-exit=$c2_exit turn2-json=$c2_json invalid=$c3 subdir=$c4 nosteering=$c5"
+
+
 # --- guards: scripts/check-manifests.py ---------------------------------------
 #
 # #145. Antigravity plugin loader discovers rules at rules/ (rules/AGENTS.md).
