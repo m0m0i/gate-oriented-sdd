@@ -71,4 +71,4 @@ So that the agent automatically adheres to Gate-SDD rules without manual rule co
 
 - [x] T1: failing test in `scripts/test-gates.sh` asserting `check-manifests.py` fails closed when `rules/AGENTS.md` is missing or drifted — then the implementation in `scripts/check-manifests.py` and creating `rules/AGENTS.md` that passes it
 - [x] T2: failing test in `scripts/test-gates.sh` for `rules/` in `check-version-bump.py` — then the implementation updating `check-version-bump.py`, `check-contract-path.py`, `tech.md`, `AGENTS.md`, and `docs/fidelity.md` that passes it
-- [ ] T3: refactor and verify all validators and `test-gates.sh` pass cleanly
+- [x] T3: refactor and verify all validators and `test-gates.sh` pass cleanly
