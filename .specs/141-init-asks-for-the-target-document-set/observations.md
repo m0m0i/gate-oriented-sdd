@@ -49,6 +49,10 @@ Reviewed at `c0cbac707a420ea8c8daeddfdafa93bad1d22590`. All three round-2 fixes 
 - **MEDIUM** — the narrowed clause was evaluated *after* the same step writes `- Mode: bootstrap`, so "where no `- Mode:` line exists" was false in every case, including the fresh install AC1 is about. Round 1's wider wording had masked the collision; narrowing it removed the mask. The condition now names the state the project arrived in. This is the finding no pin could have caught — both pins check that the sentence is present, not that it ever fires — which is exactly the exposure the pinned-not-observed table above names, demonstrated rather than argued.
 - **LOW** — the sentence added to the docstring said "#141 added two and moved this number twice". It moved once, in review, after both entries had landed. The exhibit asserted the opposite of the lesson it exists to teach, and contradicted this file one directory over. Corrected.
 
+## Review round 4 — CLEAN, 0 blockers, 0 HIGH, 0 MEDIUM, 1 LOW
+
+Reviewed at `36171138d61f4a09b4cfb9ca8e54e7eedb01abf6`. Both round-3 fixes confirmed against the branch's actual history, C1 re-verified, no new MEDIUM. The one LOW was advisory: the clause's stated *reason* said "this step has just written one in every case", which is false on an upgrade where the operator declines to move the mode up — this step then writes no `- Mode:` line at all. The conclusion held either way, but the reason is prose a model executes and was one reading from an instruction to write the line on an upgrade. Fixed rather than recorded, because leaving a known-false sentence in a skill body is the defect round 1's MEDIUM-1 was.
+
 ## Findings recorded rather than fixed
 
 - **MEDIUM-2 (version size)** — the reviewer argues `0.10.0` on #110's precedent, recorded at `.work_logs/2026-09-13.md:121`: a value on a machine-read line that `init` writes was sized minor. C4 in the spec anticipated the re-check. This is the operator's call and is not the reviewer's to settle; raised rather than applied.
