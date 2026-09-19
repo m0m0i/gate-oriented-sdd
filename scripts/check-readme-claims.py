@@ -44,6 +44,12 @@ VERSION = re.compile(r"\*\*v(\d+\.\d+\.\d+)[ ,、]")
 #: a version badge at all", and the narrower questions — is it dynamic, does it read OUR
 #: manifest — are asked separately so their failures name different causes.
 BADGE = re.compile(r"https://img\.shields\.io/[^\s)\]]+")
+#: The dynamic form, which is the only one that cannot drift. Matched on the path rather than
+#: the whole URL so that reordering query parameters is not a failure.
+DYNAMIC = "/badge/dynamic/"
+#: A version baked into a badge's own URL. Three components deliberately: `Apache_2.0` in a
+#: licence badge has two, and failing on that would be a gate firing on an ordinary edit.
+BAKED_VERSION = re.compile(r"v?\d+\.\d+\.\d+")
 
 #: How the receipts were obtained. English says "all but three"; Japanese says "3件を除いて".
 #: Both are matched as a written-out or numeric count, because #115's defect was a word.
@@ -182,13 +188,24 @@ def main():
             continue
 
         badges = BADGE.findall(text)
-        if not badges:
-            problems.append(
-                f"{name}: carries no version badge. The version is rendered from "
-                f"{MANIFEST} rather than written here (#133), so with the badge gone the file "
-                f"states no version at all — and this guard would otherwise pass a README that "
-                f"had quietly stopped making the claim."
-            )
+        dynamic = [b for b in badges if DYNAMIC in b]
+        if not dynamic:
+            # Absence and substitution are different causes and must not share a message.
+            # "Carries no version badge" sends an author who is looking at one to add a second.
+            baked = [b for b in badges if BAKED_VERSION.search(b.rsplit("/", 1)[-1])]
+            if baked:
+                problems.append(
+                    f"{name}: the version badge is static — `{baked[0]}`. A static badge bakes "
+                    f"the number into its own URL, which is the hand-edited literal #133 "
+                    f"removed, wearing a badge. Use the dynamic form that reads {MANIFEST}."
+                )
+            else:
+                problems.append(
+                    f"{name}: carries no version badge. The version is rendered from "
+                    f"{MANIFEST} rather than written here (#133), so with the badge gone the "
+                    f"file states no version at all — and this guard would otherwise pass a "
+                    f"README that had quietly stopped making the claim."
+                )
 
         for b in BEHAVIOUR_COUNT.finditer(text):
             problems.append(

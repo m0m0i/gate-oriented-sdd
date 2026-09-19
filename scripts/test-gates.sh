@@ -2126,6 +2126,7 @@ case "$err" in *PRD.md*) c6=no ;; *) c6=ok ;; esac
   || report "trailing whitespace is strict on Mode, tolerant on Docs, and blank Docs never means the repo root" no \
      "mode-exit=$c1 mode-names-whitespace=$c2 mode-not-generic=$c3 docs-tolerant=$c4 blank-falls-back=$c5 not-root-scanned=$c6"
 
+
 # 68. The tree `init` step 3 actually produces must pass the document-set checker step 3 arms.
 #
 # #127. `init` writes `- Mode:` and `- Docs: docs/`, copies this checker into the project and
@@ -3172,6 +3173,59 @@ case "$err" in *"but 1 of 2 say reviewed_by=inline"*) c8=ok ;; *) c8=no ;; esac
 [ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "each README Status claim disagreeing with its source is named" ok \
   || report "each README Status claim disagreeing with its source is named" no \
      "control=$c0 version-exit=$c1 names-manifest=$c2 count-exit=$c3 says-removed=$c4 receipts-en=$c5 names-count=$c6 receipts-ja=$c7 names-file=$c8"
+
+# 65b. A STATIC badge is the drift returning, and must not be reported as a missing one.
+#
+# #133 AC3. This is the deletion review cannot defend: a static badge renders faster, has no
+# third-party JSON fetch, and looks like a simplification — while what it restores is exactly
+# the hand-edited number this issue removed. Reported as its own cause, because "carries no
+# version badge" sends the next author to add the badge they can already see.
+r=$(readme_repo rm-staticbadge)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+import re
+root = sys.argv[1]
+# An EMPTY root is not "the current directory" — it is a fixture that never got built, and
+# every path below then resolves against the repository itself. This case rewrote the real
+# README.md exactly that way once. Refuse rather than edit something nobody meant to edit.
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+out = re.sub(r"https://img\.shields\.io/[^\s)\]]+",
+             "https://img.shields.io/badge/gate--sdd-v1.2.3-blue", src)
+if out == src: raise SystemExit("fixture no-op: no shields badge to replace")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf5=ok || cf5=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf5" = ok ]; } && s1=ok || s1=no
+case "$err" in *static*) s2=ok ;; *) s2=no ;; esac
+# It must NOT be diagnosed as absence — that is the wrong remedy for a badge that is present.
+case "$err" in *"carries no version badge"*) s3=no ;; *) s3=ok ;; esac
+
+# A non-version shields badge alongside the real one is fine. Without this, "a static badge
+# fails" is satisfiable by a guard that rejects every badge but one, and a licence or CI badge
+# added later would go red for no reason — LV-2, a gate firing on an ordinary edit.
+r=$(readme_repo rm-otherbadge)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+root = sys.argv[1]
+if not root:
+    raise SystemExit("fixture no-op: empty repo path — readme_repo did not run")
+p = pathlib.Path(root, "README.md"); src = p.read_text()
+extra = "[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)\n"
+out = src.replace("## Status", extra + "\n## Status")
+if out == src: raise SystemExit("fixture no-op: no Status heading")
+p.write_text(out)
+PYEOF
+[ "$?" = 0 ] && cf6=ok || cf6=no
+out=$(run_readme "$r")
+{ [ "$out" = "0" ] && [ "$cf6" = ok ]; } && s4=ok || s4=no
+
+[ "$s1$s2$s3$s4" = "okokokok" ] \
+  && report "a static version badge fails as a substitution, and an unrelated badge does not" ok \
+  || report "a static version badge fails as a substitution, and an unrelated badge does not" no \
+     "static-red=$s1 says-static=$s2 not-called-absent=$s3 other-badge-green=$s4"
 
 # 66. A source the guard cannot read is a THIRD outcome, never agreement.
 r=$(readme_repo rm-nomanifest); rm "$r/plugin.json"

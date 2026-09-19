@@ -44,6 +44,6 @@
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: failing case — a README with no dynamic version badge fails naming the file, and one carrying it passes — then swap the literal check for the badge check in `check-readme-claims.py` and put the badge row in both READMEs with the number removed from `## Status` (AC1, AC2)
-- [ ] T2: failing case — a static shields badge in place of the dynamic one fails with a message naming that specific substitution, not the generic absence — then the distinguishing branch (AC3)
+- [x] T2: failing case — a static shields badge in place of the dynamic one fails with a message naming that specific substitution, not the generic absence — then the distinguishing branch (AC3)
 - [ ] T3: failing case — a dynamic badge whose `url=` names another repository, another branch or a path that is not `plugin.json` fails, while a harmless reordering of the query parameters still passes — then parse the URL rather than match it whole (AC4)
 - [ ] T4: failing case — a `**v<x.y.z>` literal reappearing in either README's prose fails, saying that the badge is the source and a second one is the bug returning — then invert the existing `VERSION` pattern into a prohibition (AC5)
