@@ -1,5 +1,5 @@
 # Spec: Anchor hook working directory to repository root in antigravity.hooks.json
-- Slug: 143-anchor-hook-working-directory-to-repository-root   Issue: 143   Type: bug   Status: approved
+- Slug: 143-anchor-hook-working-directory-to-repository-root   Issue: 143   Type: bug   Status: done
 - Author: Hiroyuki   Date: 2026-09-19
 
 ## 1. Requirements (WHAT / WHY)
