@@ -265,6 +265,13 @@ def main():
             # query parameter — an author editing that URL reaches it first. Matching only the
             # escaped spelling sent exactly that case to the absence branch, which is the right
             # verdict with the wrong remedy.
+            # A stated limit, on the diagnosis rather than the verdict. The path form is a
+            # SUBSTRING test where the query form is exact, so `gate--sdd--docs-v1.2.3` is read
+            # as this badge gone static; and a non-dynamic badge genuinely labelled `gate-sdd`
+            # — the release-derived form C1 declined — lands in absence and is told the file
+            # carries no such badge, which is false of that file. Both exit 1 regardless, so
+            # neither is a fail-open; only the remedy is imprecise, and closing them means a
+            # narrowing with no case for the direction it would then miss.
             marker = BADGE_LABEL.replace("-", "--")
 
             def labelled(url):

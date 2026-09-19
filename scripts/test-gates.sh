@@ -3254,7 +3254,10 @@ PYEOF
 [ "$?" = 0 ] && cfi=ok || cfi=no
 out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cfi" = ok ]; } && q1=ok || q1=no
-case "$err" in *static*) q2=ok ;; *) q2=no ;; esac
+# The guard's PHRASE, not the bare word: this fixture's own URL contains `/static/v1`, so
+# `*static*` would stay green against a reworded message that quoted the badge and no longer
+# said it. An assertion coupled to text it does not own is what cost rounds 2 and 3.
+case "$err" in *"version badge is static"*) q2=ok ;; *) q2=no ;; esac
 case "$err" in *"no badge labelled"*) q3=no ;; *) q3=ok ;; esac
 
 [ "$q1$q2$q3" = "okokok" ] \

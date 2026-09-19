@@ -52,6 +52,27 @@ Reviewed at `c7f3444f6e3e1b8d095e064f88e937e9d0f0b30f`. All four round-4 finding
 
 While adding 65b-ii I hit the ordering trap a third time: `mutate_badge` is defined in case 65c, *below* 65b, so the first draft called an undefined function and the fixture would have edited the repository. Caught by the case going red rather than by the damage this time, and the mutation is inlined so the case no longer depends on definition order.
 
+## Review round 6 — CLEAN, 0 blockers, 0 HIGH, 1 MEDIUM, 2 LOW
+
+Reviewed at `3f28500e73ce1a58c1dc35a5c4da5004bd98a3ee`. Asked directly whether the five-round pattern had ended, the reviewer swept every assertion in cases 65 through 65f against the messages the guard can emit and answered: **it has.** Nothing in that commit made an assertion incapable of failing, and nothing outside its intended target changed reachability.
+
+- **MEDIUM — no per-AC row, and AC1's render half is the one that is pinned rather than observed.** Taken; the table below. The limits this branch found were recorded, but scattered across six round logs instead of answered against the criteria — which is the same defect the record exists to prevent, applied to the record.
+- **LOW — `says-static` matched the bare word `static`, which is also in the fixture's own `/static/v1` URL.** An assertion coupled to text it does not own is the shape that cost rounds 2 and 3, so it is fixed rather than recorded: it now pins the guard's phrase. Mutation-verified by rewording the message without it — both static halves redden.
+- **LOW — `labelled()`'s path form is a substring test where its query form is exact.** Recorded as a stated limit beside the code, which is how this file handles its other edges. Two residues, both message-only: `gate--sdd--docs-v1.2.3` reads as this badge gone static, and a non-dynamic badge genuinely labelled `gate-sdd` is told the file carries no such badge. Exit is 1 either way so neither is a fail-open, and closing them means a narrowing with no case for the direction it would then miss.
+
+## What is verified, and what is only pinned
+
+| AC | Status | Evidence |
+| :-- | :-- | :-- |
+| AC1 | **verified for form; not exercised for render** | Both READMEs' badge URLs byte-compared against `BADGE_SOURCE`, `BADGE_QUERY` and `BADGE_LABEL`; no version literal remains in either file. **Nothing observes shields.io actually rendering the number** — the Design states that limit deliberately, and no case can close it without a network call the validators must not make. |
+| AC2 | verified | Case 65 `rm-nobadge`, case 65e `rm-badge-relabel` (relabelling fails closed into absence) |
+| AC3 | verified | Case 65b (path form), 65b-ii (query form), 65f (the negative direction — a foreign versioned badge is not this one gone static) |
+| AC4 | verified | Case 65c: fork, wrong path, wrong field, plus `reorder-green` for the LV-2 direction |
+| AC5 | verified | Case 65d: EN, JA, bold-with-no-delimiter, correct-value-still-fails, and `bare-number-green` |
+| AC6 | verified | Case 65's receipt and count halves, plus cases 66 and 67, green and untouched |
+
+AC1's unexercised half is the honest counterpart to #141's AC1/AC2/AC6: there, three criteria described what a model does and no test could watch it; here, one criterion describes what a third-party service renders and no validator may reach it. In both, the guard verifies the *form* of the claim and the record says so rather than letting form read as proof.
+
 ## Recorded rather than fixed
 
 - **`Status: done` was flipped before the review, not after.** `skills/implement/SKILL.md` lists that flip among the commits landing after the receipt. No mechanical effect — `hooks/review-gate.sh` arms on unticked tasks and never reads `Status` — but the spec did read `done` while its receipt was still being written. Same slip as #141, which makes it a habit rather than an accident and worth naming here.
