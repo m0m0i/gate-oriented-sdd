@@ -254,7 +254,7 @@ Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
 - [ ] Whether plugin-shipped `hooks.json` fires identically to the global one.
-- [ ] `PreInvocation` step injection as the `SessionStart` substitute, including a once-per-session guard.
+- [x] `PreInvocation` step injection as the `SessionStart` substitute, including a once-per-session guard (#144).
 - [ ] Whether `agy plugin install` targets `~/.gemini/config/plugins/` (where the IDE's plugins live) or `~/.gemini/antigravity-cli/plugins/` (what the CLI docs describe).
 - [ ] Antigravity subagent invocation contract, for the reviewer.
 - [ ] `northstar` meeting an `Owns:` line it disagrees with — the collision path #55 could not reach.

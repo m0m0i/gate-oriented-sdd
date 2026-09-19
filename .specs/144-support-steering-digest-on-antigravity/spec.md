@@ -82,4 +82,4 @@ Antigravity plugin installations will now execute `PreInvocation` on turn 1 to r
 
 - [x] T1: failing test for Antigravity steering digest script in `scripts/test-gates.sh` — then implementation in `hooks/steering-digest-antigravity.sh`
 - [x] T2: failing test for `check-manifests.py` verifying `PreInvocation` in `antigravity.hooks.json` — then implementation in `hooks/templates/antigravity.hooks.json` and `scripts/check-manifests.py`
-- [ ] T3: update documentation (`docs/fidelity.md`, `AGENTS.md`), skill (`skills/init/SKILL.md`), and verify all validators pass cleanly
+- [x] T3: update documentation (`docs/fidelity.md`, `AGENTS.md`), skill (`skills/init/SKILL.md`), and verify all validators pass cleanly

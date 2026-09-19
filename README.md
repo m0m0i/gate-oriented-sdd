@@ -163,9 +163,10 @@ Every row was produced by running it. Method, versions, and open questions: [`do
 | Quality gate on turn end | full — `Stop`, exit 2 | full — `Stop`, `{"decision":"continue"}` |
 | Review-receipt gate | full | full |
 | Per-edit fast feedback | full — `PostToolUse` | full — `PostToolUse`, observe-only |
-| Steering re-injection after compaction | full — `SessionStart` | **none** — no such event |
+| Steering digest | full — `SessionStart` | full — `PreInvocation` (turn 1 step injection) |
+| Context re-injection after compaction | full — `SessionStart` | **none** — no session compaction hook |
 
-The last row is a real gap, not a rounding error. `PreInvocation` is the candidate substitute and needs a once-per-session guard before it is worth shipping.
+The last row is a real gap, not a rounding error. Re-injecting steering after context compaction mid-session has no hook event on Antigravity; initial turn 1 injection is handled via `PreInvocation`.
 
 ## Status
 
