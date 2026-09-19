@@ -3959,6 +3959,40 @@ case "$err" in *"missing: AGENTS.md"*|*"missing: rules/AGENTS.md"*) c6=ok ;; *) 
   || report "check-manifests verifies rules/AGENTS.md matches AGENTS.md and fails closed" no \
      "control=$c0 missing-rules-exit=$c1 missing-rules-err=$c2 drift-exit=$c3 drift-err=$c4 missing-root-exit=$c5 missing-root-err=$c6"
 
+# #144. check-manifests.py pairs Claude Code SessionStart with Antigravity PreInvocation
+# for steering digest injection. Omitting PreInvocation, or writing it in tool-style nested
+# form, must fail closed.
+
+r=$(manifest_repo mf-missing-preinv)
+python3 -c "
+import json
+p = '$r/hooks/templates/antigravity.hooks.json'
+d = json.load(open(p))
+if 'PreInvocation' in d.get('gate-sdd', {}):
+    del d['gate-sdd']['PreInvocation']
+json.dump(d, open(p, 'w'), indent=2)
+"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c7=ok || c7=no
+case "$err" in *"Antigravity hooks template is missing PreInvocation"*|*"hook events differ"*) c8=ok ;; *) c8=no ;; esac
+
+r=$(manifest_repo mf-nested-preinv)
+python3 -c "
+import json
+p = '$r/hooks/templates/antigravity.hooks.json'
+d = json.load(open(p))
+d['gate-sdd']['PreInvocation'] = [{'matcher': '.*', 'hooks': [{'type': 'command', 'command': 'exit 0'}]}]
+json.dump(d, open(p, 'w'), indent=2)
+"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *"antigravity PreInvocation: non-tool events need the flat {type, command} form"*) c10=ok ;; *) c10=no ;; esac
+
+[ "$c7$c8$c9$c10" = "okokokok" ] && report "check-manifests enforces PreInvocation on Antigravity in flat form" ok \
+  || report "check-manifests enforces PreInvocation on Antigravity in flat form" no \
+     "missing-preinv-exit=$c7 missing-preinv-err=$c8 nested-preinv-exit=$c9 nested-preinv-err=$c10"
+
+
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #

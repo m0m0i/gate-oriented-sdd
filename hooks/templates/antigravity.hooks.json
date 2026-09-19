@@ -1,6 +1,13 @@
 {
   "gate-sdd": {
     "enabled": true,
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f {{HOOKS_DIR}}/steering-digest-antigravity.sh ] || exit 0; sh {{HOOKS_DIR}}/steering-digest-antigravity.sh",
+        "timeout": 15
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": ".*",
