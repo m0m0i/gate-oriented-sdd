@@ -1849,6 +1849,35 @@ case "$err" in *"never as a task"*) c3=ok ;; *) c3=no ;; esac
      "control=$c0 stripped-exit=$c1 names-file=$c2 names-needle=$c3"
 
 
+# 54b. implement stripped of Antigravity reviewer invocation instruction must fail.
+#
+# #147. Under Antigravity, subagents are not auto-discovered from markdown files.
+# If implement loses its instructions for dynamic registration via define_subagent or
+# self subagent delegation, Antigravity agents fall back to inline reviews and lose
+# reviewer independence.
+r=$(contracts_repo contracts-control)
+out=$(run_contracts "$r")
+[ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(contracts_repo contracts-antigravity-stripped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "implement", "SKILL.md")
+needle = "register it dynamically via `define_subagent` or delegate to a `self` subagent"
+src = p.read_text()
+p.write_text(src.replace(needle, "invoke the subagent if possible"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"skills/implement/SKILL.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"define_subagent"*) c3=ok ;; *) c3=no ;; esac
+
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "implement stripped of Antigravity reviewer invocation fails" ok \
+  || report "implement stripped of Antigravity reviewer invocation fails" no \
+     "control=$c0 stripped-exit=$c1 names-file=$c2 names-needle=$c3"
+
+
+
 # 55. A .specs/ or a spec directory that cannot be READ must fail, not scan nothing.
 #
 # Case 53 covers the unreadable spec FILE. One level up is a different state and it failed
