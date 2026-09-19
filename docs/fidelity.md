@@ -12,6 +12,7 @@ What each harness actually supports, and what this harness does about the differ
 | Review-receipt gate | `Stop` | `Stop` | verified via the same mechanism |
 | Per-edit feedback | `PostToolUse`, exit 2 to stderr | `PostToolUse`, observe-only | verified — both fire |
 | Deny a tool call outright | `PreToolUse` | `PreToolUse`, `decision: deny` | not exercised by this harness |
+| Rules discovery | root `AGENTS.md` (read as canonical context) | `rules/AGENTS.md` (auto-discovered and merged by plugin loader) | verified — symlinked, kept in sync by `check-manifests.py` |
 | Context re-injection after compaction | `SessionStart` | **no event** | **gap** |
 
 ## The one real gap

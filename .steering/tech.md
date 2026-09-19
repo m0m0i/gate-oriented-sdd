@@ -6,7 +6,7 @@ Machine-read lines. Each must stay on ONE physical line — the gates read them 
 
 - Validators: ./scripts/check-leakage.sh, ./scripts/check-manifests.py, ./scripts/check-markdown-fences.py, ./scripts/check-receipt-schema.py, ./scripts/check-skill-contracts.py, ./scripts/check-templates.py, ./assets/check-steering-anchors.sh, ./assets/check-locks.py, ./assets/check-document-set.py, ./scripts/check-contract-path.py, ./scripts/check-readme-claims.py, ./scripts/test-gates.sh
 - Reviewer: gate-sdd-reviewer
-- Source globs: :(glob)skills/**/*.md :(glob)agents/**/*.md :(glob)hooks/**/*.sh :(glob)assets/**/*.py :(glob)assets/**/*.sh :(glob)assets/**/*.md :(glob)scripts/**/*.py :(glob)scripts/**/*.sh
+- Source globs: :(glob)rules/**/*.md :(glob)skills/**/*.md :(glob)agents/**/*.md :(glob)hooks/**/*.sh :(glob)assets/**/*.py :(glob)assets/**/*.sh :(glob)assets/**/*.md :(glob)scripts/**/*.py :(glob)scripts/**/*.sh
 - Docs: docs/
 - Mode: full
 
