@@ -1,5 +1,5 @@
 # Spec: Anchor hook working directory to repository root in antigravity.hooks.json
-- Slug: 143-anchor-hook-working-directory-to-repository-root   Issue: 143   Type: bug   Status: draft
+- Slug: 143-anchor-hook-working-directory-to-repository-root   Issue: 143   Type: bug   Status: approved
 - Author: Hiroyuki   Date: 2026-09-19
 
 ## 1. Requirements (WHAT / WHY)
@@ -46,6 +46,6 @@
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: regression test in `scripts/test-gates.sh` invoking hook commands from `.agents/` working directory — then the fix anchoring commands in `hooks/templates/antigravity.hooks.json`
+- [x] T1: regression test in `scripts/test-gates.sh` invoking hook commands from `.agents/` working directory — then the fix anchoring commands in `hooks/templates/antigravity.hooks.json`
 - [ ] T2: test that reproduces fail-open when gates are invoked from a subdirectory — then the fix anchoring to repository root inside `hooks/quality-gate.sh` and `hooks/review-gate.sh`
 - [ ] T3: refactor test helpers and verify suite passes

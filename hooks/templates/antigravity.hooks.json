@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "{{FAST_CHECK}}",
+            "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && {{FAST_CHECK}}",
             "timeout": 60
           }
         ]
@@ -16,12 +16,12 @@
     "Stop": [
       {
         "type": "command",
-        "command": "[ -f {{HOOKS_DIR}}/quality-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/quality-gate.sh",
+        "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f {{HOOKS_DIR}}/quality-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/quality-gate.sh",
         "timeout": 180
       },
       {
         "type": "command",
-        "command": "[ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh",
+        "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh",
         "timeout": 30
       }
     ]
