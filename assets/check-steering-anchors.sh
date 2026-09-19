@@ -27,6 +27,7 @@ ANCHORS="
 .steering/tech.md|Source globs
 .steering/tech.md|Docs
 .steering/tech.md|Mode
+.steering/tech.md|Target
 "
 
 # gate-lib.sh is `hooks/` in the harness repo and `.claude/hooks/` in a project. Finding it is

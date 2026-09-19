@@ -607,6 +607,35 @@ case "$err" in *"predates the shared reader"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "a stale gate-lib.sh fails with the right diagnosis" ok \
   || report "a stale gate-lib.sh fails with the right diagnosis" no "exit=$c1 msg=$c2"
 
+# 29b. `- Target:` joins the anchors, because it is read with the same exact expression.
+#
+# #141 AC10. The table is hand-maintained, so a new machine-read line that is not added to it
+# is unguarded: `- **Target: full**` yields nothing, `check-document-set.py` sees no target and
+# falls back to the generic wording, and the operator's answer is silently discarded. That is
+# #34 exactly, reached through the line added to prevent a different silent discard.
+r=$(anchor_repo anc-tgt-bold '- Owns: x')
+printf -- '- **Target: full**\n' >> "$r/.steering/tech.md"
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"Target"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"tech.md"*) c3=ok ;; *) c3=no ;; esac
+
+# Correctly written passes — otherwise "bolded fails" is satisfiable by a row that rejects the
+# key outright, and every project writing the line properly would be blocked by it.
+r=$(anchor_repo anc-tgt-ok '- Owns: x')
+printf -- '- Target: full\n' >> "$r/.steering/tech.md"
+out=$(run_anchors "$r"); [ "$out" = "0" ] && c4=ok || c4=no
+
+# Absent stays legitimate. The line is optional by design — it is meaningless outside the
+# bootstrap window — and a guard that demanded it would fire on every settled project.
+r=$(anchor_repo anc-tgt-absent '- Owns: x')
+out=$(run_anchors "$r"); [ "$out" = "0" ] && c5=ok || c5=no
+
+[ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
+  && report "a bolded Target fails the anchor guard, a plain one passes, an absent one is silent" ok \
+  || report "a bolded Target fails the anchor guard, a plain one passes, an absent one is silent" no \
+     "bold-red=$c1 names-key=$c2 names-file=$c3 plain-green=$c4 absent-green=$c5"
+
 # 30. ANCHORS must not fall behind the hooks it mirrors.
 #
 # G-8: a guard's list is part of the guard, and "N of M anchor(s) resolved" reads the
