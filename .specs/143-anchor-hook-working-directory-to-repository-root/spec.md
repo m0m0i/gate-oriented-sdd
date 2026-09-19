@@ -48,4 +48,4 @@
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: regression test in `scripts/test-gates.sh` invoking hook commands from `.agents/` working directory — then the fix anchoring commands in `hooks/templates/antigravity.hooks.json`
 - [x] T2: test that reproduces fail-open when gates are invoked from a subdirectory — then the fix anchoring to repository root inside `hooks/quality-gate.sh` and `hooks/review-gate.sh`
-- [ ] T3: refactor test helpers and verify suite passes
+- [x] T3: refactor test helpers and verify suite passes
