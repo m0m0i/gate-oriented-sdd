@@ -2653,6 +2653,39 @@ case "$err" in *"canonical filename for its type"*) c14=ok ;; *) c14=no ;; esac
      "control=$c0 nomode-exit=$c1 names-file=$c2 nowiring-exit=$c3 names-validators=$c4 noupgrade-exit=$c5 names-upgrade=$c6 nodest-exit=$c7 names-dest=$c8 nobootstrap-exit=$c9 names-spec-skill=$c10 names-needle=$c11 nomerge-exit=$c12 names-init=$c13 names-merge-needle=$c14"
 
 
+# 74. init stripped of the TARGET question must fail.
+#
+# #141 AC7. The question is the whole feature: the checker can read `- Target:` perfectly and
+# still never see one, because nothing but this sentence causes the line to be written. Its
+# deletion is the deletion that review cannot defend — asking one fewer question reads as
+# respecting the operator's attention, and step 2's own five-question budget argues for it,
+# while what it removes is the only producer of a value three guards now consume.
+r=$(contracts_repo contracts-notarget)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "ask which document set the project is signing up for and record the answer as `- Target: minimum` or `- Target: full`"
+src = p.read_text()
+if needle not in src:
+    raise SystemExit("fixture no-op: the target question is not where this expects it")
+p.write_text(src.replace(needle, "record the mode"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"skills/init/SKILL.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *Target*) c3=ok ;; *) c3=no ;; esac
+
+# The control, again first: unmutated init must pass, or the accusing half above is satisfied
+# by a guard that fails on everything.
+r=$(contracts_repo contracts-target-control)
+out=$(run_contracts "$r"); [ "$out" = "0" ] && c4=ok || c4=no
+
+[ "$c1$c2$c3$c4" = "okokokok" ] \
+  && report "init stripped of the target question fails, naming the file and the key" ok \
+  || report "init stripped of the target question fails, naming the file and the key" no \
+     "notarget-exit=$c1 names-file=$c2 names-key=$c3 control=$c4"
+
+
 # --- shipped reviewers: the contract path they name -----------------------------------
 #
 # #82. A reference reviewer's FIRST instruction is "Read the reviewer contract first", and the

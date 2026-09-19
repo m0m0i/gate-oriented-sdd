@@ -111,6 +111,16 @@ CONTRACTS = (
     ),
     (
         "skills/init/SKILL.md",
+        "ask which document set the project is signing up for and record the answer as `- Target: minimum` or `- Target: full`",
+        "This sentence is the only producer of `- Target:`. The checker can read the line "
+        "perfectly and still never see one, because nothing else causes it to be written — so "
+        "its deletion turns three guards into code that is exercised by no install. Review "
+        "cannot defend it: asking one fewer question reads as respecting the operator's "
+        "attention, and step 2's five-question budget argues for the cut, while what it "
+        "removes is the answer the bootstrap window's every message is built from. #141 AC7.",
+    ),
+    (
+        "skills/init/SKILL.md",
         "copy `assets/check-document-set.py` to the project's `scripts/` directory and add it to the `- Validators:` line",
         "This is the ONLY route by which the mode reaches a gate. Delete it and the mode "
         "becomes a comment: declared, never checked. It must stay on the `- Validators:` "
