@@ -53,6 +53,14 @@ Reviewed at `c0cbac707a420ea8c8daeddfdafa93bad1d22590`. All three round-2 fixes 
 
 Reviewed at `36171138d61f4a09b4cfb9ca8e54e7eedb01abf6`. Both round-3 fixes confirmed against the branch's actual history, C1 re-verified, no new MEDIUM. The one LOW was advisory: the clause's stated *reason* said "this step has just written one in every case", which is false on an upgrade where the operator declines to move the mode up — this step then writes no `- Mode:` line at all. The conclusion held either way, but the reason is prose a model executes and was one reading from an instruction to write the line on an upgrade. Fixed rather than recorded, because leaving a known-false sentence in a skill body is the defect round 1's MEDIUM-1 was.
 
+## Review round 5 — CLEAN, 0 findings at every severity
+
+Reviewed at `195e1a7de12b9f2f6c21ab9bc2fb5c07351b9535`. The receipt is written from this round.
+
+The reviewer checked a third path the round-4 fix did not enumerate: a project from an older harness that predates `- Mode:` and carries no such line. Under the Rules bullet's own binary that project is not an upgrade, the step writes the line, and the ask fires — so the two cases the sentence names are exhaustive under this file's definition, and there is no gap. That check is the reason this round is worth recording rather than just passing.
+
+Five rounds, and the shape of the findings is the record worth keeping: rounds 1 and 2 found defects in the work, rounds 3 and 4 found defects **introduced by the previous round's fixes** — a vacuously-false condition that the earlier, wider wording had masked, and a docstring exhibit that asserted the opposite of the lesson it taught. Neither could have been caught by a pin, because both pins check that a sentence is present rather than that it is true or that it fires. That is the same exposure the pinned-not-observed table above names for AC1, AC2 and AC6, demonstrated twice on this branch.
+
 ## Findings recorded rather than fixed
 
 - **MEDIUM-2 (version size)** — the reviewer argues `0.10.0` on #110's precedent, recorded at `.work_logs/2026-09-13.md:121`: a value on a machine-read line that `init` writes was sized minor. C4 in the spec anticipated the re-check. This is the operator's call and is not the reviewer's to settle; raised rather than applied.
