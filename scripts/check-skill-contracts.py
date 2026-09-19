@@ -16,9 +16,10 @@ this prevents.
 
 Twenty today. A twenty-first needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
-grows one defensible entry at a time. #141 added two and moved this number twice; a cap that
-is not moved with the entry reads as already exceeded, and the next author cannot tell whether
-the list is at its limit or the sentence is stale.
+grows one defensible entry at a time. #141 added two entries and moved this number only in
+review, after both had landed; a cap that is not moved with the entry reads as already
+exceeded, and the next author cannot tell whether the list is at its limit or the sentence is
+stale.
 """
 
 import pathlib

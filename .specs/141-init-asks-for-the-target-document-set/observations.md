@@ -42,6 +42,13 @@ Reviewed at `4ff120a68188f59e21038b7c9cbe6c6652229f17`. All five round-1 fixes c
   The widening was tempting and is not free to keep: a `bootstrap` re-run is the one upgrade where a target is still useful, and a project that re-runs `init` before writing any document gets no chance to record its choice. Taking it would mean amending AC6 in its own commit, which is a scope change this spec did not agree. Left as the narrower behaviour, and worth its own issue.
 - **LOW** — case 74's destination half asserted `*Target*`, a cue both Target pins print. Now asserts the needle, matching the precedent one case above.
 
+## Review round 3 — CLEAN, 0 blockers, 0 HIGH, 1 MEDIUM, 1 LOW
+
+Reviewed at `c0cbac707a420ea8c8daeddfdafa93bad1d22590`. All three round-2 fixes confirmed, no stale count left anywhere in the repo, C1 re-verified. Both new findings were defects the previous round's fixes introduced, and both are fixed:
+
+- **MEDIUM** — the narrowed clause was evaluated *after* the same step writes `- Mode: bootstrap`, so "where no `- Mode:` line exists" was false in every case, including the fresh install AC1 is about. Round 1's wider wording had masked the collision; narrowing it removed the mask. The condition now names the state the project arrived in. This is the finding no pin could have caught — both pins check that the sentence is present, not that it ever fires — which is exactly the exposure the pinned-not-observed table above names, demonstrated rather than argued.
+- **LOW** — the sentence added to the docstring said "#141 added two and moved this number twice". It moved once, in review, after both entries had landed. The exhibit asserted the opposite of the lesson it exists to teach, and contradicted this file one directory over. Corrected.
+
 ## Findings recorded rather than fixed
 
 - **MEDIUM-2 (version size)** — the reviewer argues `0.10.0` on #110's precedent, recorded at `.work_logs/2026-09-13.md:121`: a value on a machine-read line that `init` writes was sized minor. C4 in the spec anticipated the re-check. This is the operator's call and is not the reviewer's to settle; raised rather than applied.
