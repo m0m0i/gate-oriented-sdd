@@ -44,7 +44,8 @@ STEERING = pathlib.Path(".steering/tech.md")
 #: which is the state of not having written them yet.
 MANDATORY_DOCS = ("PRD.md", "DESIGN.md", "BACKLOG.md")
 #: The skill that writes each. `bootstrap` names them in its output: telling a user three
-#: documents are owed without naming what writes them leaves them to search the skill list.
+#: documents are owed — or six, under `- Target: full` — without naming what writes them
+#: leaves them to search the skill list.
 DOC_OWNER = {
     "PRD.md": "prd",
     "DESIGN.md": "design-doc",

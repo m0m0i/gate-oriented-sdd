@@ -121,6 +121,16 @@ CONTRACTS = (
     ),
     (
         "skills/init/SKILL.md",
+        "- Target: <minimum|full — the set the operator chose, read only while Mode is bootstrap",
+        "AC7 is a conjunction — question, destination, wiring — and the entry above pins only "
+        "the question. Without this one the fenced block can lose the line while every guard "
+        "stays green, and `init` is left to infer where the answer goes: a `- Target:` written "
+        "into product.md or into prose resolves to nothing, and the checker falls back to the "
+        "generic message having never seen it. Silent discard is the failure the line exists "
+        "to close, reached by deleting the statement of where it lives. #141 AC7.",
+    ),
+    (
+        "skills/init/SKILL.md",
         "copy `assets/check-document-set.py` to the project's `scripts/` directory and add it to the `- Validators:` line",
         "This is the ONLY route by which the mode reaches a gate. Delete it and the mode "
         "becomes a comment: declared, never checked. It must stay on the `- Validators:` "

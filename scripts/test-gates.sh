@@ -2680,10 +2680,29 @@ case "$err" in *Target*) c3=ok ;; *) c3=no ;; esac
 r=$(contracts_repo contracts-target-control)
 out=$(run_contracts "$r"); [ "$out" = "0" ] && c4=ok || c4=no
 
-[ "$c1$c2$c3$c4" = "okokokok" ] \
-  && report "init stripped of the target question fails, naming the file and the key" ok \
-  || report "init stripped of the target question fails, naming the file and the key" no \
-     "notarget-exit=$c1 names-file=$c2 names-key=$c3 control=$c4"
+# AC7 is a conjunction — question, DESTINATION, wiring — and the needle above pins only the
+# first. Delete the fenced-block line and every validator stays green while `init` is left to
+# infer where the answer goes; a `- Target:` written into the wrong file resolves to nothing
+# and is discarded in silence, which is the failure the line was added to close. Found in
+# review, in the same shape the `- Mode:` entry still carries.
+r=$(contracts_repo contracts-notarget-dest)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
+needle = "- Target: <minimum|full — the set the operator chose, read only while Mode is bootstrap"
+src = p.read_text()
+if needle not in src:
+    raise SystemExit("fixture no-op: the Target line is not in the machine-read block")
+p.write_text(src.replace(needle, "- Target: <the chosen set"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *Target*) c6=ok ;; *) c6=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] \
+  && report "init stripped of the target question or its destination fails, naming the file and the key" ok \
+  || report "init stripped of the target question or its destination fails, naming the file and the key" no \
+     "notarget-exit=$c1 names-file=$c2 names-key=$c3 control=$c4 nodest-exit=$c5 nodest-names-key=$c6"
 
 
 # --- shipped reviewers: the contract path they name -----------------------------------
