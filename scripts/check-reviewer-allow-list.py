@@ -65,6 +65,57 @@ def read_validators(steering_path: pathlib.Path) -> list[str]:
     return []
 
 
+def check_categories(rel_path: str, policy: str) -> list[str]:
+    """Verify that all four sanctioned categories are present in the reviewer's Bash policy.
+
+    Sanctioned categories from reviewer-contract.md:
+    1. diff/log/commit
+    2. clock (date -u)
+    3. installed version check (package manager, environment listing, SDK version, or reasoned N/A)
+    4. validators (named in .steering/tech.md or enumerated list)
+    """
+    errors: list[str] = []
+
+    # 1. diff/log/commit
+    has_diff = bool(re.search(r"\bgit\s+(diff|log|rev-parse)\b", policy))
+    if not has_diff:
+        errors.append(f"{rel_path} is missing category 'diff/log/commit'")
+
+    # 2. clock
+    has_clock = bool(re.search(r"\bdate\s+-u\b", policy))
+    if not has_clock:
+        errors.append(f"{rel_path} is missing category 'clock'")
+
+    # 3. installed version
+    # Check for N/A declaration
+    cat3_na_lines = [
+        line for line in policy.splitlines()
+        if re.search(r"\b(?:n/a|not applicable)\b", line, re.IGNORECASE)
+        and re.search(r"version|package|sdk|dependency|category\s*3", line, re.IGNORECASE)
+    ]
+    if cat3_na_lines:
+        has_reason = False
+        for line in cat3_na_lines:
+            m_paren = re.search(r"\b(?:n/a|not applicable)\b\s*\(([^)]+)\)", line, re.IGNORECASE)
+            m_sep = re.search(r"\b(?:n/a|not applicable)\b\s*[-—:,]\s*(\S+.*)", line, re.IGNORECASE)
+            if (m_paren and m_paren.group(1).strip()) or (m_sep and m_sep.group(1).strip()):
+                has_reason = True
+                break
+        if not has_reason:
+            errors.append(f"{rel_path} declares category 'installed version' N/A without a stated reason")
+    else:
+        has_cat3 = bool(re.search(r"package\s+manager|package\s+listing|sdk\s+version", policy, re.IGNORECASE))
+        if not has_cat3:
+            errors.append(f"{rel_path} is missing category 'installed version'")
+
+    # 4. validators
+    has_validators = bool(re.search(r"\bvalidators\b", policy, re.IGNORECASE))
+    if not has_validators:
+        errors.append(f"{rel_path} is missing category 'validators'")
+
+    return errors
+
+
 def main() -> None:
     if len(REVIEWERS) < MIN_REVIEWERS:
         print(f"check-reviewer-allow-list FAILED — REVIEWERS is below its floor of {MIN_REVIEWERS}", file=sys.stderr)
@@ -106,7 +157,25 @@ def main() -> None:
         print("  Every validator on the '- Validators:' line must appear on the reviewer's allow-list.", file=sys.stderr)
         sys.exit(1)
 
-    print(f"check-reviewer-allow-list: {len(validators)} validator(s) covered in {DOGFOOD}")
+    # Categories check across all REVIEWERS
+    category_errors: list[str] = []
+    for rel in REVIEWERS:
+        reviewer_file = ROOT / rel
+        if not reviewer_file.is_file():
+            print(f"check-reviewer-allow-list FAILED — reviewer {rel} does not exist", file=sys.stderr)
+            sys.exit(1)
+        r_policy = bash_policy(reviewer_file)
+        if r_policy is None:
+            print(f"check-reviewer-allow-list FAILED — {rel} has no '## Bash policy' section", file=sys.stderr)
+            sys.exit(1)
+        category_errors.extend(check_categories(rel, r_policy))
+
+    if category_errors:
+        for err in category_errors:
+            print(f"check-reviewer-allow-list FAILED — {err}", file=sys.stderr)
+        sys.exit(1)
+
+    print(f"check-reviewer-allow-list: {len(validators)} validator(s) covered in {DOGFOOD}; all {len(REVIEWERS)} reviewer(s) satisfy categories")
 
 
 if __name__ == "__main__":

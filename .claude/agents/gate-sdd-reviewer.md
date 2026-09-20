@@ -17,6 +17,7 @@ Evidence gathering only:
 
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
 - `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
+- checking an installed version: N/A (this project has no package manager, no build, and no dependency file)
 - these validators, and no others:
   - `./scripts/check-leakage.sh`
   - `./scripts/check-manifests.py`

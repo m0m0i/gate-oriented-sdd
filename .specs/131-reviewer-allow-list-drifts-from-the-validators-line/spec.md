@@ -39,15 +39,15 @@
         absent validator and the file.
   - [x] **AC2:** WHEN the reviewer is asked to run any validator on the `- Validators:` line THE
         SYSTEM SHALL sanction it, for all twelve current entries.
-  - [ ] **AC3:** WHEN a reviewer file shows neither evidence of one of the four categories
+  - [x] **AC3:** WHEN a reviewer file shows neither evidence of one of the four categories
         `reviewer-contract.md`'s Bash policy sanctions nor a declared N/A for it THE SYSTEM SHALL
         fail and name the file and the category. The corpus is the five files
         `check-receipt-schema.py` already pins as `REVIEWERS`. *(#118)*
-  - [ ] **AC4:** WHEN a category is inapplicable to a project THE SYSTEM SHALL accept a declared
+  - [x] **AC4:** WHEN a category is inapplicable to a project THE SYSTEM SHALL accept a declared
         N/A that states its reason, and SHALL reject a bare or unreasoned one. The dogfood
         reviewer declares category 3 N/A because `.steering/tech.md` records that this project has
         no package manager, no build, and no dependency file.
-  - [ ] **AC5:** AC3 SHALL match each category across the spellings the shipped reviewers already
+  - [x] **AC5:** AC3 SHALL match each category across the spellings the shipped reviewers already
         use — `agents/ts-reviewer.md` and `agents/python-reviewer.md` spell category 3 "the package
         manager's list command", `agents/dart-flutter-reviewer.md` "the SDK version command" — so
         the check reads the category, not one stack's wording.
@@ -213,7 +213,7 @@ to fix it. The class closes because the guard's first subject is itself.
       the allow-list, then the sanctioned extra proving containment rather than equality), failing
       for the right reason; then `scripts/check-reviewer-allow-list.py` implementing it, and the
       three absent validators added to the dogfood allow-list.
-- [ ] **T2:** Category rule — cases for AC3, AC4, AC5 (a dropped category fails and is named; each
+- [x] **T2:** Category rule — cases for AC3, AC4, AC5 (a dropped category fails and is named; each
       of the three category-3 spellings passes; a bare N/A fails and a reasoned one passes); then
       the rule, and the dogfood reviewer's category-3 N/A declaration with its reason.
 - [ ] **T3:** AC8 — the guard onto `.steering/tech.md`'s `- Validators:` line, onto the dogfood
