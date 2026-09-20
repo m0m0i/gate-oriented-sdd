@@ -280,10 +280,12 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   # `|| return 1` for the same reason every other step here has it, and it was missing for one
   # round: an awk that exits non-zero prints nothing, and nothing is what a branch with no
   # footprint prints — so the empty-footprint return below read "awk could not tell me" as
-  # "the branch touched nothing". UNPINNED, and said out loud rather than implied: no
-  # consumer-authored value reaches this line, so the trigger is awk itself failing and no
-  # cheap fixture produces it. The anchor diff's guard is unpinned for its own reason, which
-  # case 140 records.
+  # "the branch touched nothing". UNPINNED, and said out loud rather than implied: nothing
+  # consumer-authored controls what awk DOES here — the program and its arguments are ours,
+  # and only path names flow through as data — so the trigger is awk itself failing rather
+  # than anything a project could write, and no cheap fixture produces that. This is the
+  # difference from the rejected pathspec above, where the consumer authors the argument. The
+  # anchor diff's guard is unpinned for its own reason, which case 140 records.
   #
   # `NF` and not `length($0)`: it is what guarantees _wfoot holds no blank-equivalent line,
   # which is what makes the sentinel below safe. The cost is a corner — a path named entirely
