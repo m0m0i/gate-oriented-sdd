@@ -19,7 +19,7 @@ It deliberately creates **no issues**. That is `sprint`'s job, and the separatio
 
 **Two doors stay open that no skill can close**: an issue closed by a merge, and an issue filed outside a grooming. Nothing runs at either moment, so nothing can be instructed to write them down. Compare the list against the tracker instead — no open issue missing from it, and no `Item` cell citing work that has finished — and start a grooming from what that comparison turns up rather than from a re-read of the whole document. Whether a command does the comparing or a person does it by hand, it is the half of a grooming nobody can do from memory.
 
-When that comparison finds a row whose work has finished **between** groomings, the correction is bounded and does not wait for the next one: append the row to `## Discharged since last grooming`, drop it from the table, and change nothing else. No order is revisited and no reasoning rewritten. Treating a discharge as a re-groom is why it gets deferred to a grooming that is months away, and why the trace ends up wherever the person writing it could find room.
+When that comparison finds a row whose work has finished **between** groomings, the correction is bounded and does not wait for the next one: append the row to `## Discharged since last grooming` and drop it from the table. No order is revisited and no reasoning rewritten — though the positions below it do shift, which is the part of a discharge this section does not make cheaper. Treating a discharge as a re-groom is why it gets deferred to a grooming that is months away, and why the trace ends up wherever the person writing it could find room.
 
 Ordering is the entire value. A list of everything that must be built is not a backlog; it is an inventory.
 
@@ -57,6 +57,8 @@ The **Item** cell names the issues this row is live work for. `Why here` may cit
 Rows that have left. One line each, and all four parts of it: the issue, the position it held, the date, and how it left — shipped by a named pull request, closed without shipping, or folded into a named row. A line missing one of the four is not a record; each is the question the next reader asks first.
 
 - <#n> — row <n>, <YYYY-MM-DD> — shipped as <#n> | closed without shipping: <why> | folded into row <n>
+
+One bullet per discharge, **never a table**. A second table here is indistinguishable from the ordered list to anything comparing this document against the tracker, so every issue a discharge table named would stop being reported as missing from the list — the section would quietly become an exemption list, which is the one thing it must not be.
 
 This is the only home a discharge has, and appending to it is a bounded edit rather than a re-groom. Without it the trace lands in a surviving row's `Why here`, or in **What changed at this grooming**, or in the work log, or nowhere at all — a row that ships whole leaves no cell to carry the sentence. Prune at each grooming to the **two most recent groomings' worth** and drop what is older: the spec archive and the work log hold the detail, and a third grooming's worth makes this a second history of the list.
 
@@ -98,5 +100,5 @@ Issues that are open and deliberately not rows. One line each: the issue, why it
 - `## Unshaped` never empties. Those items are being deferred without anyone deciding to defer them.
 - Items read like issue titles. Then they have been decomposed too early, and the decomposition is now frozen into an ordering decision that has to be redone.
 - The backlog has been created as issues. Then the tracker is a plan rather than a commitment, and every future search filters through work nobody chose.
-- `## Unshaped` is empty while rows still carry unresolved dependencies. Either the plan is unusually complete, or work nobody can size is being ordered as though it were actionable.
+- `## Unshaped` is empty while the table carries items nobody can size. Either the plan is unusually complete, or work that has not been shaped is being ordered as though it were actionable.
 - `## What changed at this grooming` is a list of what shipped. Then the grooming recorded facts the section above it already holds and made no judgment at all, and the next grooming starts from scratch — which is the cost this whole document exists to avoid.

@@ -5264,7 +5264,7 @@ case "$err" in *"#21"*) c14=ok ;; *) c14=no ;; esac
   || report "check-backlog-tracker binds the Item column by name and names its exclusions" no \
      "col=$c0/$c1 nohdr=$c2/$c3/$c4 indent=$c5/$c6 stale-exempt=$c7/$c8 unknown=$c9/$c10 names=$c11/$c12 subbullet=$c13/$c14"
 
-# 132. #174 — the remedy for a discharged row names the section a discharge goes in, and that
+# 145. #174 — the remedy for a discharged row names the section a discharge goes in, and that
 # section buys nobody an exemption.
 #
 # The finished direction's message is the ONLY automated instruction anyone ever receives about
