@@ -4751,6 +4751,67 @@ case "$err" in *"row 1"*) c8=ok ;; *) c8=no ;; esac
   || report "check-backlog-tracker reports both directions and spares history" no \
      "ok-exit=$c0 counts-issues=$c1 counts-rows=$c2 absent-exit=$c3 names-14=$c4 spares-11=$c5 closed-exit=$c6 names-10=$c7 names-row=$c8"
 
+
+# 129. #79's anchor half: every way this checker can fail to do its job, and not one of them
+# reporting agreement. `- Owns: gates never fail open` is the line every severity here is
+# judged against, and an empty issue list is the input that would satisfy BOTH directions with
+# nothing to compare — nothing to find absent, nothing to find finished — so it is the one that
+# would print a clean success while checking nothing.
+#
+# Each half asserts the exit code, a diagnostic naming WHICH failure it was, and the absence of
+# the success line. The third assertion is the one that matters: exit codes and messages can
+# both be right while a later edit adds a success print above the failure branch.
+PY3=$(command -v python3)
+# python3 by absolute path so PATH can be emptied to take `gh` away without taking the
+# interpreter with it. This is the only way to reach the unreachable-tracker branch offline.
+run_bt_nogh() { ( cd "$1" && PATH=/nonexistent "$PY3" -O scripts/check-backlog-tracker.py >"$TMP/btout" 2>"$TMP/bterr"; printf '%s' "$?" ) }
+
+bt_all=""
+bt_check() { # bt_check <label> <exit> <needle>
+  _e=$2; _n=$3
+  _err=$(cat "$TMP/bterr"); _out=$(cat "$TMP/btout")
+  [ "$_e" = "1" ] && _a=ok || _a=no
+  case "$_err" in *"$_n"*) _b=ok ;; *) _b=no ;; esac
+  # The fail-open assertion. "Could not check" and "checked, clean" must never share output.
+  case "$_out" in *"no drift"*) _c=no ;; *) _c=ok ;; esac
+  bt_all="$bt_all $1=$_a$_b$_c"
+  [ "$_a$_b$_c" = "okokok" ] || bt_bad=1
+}
+bt_bad=
+
+# The tracker cannot be reached at all.
+r=$(bt_repo bt-nogh); out=$(run_bt_nogh "$r"); bt_check nogh "$out" "tracker cannot be reached"
+
+# `- Docs:` names another repository, so the document is not local. Reading its absence as
+# "no rows to check" would be the false GREEN in the direction this guard exists to close.
+r=$(bt_repo bt-remote "https://example.invalid/docs"); bt_issues "$r" "10 OPEN"
+out=$(run_bt "$r"); bt_check remote "$out" "names another repository"
+
+# The document is simply not there.
+r=$(bt_repo bt-nofile); bt_issues "$r" "10 OPEN"; rm "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); bt_check nofile "$out" "does not exist"
+
+# An empty issue list. Both directions would pass with nothing to compare.
+r=$(bt_repo bt-noissues); : > "$r/issues.txt"
+out=$(run_bt "$r"); bt_check empty "$out" "not agreement"
+
+# An issue list that cannot be parsed is not an empty issue list, and must not be read as one.
+r=$(bt_repo bt-garbage); printf 'not-an-issue\n' > "$r/issues.txt"
+out=$(run_bt "$r"); bt_check garbage "$out" "OPEN|CLOSED"
+
+# A table with no ordered rows. Both loops run zero times and the success line would read
+# `0 row(s), no drift` — a guard certifying a comparison it never made.
+r=$(bt_repo bt-norows); bt_issues "$r" "10 OPEN"
+printf '# Product backlog\n\nNo table here yet.\n' > "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); bt_check norows "$out" "no ordered rows"
+
+# No steering file, so the document directory cannot be resolved.
+r=$(bt_repo bt-nosteer); bt_issues "$r" "10 OPEN"; rm "$r/.steering/tech.md"
+out=$(run_bt "$r"); bt_check nosteer "$out" "does not exist"
+
+[ -z "$bt_bad" ] && report "check-backlog-tracker refuses every input it cannot check" ok \
+  || report "check-backlog-tracker refuses every input it cannot check" no "exit/names/no-success:$bt_all"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 
