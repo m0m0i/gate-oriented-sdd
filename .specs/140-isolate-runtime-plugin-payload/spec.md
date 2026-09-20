@@ -1,5 +1,5 @@
 # Spec: Isolate runtime plugin payload from repo-internal tooling on plugin installation
-- Slug: 140-isolate-runtime-plugin-payload   Issue: 140   Type: feature   Status: approved
+- Slug: 140-isolate-runtime-plugin-payload   Issue: 140   Type: feature   Status: done
 - Author: Hiroyuki   Date: 2026-09-20
 
 ## 1. Requirements (WHAT / WHY)
