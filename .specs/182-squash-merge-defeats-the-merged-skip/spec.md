@@ -1,6 +1,6 @@
 # Spec: the merged-branch skip never fires where the repository squash-merges
 
-- Slug: 182-squash-merge-defeats-the-merged-skip   Issue: 182   Type: bug   Status: approved
+- Slug: 182-squash-merge-defeats-the-merged-skip   Issue: 182   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-09-20
 
 ## 1. Requirements (WHAT / WHY)
