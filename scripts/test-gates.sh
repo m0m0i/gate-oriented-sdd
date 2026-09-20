@@ -376,16 +376,19 @@ squash_merge() { ( cd "$1" && git checkout -q main && git merge --squash -q "$2"
 
 # 132. #182 AC1, the scan — case 82 under this project's own merge style. A squash merge writes
 #      a commit with no parent link to the branch, so the tip is never an ancestor of the base
-#      and `merge-base --is-ancestor` at :111 can never succeed again. The skip therefore needs
-#      evidence that the WORK reached the base, not that the commit did.
+#      and the `merge-base --is-ancestor` in scan_other_branches can never succeed again. The
+#      skip therefore needs evidence that the WORK reached the base, not that the commit did.
+#      Named by function rather than by line: this change moves both skip sites, so a line
+#      number written here is wrong by the time the commit that writes it lands.
 r=$(make_repo sqparkedmerged 1); park_spec "$r" 12-parked 0
 squash_merge "$r" 12-parked
 out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "a squash-merged parked branch stays silent" ok ;;
                         *) report "a squash-merged parked branch stays silent" no "$out" ;; esac
 
-# 133. #182 AC1, the current branch — case 8's sibling. Same defect one function up, at :63,
-#      and the commoner case: you merge your own pull request and stay standing on the branch.
+# 133. #182 AC1, the current branch — case 8's sibling. The same defect in
+#      check_current_branch, and the commoner case: you merge your own pull request and stay
+#      standing on the branch.
 r=$(make_repo sqmergedstand 1); park_spec "$r" 12-parked 0
 squash_merge "$r" 12-parked
 ( cd "$r" && git checkout -q 12-parked ) >/dev/null 2>&1
