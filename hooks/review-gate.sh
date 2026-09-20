@@ -2,11 +2,16 @@
 # review-gate.sh — the harness's one enforced rule.
 #
 # Everything else here is guidance a model can decline. This is the rule that
-# holds: a finished spec branch cannot end a turn without a fresh, clean review.
+# holds: finished work cannot sit in this repository without a fresh, clean review.
 #
-# It is deliberately narrow. A gate that fires on ordinary turns is a gate people
-# disable, and a disabled gate protects nothing — so this exits silently on every
-# case that is not the one it exists for.
+# It asks that about the REPOSITORY, not about where HEAD happens to point. Those are
+# different questions, and until #26 only the first was asked: on a branch with no spec the
+# gate exited 0 and printed nothing, so `git checkout main` turned the one enforced rule off
+# and left no trace — a skipped review and a clean repository produced identical silence.
+#
+# It is still deliberately narrow. A gate that fires on ordinary turns is a gate people
+# disable, and a disabled gate protects nothing — so this is silent on every case that is not
+# the one it exists for. What it is not is narrow in a way the author chooses per turn.
 set -u
 
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -18,84 +23,99 @@ if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
 fi
 branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || gate_pass
 
-spec=".specs/$branch/spec.md"
-[ -f "$spec" ] || gate_pass          # not a spec branch — nothing to gate
-
-# A spec that exists but cannot be read is NOT the same as a spec with nothing in it, and
-# the difference is invisible downstream: both task counters come back 0 for a file they
-# cannot open, and a zero total is read below as "nothing authored, stay silent". Without
-# this line the gate exits 0 in precisely the case where it could not do its job. Fail
-# closed — an unreadable spec is a broken working tree, not an empty one.
-[ -r "$spec" ] || gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass."
-
-# No issue, no spec. The slug is <issue-number>-<kebab-title>, so a spec directory
-# without a numeric prefix is work that never had an issue — unplanned work that
-# entered through the side door and bypassed whatever decided the sprint. This is
-# checkable without touching the network, so it is checked.
-case "$branch" in
-  [0-9]*) : ;;
-  *) gate_block "No issue, no spec: the branch '$branch' has a spec at $spec but its slug does not start with an issue number. The slug is <issue>-<kebab-title>, and the issue is what recorded that this work was chosen. Create the issue and rename the branch and spec directory to match, or say explicitly that this is acknowledged unplanned work." ;;
-esac
+reviewer=$(gate_steering_value .steering/tech.md Reviewer)
+[ -n "$reviewer" ] || reviewer="the reviewer named in .steering/tech.md"
 
 # Already-merged work has nothing left to review. Without this, every historical
 # feature branch trips the gate the moment the harness is installed.
 base=$(git rev-parse --verify -q origin/HEAD 2>/dev/null \
      || git rev-parse --verify -q origin/main 2>/dev/null \
      || git rev-parse --verify -q main 2>/dev/null) || base=""
-if [ -n "$base" ] && git merge-base --is-ancestor HEAD "$base" 2>/dev/null; then
-  gate_pass
-fi
 
-# Two ways there is nothing to review, indistinguishable in a count of unticked boxes alone
-# — which is why that count used to block a spec still being drafted while telling its author
-# that every task was ticked:
-#
-#   no checkboxes at all   the Tasks section is a placeholder; nothing has been written yet
-#   some still unticked    implementation is in progress
-#
-# Neither is the moment to demand a review.
-[ "$(gate_total_tasks "$spec")" -eq 0 ] 2>/dev/null && gate_pass
-[ "$(gate_open_tasks "$spec")" -gt 0 ] 2>/dev/null && gate_pass
+# The branch you are standing on, with the messages written in the second person because you
+# are the person who can act on them. Every exit from here is a `return`, never a pass: the
+# repository-wide pass below must run whatever this one concludes, or each of its early
+# returns is another way to be standing somewhere the gate does not look.
+check_current_branch() {
+  spec=".specs/$branch/spec.md"
+  [ -f "$spec" ] || return 0          # not a spec branch — nothing of its own to gate
 
-receipt=".specs/$branch/.review-receipt"
-reviewer=$(gate_steering_value .steering/tech.md Reviewer)
-[ -n "$reviewer" ] || reviewer="the reviewer named in .steering/tech.md"
+  # A spec that exists but cannot be read is NOT the same as a spec with nothing in it, and
+  # the difference is invisible downstream: both task counters come back 0 for a file they
+  # cannot open, and a zero total is read as "nothing authored, stay silent". Without this
+  # line the gate exits 0 in precisely the case where it could not do its job. Fail closed —
+  # an unreadable spec is a broken working tree, not an empty one.
+  [ -r "$spec" ] || gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass."
 
-if [ ! -f "$receipt" ]; then
-  gate_block "Review gate: every task in $spec is ticked, but no reviewer receipt exists. Run $reviewer on the branch diff, then write its Receipt block to $receipt. If $reviewer is already running, wait for it and write the receipt from its result — do not start a second one."
-fi
+  # No issue, no spec. The slug is <issue-number>-<kebab-title>, so a spec directory
+  # without a numeric prefix is work that never had an issue — unplanned work that
+  # entered through the side door and bypassed whatever decided the sprint. This is
+  # checkable without touching the network, so it is checked.
+  #
+  # Current-branch only, on purpose: it is a rule about the spec you are authoring now, and
+  # asking it of every directory in .specs/ would fire forever on anything predating it.
+  case "$branch" in
+    [0-9]*) : ;;
+    *) gate_block "No issue, no spec: the branch '$branch' has a spec at $spec but its slug does not start with an issue number. The slug is <issue>-<kebab-title>, and the issue is what recorded that this work was chosen. Create the issue and rename the branch and spec directory to match, or say explicitly that this is acknowledged unplanned work." ;;
+  esac
 
-verdict=$(sed -n 's/^verdict=//p' "$receipt" | head -1)
-if [ "$verdict" != "CLEAN" ]; then
-  gate_block "Review gate: the recorded review verdict is '${verdict:-missing}', not CLEAN. Address every BLOCKER and HIGH finding, re-run $reviewer, and update $receipt."
-fi
+  if [ -n "$base" ] && git merge-base --is-ancestor HEAD "$base" 2>/dev/null; then
+    return 0
+  fi
 
-sha=$(sed -n 's/^reviewed_sha=//p' "$receipt" | head -1)
-head=$(git rev-parse HEAD 2>/dev/null || echo '')
-[ "$sha" = "$head" ] && gate_pass
+  receipt=".specs/$branch/.review-receipt"
+  head=$(git rev-parse HEAD 2>/dev/null || echo '')
 
-# HEAD moved after the review. That is expected and fine when the trailing
-# commits are the work log and the spec's own Status flip. It is not fine when
-# reviewable source moved, because then the receipt describes code that no longer
-# exists. Source globs come from .steering/tech.md so this stays language-neutral.
-globs=$(gate_steering_value .steering/tech.md 'Source globs')
-[ -n "$globs" ] || globs='*'
+  # Two ways there is nothing to review, indistinguishable in a count of unticked boxes alone
+  # — which is why that count used to block a spec still being drafted while telling its
+  # author that every task was ticked:
+  #
+  #   no checkboxes at all   the Tasks section is a placeholder; nothing has been written yet
+  #   some still unticked    implementation is in progress
+  #
+  # Neither is the moment to demand a review. Both are an empty state below.
+  state=$(gate_spec_review_state ".specs/$branch" "$head")
+  case "$state" in
+    '')
+      return 0 ;;
+    no-receipt)
+      gate_block "Review gate: every task in $spec is ticked, but no reviewer receipt exists. Run $reviewer on the branch diff, then write its Receipt block to $receipt. If $reviewer is already running, wait for it and write the receipt from its result — do not start a second one." ;;
+    receipt-unreadable)
+      gate_block "Review gate: $receipt exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass." ;;
+    verdict=*)
+      gate_block "Review gate: the recorded review verdict is '${state#verdict=}', not CLEAN. Address every BLOCKER and HIGH finding, re-run $reviewer, and update $receipt." ;;
+    stale=*)
+      rest=${state#stale=}
+      gate_block "Review gate: source changed since the recorded review (${rest%% *}): ${rest#* }. Re-run $reviewer and update $receipt before opening the PR." ;;
+  esac
+}
 
-# Two ways this used to fail OPEN, both the shell's doing rather than git's, and both
-# silent — which is the worst direction for a gate to fail in.
-#
-#   '*.py'   quotes inside a variable are not removed on expansion, so git received the
-#            literal pathspec '*.py' and matched nothing
-#   *.py     the shell expanded it against the repository root before git saw it, so a
-#            src/-layout project matched nothing and a flat one matched only top level
-#
-# Strip the quotes, then disable globbing across the word split so the pattern reaches
-# git intact. Word splitting is still wanted here: several globs are separated by spaces.
-globs=$(printf '%s' "$globs" | tr -d "\"'")
-set -f
-changed=$(git diff --name-only "$sha"..HEAD -- $globs 2>/dev/null)
-set +f
+# Every other branch. This is the half #26 was missing, and the reason it reads branches
+# rather than globbing `.specs/` is that the spec is its branch's FIRST commit: from anywhere
+# else, the directory does not exist in the working tree at all. A scan of `.specs/` would
+# therefore find nothing and report it as cleanliness — the same silence, one layer deeper.
+scan_other_branches() {
+  found=''
+  for ref in $(git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null); do
+    [ "$ref" = "$branch" ] && continue
+    tip=$(git rev-parse --verify -q "$ref^{commit}" 2>/dev/null) || continue
+    if [ -n "$base" ] && git merge-base --is-ancestor "$tip" "$base" 2>/dev/null; then
+      continue                        # shipped — case 8's reasoning, one branch over
+    fi
+    state=$(gate_spec_review_state ".specs/$ref" "$tip" "$ref")
+    [ -n "$state" ] || continue
+    found="$found
+  $ref — $(gate_review_state_sentence "$state")"
+  done
 
-[ -z "$changed" ] && gate_pass
+  [ -n "$found" ] || return 0
 
-gate_block "Review gate: source changed since the recorded review ($sha): $(echo "$changed" | tr '\n' ' '). Re-run $reviewer and update $receipt before opening the PR."
+  gate_block "Review gate: this repository holds finished work that nobody has reviewed, on a branch you are not standing on:
+$found
+
+The gate asks what this repository contains, not which branch HEAD points at, so moving HEAD does not clear this and neither does a detached checkout. For each branch above: run $reviewer against it and write the receipt, merge it, or delete the branch if the work is abandoned."
+}
+
+check_current_branch
+scan_other_branches
+gate_pass
