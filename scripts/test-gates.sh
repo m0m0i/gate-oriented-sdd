@@ -5264,6 +5264,64 @@ case "$err" in *"#21"*) c14=ok ;; *) c14=no ;; esac
   || report "check-backlog-tracker binds the Item column by name and names its exclusions" no \
      "col=$c0/$c1 nohdr=$c2/$c3/$c4 indent=$c5/$c6 stale-exempt=$c7/$c8 unknown=$c9/$c10 names=$c11/$c12 subbullet=$c13/$c14"
 
+# 145. #174 — the remedy for a discharged row names the section a discharge goes in, and that
+# section buys nobody an exemption.
+#
+# The finished direction's message is the ONLY automated instruction anyone ever receives about
+# a row that has left, and until #174 it said "move the citation into `Why here`" and nothing
+# else. `Why here` belongs to a row that SURVIVED; a row that ships whole has no cell, and the
+# trace then lands in one of five places or none. So the remedy names both outcomes, and the
+# heading it names is a constant this file can assert on rather than prose nobody compares.
+#
+# The second half is the fail-open the first half opens the door to. `## Discharged since last
+# grooming` is deliberately NOT a region either direction reads: a discharge names finished work,
+# and counting it in the absent direction would hand every issue it mentions a silent exemption —
+# `## Open, not planned` without the reason, the falsifier, or the staleness check case 131 added.
+# It holds by construction today, which is exactly why it needs a case: nothing else would notice
+# the day someone "fixes" the section by wiring it into `cited`.
+
+# AC6: an Item cell citing a closed issue. The remedy names BOTH outcomes.
+r=$(bt_repo bt-remedy); bt_issues "$r" "10 CLOSED" "11 CLOSED" "12 OPEN" "13 OPEN"
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
+[ "$out" = "1" ] && c0=ok || c0=no
+case "$err" in *"Discharged since last grooming"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"Why here"*) c2=ok ;; *) c2=no ;; esac
+# Naming one outcome twice is not naming two. The surviving-row half was the whole message
+# before #174, so a change that only appended the new heading would pass c1 and c2 while
+# leaving the reader no way to tell which case they are in.
+case "$err" in *"row survives"*) c3=ok ;; *) c3=no ;; esac
+
+# AC7: an OPEN issue named in a discharge line — a row folded into another, whose issue is
+# still live. The absent direction must still report it.
+#
+# RED-CAPABILITY: this half passes on first run, so it was established by MUTATION rather than
+# by sequence. Named mutation: add
+#     cited.update(int(n) for n in ISSUE.findall(section(text, DISCHARGED_HEADING)))
+# beside the `## Unshaped` line in the absent direction. What flipped: c5 ok -> no and c4
+# ok -> no — #22 stops being reported and the run reports `no drift`, i.e. the exemption is
+# granted and the guard says the list agrees with the tracker. Reverted.
+r=$(bt_repo bt-discharge); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "22 OPEN"
+{ printf '\n## Discharged since last grooming\n\n'
+  printf -- '- **#22** - row 4, 2026-09-21 - folded into row 1.\n'; } >> "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
+[ "$out" = "1" ] && c4=ok || c4=no
+case "$err" in *"#22"*) c5=ok ;; *) c5=no ;; esac
+
+# The same document with #22 CLOSED is the ordinary case — a discharge line citing finished
+# work — and it must be silent. A guard that reports every discharge it can see is a guard
+# switched off on the first grooming after it ships.
+r=$(bt_repo bt-discharge-ok); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "22 CLOSED"
+{ printf '\n## Discharged since last grooming\n\n'
+  printf -- '- **#22** - row 4, 2026-09-21 - shipped as #99.\n'; } >> "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
+[ "$out" = "0" ] && c6=ok || c6=no
+case "$err" in *"#22"*) c7=no ;; *) c7=ok ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokokok" ] \
+  && report "check-backlog-tracker points a discharged row at its section, and exempts nothing" ok \
+  || report "check-backlog-tracker points a discharged row at its section, and exempts nothing" no \
+     "remedy=$c0/$c1/$c2/$c3 open-in-discharge=$c4/$c5 closed-in-discharge=$c6/$c7"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 
