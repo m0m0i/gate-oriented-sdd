@@ -31,12 +31,12 @@ reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 # historical feature branch would trip the gate on install, and that case cannot occur. A
 # branch with no spec of its own is already silent whatever the merge style, and by two
 # different routes: the current-branch path returns at the absent spec.md before reaching any
-# of this, while the scan does consult ancestry first and then gets an empty state back from
-# gate_spec_review_state. Case 83 pins the first route; cases 1-7 exercise the second, where
-# HEAD is on 9-feature and the scan reaches a main with no spec of its own. The one that needs
-# this skip is a branch that shipped
-# WITH a spec and was not deleted — which, in a squash-merging repository, is every branch
-# anyone has merged. #182 measured that and corrected the sentence.
+# of this, while the scan consults ancestry first and then gets an empty state back from
+# gate_spec_review_state. Case 83 pins the first, case 144 the second. Cases 1-7 were cited
+# for the second and do not reach it — their only other ref is main, which IS an ancestor of
+# itself, so the scan skips it before asking. The branch that needs this skip is one that
+# shipped WITH a spec and was not deleted — which, in a squash-merging repository, is every
+# branch anyone has merged. #182 measured that and corrected the sentence.
 #
 # The candidate list is longer since #26 widened the scan, because an unresolvable base costs
 # far more than it used to. It used to mean one false block, while you stood on your own

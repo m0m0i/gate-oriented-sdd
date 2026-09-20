@@ -631,6 +631,61 @@ case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "carry-on that reverts a shipped path is not skipped" ok \
   || report "carry-on that reverts a shipped path is not skipped" no "standing=$c1 scan=$c2 names=$c3"
 
+# 143. #182 AC2 — carry-on inside a MERGE COMMIT. Review round 4's HIGH, and the shape that
+#      shows the two readings of "what did this branch touch" are complements, not rivals.
+#
+#      `git log --name-only` prints no diff for a merge commit, so content that exists only
+#      there — a conflict fixup, or a hand edit made between `git merge --no-commit` and the
+#      commit — is invisible to a commit-derived footprint. The net tree diff sees it, because
+#      it compares trees and does not care how they got that way. And the net diff is blind to
+#      case 142's revert, which the log catches. Measured on this fixture: the log footprint is
+#      {src/a.txt} and the net footprint is {src/b.txt}, and the unreviewed edit is in b.
+#
+#      So the footprint is the UNION. It can only ever grow, and a larger footprint intersects
+#      more, so the skip fires less — the fail-closed direction, which is why widening is the
+#      safe way to be wrong here. RED-CAPABLE under either half alone: drop the `git log` term
+#      and case 142 goes red, drop the `git diff` term and this one does.
+r=$(make_repo sqmergefixup 1)
+( cd "$r" && git checkout -q main && echo b0 > src/b.txt \
+  && git add src/b.txt && git commit -qm "b exists on main" \
+  && git checkout -q -b 12-parked main && mkdir -p .specs/12-parked \
+  && printf '# Spec: parked\n- Slug: 12-parked   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' > .specs/12-parked/spec.md \
+  && echo a > src/a.txt && git add .specs/12-parked src/a.txt && git commit -qm "add src/a.txt" ) >/dev/null 2>&1
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q main && echo b1 >> src/b.txt && git commit -qam "main moves on at src/b.txt" \
+  && git update-ref refs/remotes/origin/main refs/heads/main \
+  && git checkout -q 12-parked && { git merge --no-commit --no-ff -q main >/dev/null 2>&1 || true; } \
+  && echo "fixup nobody reviewed" >> src/b.txt && git add -A \
+  && git commit -qm "merge main, with a fixup inside the merge commit" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "an edit made inside a merge commit is not skipped" ok \
+  || report "an edit made inside a merge commit is not skipped" no "standing=$c1 scan=$c2 names=$c3"
+
+# 144. The scan's own route to silence for a branch with no spec, which review round 4 found
+#      asserted in a comment and pinned by nothing. Case 83 covers the CURRENT-branch route,
+#      where check_current_branch returns at the absent spec.md. This is the other one: a
+#      branch that is not the current one, not an ancestor of the base, and has no spec of its
+#      own, so the scan consults ancestry, gets false, and then gets an empty state back.
+#
+#      Cases 1-7 were cited for this and do not reach it: make_repo builds no origin/*, so the
+#      base falls through to the local main, main is the only other ref, and a branch is its
+#      own ancestor — the scan skips it at the ancestry arm before ever asking about its spec.
+#
+#      RED-CAPABLE under the named mutation "an absent spec reads as unreviewed": in
+#      gate_spec_review_state, `[ "$_rc" -eq 1 ] && return 0` returning `no-receipt` instead.
+r=$(make_repo scanroute 1)
+( cd "$r" && git checkout -q -b unrelated 9-feature && echo more >> src/main.txt \
+  && git commit -qam "work on a branch with no spec of its own" \
+  && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); anc=$( cd "$r" && git merge-base --is-ancestor unrelated main 2>/dev/null && echo yes || echo no )
+case "$out$anc" in *"exit=0"*no) report "a spec-less branch is silent through the scan, not only the current-branch path" ok ;;
+                             *) report "a spec-less branch is silent through the scan, not only the current-branch path" no "$out ancestor=$anc" ;; esac
+
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
 #     gate cannot compare anything at all, so exiting 0 asserts a comparison it never made.

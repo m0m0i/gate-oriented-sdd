@@ -241,6 +241,7 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   _wglobs=$(gate_steering_value .steering/tech.md 'Source globs')
   [ -n "$_wglobs" ] || _wglobs='*'
   _wglobs=$(printf '%s' "$_wglobs" | tr -d "\"'")
+
   # Exit status, never emptiness. `- Source globs:` is consumer-authored and nothing validates
   # it — `check-steering-anchors.sh` says in its own header that it does not judge whether a
   # value is any good — so a pathspec git rejects (`:(globs)` for `:(glob)`, a typo echoing the
@@ -248,24 +249,34 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   # with no footprint prints, and reading the two as one silenced the gate on both call sites
   # with no diagnostic anywhere. Review round 1's BLOCKER, case 140. A git that could not
   # answer leaves the skip unfired, which is the same direction as every other guard here.
-  # From the branch's own COMMITS, not from `git diff <fork> <tip>`. A net tree diff omits any
-  # path the branch changed and then changed back, and "absent from the footprint" is read
-  # below as "nothing to review" — so adding a file, shipping it, and then deleting it on the
-  # branch produced an empty footprint and a silenced gate, over a tree that differs from the
-  # base at a reviewed path. Review round 3's HIGH, case 142. The log form keeps the scoping
-  # the design turns on: what landed on the base between this branch's fork and its squash is
-  # in the base's history, not in this range, so it still cannot drag the comparison wider.
+  # What did this branch touch? Two readings, and they are COMPLEMENTS rather than rivals —
+  # each is blind to a shape the other catches, and "absent from the footprint" is read below
+  # as "nothing to review", so a blind spot here is a silenced gate.
+  #
+  #   git log   the branch's own commits. Sees a path changed and then changed back — add a
+  #             file, ship it, delete it on the branch — which a tree comparison cannot,
+  #             because fork and tip agree at a path neither of them has. Round 3, case 142.
+  #             Blind to a merge commit, for which --name-only prints no diff at all.
+  #   git diff  the net tree comparison. Sees content that exists ONLY in a merge commit — a
+  #             conflict fixup, or a hand edit between `git merge --no-commit` and the commit
+  #             — because it does not care how the trees came to differ. Round 4, case 143.
+  #
+  # So: the union. It can only grow, and a larger footprint intersects more below, so the skip
+  # fires LESS — widening is the safe way to be wrong here. Neither term widens the scoping the
+  # design turns on, because _wfork is the merge base: whatever the base carried before this
+  # branch forked is common to both sides and appears in neither term.
   set -f
-  _wfoot=$(git log --format= --name-only "$_wfork".."$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
+  _wlog=$(git log --format= --name-only "$_wfork".."$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
+  _wnet=$(git diff --name-only "$_wfork" "$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
   set +f
 
-  # Two reasons this is a separate step rather than a pipe on the line above. A pipeline's
-  # status is its LAST command's, so `git log ... | sort -u` would hand `sort`'s success back
-  # and undo the exit-status read three lines up — case 140 caught exactly that regression.
-  # And `git log --name-only` separates each commit's paths with a BLANK line, which is the
-  # sentinel the intersection below splits its two lists on; left in, the first commit
-  # boundary would be read as the end of the footprint.
-  _wfoot=$(printf '%s\n' "$_wfoot" | awk 'NF && !seen[$0]++')
+  # Folded here rather than piped above, for two reasons. A pipeline's status is its LAST
+  # command's, so `git log ... | sort -u` hands back sort's success and undoes the exit-status
+  # reads two lines up — case 140 went red on exactly that regression. And `git log
+  # --name-only` separates each commit's paths with a BLANK line, which is the sentinel the
+  # intersection below splits its two lists on; left in, the first commit boundary would be
+  # read as the end of the footprint.
+  _wfoot=$(printf '%s\n%s\n' "$_wlog" "$_wnet" | awk 'NF && !seen[$0]++')
 
   # Answered, and the answer is that the branch carries no reviewable source of its own. Step 1
   # already established the work is in the base. Distinct from the line above on purpose: "git
