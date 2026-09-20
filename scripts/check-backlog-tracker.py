@@ -70,7 +70,7 @@ NOT_PLANNED_HEADING = "## Open, not planned"
 #: Where a discharged row is written down (#174). Named here and read NOWHERE: a discharge
 #: describes work that has finished, so counting it in the absent direction would hand every
 #: issue it mentions a silent exemption — `## Open, not planned` without the reason, the
-#: falsifier, or the staleness check above. It is a constant rather than a literal because the
+#: falsifier, or the staleness check below. It is a constant rather than a literal because the
 #: remedy below is the only automated instruction anyone receives about a row that has left,
 #: and a heading that drifts from the template turns that instruction into a wrong address.
 DISCHARGED_HEADING = "## Discharged since last grooming"

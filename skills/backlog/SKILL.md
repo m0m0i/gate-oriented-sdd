@@ -58,7 +58,7 @@ Rows that have left. One line each, and all four parts of it: the issue, the pos
 
 - <#n> — row <n>, <YYYY-MM-DD> — shipped as <#n> | closed without shipping: <why> | folded into row <n>
 
-One bullet per discharge, **never a table**. A second table here is indistinguishable from the ordered list to anything comparing this document against the tracker, so every issue a discharge table named would stop being reported as missing from the list — the section would quietly become an exemption list, which is the one thing it must not be.
+One bullet per discharge, and **never a table — here or in the section below it**. A command comparing this document against the tracker finds the ordered list by its rows, so a second table of numbered lines is the ordered list as far as it can tell, and every issue either section tabulated would stop being reported as missing. A person comparing by hand sees the heading and is not fooled; the exemption arrives silently on the day the comparison is automated, which is the wrong day to find out. Both sections are bullets for that reason, and `## What changed at this grooming` is the likelier of the two to reach for a table, because what it records is rows moving.
 
 This is the only home a discharge has, and appending to it is a bounded edit rather than a re-groom. Without it the trace lands in a surviving row's `Why here`, or in **What changed at this grooming**, or in the work log, or nowhere at all — a row that ships whole leaves no cell to carry the sentence. Prune at each grooming to the **two most recent groomings' worth** and drop what is older: the spec archive and the work log hold the detail, and a third grooming's worth makes this a second history of the list.
 

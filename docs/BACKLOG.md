@@ -127,6 +127,8 @@ The **Item** cell names the issues a row is live work for. `Why here` may cite a
 
 Rows that have left. One line each, and all four parts of it: the issue, the position it held, the date, and how it left — shipped by a named pull request, closed without shipping, or folded into a named row. Prune at each grooming to the two most recent groomings' worth; the spec archive and the work log hold the detail, and a third grooming's worth makes this a second history of the list.
 
+Bullets, never a table — here and under **What changed at this grooming**. `scripts/check-backlog-tracker.py` reads any `| <n> |` line as an ordered row, so a table in either section would exempt every issue it named from being reported as missing from this list.
+
 - **#182** — row 2, 2026-09-21 — shipped as #186.
 
 Added by #174, which is row 1 and was argued for by five consecutive groomings. It starts with one line because it starts with the eighth grooming's own discharge; the earlier ones are in the records below, where they were written, and stay there.
