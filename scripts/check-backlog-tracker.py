@@ -56,6 +56,16 @@ ISSUE = re.compile(r"#(\d+)")
 UNSHAPED_HEADING = "## Unshaped"
 NOT_PLANNED_HEADING = "## Open, not planned"
 
+#: An exclusion's SUBJECT: the first issue cited on a `- ` entry line, and nothing else on it.
+#:
+#: Found by running this checker against this repository's own document. The entry excluding #36
+#: explains itself by citing #26, and reading the whole section counted both — harmless there
+#: only because #26 is closed and the absent direction reads open issues. Written as "rejected
+#: while specing #<open issue>" it is an exemption granted by a sentence of prose, which is this
+#: guard's own fail-open. It is also exactly the Item-versus-`Why here` split one section over:
+#: an entry states what is excluded, and its reason may cite anything.
+ENTRY = re.compile(r"^\s*[-*]\s+.*?#(\d+)")
+
 #: How many issues to ask the tracker for. A cap that silently truncates is a fail-open: the
 #: absent direction would stop seeing the issues past it and report agreement about a list it
 #: had not finished reading. So the cap is checked against the result below rather than
@@ -216,7 +226,11 @@ def main():
 
     states = tracker_state()
 
-    exempt = {int(n) for n in ISSUE.findall(section(text, NOT_PLANNED_HEADING))}
+    exempt = set()
+    for line in section(text, NOT_PLANNED_HEADING).split("\n"):
+        entry = ENTRY.match(line)
+        if entry:
+            exempt.add(int(entry.group(1)))
 
     # The generous region for the absent direction: every cell of every row, plus Unshaped.
     # Deliberately wider than the Item cells the finished-work direction reads below.

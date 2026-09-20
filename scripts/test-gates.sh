@@ -4812,6 +4812,43 @@ out=$(run_bt "$r"); bt_check nosteer "$out" "does not exist"
 [ -z "$bt_bad" ] && report "check-backlog-tracker refuses every input it cannot check" ok \
   || report "check-backlog-tracker refuses every input it cannot check" no "exit/names/no-success:$bt_all"
 
+
+# 130. #79 AC4 — an exclusion is the entry's subject, not anything its reason mentions.
+#
+# Found by running the checker against this repository's own document: the `## Open, not
+# planned` entry for #36 explains itself by citing #26, and the guard counted BOTH as excluded.
+# Harmless there only because #26 is closed and the absent direction reads open issues. Written
+# as "blocked on #<open issue>" it is a silent exemption granted by a sentence of prose — the
+# guard's own fail-open, and the same lesson as Item versus `Why here` one section over.
+#
+# So only the FIRST citation on a `- ` entry line exempts anything.
+r=$(bt_repo bt-exempt); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "20 OPEN" "21 OPEN"
+{
+  printf '\n## Open, not planned\n\n'
+  printf -- '- **#20** - held against a falsifier rather than planned. Rejected while specing #21.\n'
+} >> "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr"); btout=$(cat "$TMP/btout")
+# #21 is named only in #20's reason, so it is still work the list does not know about.
+[ "$out" = "1" ] && c0=ok || c0=no
+case "$err" in *"#21"*) c1=ok ;; *) c1=no ;; esac
+# ...while #20 itself is genuinely excluded and must not be reported.
+case "$err" in *"#20"*) c2=no ;; *) c2=ok ;; esac
+
+# And the count says how many were excluded, so a section that silently swallows more than it
+# lists is visible rather than inferred.
+r=$(bt_repo bt-exempt-count); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "20 OPEN"
+{
+  printf '\n## Open, not planned\n\n'
+  printf -- '- **#20** - held against a falsifier. Rejected while specing #11, which shipped.\n'
+} >> "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); btout=$(cat "$TMP/btout")
+[ "$out" = "0" ] && c3=ok || c3=no
+case "$btout" in *"1 excluded"*) c4=ok ;; *) c4=no ;; esac
+
+[ "$c0$c1$c2$c3$c4" = "okokokokok" ] && report "check-backlog-tracker excludes the entry, not what its reason cites" ok \
+  || report "check-backlog-tracker excludes the entry, not what its reason cites" no \
+     "exit=$c0 names-21=$c1 spares-20=$c2 clean-exit=$c3 counts-1=$c4"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 
