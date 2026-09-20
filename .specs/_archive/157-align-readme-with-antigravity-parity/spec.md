@@ -1,5 +1,5 @@
 # Spec: Align README and README.ja.md with Antigravity parity and release packaging
-- Slug: 157-align-readme-with-antigravity-parity   Issue: 157   Type: chore   Status: done
+- Slug: 157-align-readme-with-antigravity-parity   Issue: 157   Type: chore   Status: archived   Archived: 2026-09-20
 - Author: Antigravity   Date: 2026-09-20
 
 ## 1. Requirements (WHAT / WHY)
