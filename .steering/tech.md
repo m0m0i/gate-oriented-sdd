@@ -14,6 +14,24 @@ Machine-read lines. Each must stay on ONE physical line — the gates read them 
 
 `./scripts/check-version-bump.py` is CI-only, on pull requests. It is deliberately **not** a turn-end validator: mid-implementation a shipped file is routinely edited before the version moves, so running it on every turn would block normal work and teach the user to switch the gate off. CI runs it once, against the PR base, which is the moment the question is actually meaningful.
 
+## Why `check-unreviewed-work.sh` is not on the Validators line either
+
+`./assets/check-unreviewed-work.sh` is CI-only, on pull requests, for a different reason than
+`check-version-bump.py` above. It is not that running it per turn would block normal work — it
+is that `review-gate.sh` already asks its question on every turn end, and asks it better there,
+in the second person, of the person who can act on it. A copy on the `- Validators:` line would
+produce a second block in the same place, worded differently, for the same fact.
+
+What CI adds is not a second opinion but a different property. A hook can be switched off, and
+HEAD can be moved; a pull request can do neither, and its head branch and head commit come from
+the event rather than from wherever the checkout is standing. That is the whole of #26: the one
+enforced rule in this harness was one `git checkout` from silent, and a layer with no working
+tree is where the guarantee can actually live.
+
+Both callers ask `gate_spec_review_state` in `hooks/gate-lib.sh` rather than carrying the
+question themselves, which is the same reason `check-steering-anchors.sh` calls
+`gate_steering_value`: a copy that can disagree with its subject is #14 and #23.
+
 ## Why `Source globs` excludes the manifests, and what that costs
 
 Since 0.2.4 this one line answers **two different questions**: the review gate asks "what re-stales a receipt?" and the quality gate asks "what should trigger the validators?". Those have different right answers for the manifests, and the line can only give one.

@@ -24,9 +24,9 @@ Sort every rule by **how much it can be talked out of**, and put it at the layer
 | :-- | :-- | :-- |
 | **Process** | skills — `spec`, `clarify`, `implement`, `worklog`, `archive` | Yes. It is guidance, and that is appropriate. |
 | **Judgment** | a read-only reviewer subagent with a vendored, hash-pinned rulebook | It can be skipped — so a receipt records whether it ran. |
-| **Determinism** | `Stop` hook: format, lint, types, and receipt freshness | **No.** |
+| **Determinism** | `Stop` hook: format, lint, types, and receipt freshness — and, for the last of those, a pull-request check the hook's own weaknesses do not reach | **No.** |
 
-The bottom row is the only one that is a guarantee. The design work is deciding what earns a place there — and keeping that list short enough that the gate stays welcome.
+The bottom row is the only one that is a guarantee, and it takes two places to be one. The `Stop` hook is the fast local half; a check on the pull request is the half with no working tree to step out of. Until #26 there was only the hook, and it asked whether you were *standing on* a finished spec branch rather than whether the repository *held* one — so `git checkout main` turned the only enforced rule off and left no trace. The design work is deciding what earns a place in this row — and keeping that list short enough that the gate stays welcome.
 
 ### Two things worth stealing even if you don't use this
 
@@ -40,7 +40,7 @@ The six inception skills account for ~450 of that always-on total while firing p
 
 ### Why the gate is narrow
 
-A gate that fires on ordinary turns gets disabled, and a disabled gate protects nothing. So `review-gate.sh` is silent unless a spec branch has every task ticked and no fresh clean review. It skips merged branches, mid-implementation turns, and the documentation commits that legitimately land *after* a review. `quality-gate.sh` is the other half, and it carries no commands of its own — it runs the `- Validators:` line from `.steering/tech.md`, so enforcement is a property of the project rather than of the hook. The gates' and guards' behaviours are [tested deterministically](./scripts/test-gates.sh) with no model in the loop.
+A gate that fires on ordinary turns gets disabled, and a disabled gate protects nothing. So `review-gate.sh` is silent unless this repository holds a branch whose spec has every task ticked and no fresh clean review. It skips merged branches, mid-implementation turns, and the documentation commits that legitimately land *after* a review. What it does not skip is a branch you are not standing on: narrow is a property of the condition, not of where HEAD happens to point, and the difference is what #26 was. `quality-gate.sh` is the other half, and it carries no commands of its own — it runs the `- Validators:` line from `.steering/tech.md`, so enforcement is a property of the project rather than of the hook. The gates' and guards' behaviours are [tested deterministically](./scripts/test-gates.sh) with no model in the loop.
 
 ## The flow
 
@@ -71,7 +71,7 @@ archive ····· beside the chain, not a step in it: a sweep of shipped specs 
 
 The issue, the branch, the spec directory, and the PR all share one slug, and the PR closes the issue. The rule is **no issue, no spec**. `sprint` creates typed issues from templates; `spec` refuses to start without one rather than quietly creating it, because a spec written without an issue is something being built that nobody chose. The gate checks it mechanically: the slug is `<issue>-<title>`, so a spec directory without a numeric prefix blocks the turn. `spec` reads the type — `feature`, `bug`, or `chore` — and writes a differently shaped spec for each. A bug pushed through feature scaffolding produces a user story that does not exist and acceptance criteria that are fiction, so the type is not decoration: it decides what the first task is.
 
-**The chain ends at one pull request.** The spec is that PR's first commit rather than a pull request of its own, the work-log entry is one of its last, and the merge is the end — there is no follow-up PR to open. `archive` sits beside the chain for that reason: a `git mv` does not earn a branch, a review and a merge of its own, and nothing mechanical waits on it, since the review gate reads only the current branch's spec and cannot see a shipped one left in `.specs/`. Sweeping is therefore paid per noisy directory, not per merge.
+**The chain ends at one pull request.** The spec is that PR's first commit rather than a pull request of its own, the work-log entry is one of its last, and the merge is the end — there is no follow-up PR to open. `archive` sits beside the chain for that reason: a `git mv` does not earn a branch, a review and a merge of its own, and nothing mechanical waits on it. The review gate does now look past the branch you are standing on, so a shipped spec left in `.specs/` is within its view — it stays silent about one because the receipt is clean and the branch is merged, which is silence earned — or, where the branch has been deleted, because there is no branch left to read the spec from, which is not. Sweeping is therefore paid per noisy directory, not per merge.
 
 Each inception skill has to terminate in something the harness mechanically uses, or it does not ship: `northstar` produces the quality anchor the reviewer reads for severity, `contract` compiles its enforceable rules into the rulebook, `backlog` creates the tracker issues `spec` consumes, `design-doc` writes `.steering/structure.md` and the ADRs the reviewer escalates to. A document that ends in prose alone is one this repo has no business generating.
 

@@ -140,8 +140,14 @@ out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "merged branch stays silent" ok ;;
                         *) report "merged branch stays silent" no "$out" ;; esac
 
-# 9. Not a spec branch -> silent
-r=$(make_repo nospec 0); ( cd "$r" && git checkout -q -b unrelated ) >/dev/null 2>&1
+# 9. Not a spec branch -> silent, when there is nothing else to review.
+#
+# The fixture carries an OPEN task deliberately. It used to carry a finished, unreviewed one,
+# which is the state #26 is about: this case then asserted that parked unreviewed work is
+# invisible from another branch, which is the bug rather than the contract. What the case is
+# for survives unchanged — a branch with no spec of its own is not gated on its own account —
+# and cases 76-83 below assert the part that was wrong. See the spec's AC8 for the exception.
+r=$(make_repo nospec 1); ( cd "$r" && git checkout -q -b unrelated ) >/dev/null 2>&1
 out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "non-spec branch stays silent" ok ;;
                         *) report "non-spec branch stays silent" no "$out" ;; esac
@@ -235,6 +241,345 @@ printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(cd "$r" && git rev-parse HEAD)" > "
 out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "quoted globs do not cause a false block" ok ;;
                         *) report "quoted globs do not cause a false block" no "$out" ;; esac
+
+# --- review-gate.sh, the repository-wide question (#26) ---------------------------
+#
+# Numbers continue the file's global sequence rather than this section's, which is how every
+# later group was appended.
+#
+# Everything above asks about the branch HEAD points at. That is a narrower question than the
+# claim the gate backs, and the difference is one `git checkout` wide. The fixtures below put
+# the spec ONLY on the parked branch, as the flow actually does — the spec is that branch's
+# first commit — so a scan of the working tree would find nothing and these cases would pass
+# while the gate did nothing. Read them as: the gate must look at branches, not at `.specs/`.
+
+# Park a second spec branch and come back. $1 repo, $2 slug, $3 open tasks (0|1),
+# $4 receipt verdict (optional; the receipt commit lands AFTER the reviewed sha, as it does
+# in the real flow, and must not be read as staleness because it touches no source).
+#
+# It stages its own paths rather than `-A`: a broad add sweeps up whatever the calling case
+# left untracked in the working tree — the copied checker, in cases 85 and 86 — and then
+# checking the branch back out deletes it, so the case runs against a script that is gone.
+park_spec() {
+  _r=$1; _slug=$2; _open=$3; _verdict=${4:-}
+  if [ "$_open" = 0 ]; then _box='- [x]'; else _box='- [ ]'; fi
+  ( cd "$_r" && _cur=$(git rev-parse --abbrev-ref HEAD) \
+    && git checkout -q -b "$_slug" main \
+    && mkdir -p ".specs/$_slug" \
+    && printf '# Spec: parked\n- Slug: %s   Status: approved\n\n## 3. Tasks (TDD-ordered)\n%s T1: do the thing\n' \
+         "$_slug" "$_box" > ".specs/$_slug/spec.md" \
+    && echo parked >> src/main.txt \
+    && git add ".specs/$_slug" src/main.txt && git commit -qm "parked work" \
+    && if [ -n "$_verdict" ]; then \
+         printf 'reviewed_sha=%s\nverdict=%s\n' "$(git rev-parse HEAD)" "$_verdict" > ".specs/$_slug/.review-receipt" \
+         && git add ".specs/$_slug/.review-receipt" && git commit -qm "receipt"; \
+       fi \
+    && git checkout -q "$_cur" ) >/dev/null 2>&1
+}
+
+# Park a finished spec branch on a named base and merge it back. Three cases build their own
+# repository rather than using make_repo, which hardcodes `-b main` and would resolve the base
+# through the wrong fallback.
+park_spec_on() { ( cd "$1" && git checkout -q -b "$2" "$3" && mkdir -p ".specs/$2" \
+  && printf '# Spec: parked\n- Slug: %s   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' "$2" > ".specs/$2/spec.md" \
+  && echo parked >> src/main.txt && git add ".specs/$2" src/main.txt && git commit -qm parked \
+  && git checkout -q "$3" && git merge -q "$2" ) >/dev/null 2>&1; }
+
+# 76. THE BUG. Finished, unreviewed work on a parked branch blocks from a branch with no spec
+#     — on both channels, naming the branch, and saying that moving HEAD does not clear it.
+r=$(make_repo parked 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err"); basesha=$( cd "$r" && git rev-parse main )
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+# The message must carry no stray payload. `${base:-...}` substitutes the VALUE of base when
+# base is set and non-null, which is always — so an attempt to append a note "only when the
+# base is missing" appended the base sha instead, to every block, with no separator.
+case "$err" in *"$basesha"*) c4=no ;; *) c4=ok ;; esac
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "parked unreviewed work blocks from another branch" ok \
+  || report "parked unreviewed work blocks from another branch" no "exit=$c1 json=$c2 names-branch=$c3 no-stray-sha=$c4"
+
+# 77. A detached HEAD is not an exit either. `git checkout <sha>` leaves no branch name for
+#     the branch-scoped question to be asked about, which is the same hole one step quieter.
+r=$(make_repo detached 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git checkout -q "$(git rev-parse HEAD)" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) report "parked unreviewed work blocks from a detached HEAD" ok ;;
+                        *) report "parked unreviewed work blocks from a detached HEAD" no "$out" ;; esac
+
+# 78. Standing on a spec branch of your own does not buy silence about someone else's. Without
+#     this, `git checkout -b` onto a directory holding a task-less spec is a second one-command
+#     bypass: the current branch's own checks return early at "no tasks authored" and the
+#     repository-wide question is never reached.
+r=$(make_repo ownspec 1); park_spec "$r" 12-parked 0
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) report "an unfinished spec of your own does not hide another branch" ok ;;
+                        *) report "an unfinished spec of your own does not hide another branch" no "$out" ;; esac
+
+# 79. Nor does standing on a MERGED branch, which returns early for a reason that says nothing
+#     about the rest of the repository.
+r=$(make_repo mergedstand 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git merge -q 9-feature \
+  && git update-ref refs/remotes/origin/main refs/heads/main && git checkout -q 9-feature ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) report "a merged current branch does not hide another branch" ok ;;
+                        *) report "a merged current branch does not hide another branch" no "$out" ;; esac
+
+# 80. The other half, and the one that decides whether this is a gate people keep: a parked
+#     branch still being implemented is NOT finished work, so it is silent. This is the state
+#     the baseline round trip to main runs in (#26's comment), for both the author and the
+#     reviewer, and blocking it would be the false block that gets the gate switched off.
+r=$(make_repo parkedopen 1); park_spec "$r" 12-parked 1
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a parked branch mid-implementation stays silent" ok ;;
+                        *) report "a parked branch mid-implementation stays silent" no "$out" ;; esac
+
+# 81. A parked branch that WAS reviewed is silent — the receipt is what clears it, from
+#     anywhere. The receipt commit lands after the reviewed sha and must not read as stale.
+r=$(make_repo parkedclean 1); park_spec "$r" 12-parked 0 CLEAN
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a parked branch with a CLEAN receipt stays silent" ok ;;
+                        *) report "a parked branch with a CLEAN receipt stays silent" no "$out" ;; esac
+
+# 82. A merged parked branch is silent, for the same reason case 8 is: on install, every
+#     historical branch would otherwise trip a gate about work that shipped.
+r=$(make_repo parkedmerged 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git merge -q 12-parked \
+  && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a merged parked branch stays silent" ok ;;
+                        *) report "a merged parked branch stays silent" no "$out" ;; esac
+
+# 83. Two shapes of debris, both silent. A `.specs/` directory whose branch no longer exists
+#     is a shipped spec left behind by a sweep that has not run; a directory with no spec.md
+#     at all is real on this repository's own main today. Neither is unreviewed work, and a
+#     gate that blocked on either would be blocking on litter.
+r=$(make_repo debris 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git merge -q 12-parked \
+  && git update-ref refs/remotes/origin/main refs/heads/main \
+  && git branch -qD 12-parked && mkdir -p .specs/109-swept-away ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a deleted branch and an empty spec directory are litter, not work" ok ;;
+                        *) report "a deleted branch and an empty spec directory are litter, not work" no "$out" ;; esac
+
+# 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
+#     one reading. Both used to pass silently, and both are worse than a stale receipt: the
+#     gate cannot compare anything at all, so exiting 0 asserts a comparison it never made.
+#
+#     An absent field is the sharper of the two, because `git diff ..<tip>` resolves an
+#     omitted left side to HEAD — which on the current branch is <tip> itself, so the diff
+#     comes back empty and a receipt recording no commit whatsoever reads as current.
+r=$(make_repo shaless 0)
+printf 'verdict=CLEAN\n' > "$r/.specs/9-feature/.review-receipt"
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out$err" in *"exit=2"*"cannot be resolved"*) report "a CLEAN receipt with no reviewed_sha blocks" ok ;;
+                 *) report "a CLEAN receipt with no reviewed_sha blocks" no "$out $err" ;; esac
+
+r=$(make_repo shagone 0)
+printf 'reviewed_sha=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\nverdict=CLEAN\n' > "$r/.specs/9-feature/.review-receipt"
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out$err" in *"exit=2"*"cannot be resolved"*) report "a receipt naming an unreachable commit blocks" ok ;;
+                 *) report "a receipt naming an unreachable commit blocks" no "$out $err" ;; esac
+
+# There is deliberately no case here for "a current receipt must not reach the sha check".
+# It was written and removed: its fixture was byte-identical to case 5, and moving the
+# resolution check above the short-circuit leaves it green, because a current sha resolves.
+# The ordering is only observable when the sha equals the tip AND does not resolve, which
+# cannot happen. Case 5 covers the behaviour; a second case that cannot fail would have
+# asserted the ordering was pinned when it was not.
+
+# 92. The scan must report a parked branch's non-CLEAN verdict, not merely its existence.
+r=$(make_repo parkedblocked 1); park_spec "$r" 12-parked 0 BLOCKED
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"BLOCKED"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "the scan names a parked branch's non-CLEAN verdict" ok \
+  || report "the scan names a parked branch's non-CLEAN verdict" no "exit=$c1 names-verdict=$c2"
+
+# 93. A stale parked branch is named with the FILES that moved — not with the patch.
+#
+# `git diff` without --name-only returns the whole unified diff, and every message that
+# consumes this state inlines it into stderr and into the JSON reason. The suite was green
+# through exactly that regression, because no case had ever asserted the payload: case 7 and
+# the three-spelling loop both assert `exit=2` and nothing more.
+r=$(make_repo parkedstale 1); park_spec "$r" 12-parked 0 CLEAN
+( cd "$r" && git checkout -q 12-parked && echo five >> src/main.txt && git commit -qam more \
+  && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"src/main.txt"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"diff --git"*|*"@@"*) c3=no ;; *) c3=ok ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a stale parked branch is named by file, not by patch" ok \
+  || report "a stale parked branch is named by file, not by patch" no "exit=$c1 names-file=$c2 no-patch=$c3"
+
+# 94. A project whose default branch is not `main` and which has no origin must not have
+#     every old spec branch block every turn forever.
+#
+# `base` falls back through origin/HEAD, origin/main, main. On a `master` repository with no
+# remote all three miss, and before this the empty base only cost a false block while you
+# stood on your own merged branch. Widened to every branch, an unresolvable base turns each
+# shipped-but-undeleted spec branch into a permanent block with no way to clear it but
+# `git branch -D`. That is how a gate gets switched off.
+r="$TMP/masterdefault"; mkdir -p "$r/hooks" "$r/.steering" "$r/src"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/review-gate.sh" "$r/hooks/"
+printf -- '- Reviewer: test-reviewer\n- Source globs: %s\n' "'*.txt'" > "$r/.steering/tech.md"
+( cd "$r" && git init -q -b master && git config user.email t@t && git config user.name t \
+  && echo one > src/main.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+park_spec_on "$r" 12-shipped master
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a merged branch on a master-default repo with no origin stays silent" ok ;;
+                        *) report "a merged branch on a master-default repo with no origin stays silent" no "$out" ;; esac
+
+# 96. A repository whose default branch resolves to nothing must SAY so when it blocks.
+#
+# `base` falls back through five refs and can still come back empty — a `trunk` default with
+# no remote. The merged check then never fires for any branch, so every finished spec branch
+# is named, including ones that shipped long ago. Blocking is the fail-closed direction and
+# is kept; what must not happen is naming them with no explanation of why an obviously
+# merged branch is in the list.
+r="$TMP/nobase"; mkdir -p "$r/hooks" "$r/.steering" "$r/src"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/review-gate.sh" "$r/hooks/"
+printf -- '- Reviewer: test-reviewer\n- Source globs: %s\n' "'*.txt'" > "$r/.steering/tech.md"
+( cd "$r" && git init -q -b trunk && git config user.email t@t && git config user.name t \
+  && echo one > src/main.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+park_spec_on "$r" 12-parked trunk
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"no resolvable default branch"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "an unresolvable default branch is named in the block, not hidden" ok \
+  || report "an unresolvable default branch is named in the block, not hidden" no "exit=$c1 says-why=$c2"
+
+# 97. The other half of the widened fallback chain: a remote-only `origin/master`, with no
+#     local branch of that name. Without it, case 94 pins `master` and leaves `origin/master`
+#     free to be deleted from the chain.
+r="$TMP/originmaster"; mkdir -p "$r/hooks" "$r/.steering" "$r/src"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/review-gate.sh" "$r/hooks/"
+printf -- '- Reviewer: test-reviewer\n- Source globs: %s\n' "'*.txt'" > "$r/.steering/tech.md"
+( cd "$r" && git init -q -b trunk && git config user.email t@t && git config user.name t \
+  && echo one > src/main.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+park_spec_on "$r" 12-shipped trunk
+( cd "$r" && git update-ref refs/remotes/origin/master refs/heads/trunk && git branch -qD trunk 2>/dev/null
+  git checkout -q --detach refs/remotes/origin/master ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a branch merged into a remote-only origin/master stays silent" ok ;;
+                        *) report "a branch merged into a remote-only origin/master stays silent" no "$out" ;; esac
+
+# 98. The scan names an unresolvable reviewed_sha as such, rather than falling through to the
+#     generic sentence. Cases 92 and 93 do this for the other two states.
+r=$(make_repo parkedghost 1); park_spec "$r" 12-parked 0 CLEAN
+( cd "$r" && git checkout -q 12-parked \
+  && printf 'reviewed_sha=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\nverdict=CLEAN\n' > .specs/12-parked/.review-receipt \
+  && git commit -qam "ghost receipt" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"12-parked"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"cannot be resolved"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "the scan names an unresolvable reviewed_sha" ok \
+  || report "the scan names an unresolvable reviewed_sha" no "exit=$c1 names-branch=$c2 says-why=$c3"
+
+# --- assets/check-unreviewed-work.sh, the layer with no working tree (#26) --------
+#
+# The hook above is a fast local signal and it can be switched off. This is the same question
+# asked where the author cannot stand somewhere else: a pull request has no HEAD to move. It
+# takes the head branch and head commit as arguments because that is what the event carries —
+# `actions/checkout` leaves a PR on a detached merge ref, so a checker reading `HEAD` would be
+# asking about a commit that exists nowhere else.
+
+uw_repo() {  # <name> [<open tasks on 9-feature, default 1>]
+  _r=$(make_repo "$1" "${2:-1}")
+  mkdir -p "$_r/scripts"
+  cp "$ROOT/assets/check-unreviewed-work.sh" "$_r/scripts/"
+  echo "$_r"
+}
+run_uw() { _d=$1; shift; ( cd "$_d" || exit 9; sh scripts/check-unreviewed-work.sh "$@" 2>"$TMP/uwerr"; echo "exit=$?" ) }
+
+# 84. A head branch carrying finished, unreviewed work fails the check.
+r=$(uw_repo uw-unreviewed 0)
+out=$(run_uw "$r"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"9-feature"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work fails a pull request carrying an unreviewed spec" ok \
+  || report "check-unreviewed-work fails a pull request carrying an unreviewed spec" no "exit=$c1 names-branch=$c2"
+
+# 85. THE POINT OF THIS LAYER. The same repository, with HEAD parked somewhere else entirely,
+#     and the branch and commit supplied the way the pull-request event supplies them. Moving
+#     HEAD is what silences the hook; it must do nothing here.
+r=$(uw_repo uw-detached 1); park_spec "$r" 12-parked 0
+tip=$( cd "$r" && git rev-parse 12-parked )
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_uw "$r" 12-parked "$tip"); err=$(cat "$TMP/uwerr")
+# The exit code alone is not enough here: a missing script also exits non-zero, so this case
+# would have reported a pass against a checker that did not exist.
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"12-parked"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work cannot be satisfied by moving HEAD" ok \
+  || report "check-unreviewed-work cannot be satisfied by moving HEAD" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 86. A reviewed head branch passes.
+r=$(uw_repo uw-clean 1); park_spec "$r" 12-parked 0 CLEAN
+tip=$( cd "$r" && git rev-parse 12-parked )
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_uw "$r" 12-parked "$tip")
+case "$out" in *"exit=0"*) report "check-unreviewed-work passes a reviewed branch" ok ;;
+                        *) report "check-unreviewed-work passes a reviewed branch" no "$out — $(cat "$TMP/uwerr")" ;; esac
+
+# 87. A head branch with no spec passes — most pull requests in most projects — but it must
+#     say what it examined. "Nothing to check" and "checked, clean" sharing one sentence is
+#     #16's shape and the thing #39 is open about.
+r=$(uw_repo uw-nospec 1)
+( cd "$r" && git checkout -q -b bookkeeping ) >/dev/null 2>&1
+out=$(run_uw "$r"); said=$(printf '%s' "$out" | sed 's/exit=[0-9]*//')
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$said" in *"no spec"*|*"bookkeeping"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work passes a spec-less branch, and says so" ok \
+  || report "check-unreviewed-work passes a spec-less branch, and says so" no "exit=$c1 said=$c2 out=$out"
+
+# 88. It must FAIL, not skip, when it cannot find gate-lib.sh. A guard that cannot ask its
+#     question and reports success is the bug this whole spec is about, one layer out.
+r=$(uw_repo uw-nolib 0); rm -f "$r/hooks/gate-lib.sh"
+out=$(run_uw "$r"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=0"*) c1=no ;; *) c1=ok ;; esac
+case "$err" in *gate-lib*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work fails rather than skips without gate-lib.sh" ok \
+  || report "check-unreviewed-work fails rather than skips without gate-lib.sh" no "nonzero=$c1 names-lib=$c2"
+
+# 89. And with the RIGHT diagnosis when the library is there but predates the function — the
+#     state every project installed before this shipped is in. Case 29 is the same failure for
+#     the same reason: a correct diagnosis sends the author to re-copy the hook, a wrong one
+#     sends them to edit a spec that is fine.
+r=$(uw_repo uw-oldlib 0)
+cat > "$r/hooks/gate-lib.sh" <<'OLDLIB'
+gate_pass() { printf '{}\n'; exit 0; }
+gate_block() { printf '%s\n' "$1" >&2; exit 2; }
+gate_steering_value() { sed -n "s/^ *- *$2: *//p" "$1" 2>/dev/null | head -1; }
+OLDLIB
+out=$(run_uw "$r"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=0"*) c1=no ;; *) c1=ok ;; esac
+case "$err" in *"gate_spec_review_state"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"re-copy"*|*"Re-copy"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "check-unreviewed-work names a gate-lib.sh that predates the shared question" ok \
+  || report "check-unreviewed-work names a gate-lib.sh that predates the shared question" no "nonzero=$c1 names-fn=$c2 says-recopy=$c3"
+
+# 95. A head commit this clone cannot see must FAIL, not pass as "no spec".
+#
+# `git cat-file -e "$sha:$spec"` fails for two unrelated reasons — the commit exists and has
+# no spec, and the commit is not here at all — and reading the second as the first passes
+# every pull request while printing a success sentence. The live trigger is the default
+# `actions/checkout`: on a pull_request event with fetch-depth 1 only the merge commit is
+# fetched and head.sha is absent, so the whole layer would have been a no-op wherever the
+# init instruction's `fetch-depth: 0` was not followed. A force-push reproduces it with full
+# history. Both READMEs describe this layer as the one that cannot be stepped around.
+r=$(uw_repo uw-nosha 0)
+out=$(run_uw "$r" 9-feature deadbeefdeadbeefdeadbeefdeadbeefdeadbeef); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=0"*) c1=no ;; *) c1=ok ;; esac
+case "$err" in *"cannot resolve"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"fetch-depth"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "check-unreviewed-work fails on a head commit it cannot see" ok \
+  || report "check-unreviewed-work fails on a head commit it cannot see" no "nonzero=$c1 says-why=$c2 names-remedy=$c3"
 
 # --- quality-gate.sh -------------------------------------------------------------
 #
