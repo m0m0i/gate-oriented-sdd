@@ -46,6 +46,14 @@ Also on #14: this line duplicates by hand the definition `scripts/check-version-
 
 `:(glob)` is load-bearing. The value is interpolated unquoted, so a bare `*.py` would be expanded by the shell against the repository root before git ever saw it. `:(glob)` matches no file on disk, so the shell leaves the word alone. This is #1, and it failed silently for three releases.
 
+## Why `check-backlog-tracker.py` is not on the Validators line either
+
+A third exclusion, and unlike the two above it is a capability rather than a judgment. Those two are calls about noise and duplication — one would block normal work mid-implementation, the other would print a second copy of a question already asked better elsewhere. This one cannot run in a hook at all: it compares `docs/BACKLOG.md` against the tracker, so it needs the network and an authenticated `gh`. A `Stop` hook that reaches the network is a turn that hangs when the network is down, and a gate that hangs is a gate switched off — which is the failure this project does not own but still has to avoid.
+
+So it runs in CI on pull requests, and by hand as `./scripts/check-backlog-tracker.py`. By hand is where a grooming should start: what it reports is the diff between the list and the tracker, which is the part of a grooming nobody can do from memory.
+
+It is also the one guard here deliberately **not** shipped. The shipped form needs a machine-read tracker line and a declared command to list issues, and that contract belongs to #128. Until it exists, `backlog` terminates in nothing a consumer's harness reads — C-4 open for them, stated here rather than implied. #79.
+
 ## Commit and branch convention
 
 Conventional commits — `feat:`, `fix:`, `docs:`, `chore:` — subject in the imperative, body explaining why over what. Branches are `<issue-number>-<kebab-title>`, which is also the spec directory name; the review gate blocks a spec branch whose slug has no issue number.

@@ -9,6 +9,11 @@ jobs:
   guard:
     name: Guards, locks, and gate behaviour
     runs-on: ubuntu-latest
+    # Named explicitly because one step below reads the tracker. Every other step in this job
+    # reads only the working tree, so `contents: read` alone covered it until now.
+    permissions:
+      contents: read
+      issues: read
     steps:
       # Full history: the version-bump guard diffs this branch against the PR base, and
       # a depth-1 checkout has no base to diff against.
@@ -104,6 +109,18 @@ jobs:
       - name: No pull request carries unreviewed work
         if: github.event_name == 'pull_request'
         run: ./assets/check-unreviewed-work.sh "${{ github.event.pull_request.head.ref }}" "${{ github.event.pull_request.head.sha }}"
+
+      # The ordered list restates two facts the tracker also holds — which issues exist for an
+      # item, and which are still live — and nothing compared them, so it was false by
+      # construction between groomings. This cannot be a turn-end validator: it needs the
+      # network and an authenticated `gh`, and a Stop hook that reaches the network is a turn
+      # that hangs when the network is down. PR-only, so a merge to main never reddens main on
+      # its own; the next pull request is where a row citing newly-closed work is caught.
+      - name: The ordered list agrees with the tracker
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/check-backlog-tracker.py
 
       # A shipped file that changed without a version bump is a fix consumers never
       # receive: `claude plugin update` compares version strings, not commit shas, so it
