@@ -14,10 +14,10 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Twenty-four today. A twenty-fifth needs an argument, in the spec that proposes it, for why review cannot
+Twenty-five today. A twenty-sixth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
-with it, and #26 the twenty-fourth; a cap that is not moved with the entry reads as already exceeded, and the next author
+with it, #26 the twenty-fourth, and #79 the twenty-fifth; a cap that is not moved with the entry reads as already exceeded, and the next author
 cannot tell whether the list is at its limit or the sentence is stale.
 """
 
@@ -262,6 +262,18 @@ CONTRACTS = (
         "The harness pointer must match the active target so canonical AGENTS.md is reachable. "
         "Review cannot defend it: generating only CLAUDE.md reads as normal legacy behavior, "
         "leaving Antigravity agents without GEMINI.md root rule context. #146.",
+    ),
+    (
+        "skills/sprint/SKILL.md",
+        "creates no parallel record",
+        "#79. The rule used to read \"writes no document\", which is true of the tracker and "
+        "false of the backlog this skill read at step 1 — so creating issues left the list "
+        "describing them as unissued, and no sentence anywhere said who fixed it. The pinned "
+        "sentence carries BOTH halves: the narrowed rule, and the write-back it permits. "
+        "Review cannot defend it, and the direction of the damage is what makes that true: "
+        "reverting to \"writes no document\" reads as tightening a rule, which is the "
+        "direction a reviewer waves through, and what it actually restores is a document "
+        "false by construction from the moment this skill returns.",
     ),
 )
 

@@ -13,7 +13,9 @@ Its output is **typed tracker issues**, because `spec <issue>` is where delivery
 
 ## Where it goes
 
-Into the **tracker**, not into a file. This skill writes no document: the issues it creates are the record, and a parallel markdown copy of them would be a second source of truth that drifts from the first.
+Into the **tracker**, not into a file. This skill **creates no parallel record**: the issues it creates are the record, and a parallel markdown copy of them would be a second source of truth that drifts from the first. That rule is about a second source of truth, not about leaving the first one wrong — step 6 writes the issue numbers back onto the backlog rows they came from.
+
+The distinction is load-bearing rather than pedantic. The rule used to read *writes no document*, and under it a sprint left `<docs>/BACKLOG.md` describing rows that had already become issues as if they had not — from the moment this skill returned until the next grooming, with nothing anywhere saying whose job it was to fix. That is `backlog`'s own "the tracker is a plan rather than a commitment" red flag, reached from the other side (#79).
 
 If the iteration is worth a retrospective, that belongs in `.work_logs/` via `worklog`, which is already the append-only record of what happened.
 
@@ -28,7 +30,8 @@ If the iteration is worth a retrospective, that belongs in `.work_logs/` via `wo
 3. **Type each issue as you create it** — `feature`, `bug`, or `chore` — from the matching template in `.github/ISSUE_TEMPLATE/`, with the matching label. The type is decided here, at decomposition, not earlier: one backlog item routinely yields a feature and a chore, so it never had a single type to inherit.
 4. **Create the issues for this iteration only.** Everything else stays in the backlog, where it costs nothing. An issue nobody will touch for two months is noise in every future search, and it ages into a decision nobody remembers making.
 5. **Say what is deliberately left out**, and why. This is what stops the same argument recurring mid-iteration.
-6. Optionally group them with the tracker's native container — a GitHub milestone, a Linear cycle, a Jira sprint — if you want a due date and a progress view. It is a grouping label, nothing more: no spec, no branch, no PR hangs off it.
+6. **Record the issue numbers on the rows you took, and change nothing else.** One edit per row, naming the issues that row became; leave the order, the `Why here` reasoning, and every other row untouched. It is a bounded, mechanical correction to a document `backlog` owns — not a re-groom, and not a copy. It closes the one door this skill can close: an issue closed by a merge and an issue filed outside a grooming belong to no skill at all, which is why a grooming compares the list against the tracker rather than trusting that every change was written down.
+7. Optionally group them with the tracker's native container — a GitHub milestone, a Linear cycle, a Jira sprint — if you want a due date and a progress view. It is a grouping label, nothing more: no spec, no branch, no PR hangs off it.
 
 ## Rules
 
@@ -38,6 +41,7 @@ If the iteration is worth a retrospective, that belongs in `.work_logs/` via `wo
 - **Decompose here, not in the backlog.** Ordering coarse items is cheap and revisable; decomposing early freezes guesses into the plan.
 - **Issues for this iteration only.**
 - **Unplanned work is visible.** A bug found mid-iteration that must be fixed now gets its own issue and is named as unplanned when the iteration is reviewed. Silently absorbing it is how an iteration appears to have gone well while the plan quietly stops meaning anything.
+- **Leave the backlog correct.** Creating an issue makes the row it came from wrong, and this skill is the only thing that knows which row. Recording the numbers is not writing a document — it is not leaving a false one behind.
 - Group with a milestone if it helps, but nothing in the flow depends on it.
 
 ## Red flags

@@ -4669,6 +4669,277 @@ out=$(run_allowlist "$r_reasoned")
      "drop-code=$c_cat0 drop-cat=$c_cat1 drop-file=$c_cat2 spellings=$c_cat3 bare-code=$c_cat4 bare-cat=$c_cat5 bare-file=$c_cat6 reasoned=$c_cat7"
 
 
+
+# 128. #79 — the ordered list against the tracker, in both directions.
+#
+# The two directions deliberately read DIFFERENT regions, and that asymmetry is the design
+# rather than an implementation detail. It was chosen against the real document rather than
+# assumed: Item cells cited zero closed issues, while whole rows cited eleven — every one of
+# them correct history in a `Why here` cell ("#146 left this row by shipping"). So the absence
+# direction is generous, counting a citation anywhere in the table or Unshaped, and the
+# finished-work direction reads Item cells only. A checker reading whole rows for both would
+# have reported all eleven on its first run and been switched off the same day.
+#
+# Every half asserts the MESSAGE as well as the exit code. A checker that does not exist also
+# exits non-zero, so exit alone would report a pass against a missing file — the contract
+# case 85 states for the same reason.
+bt_repo() { # bt_repo <name> [docs-value]
+  r="$TMP/$1"; mkdir -p "$r/.steering" "$r/scripts"
+  cp "$ROOT/scripts/check-backlog-tracker.py" "$r/scripts/"
+  d=${2:-docs/}
+  # A URL is not a path, so it is not seeded — same reason as docset_repo above: building a
+  # real tree under `https:/` would let the remote case go green for the wrong reason.
+  case "$d" in
+    *://*) : ;;
+    *) mkdir -p "$r/$d" 2>/dev/null || true
+       {
+         printf '# Product backlog\n\n'
+         printf -- '- Last groomed: 2026-09-20\n\n'
+         printf '| # | Item | Blocks | Rough size | Why here |\n'
+         printf '| :-- | :-- | :-- | :-- | :-- |\n'
+         printf '| 1 | A live item - **#10** | - | ~1 issue | Above row 2 because #11 left this row by shipping. |\n'
+         printf '| 2 | Another live item - **#12** | - | ~1 issue | Why it sits below row 1. |\n\n'
+         printf '## Unshaped\n\n'
+         printf -- '- An undecided thing - **#13**\n'
+       } > "$r/$d/BACKLOG.md" ;;
+  esac
+  {
+    printf '# Tech\n\n'
+    printf -- '- Validators: true\n'
+    printf -- '- Reviewer: some-reviewer\n'
+    printf -- '- Docs: %s\n' "$d"
+  } > "$r/.steering/tech.md"
+  echo "$r"
+}
+# `<number> <state>` per line — the injected tracker. A fixture carries OPEN and CLOSED
+# issues both, or one of the two directions is untested while the case still reports a pass.
+bt_issues() { # bt_issues <repo> <"n STATE">...
+  _r=$1; shift
+  : > "$_r/issues.txt"
+  for _spec in "$@"; do printf '%s\n' "$_spec" >> "$_r/issues.txt"; done
+}
+run_bt() { ( cd "$1" && BACKLOG_TRACKER_ISSUES=issues.txt python3 -O scripts/check-backlog-tracker.py >"$TMP/btout" 2>"$TMP/bterr"; printf '%s' "$?" ) }
+
+# Control: the list agrees with the tracker. #11 is closed and cited in a `Why here` cell,
+# which is correct and must stay silent.
+r=$(bt_repo bt-ok); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN"
+out=$(run_bt "$r"); btout=$(cat "$TMP/btout")
+[ "$out" = "0" ] && c0=ok || c0=no
+# AC6: the success line says what it examined. "Nothing to check" and "checked, clean" sharing
+# one sentence is #16's shape and what #39 is open about.
+case "$btout" in *"3 open issue"*) c1=ok ;; *) c1=no ;; esac
+case "$btout" in *"2 row"*) c2=ok ;; *) c2=no ;; esac
+
+# AC1: an open issue nobody put in the list.
+r=$(bt_repo bt-absent); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "14 OPEN"
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *"#14"*) c4=ok ;; *) c4=no ;; esac
+# AC3, the half easiest to lose: the SAME failing run must not also report #11. A checker that
+# fails for the right issue while quietly reporting history is the eleven-false-positive case
+# in miniature, and a case asserting only the exit code would pass against it.
+case "$err" in *"#11"*) c5=no ;; *) c5=ok ;; esac
+
+# AC2: an Item cell citing work that has finished.
+r=$(bt_repo bt-closed); bt_issues "$r" "10 CLOSED" "11 CLOSED" "12 OPEN" "13 OPEN"
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
+[ "$out" = "1" ] && c6=ok || c6=no
+case "$err" in *"#10"*) c7=ok ;; *) c7=no ;; esac
+case "$err" in *"row 1"*) c8=ok ;; *) c8=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokokok" ] && report "check-backlog-tracker reports both directions and spares history" ok \
+  || report "check-backlog-tracker reports both directions and spares history" no \
+     "ok-exit=$c0 counts-issues=$c1 counts-rows=$c2 absent-exit=$c3 names-14=$c4 spares-11=$c5 closed-exit=$c6 names-10=$c7 names-row=$c8"
+
+
+# 129. #79's anchor half: every way this checker can fail to do its job, and not one of them
+# reporting agreement. `- Owns: gates never fail open` is the line every severity here is
+# judged against, and an empty issue list is the input that would satisfy BOTH directions with
+# nothing to compare — nothing to find absent, nothing to find finished — so it is the one that
+# would print a clean success while checking nothing.
+#
+# Each half asserts the exit code, a diagnostic naming WHICH failure it was, and the absence of
+# the success line. The third assertion is the one that matters: exit codes and messages can
+# both be right while a later edit adds a success print above the failure branch.
+PY3=$(command -v python3)
+# python3 by absolute path so PATH can be emptied to take `gh` away without taking the
+# interpreter with it. This is the only way to reach the unreachable-tracker branch offline.
+run_bt_nogh() { ( cd "$1" && PATH=/nonexistent "$PY3" -O scripts/check-backlog-tracker.py >"$TMP/btout" 2>"$TMP/bterr"; printf '%s' "$?" ) }
+
+bt_all=""
+bt_check() { # bt_check <label> <exit> <needle>
+  _e=$2; _n=$3
+  _err=$(cat "$TMP/bterr"); _out=$(cat "$TMP/btout")
+  [ "$_e" = "1" ] && _a=ok || _a=no
+  case "$_err" in *"$_n"*) _b=ok ;; *) _b=no ;; esac
+  # The fail-open assertion. "Could not check" and "checked, clean" must never share output.
+  case "$_out" in *"no drift"*) _c=no ;; *) _c=ok ;; esac
+  bt_all="$bt_all $1=$_a$_b$_c"
+  [ "$_a$_b$_c" = "okokok" ] || bt_bad=1
+}
+bt_bad=
+
+# The tracker cannot be reached at all.
+r=$(bt_repo bt-nogh); out=$(run_bt_nogh "$r"); bt_check nogh "$out" "tracker cannot be reached"
+
+# `- Docs:` names another repository, so the document is not local. Reading its absence as
+# "no rows to check" would be the false GREEN in the direction this guard exists to close.
+r=$(bt_repo bt-remote "https://example.invalid/docs"); bt_issues "$r" "10 OPEN"
+out=$(run_bt "$r"); bt_check remote "$out" "names another repository"
+
+# The document is simply not there.
+r=$(bt_repo bt-nofile); bt_issues "$r" "10 OPEN"; rm "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); bt_check nofile "$out" "BACKLOG.md does not exist"
+
+# An empty issue list. Both directions would pass with nothing to compare.
+r=$(bt_repo bt-noissues); : > "$r/issues.txt"
+out=$(run_bt "$r"); bt_check empty "$out" "not agreement"
+
+# An issue list that cannot be parsed is not an empty issue list, and must not be read as one.
+r=$(bt_repo bt-garbage); printf 'not-an-issue\n' > "$r/issues.txt"
+out=$(run_bt "$r"); bt_check garbage "$out" "OPEN|CLOSED"
+
+# A document with no table at all: the header carrying the `Item` column is what the
+# finished-work direction binds to, so its absence is the precise diagnosis.
+r=$(bt_repo bt-nohdr2); bt_issues "$r" "10 OPEN"
+printf '# Product backlog\n\nNo table here yet.\n' > "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); bt_check noheader "$out" "no table header"
+
+# A header WITH an Item column but no rows under it. Both loops run zero times and the success
+# line would read `0 row(s), no drift` — a guard certifying a comparison it never made.
+r=$(bt_repo bt-norows); bt_issues "$r" "10 OPEN"
+{ printf '# Product backlog\n\n'
+  printf '| # | Item | Blocks | Rough size | Why here |\n'
+  printf '| :-- | :-- | :-- | :-- | :-- |\n'; } > "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); bt_check norows "$out" "no ordered rows"
+
+# No steering file, so the document directory cannot be resolved.
+r=$(bt_repo bt-nosteer); bt_issues "$r" "10 OPEN"; rm "$r/.steering/tech.md"
+out=$(run_bt "$r"); bt_check nosteer "$out" ".steering/tech.md does not exist"
+
+[ -z "$bt_bad" ] && report "check-backlog-tracker refuses every input it cannot check" ok \
+  || report "check-backlog-tracker refuses every input it cannot check" no "exit/names/no-success:$bt_all"
+
+
+# 130. #79 AC4 — an exclusion is the entry's subject, not anything its reason mentions.
+#
+# Found by running the checker against this repository's own document: the `## Open, not
+# planned` entry for #36 explains itself by citing #26, and the guard counted BOTH as excluded.
+# Harmless there only because #26 is closed and the absent direction reads open issues. Written
+# as "blocked on #<open issue>" it is a silent exemption granted by a sentence of prose — the
+# guard's own fail-open, and the same lesson as Item versus `Why here` one section over.
+#
+# So only the FIRST citation on a `- ` entry line exempts anything.
+r=$(bt_repo bt-exempt); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "20 OPEN" "21 OPEN"
+{
+  printf '\n## Open, not planned\n\n'
+  printf -- '- **#20** - held against a falsifier rather than planned. Rejected while specing #21.\n'
+} >> "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr"); btout=$(cat "$TMP/btout")
+# #21 is named only in #20's reason, so it is still work the list does not know about.
+[ "$out" = "1" ] && c0=ok || c0=no
+case "$err" in *"#21"*) c1=ok ;; *) c1=no ;; esac
+# ...while #20 itself is genuinely excluded and must not be reported.
+case "$err" in *"#20"*) c2=no ;; *) c2=ok ;; esac
+
+# And the success line NAMES what it excluded, so a section that silently swallows more than it
+# lists is visible rather than inferred: #11 is cited in #20's reason and must not appear.
+r=$(bt_repo bt-exempt-count); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "20 OPEN"
+{
+  printf '\n## Open, not planned\n\n'
+  printf -- '- **#20** - held against a falsifier. Rejected while specing #11, which shipped.\n'
+} >> "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); btout=$(cat "$TMP/btout")
+[ "$out" = "0" ] && c3=ok || c3=no
+case "$btout" in *"#20"*) c4=ok ;; *) c4=no ;; esac
+case "$btout" in *"#11"*) c4=no ;; *) : ;; esac
+
+[ "$c0$c1$c2$c3$c4" = "okokokokok" ] && report "check-backlog-tracker excludes the entry, not what its reason cites" ok \
+  || report "check-backlog-tracker excludes the entry, not what its reason cites" no \
+     "exit=$c0 names-21=$c1 spares-20=$c2 clean-exit=$c3 counts-1=$c4"
+
+
+# 131. #79 review round 1 — the guard binds to the table by NAME, not by position, and says
+# which issues it waved through.
+#
+# The HIGH: the Item cell was "the second column", with nothing reading the header. The `Epic`
+# column was deleted from this repository's own table this month and row 10 (#164) is scheduled
+# to replace it with version lines, so a column arriving before `Item` is scheduled work rather
+# than a hypothetical — and it would have made direction B read a cell that never carries `#n`,
+# find nothing, and print `no drift`. A row indented by one space (legal Markdown, renders
+# identically) vanished from BOTH directions just as quietly.
+bt_table() { # bt_table <repo> <header-line> <row-lines...>
+  _r=$1; shift; _h=$1; shift
+  { printf '# Product backlog\n\n'; printf '%s\n' "$_h"
+    printf '| :-- | :-- | :-- | :-- | :-- |\n'
+    for _l in "$@"; do printf '%s\n' "$_l"; done
+  } > "$_r/docs/BACKLOG.md"
+}
+
+# A column before Item. Direction B must still find the closed issue in the Item cell.
+r=$(bt_repo bt-col); bt_issues "$r" "10 CLOSED" "12 OPEN"
+bt_table "$r" '| # | Epic | Item | Rough size | Why here |' \
+  '| 1 | EPIC-1 | A live item - **#10** | ~1 issue | #12 is cited here so it is known. |'
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
+[ "$out" = "1" ] && c0=ok || c0=no
+case "$err" in *"#10"*) c1=ok ;; *) c1=no ;; esac
+
+# A header with no Item column at all: fail closed rather than guess an index.
+r=$(bt_repo bt-nohdr); bt_issues "$r" "10 OPEN"
+bt_table "$r" '| # | Thing | Blocks | Rough size | Why here |' \
+  '| 1 | A live item - **#10** | - | ~1 issue | Why. |'
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr"); btout=$(cat "$TMP/btout")
+[ "$out" = "1" ] && c2=ok || c2=no
+case "$err" in *"Item"*) c3=ok ;; *) c3=no ;; esac
+case "$btout" in *"no drift"*) c4=no ;; *) c4=ok ;; esac
+
+# A row indented by one space renders identically and must not disappear.
+r=$(bt_repo bt-indent); bt_issues "$r" "10 CLOSED" "12 OPEN"
+bt_table "$r" '| # | Item | Blocks | Rough size | Why here |' \
+  ' | 1 | A live item - **#10** | - | ~1 issue | #12 is cited here. |'
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *"#10"*) c6=ok ;; *) c6=no ;; esac
+
+# An exclusion whose issue has since closed is a hand-written claim nothing compares —
+# #14's and #23's class reappearing inside the fix for it.
+r=$(bt_repo bt-stale-exempt); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "20 CLOSED"
+{ printf '\n## Open, not planned\n\n'; printf -- '- **#20** - held against a falsifier.\n'; } >> "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
+[ "$out" = "1" ] && c7=ok || c7=no
+case "$err" in *"#20"*) c8=ok ;; *) c8=no ;; esac
+
+# An Item cell citing a number this tracker does not have — a typo, a pull request, another
+# repository. `--state all` means absence is knowledge, not ignorance.
+r=$(bt_repo bt-unknown); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN"
+sed -i.bak 's/\*\*#12\*\*/**#1999** (formerly **#12**)/' "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *"#1999"*) c10=ok ;; *) c10=no ;; esac
+
+# The success line names what it excluded. A count alone leaves the CI log unable to say
+# WHICH issues were waved through — G-8.
+r=$(bt_repo bt-names); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "20 OPEN"
+{ printf '\n## Open, not planned\n\n'; printf -- '- **#20** - held against a falsifier.\n'; } >> "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); btout=$(cat "$TMP/btout")
+[ "$out" = "0" ] && c11=ok || c11=no
+case "$btout" in *"#20"*) c12=ok ;; *) c12=no ;; esac
+
+# A sub-bullet under an entry is continuation prose, not an entry of its own — the same shape
+# case 130 closed one level up, at the reason rather than the indent.
+r=$(bt_repo bt-subbullet); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "20 OPEN" "21 OPEN"
+{ printf '\n## Open, not planned\n\n'
+  printf -- '- **#20** - held against a falsifier rather than planned work.\n'
+  printf -- '  - Blocked on #21, which nobody has placed.\n'; } >> "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
+[ "$out" = "1" ] && c13=ok || c13=no
+case "$err" in *"#21"*) c14=ok ;; *) c14=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14" = "okokokokokokokokokokokokokokok" ] \
+  && report "check-backlog-tracker binds the Item column by name and names its exclusions" ok \
+  || report "check-backlog-tracker binds the Item column by name and names its exclusions" no \
+     "col=$c0/$c1 nohdr=$c2/$c3/$c4 indent=$c5/$c6 stale-exempt=$c7/$c8 unknown=$c9/$c10 names=$c11/$c12 subbullet=$c13/$c14"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 
