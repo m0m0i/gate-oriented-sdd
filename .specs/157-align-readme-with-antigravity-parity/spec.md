@@ -1,5 +1,5 @@
 # Spec: Align README and README.ja.md with Antigravity parity and release packaging
-- Slug: 157-align-readme-with-antigravity-parity   Issue: 157   Type: chore   Status: approved
+- Slug: 157-align-readme-with-antigravity-parity   Issue: 157   Type: chore   Status: done
 - Author: Antigravity   Date: 2026-09-20
 
 ## 1. Requirements (WHAT / WHY)
@@ -22,11 +22,11 @@
 - Why now:
   Following the merge of #140 and #146, the documentation in `README.md` and `README.ja.md` remained partially dated and Claude Code-centric. Users following the README instructions to install on Antigravity were directed solely to `git clone` (which brings internal repo files), unaware of the clean `gate-sdd.zip` distribution artifact, and readers looking at the fidelity table lacked information on rules discovery.
 - Acceptance criteria:
-  - [ ] **AC1:** `README.md` and `README.ja.md` SHALL describe both the standalone release archive (`gate-sdd.zip`) and direct `git clone` installation methods for Antigravity.
-  - [ ] **AC2:** `README.md` and `README.ja.md` SHALL update the context isolation explanation to refer to `AGENTS.md` (or `CLAUDE.md` / `GEMINI.md`) instead of `CLAUDE.md` alone.
-  - [ ] **AC3:** `README.md` and `README.ja.md` SHALL include `Rules discovery` in the fidelity table (`root AGENTS.md` vs `rules/AGENTS.md`), matching `docs/fidelity.md`.
-  - [ ] **AC4:** `README.md` and `README.ja.md` SHALL note in the `init` description that `init` detects the active harness to configure appropriate rule pointers and agent directories.
-  - [ ] **AC5:** `scripts/check-readme-claims.py` and all 12 repository validators SHALL pass with exit code 0.
+  - [x] **AC1:** `README.md` and `README.ja.md` SHALL describe both the standalone release archive (`gate-sdd.zip`) and direct `git clone` installation methods for Antigravity.
+  - [x] **AC2:** `README.md` and `README.ja.md` SHALL update the context isolation explanation to refer to `AGENTS.md` (or `CLAUDE.md` / `GEMINI.md`) instead of `CLAUDE.md` alone.
+  - [x] **AC3:** `README.md` and `README.ja.md` SHALL include `Rules discovery` in the fidelity table (`root AGENTS.md` vs `rules/AGENTS.md`), matching `docs/fidelity.md`.
+  - [x] **AC4:** `README.md` and `README.ja.md` SHALL note in the `init` description that `init` detects the active harness to configure appropriate rule pointers and agent directories.
+  - [x] **AC5:** `scripts/check-readme-claims.py` and all 12 repository validators SHALL pass with exit code 0.
 - Out of scope:
   - Bumping version or modifying `plugin.json` during spec authoring (manifest bumps occur during post-receipt implement steps for shipped changes).
   - Changing runtime hook or plugin logic.
@@ -61,4 +61,4 @@ None needed — requirements were unambiguous and follow directly from previous 
 - [x] T1: verify baseline guards pass (`scripts/check-readme-claims.py`, `scripts/check-markdown-fences.py`, `scripts/test-gates.sh`)
 - [x] T2: update `README.md` with Antigravity release archive and clone install options, updated rulebook pointer phrasing, `Rules discovery` fidelity row, and `init` harness detection note
 - [x] T3: update `README.ja.md` in lockstep with matching Japanese translations
-- [ ] T4: confirm `scripts/check-readme-claims.py`, `scripts/check-markdown-fences.py`, and `scripts/test-gates.sh` pass cleanly
+- [x] T4: confirm `scripts/check-readme-claims.py`, `scripts/check-markdown-fences.py`, and `scripts/test-gates.sh` pass cleanly
