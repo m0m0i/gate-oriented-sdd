@@ -13,12 +13,12 @@ so that installing the plugin into my workspace does not unpack repository-inter
 CAP-4 (Installation into a repository that already has opinions) and CAP-5 (Fixes that reach the people running it).
 
 ### Acceptance criteria
-- [ ] **AC1:** WHEN the release packaging tool (`scripts/package-release.py`) executes THE SYSTEM SHALL generate a standalone zip archive (`dist/gate-sdd.zip`) containing strictly the runtime payload (`plugin.json`, `.claude-plugin/`, `skills/`, `agents/`, `hooks/`, `rules/`, `assets/`, `AGENTS.md`, `README.md`, `README.ja.md`, `LICENSE`), preserving file permissions and symbolic links.
-- [ ] **AC2:** WHEN the release packaging tool generates `dist/gate-sdd.zip` THE SYSTEM SHALL exclude repository-internal assets (`.specs/`, `.steering/`, `.work_logs/`, `scripts/`, `evals/`, `docs/`, `.github/`, `.vscode/`, `.git*`, `__pycache__`, `.DS_Store`).
-- [ ] **AC3:** WHEN `dist/gate-sdd.zip` is extracted into a target directory THE SYSTEM SHALL pass `scripts/check-manifests.py` verifying both manifests agree and `rules/AGENTS.md` resolves identically to `AGENTS.md`.
-- [ ] **AC4:** WHEN a tag matching `gate-sdd--v*` or `v*` is pushed (or `workflow_dispatch` triggered) THE SYSTEM SHALL run `.github/workflows/release.yml` to package `dist/gate-sdd.zip`, verify its manifest integrity, and attach it to the GitHub Release.
-- [ ] **AC5:** WHEN documentation (`docs/fidelity.md`, `docs/layout.md`) is consulted THE SYSTEM SHALL describe the release distribution artifact, explain what direct `git clone` or local path installs unpack vs the release artifact, and record why Option 1 (`.gitattributes export-ignore`) and Option 2 (`plugins/gate-sdd/`) were rejected.
-- [ ] **AC6:** WHEN `scripts/test-gates.sh` runs THE SYSTEM SHALL verify `scripts/package-release.py` against a fixture and current repository, verifying runtime files are present, internal dev assets are excluded, and missing runtime files fail closed with non-zero exit code.
+- [x] **AC1:** WHEN the release packaging tool (`scripts/package-release.py`) executes THE SYSTEM SHALL generate a standalone zip archive (`dist/gate-sdd.zip`) containing strictly the runtime payload (`plugin.json`, `.claude-plugin/`, `skills/`, `agents/`, `hooks/`, `rules/`, `assets/`, `AGENTS.md`, `README.md`, `README.ja.md`, `LICENSE`), preserving file permissions and symbolic links.
+- [x] **AC2:** WHEN the release packaging tool generates `dist/gate-sdd.zip` THE SYSTEM SHALL exclude repository-internal assets (`.specs/`, `.steering/`, `.work_logs/`, `scripts/`, `evals/`, `docs/`, `.github/`, `.vscode/`, `.git*`, `__pycache__`, `.DS_Store`).
+- [x] **AC3:** WHEN `dist/gate-sdd.zip` is extracted into a target directory THE SYSTEM SHALL pass `scripts/check-manifests.py` verifying both manifests agree and `rules/AGENTS.md` resolves identically to `AGENTS.md`.
+- [x] **AC4:** WHEN a tag matching `gate-sdd--v*` or `v*` is pushed (or `workflow_dispatch` triggered) THE SYSTEM SHALL run `.github/workflows/release.yml` to package `dist/gate-sdd.zip`, verify its manifest integrity, and attach it to the GitHub Release.
+- [x] **AC5:** WHEN documentation (`docs/fidelity.md`, `docs/layout.md`) is consulted THE SYSTEM SHALL describe the release distribution artifact, explain what direct `git clone` or local path installs unpack vs the release artifact, and record why Option 1 (`.gitattributes export-ignore`) and Option 2 (`plugins/gate-sdd/`) were rejected.
+- [x] **AC6:** WHEN `scripts/test-gates.sh` runs THE SYSTEM SHALL verify `scripts/package-release.py` against a fixture and current repository, verifying runtime files are present, internal dev assets are excluded, and missing runtime files fail closed with non-zero exit code.
 
 ### Out of scope
 - Restructuring the repository root into `plugins/gate-sdd/` (Option 2 — rejected because the repo root IS the plugin, per `docs/layout.md`).
@@ -79,4 +79,4 @@ CAP-4 (Installation into a repository that already has opinions) and CAP-5 (Fixe
 - [x] T1: failing test in `scripts/test-gates.sh` asserting `scripts/package-release.py` packages runtime files, preserves symlinks, and strictly excludes internal dev assets — then implement `scripts/package-release.py` to make the test pass
 - [x] T2: add release workflow `.github/workflows/release.yml` with tag and workflow_dispatch triggers, and verify syntax and packaging step
 - [x] T3: update `docs/fidelity.md` and `docs/layout.md` documenting the release artifact, consumption methods, and rejected alternatives
-- [ ] T4: refactor and verify all 12 repository validators and `scripts/test-gates.sh` pass cleanly
+- [x] T4: refactor and verify all 12 repository validators and `scripts/test-gates.sh` pass cleanly
