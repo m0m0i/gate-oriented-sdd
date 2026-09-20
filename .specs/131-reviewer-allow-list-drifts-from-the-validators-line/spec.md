@@ -34,10 +34,10 @@
   there. This is C-2's class and #14's class: a definition with two homes, where the copy fails
   open.
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN `.steering/tech.md`'s `- Validators:` line names a validator absent from
+  - [x] **AC1:** WHEN `.steering/tech.md`'s `- Validators:` line names a validator absent from
         `.claude/agents/gate-sdd-reviewer.md`'s Bash policy THE SYSTEM SHALL fail and name both the
         absent validator and the file.
-  - [ ] **AC2:** WHEN the reviewer is asked to run any validator on the `- Validators:` line THE
+  - [x] **AC2:** WHEN the reviewer is asked to run any validator on the `- Validators:` line THE
         SYSTEM SHALL sanction it, for all twelve current entries.
   - [ ] **AC3:** WHEN a reviewer file shows neither evidence of one of the four categories
         `reviewer-contract.md`'s Bash policy sanctions nor a declared N/A for it THE SYSTEM SHALL
@@ -54,7 +54,7 @@
   - [ ] **AC6:** no reviewer's allow-list gains a command it does not have today. The check proves a
         reviewer *shows* what the contract already permits; it is not a route to granting.
         *(#118's "What must NOT change")*
-  - [ ] **AC7:** `./scripts/check-version-bump.py` remains sanctioned for the dogfood reviewer while
+  - [x] **AC7:** `./scripts/check-version-bump.py` remains sanctioned for the dogfood reviewer while
         remaining off the `- Validators:` line, per `.steering/tech.md`'s stated reason.
   - [ ] **AC8:** the new guard is itself named on `.steering/tech.md`'s `- Validators:` line and on
         the dogfood reviewer's allow-list, and therefore passes its own AC1.
@@ -209,7 +209,7 @@ to fix it. The class closes because the guard's first subject is itself.
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit.
 
-- [ ] **T1:** Coverage rule — cases for AC1, AC2, AC7 (control first, then a validator absent from
+- [x] **T1:** Coverage rule — cases for AC1, AC2, AC7 (control first, then a validator absent from
       the allow-list, then the sanctioned extra proving containment rather than equality), failing
       for the right reason; then `scripts/check-reviewer-allow-list.py` implementing it, and the
       three absent validators added to the dogfood allow-list.

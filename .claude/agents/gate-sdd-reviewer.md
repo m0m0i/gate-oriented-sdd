@@ -26,6 +26,9 @@ Evidence gathering only:
   - `./scripts/check-templates.py`
   - `./assets/check-steering-anchors.sh`
   - `./assets/check-locks.py`
+  - `./assets/check-document-set.py`
+  - `./scripts/check-contract-path.py`
+  - `./scripts/check-readme-claims.py`
   - `./scripts/test-gates.sh`
   - `./scripts/check-version-bump.py <base-sha>` — read-only, safe to run for evidence
 - `claude plugin validate . --strict`
