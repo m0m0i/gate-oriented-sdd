@@ -129,7 +129,7 @@ The middle of that chain is not this plugin's invention — it is **GitHub's**. 
 | `worklog` | append-only session record | decisions with their reasons |
 | `archive` | shipped specs out of `.specs/`, swept on request | `.specs/` means live work |
 
-Plus three read-only reviewers — TypeScript, Python, Dart/Flutter — and a template for a stack none of them fit.
+Plus three read-only reviewers — TypeScript, Python, Dart/Flutter — and a template for a stack none of them fit. Every reviewer's Bash policy allow-list is strictly bounded to evidence-gathering commands (diff/log, clock, installed version checks, and the project's turn-end validators), and a dedicated guard prevents silent drift between `.steering/tech.md`'s `- Validators:` line and the reviewer's allow-list.
 
 ## Layout
 

@@ -4185,6 +4185,145 @@ case "$err" in *"missing required runtime component"*|*"missing: "*) c_pkg4=ok ;
      "run-exit=$c_pkg0 contents=$c_pkg1 manifests=$c_pkg2 manifests-fail=$c_pkg2b manifests-fail-err=$c_pkg2c fail-closed-exit=$c_pkg3 fail-closed-err=$c_pkg4"
 
 
+
+# --- reviewer allow-list: scripts/check-reviewer-allow-list.py -----------------
+#
+# #131. check-reviewer-allow-list.py guards against silent drift between
+# .steering/tech.md's - Validators: line and the dogfood reviewer's allow-list,
+# and verifies that all sanctioned categories from reviewer-contract.md are present.
+
+allowlist_repo() {
+  r="$TMP/$1"
+  mkdir -p "$r/scripts" "$r/.steering" "$r/.claude/agents" "$r/agents"
+  cp "$ROOT/scripts/check-reviewer-allow-list.py" "$r/scripts/" 2>/dev/null || true
+  [ -f "$r/scripts/check-reviewer-allow-list.py" ] && chmod +x "$r/scripts/check-reviewer-allow-list.py"
+  printf -- '- Validators: ./scripts/check-leakage.sh, ./scripts/check-manifests.py, ./scripts/test-gates.sh\n' > "$r/.steering/tech.md"
+  cat > "$r/.claude/agents/gate-sdd-reviewer.md" << 'EOF'
+## Bash policy
+
+Evidence gathering only:
+
+- `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
+- `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
+- checking an installed version: N/A (this project has no package manager, no build, and no dependency file)
+- these validators, and no others:
+  - `./scripts/check-leakage.sh`
+  - `./scripts/check-manifests.py`
+  - `./scripts/test-gates.sh`
+  - `./scripts/check-version-bump.py <base-sha>` — read-only, safe to run for evidence
+
+Nothing else. You do not edit, commit, or push.
+EOF
+  cat > "$r/agents/ts-reviewer.md" << 'EOF'
+## Bash policy
+
+- `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
+- `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
+- the validators named in `.steering/tech.md` — typically a type check, a lint, and a test run
+- the package manager's list command, to check an installed version before claiming an API is wrong
+EOF
+  cat > "$r/agents/python-reviewer.md" << 'EOF'
+## Bash policy
+
+- `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
+- `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
+- the validators named in `.steering/tech.md` — typically a formatter check, a linter, a type checker, a security scanner, and the test suite
+- the environment's package listing, to check an installed version before claiming an API is wrong
+EOF
+  cat > "$r/agents/dart-flutter-reviewer.md" << 'EOF'
+## Bash policy
+
+- `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
+- `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
+- the validators named in `.steering/tech.md` — typically a format check, the analyzer, and the test suite
+- the SDK version command, to check an API against the pinned SDK before claiming it is wrong
+EOF
+  cat > "$r/agents/_template_reviewer.md" << 'EOF'
+## Bash policy
+
+Evidence gathering only:
+
+- `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
+- `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
+- these validators, and no others:
+- the package manager's list command, to check an installed version before claiming an API is wrong
+EOF
+  mkdir -p "$r/agents/_template"
+  mv "$r/agents/_template_reviewer.md" "$r/agents/_template/reviewer.md"
+  echo "$r"
+}
+
+run_allowlist() { ( cd "$1" && python3 -O scripts/check-reviewer-allow-list.py >"$TMP/alout" 2>"$TMP/alerr"; printf '%s' "$?" ) }
+
+# Coverage rule: control (containment: check-version-bump is extra on allow-list, passes)
+r=$(allowlist_repo al-control)
+out=$(run_allowlist "$r")
+[ "$out" = "0" ] && c_al0=ok || c_al0=no
+
+# Missing validator: absent from allow-list fails closed and names validator and file
+r=$(allowlist_repo al-missing)
+printf -- '- Validators: ./scripts/check-leakage.sh, ./scripts/check-manifests.py, ./scripts/check-contract-path.py\n' > "$r/.steering/tech.md"
+out=$(run_allowlist "$r"); err=$(cat "$TMP/alerr")
+[ "$out" = "1" ] && c_al1=ok || c_al1=no
+case "$err" in *"check-contract-path.py"*) c_al2=ok ;; *) c_al2=no ;; esac
+case "$err" in *"gate-sdd-reviewer.md"*) c_al3=ok ;; *) c_al3=no ;; esac
+
+[ "$c_al0$c_al1$c_al2$c_al3" = "okokokok" ] && report "check-reviewer-allow-list coverage rule enforces containment and names absent validators" ok \
+  || report "check-reviewer-allow-list coverage rule enforces containment and names absent validators" no \
+     "control=$c_al0 missing-code=$c_al1 missing-err=$c_al2 file-named=$c_al3"
+
+# Category rule: dropped category fails and names category and file
+r=$(allowlist_repo al-drop-cat)
+cat > "$r/agents/ts-reviewer.md" << 'EOF'
+## Bash policy
+
+- `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
+- the validators named in `.steering/tech.md` — typically a type check, a lint, and a test run
+- the package manager's list command, to check an installed version before claiming an API is wrong
+EOF
+out=$(run_allowlist "$r"); err=$(cat "$TMP/alerr")
+[ "$out" = "1" ] && c_cat0=ok || c_cat0=no
+case "$err" in *"diff/log/commit"*) c_cat1=ok ;; *) c_cat1=no ;; esac
+case "$err" in *"ts-reviewer.md"*) c_cat2=ok ;; *) c_cat2=no ;; esac
+
+# Category rule: stack-specific category 3 spellings pass in control repo
+# al-control already exercises all three spellings (package manager's list command, environment's package listing, SDK version command)
+r_ctrl=$(allowlist_repo al-cat-spellings)
+out=$(run_allowlist "$r_ctrl")
+[ "$out" = "0" ] && c_cat3=ok || c_cat3=no
+
+# Category rule: bare N/A fails, reasoned N/A passes
+r_bare=$(allowlist_repo al-cat-bare)
+cat > "$r_bare/.claude/agents/gate-sdd-reviewer.md" << 'EOF'
+## Bash policy
+
+Evidence gathering only:
+
+- `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
+- `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
+- checking an installed version: N/A
+- these validators, and no others:
+  - `./scripts/check-leakage.sh`
+  - `./scripts/check-manifests.py`
+  - `./scripts/test-gates.sh`
+
+Nothing else. You do not edit, commit, or push.
+EOF
+out=$(run_allowlist "$r_bare"); err=$(cat "$TMP/alerr")
+[ "$out" = "1" ] && c_cat4=ok || c_cat4=no
+case "$err" in *"installed version"*) c_cat5=ok ;; *) c_cat5=no ;; esac
+case "$err" in *"gate-sdd-reviewer.md"*) c_cat6=ok ;; *) c_cat6=no ;; esac
+
+# Category rule: reasoned N/A passes
+r_reasoned=$(allowlist_repo al-cat-reasoned)
+out=$(run_allowlist "$r_reasoned")
+[ "$out" = "0" ] && c_cat7=ok || c_cat7=no
+
+[ "$c_cat0$c_cat1$c_cat2$c_cat3$c_cat4$c_cat5$c_cat6$c_cat7" = "okokokokokokokok" ] && report "check-reviewer-allow-list category rule enforces all 4 categories, spellings, and reasoned N/A" ok \
+  || report "check-reviewer-allow-list category rule enforces all 4 categories, spellings, and reasoned N/A" no \
+     "drop-code=$c_cat0 drop-cat=$c_cat1 drop-file=$c_cat2 spellings=$c_cat3 bare-code=$c_cat4 bare-cat=$c_cat5 bare-file=$c_cat6 reasoned=$c_cat7"
+
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 

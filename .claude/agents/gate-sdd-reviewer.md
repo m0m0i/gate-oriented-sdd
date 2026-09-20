@@ -17,6 +17,7 @@ Evidence gathering only:
 
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
 - `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
+- checking an installed version: N/A (this project has no package manager, no build, and no dependency file)
 - these validators, and no others:
   - `./scripts/check-leakage.sh`
   - `./scripts/check-manifests.py`
@@ -26,6 +27,10 @@ Evidence gathering only:
   - `./scripts/check-templates.py`
   - `./assets/check-steering-anchors.sh`
   - `./assets/check-locks.py`
+  - `./assets/check-document-set.py`
+  - `./scripts/check-contract-path.py`
+  - `./scripts/check-readme-claims.py`
+  - `./scripts/check-reviewer-allow-list.py`
   - `./scripts/test-gates.sh`
   - `./scripts/check-version-bump.py <base-sha>` — read-only, safe to run for evidence
 - `claude plugin validate . --strict`
