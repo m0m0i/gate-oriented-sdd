@@ -157,7 +157,7 @@ def main() -> None:
     source = pathlib.Path(args.source).resolve() if args.source else ROOT
     output = pathlib.Path(args.output)
     if not output.is_absolute():
-        output = (ROOT / output).resolve()
+        output = (pathlib.Path.cwd() / output).resolve()
 
     package_release(source, output)
 

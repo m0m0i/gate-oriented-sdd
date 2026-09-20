@@ -4162,6 +4162,15 @@ unzip -q "$pkg_out" -d "$pkg_unpacked" 2>/dev/null
 python3 "$ROOT/scripts/check-manifests.py" "$pkg_unpacked" >/dev/null 2>"$TMP/pkgmanifesterr"
 [ "$?" = "0" ] && c_pkg2=ok || c_pkg2=no
 
+# 3b. Verify check-manifests fails closed on corrupted/tampered extracted tree
+pkg_broken="$TMP/pkg-broken"
+rm -rf "$pkg_broken" && cp -r "$pkg_unpacked" "$pkg_broken"
+rm -f "$pkg_broken/rules/AGENTS.md"
+python3 "$ROOT/scripts/check-manifests.py" "$pkg_broken" >/dev/null 2>"$TMP/pkgbrokenerr"
+[ "$?" = "1" ] && c_pkg2b=ok || c_pkg2b=no
+err=$(cat "$TMP/pkgbrokenerr" 2>/dev/null)
+case "$err" in *"missing: rules/AGENTS.md"*) c_pkg2c=ok ;; *) c_pkg2c=no ;; esac
+
 # 4. Fail-closed: missing required runtime component in fixture repo fails closed
 r="$TMP/pkg-fixture-missing"
 rm -rf "$r" && mkdir -p "$r"
@@ -4171,9 +4180,9 @@ pkg_fail_code="$?"
 err=$(cat "$TMP/pkgfailerr" 2>/dev/null)
 case "$err" in *"missing required runtime component"*|*"missing: "*) c_pkg4=ok ;; *) c_pkg4=no ;; esac
 
-[ "$c_pkg0$c_pkg1$c_pkg2$c_pkg3$c_pkg4" = "okokokokok" ] && report "package-release bundles runtime payload, excludes internal tooling, and fails closed" ok \
+[ "$c_pkg0$c_pkg1$c_pkg2$c_pkg2b$c_pkg2c$c_pkg3$c_pkg4" = "okokokokokokok" ] && report "package-release bundles runtime payload, excludes internal tooling, and fails closed" ok \
   || report "package-release bundles runtime payload, excludes internal tooling, and fails closed" no \
-     "run-exit=$c_pkg0 contents=$c_pkg1 manifests=$c_pkg2 fail-closed-exit=$c_pkg3 fail-closed-err=$c_pkg4"
+     "run-exit=$c_pkg0 contents=$c_pkg1 manifests=$c_pkg2 manifests-fail=$c_pkg2b manifests-fail-err=$c_pkg2c fail-closed-exit=$c_pkg3 fail-closed-err=$c_pkg4"
 
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
