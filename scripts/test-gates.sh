@@ -4103,5 +4103,79 @@ out=$(run_vbump "$r")
      "bumped-exit=$c0 unbumped-exit=$c1 unbumped-err=$c2"
 
 
+
+# --- release packaging: scripts/package-release.py -----------------------------
+#
+# #140. package-release.py bundles strictly runtime payload into gate-sdd.zip,
+# preserving symlinks and permissions, and strictly excluding internal assets.
+
+pkg_out="$TMP/pkg-dist/gate-sdd.zip"
+pkg_unpacked="$TMP/pkg-unpacked"
+rm -rf "$TMP/pkg-dist" "$pkg_unpacked" "$TMP/pkgerr"
+mkdir -p "$TMP/pkg-dist" "$pkg_unpacked"
+
+# 1. Run package-release against repo root
+python3 "$ROOT/scripts/package-release.py" "$pkg_out" >/dev/null 2>"$TMP/pkgerr"
+pkg_code="$?"
+[ "$pkg_code" = "0" ] && [ -f "$pkg_out" ] && c_pkg0=ok || c_pkg0=no
+
+# 2. Inspect zip contents for inclusion & exclusion
+c_pkg1=$(python3 -c "
+import zipfile, sys
+try:
+    with zipfile.ZipFile('$pkg_out') as zf:
+        names = zf.namelist()
+        # Must include runtime payload
+        required = [
+            'plugin.json',
+            '.claude-plugin/plugin.json',
+            '.claude-plugin/marketplace.json',
+            'skills/spec/SKILL.md',
+            'agents/_shared/reviewer-contract.md',
+            'hooks/gate-lib.sh',
+            'hooks/templates/antigravity.hooks.json',
+            'rules/AGENTS.md',
+            'assets/check-steering-anchors.sh',
+            'AGENTS.md',
+            'README.md',
+            'LICENSE',
+        ]
+        missing = [r for r in required if r not in names]
+        # Must exclude internal development assets
+        forbidden_prefixes = (
+            '.specs/', '.steering/', '.work_logs/', 'scripts/',
+            'evals/', 'docs/', '.github/', '.vscode/', '.git'
+        )
+        leaked = [n for n in names if any(n.startswith(p) for p in forbidden_prefixes)]
+        if missing or leaked:
+            print(f'missing={missing} leaked={leaked}', file=sys.stderr)
+            sys.exit(1)
+        print('ok')
+except Exception as e:
+    print(f'error: {e}', file=sys.stderr)
+    sys.exit(1)
+" 2>"$TMP/pkganalyze")
+[ "$c_pkg1" = "ok" ] && c_pkg1=ok || c_pkg1=no
+
+# 3. Unpack and verify manifest check passes on extracted tree
+unzip -q "$pkg_out" -d "$pkg_unpacked" 2>/dev/null
+python3 "$ROOT/scripts/check-manifests.py" "$pkg_unpacked" >/dev/null 2>"$TMP/pkgmanifesterr"
+[ "$?" = "0" ] && c_pkg2=ok || c_pkg2=no
+
+# 4. Fail-closed: missing required runtime component in fixture repo fails closed
+r="$TMP/pkg-fixture-missing"
+rm -rf "$r" && mkdir -p "$r"
+python3 "$ROOT/scripts/package-release.py" "$r/out.zip" --source "$r" >/dev/null 2>"$TMP/pkgfailerr"
+pkg_fail_code="$?"
+[ "$pkg_fail_code" = "1" ] && c_pkg3=ok || c_pkg3=no
+err=$(cat "$TMP/pkgfailerr" 2>/dev/null)
+case "$err" in *"missing required runtime component"*|*"missing: "*) c_pkg4=ok ;; *) c_pkg4=no ;; esac
+
+[ "$c_pkg0$c_pkg1$c_pkg2$c_pkg3$c_pkg4" = "okokokokok" ] && report "package-release bundles runtime payload, excludes internal tooling, and fails closed" ok \
+  || report "package-release bundles runtime payload, excludes internal tooling, and fails closed" no \
+     "run-exit=$c_pkg0 contents=$c_pkg1 manifests=$c_pkg2 fail-closed-exit=$c_pkg3 fail-closed-err=$c_pkg4"
+
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
+
