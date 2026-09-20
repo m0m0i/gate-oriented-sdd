@@ -15,6 +15,10 @@ A total order is uncomfortable on purpose. It forces the comparison between two 
 
 It deliberately creates **no issues**. That is `sprint`'s job, and the separation matters: work becomes an issue at the moment someone commits to doing it, and everything before that moment is a plan that can still change cheaply.
 
+`sprint` is the one other skill that writes here, and only one way: when it turns a row into issues it records those issue numbers on the row it took, and changes nothing else. That is not a second author — it is the single moment when this document is knowably wrong and the skill that made it wrong is still running (#79).
+
+**Two doors stay open that no skill can close**: an issue closed by a merge, and an issue filed outside a grooming. Nothing runs at either moment, so nothing can be instructed to write them down. The list is compared against the tracker instead — no open issue missing from it, and no `Item` cell citing work that has finished — and a grooming starts from what that comparison reports rather than from a re-read of the whole document.
+
 Ordering is the entire value. A list of everything that must be built is not a backlog; it is an inventory.
 
 ## Where it goes
@@ -45,10 +49,17 @@ Ordering is the entire value. A list of everything that must be built is not a b
 | 1 | <item> | EPIC-n | #3, #7 | <~n issues> | <the risk it retires, or what it unblocks> |
 | 2 | <item> | EPIC-n | — | <~n issues> | <why above #3 specifically> |
 
+The **Item** cell names the issues this row is live work for. `Why here` may cite any issue, including closed ones, as reasoning — "#146 left this row by shipping" is correct and has to stay sayable. That split is what lets the list be compared against the tracker without every piece of history reading as stale work.
+
 ## Unshaped
 Items that cannot be ordered yet because nobody knows what they are. This is a queue to empty, not a tier — anything sitting here is undecided work, and it does not get built while it stays here.
 
 - <item> — <what has to be answered before it can take a position>
+
+## Open, not planned
+Issues that are open and deliberately not rows. One line each: the issue, why it is not planned, and the condition that would make it one. Not a tier and not a second backlog — an entry here is a decision that has been made, and the condition beside it is what reopens it.
+
+- <#n> — <why it is not a row> — <what would make it one>
 ```
 
 ## Rules
@@ -59,6 +70,8 @@ Items that cannot be ordered yet because nobody knows what they are. This is a q
 - **No ties.** "These two are both high" is the comparison being dodged.
 - **This skill creates no issues.** Ordering is cheap and reversible; an issue is a commitment. Keeping them separate is what lets the plan change without leaving debris in the tracker.
 - **A backlog item is not an issue.** One item commonly becomes several — the change, the test coverage it turns out to need, the migration it forces. Sizing them 1:1 at this stage is how a plan quietly becomes wrong, because the decomposition has not happened yet and cannot be guessed accurately.
+- **The `Item` cell is the claim; `Why here` is the argument.** Only the Item cell asserts that an issue is live work, which is what lets a shipped issue stay quotable in the reasoning without reading as stale.
+- **An open issue is either a row, unshaped, or deliberately not planned.** There is no fourth state, and silence is not one of them — an issue nobody has placed is work the list does not know about.
 - Items are coarse on purpose. Fine-grained ordering of work nobody has decomposed is precision without accuracy.
 - Every "Next up" row states why *now*. Without it the order is preference, and preference gets re-argued.
 - Re-sequence when reality diverges. A backlog that has not moved in a month is either a finished plan or an ignored one.
