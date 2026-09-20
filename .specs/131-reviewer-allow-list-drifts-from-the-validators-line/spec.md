@@ -1,5 +1,5 @@
 # Spec: The reviewer's allow-list and the Validators line
-- Slug: 131-reviewer-allow-list-drifts-from-the-validators-line   Issue: 131   Type: bug   Status: approved
+- Slug: 131-reviewer-allow-list-drifts-from-the-validators-line   Issue: 131   Type: bug   Status: done
 - Author: m0m0i, Antigravity   Date: 2026-09-20
 
 ## 1. Requirements (WHAT / WHY)
@@ -51,19 +51,19 @@
         use — `agents/ts-reviewer.md` and `agents/python-reviewer.md` spell category 3 "the package
         manager's list command", `agents/dart-flutter-reviewer.md` "the SDK version command" — so
         the check reads the category, not one stack's wording.
-  - [ ] **AC6:** no reviewer's allow-list gains a command it does not have today. The check proves a
+  - [x] **AC6:** no reviewer's allow-list gains a command it does not have today. The check proves a
         reviewer *shows* what the contract already permits; it is not a route to granting.
         *(#118's "What must NOT change")*
   - [x] **AC7:** `./scripts/check-version-bump.py` remains sanctioned for the dogfood reviewer while
         remaining off the `- Validators:` line, per `.steering/tech.md`'s stated reason.
   - [x] **AC8:** the new guard is itself named on `.steering/tech.md`'s `- Validators:` line and on
         the dogfood reviewer's allow-list, and therefore passes its own AC1.
-  - [ ] **AC9:** the regression fails before the fix and passes after, and the control case runs
+  - [x] **AC9:** the regression fails before the fix and passes after, and the control case runs
         first. Every new branch survives `python3 -O` (#28).
-  - [ ] **AC10:** `plugin.json` and `.claude-plugin/plugin.json` SHALL be incremented in lockstep by a
+  - [x] **AC10:** `plugin.json` and `.claude-plugin/plugin.json` SHALL be incremented in lockstep by a
         patch version (`0.14.0` -> `0.14.1`), and verified by `scripts/check-manifests.py` and
         `scripts/check-version-bump.py main`.
-  - [ ] **AC11:** `README.md` and `README.ja.md` SHALL be updated in lockstep to describe the
+  - [x] **AC11:** `README.md` and `README.ja.md` SHALL be updated in lockstep to describe the
         reviewer's bounded Bash policy allow-list and drift prevention, passing
         `scripts/check-readme-claims.py` and `scripts/check-markdown-fences.py`.
 - Out of scope:
@@ -219,7 +219,7 @@ to fix it. The class closes because the guard's first subject is itself.
 - [x] **T3:** AC8 — the guard onto `.steering/tech.md`'s `- Validators:` line, onto the dogfood
       allow-list, and into `.github/workflows/ci.yml`. One task because the first edit reddens the
       turn-end gate until the second lands.
-- [ ] **T4:** Verification, README updates, and patch version bump (AC9, AC10, AC11) — extend the
+- [x] **T4:** Verification, README updates, and patch version bump (AC9, AC10, AC11) — extend the
       `python3 -O` case to both new branches (#28), confirm AC6 by diffing every reviewer's Bash
       policy for added commands, update `README.md` and `README.ja.md` in lockstep, and bump
       `plugin.json` and `.claude-plugin/plugin.json` patch version (`0.14.0` -> `0.14.1`).

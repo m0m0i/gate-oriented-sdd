@@ -4253,7 +4253,7 @@ EOF
   echo "$r"
 }
 
-run_allowlist() { ( cd "$1" && python3 scripts/check-reviewer-allow-list.py >"$TMP/alout" 2>"$TMP/alerr"; printf '%s' "$?" ) }
+run_allowlist() { ( cd "$1" && python3 -O scripts/check-reviewer-allow-list.py >"$TMP/alout" 2>"$TMP/alerr"; printf '%s' "$?" ) }
 
 # Coverage rule: control (containment: check-version-bump is extra on allow-list, passes)
 r=$(allowlist_repo al-control)

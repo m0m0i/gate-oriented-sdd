@@ -130,7 +130,7 @@ Issue、ブランチ、spec ディレクトリ、PR は同じ slug を共有し�
 | `worklog`    | 追記のみのセッション記録                                                   | 理由つきの決定                               |
 | `archive`    | 出荷済みの spec を `.specs/` の外へ、頼まれたときにまとめて                | `.specs/` が「生きている作業」を意味する状態 |
 
-加えて、読み取り専用の reviewer が3つ（TypeScript、Python、Dart/Flutter）と、どれにも当てはまらないスタック向けのテンプレートがあります。
+加えて、読み取り専用の reviewer が3つ（TypeScript、Python、Dart/Flutter）と、どれにも当てはまらないスタック向けのテンプレートがあります。各 reviewer の Bash ポリシー許可リストは証拠収集コマンド（diff/log、時計、インストール済みバージョン確認、プロジェクトのターン終了バリデータ）に厳格に限定されており、`.steering/tech.md` の `- Validators:` 行と reviewer の許可リストとの間の静かな乖離を防ぐ専用ガードを備えています。
 
 ## 配置
 
