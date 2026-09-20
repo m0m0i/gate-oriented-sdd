@@ -1,5 +1,5 @@
 # Spec: The reviewer's allow-list and the Validators line
-- Slug: 131-reviewer-allow-list-drifts-from-the-validators-line   Issue: 131   Type: bug   Status: draft
+- Slug: 131-reviewer-allow-list-drifts-from-the-validators-line   Issue: 131   Type: bug   Status: approved
 - Author: m0m0i, Antigravity   Date: 2026-09-20
 
 ## 1. Requirements (WHAT / WHY)
