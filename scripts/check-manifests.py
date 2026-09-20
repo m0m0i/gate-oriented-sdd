@@ -13,7 +13,7 @@ import pathlib
 import re
 import sys
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else pathlib.Path(__file__).resolve().parent.parent
 PLUGIN = ROOT  # the repo root IS the plugin: see AGENTS.md
 errors: list[str] = []
 

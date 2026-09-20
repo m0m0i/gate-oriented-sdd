@@ -111,3 +111,16 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
                                      and the inception documents this repo wrote about itself:
                                      NORTH_STAR, PRD, EPICS, BACKLOG, CONTRACT, DESIGN, decisions/
 ```
+
+### Distribution artifact (`gate-sdd.zip`) vs direct clone
+
+The repository root contains both the runtime plugin payload and this harness's internal development tooling (`.specs/`, `.steering/`, `.work_logs/`, `scripts/`, `evals/`, `docs/`).
+
+- **Direct `git clone` or local path install** (`agy plugin install ./gate-oriented-sdd`): Clones or unpacks the whole repository. The agent runtime safely ignores unrecognized directories via progressive disclosure (only loading `plugin.json`, `skills/`, `agents/`, `hooks/`, `rules/`), but extraneous files remain visible in workspace search or status.
+- **CI Release distribution artifact** (`gate-sdd.zip`): Built on tag release via `.github/workflows/release.yml` and `scripts/package-release.py`. Contains strictly the runtime payload (`plugin.json`, `.claude-plugin/`, `skills/`, `agents/`, `hooks/`, `rules/`, `assets/`, `AGENTS.md`, `README.md`, `README.ja.md`, `LICENSE`), excluding all internal development tooling. Consumers wanting a completely isolated plugin directory can download and unpack `gate-sdd.zip`.
+
+#### Rejected alternatives (Issue #140)
+
+- **Option 1 (`.gitattributes export-ignore`)**: Rejected because marketplace installs and local development workflows clone the repository via git. Export-ignore attributes only affect archive generation and never apply to git clone operations.
+- **Option 2 (`plugins/gate-sdd/` subfolder layout)**: Rejected because it violates the foundational design ("the repo root IS the plugin") and breaks the dual-manifest arrangement, requiring moves of both manifests, `marketplace.json`, guard scripts, and downstream references in one disruptive change.
+
