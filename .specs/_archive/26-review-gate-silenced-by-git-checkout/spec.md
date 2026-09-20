@@ -1,7 +1,7 @@
 # Spec: the review gate is silenced by `git checkout`
 
-- Slug: 26-review-gate-silenced-by-git-checkout   Issue: 26   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-09-20
+- Slug: 26-review-gate-silenced-by-git-checkout   Issue: 26   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-09-20   Archived: 2026-09-20
 
 ## 1. Requirements (WHAT / WHY)
 
