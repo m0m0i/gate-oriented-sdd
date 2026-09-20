@@ -1,5 +1,5 @@
 # Spec: Detect active harness and configure rule pointers and contracts accordingly
-- Slug: 146-init-detect-active-harness-and-configure-pointers   Issue: 146   Type: feature   Status: done
+- Slug: 146-init-detect-active-harness-and-configure-pointers   Issue: 146   Type: feature   Status: archived   Archived: 2026-09-20
 - Author: Hiroyuki   Date: 2026-09-19
 
 ## 1. Requirements (WHAT / WHY)
