@@ -32,7 +32,9 @@ reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 # branch with no spec of its own is already silent whatever the merge style, and by two
 # different routes: the current-branch path returns at the absent spec.md before reaching any
 # of this, while the scan does consult ancestry first and then gets an empty state back from
-# gate_spec_review_state. Case 83. The branch that needs this skip is one that shipped
+# gate_spec_review_state. Case 83 pins the first route; cases 1-7 exercise the second, where
+# HEAD is on 9-feature and the scan reaches a main with no spec of its own. The one that needs
+# this skip is a branch that shipped
 # WITH a spec and was not deleted — which, in a squash-merging repository, is every branch
 # anyone has merged. #182 measured that and corrected the sentence.
 #

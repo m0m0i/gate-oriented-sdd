@@ -248,9 +248,24 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   # with no footprint prints, and reading the two as one silenced the gate on both call sites
   # with no diagnostic anywhere. Review round 1's BLOCKER, case 140. A git that could not
   # answer leaves the skip unfired, which is the same direction as every other guard here.
+  # From the branch's own COMMITS, not from `git diff <fork> <tip>`. A net tree diff omits any
+  # path the branch changed and then changed back, and "absent from the footprint" is read
+  # below as "nothing to review" — so adding a file, shipping it, and then deleting it on the
+  # branch produced an empty footprint and a silenced gate, over a tree that differs from the
+  # base at a reviewed path. Review round 3's HIGH, case 142. The log form keeps the scoping
+  # the design turns on: what landed on the base between this branch's fork and its squash is
+  # in the base's history, not in this range, so it still cannot drag the comparison wider.
   set -f
-  _wfoot=$(git diff --name-only "$_wfork" "$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
+  _wfoot=$(git log --format= --name-only "$_wfork".."$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
   set +f
+
+  # Two reasons this is a separate step rather than a pipe on the line above. A pipeline's
+  # status is its LAST command's, so `git log ... | sort -u` would hand `sort`'s success back
+  # and undo the exit-status read three lines up — case 140 caught exactly that regression.
+  # And `git log --name-only` separates each commit's paths with a BLANK line, which is the
+  # sentinel the intersection below splits its two lists on; left in, the first commit
+  # boundary would be read as the end of the footprint.
+  _wfoot=$(printf '%s\n' "$_wfoot" | awk 'NF && !seen[$0]++')
 
   # Answered, and the answer is that the branch carries no reviewable source of its own. Step 1
   # already established the work is in the base. Distinct from the line above on purpose: "git

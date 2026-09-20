@@ -422,12 +422,14 @@ case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a shipped branch that carried on is not skipped" ok \
   || report "a shipped branch that carried on is not skipped" no "standing=$c1 scan=$c2 names=$c3"
 
-# 135. #182 AC3 — a true merge commit, which this suite has never actually had. Seven cases
-#      merge: 8, 79, 82, 83, 94, 96 and 97, the last three through park_spec_on. Every one of
-#      them merges a base that has NOT moved, so all seven fast-forward and not one produces a
-#      merge commit. That is #182's own shape one style over — a fixture asserting a general
-#      property while exercising a single case of it. This comment's own count was wrong in
-#      each of three review rounds; recount against the file, do not carry it forward.
+# 135. #182 AC3 — a true merge commit, which this suite did not have before this change. Seven
+#      cases merged: 8, 79, 82, 83, 94, 96 and 97, the last three through park_spec_on. Every
+#      one of them merges a base that has NOT moved, so all seven fast-forward and not one
+#      produces a merge commit; case 138 adds an eighth fast-forward. That is #182's own shape
+#      one style over — a fixture asserting a general property while exercising a single case
+#      of it. This comment's own count was wrong in each of three review rounds, the last time
+#      because it was written in the present tense about a file this branch was still adding
+#      to. Recount against the file, and say which file you counted.
 #
 #      NOT red-capable by a single-arm mutation, and that was measured rather than assumed:
 #      under "drop the ancestry arm" this case stays green, because gate_work_reached_base
@@ -569,10 +571,16 @@ case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
 
 # 141. #182 AC4's last clause — a shallow clone must not be QUIETER than a full one.
 #
-#      Round 2 found this argued in prose and pinned nowhere. At depth 1 the branch and the
-#      base are both grafted tips with no common ancestor, so `git merge-base` fails and the
-#      skip returns unfired. The full clone of this same fixture is silent (case 132); this one
-#      blocks. Louder is allowed and quieter is not, which is the whole of the clause.
+#      Round 2 found this argued in prose and pinned nowhere. Measured at depth 1, rather than
+#      reasoned: step 1's `cat-file` succeeds and the anchor DOES resolve — to the grafted tip
+#      — and it is `git merge-base` that refuses, the branch and the base being two grafted
+#      tips with no common ancestor. The full clone of this same fixture is silent (case 132);
+#      this one blocks. Louder is allowed and quieter is not, which is the whole of the clause.
+#
+#      RED-CAPABLE under the named mutation "an unresolvable fork reads as the base" — both
+#      `|| return 1` arms on `_wfork` replaced by `|| _wfork="$_wbase"` — which flips this case
+#      alone. It takes both arms: three guards defend this refusal and no single-line removal
+#      reaches it, which is why round 2's version of this case shipped with no record at all.
 r=$(make_repo sqshallow 1); park_spec "$r" 12-parked 0
 squash_merge "$r" 12-parked
 sc="$TMP/sqshallow-clone"
@@ -588,6 +596,40 @@ else
   note_skip "a shallow clone is louder than a full one, never quieter" \
             "git clone --depth 1 over file:// did not produce a shallow repository here"
 fi
+
+# 142. #182 AC2 — carry-on that REVERTS, which every other carry-on case misses because they
+#      all add. Review round 3's HIGH.
+#
+#      The footprint was a net tree diff, `git diff <fork> <tip>`, so a path the branch changed
+#      and then changed back is simply absent from it. Add a file, squash-merge, then `git rm`
+#      it on the branch: fork and tip agree at that path because neither has it, the footprint
+#      comes back empty, and the empty-footprint return reads that as "nothing to review". The
+#      branch's tree now differs from the base at a shipped path that nobody reviewed — a new
+#      silence over work the base does not hold, which is the one direction `- Owns:` forbids.
+#      Before this change the same branch blocked, so the fix had opened it.
+#
+#      The footprint is now taken from the branch's own commits rather than its net tree, which
+#      keeps the scoping the design needs — what landed on the base between the fork and the
+#      squash is still not in the branch's log — while making the empty case mean what its
+#      comment claims. RED-CAPABLE under the named mutation "net footprint":
+#      `git diff --name-only "$_wfork" "$_wtip"` in place of the `git log` form, which takes
+#      this case red on both call sites and leaves the rest of the suite green.
+r=$(make_repo sqreverted 1)
+( cd "$r" && git checkout -q -b 12-parked main && mkdir -p .specs/12-parked \
+  && printf '# Spec: parked\n- Slug: 12-parked   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' > .specs/12-parked/spec.md \
+  && echo new > src/a.txt \
+  && git add .specs/12-parked src/a.txt && git commit -qm "add src/a.txt" ) >/dev/null 2>&1
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked && git rm -q src/a.txt \
+  && git commit -qm "remove the shipped file — nobody reviewed this" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "carry-on that reverts a shipped path is not skipped" ok \
+  || report "carry-on that reverts a shipped path is not skipped" no "standing=$c1 scan=$c2 names=$c3"
 
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
