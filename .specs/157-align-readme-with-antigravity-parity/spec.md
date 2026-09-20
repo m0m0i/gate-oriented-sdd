@@ -1,5 +1,5 @@
 # Spec: Align README and README.ja.md with Antigravity parity and release packaging
-- Slug: 157-align-readme-with-antigravity-parity   Issue: 157   Type: chore   Status: draft
+- Slug: 157-align-readme-with-antigravity-parity   Issue: 157   Type: chore   Status: approved
 - Author: Antigravity   Date: 2026-09-20
 
 ## 1. Requirements (WHAT / WHY)
@@ -58,7 +58,7 @@ None needed — requirements were unambiguous and follow directly from previous 
   Revert `git checkout main -- README.md README.ja.md`.
 
 ## 3. Tasks (TDD-ordered)
-- [ ] T1: verify baseline guards pass (`scripts/check-readme-claims.py`, `scripts/check-markdown-fences.py`, `scripts/test-gates.sh`)
+- [x] T1: verify baseline guards pass (`scripts/check-readme-claims.py`, `scripts/check-markdown-fences.py`, `scripts/test-gates.sh`)
 - [ ] T2: update `README.md` with Antigravity release archive and clone install options, updated rulebook pointer phrasing, `Rules discovery` fidelity row, and `init` harness detection note
 - [ ] T3: update `README.ja.md` in lockstep with matching Japanese translations
 - [ ] T4: confirm `scripts/check-readme-claims.py`, `scripts/check-markdown-fences.py`, and `scripts/test-gates.sh` pass cleanly
