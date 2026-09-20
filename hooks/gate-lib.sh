@@ -241,16 +241,24 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   _wglobs=$(gate_steering_value .steering/tech.md 'Source globs')
   [ -n "$_wglobs" ] || _wglobs='*'
   _wglobs=$(printf '%s' "$_wglobs" | tr -d "\"'")
+  # Exit status, never emptiness. `- Source globs:` is consumer-authored and nothing validates
+  # it — `check-steering-anchors.sh` says in its own header that it does not judge whether a
+  # value is any good — so a pathspec git rejects (`:(globs)` for `:(glob)`, a typo echoing the
+  # key's own name) makes this exit 128 having printed nothing. Nothing is also what a branch
+  # with no footprint prints, and reading the two as one silenced the gate on both call sites
+  # with no diagnostic anywhere. Review round 1's BLOCKER, case 140. A git that could not
+  # answer leaves the skip unfired, which is the same direction as every other guard here.
   set -f
-  _wfoot=$(git diff --name-only "$_wfork" "$_wtip" -- $_wglobs 2>/dev/null)
+  _wfoot=$(git diff --name-only "$_wfork" "$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
   set +f
 
-  # No reviewable source of its own. Step 1 already established the work is in the base, and
-  # the second diff is not worth paying for — this runs once per branch per turn end.
+  # Answered, and the answer is that the branch carries no reviewable source of its own. Step 1
+  # already established the work is in the base. Distinct from the line above on purpose: "git
+  # could not tell me" and "git told me nothing changed" must not collapse into one return.
   [ -n "$_wfoot" ] || return 0
 
   set -f
-  _wnow=$(git diff --name-only "$_wanchor" "$_wtip" -- $_wglobs 2>/dev/null)
+  _wnow=$(git diff --name-only "$_wanchor" "$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
   set +f
 
   # Both lists go in on STDIN, separated by a blank line, because `awk -v foot="$list"` cannot

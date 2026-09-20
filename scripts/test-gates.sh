@@ -401,8 +401,11 @@ case "$out" in *"exit=0"*) report "a squash-merged branch you are standing on st
 #
 #      RED-CAPABLE under the named mutation "skip on evidence alone" — `return 0` in
 #      gate_work_reached_base immediately after the `git cat-file -e` pair, dropping the
-#      footprint half. Measured, not assumed: that mutation takes this case red on both paths
-#      and FIFTEEN cases red in total, which is every case in the suite that asserts a block.
+#      footprint half. Measured, not assumed, and re-measured after every case added since:
+#      that mutation takes this case red on both paths and SEVENTEEN cases red in total —
+#      every case whose fixture puts a spec on the base. That is NOT the same set as "every
+#      case that asserts a block", which is what this comment claimed for two rounds: many
+#      block-asserting cases stay green under it. Re-measure this number when adding a case.
 #      make_repo commits its spec on main at init, so every fixture satisfies the evidence half
 #      from its first commit, and a skip resting on evidence alone disarms the gate outright.
 #      The blast radius is the argument: step 1 is a filter, never a verdict.
@@ -420,8 +423,9 @@ case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
   || report "a shipped branch that carried on is not skipped" no "standing=$c1 scan=$c2 names=$c3"
 
 # 135. #182 AC3 — a true merge commit, which this suite has never actually had. Cases 8, 82,
-#      94 and 97 all call `git merge -q` on a base that has not moved, so every one of them
-#      fast-forwards and none produces a merge commit. That is #182's own shape one style over:
+#      83, 94, 96 and 97 all merge — the last three through park_spec_on — and every one of
+#      them merges a base that has NOT moved, so all seven fast-forward and none produces a
+#      merge commit. That is #182's own shape one style over:
 #      a fixture asserting a general property while exercising a single case of it.
 #
 #      NOT red-capable by a single-arm mutation, and that was measured rather than assumed:
@@ -441,7 +445,12 @@ case "$out$mc" in *"exit=0"*1*) report "a branch joined by a real merge commit s
 #      the skip looks in first — which is why both locations count and neither alone does.
 #      And that `git mv` is a LATER commit touching the very paths the anchor is resolved from,
 #      so an anchor taken as the last such commit instead of the first would land on it and
-#      compare the branch against a tree it never had.
+#      compare the branch against a tree it never had. RED-CAPABLE under the named mutation
+#      "drop --reverse", which flips this case alone. The commit ORDER below is what makes that
+#      true and is not incidental: review round 1 measured the first cut, where the sweep
+#      landed before the later work, and the mutation was undetectable — the mv commit's tree
+#      still matched the branch at src/main.txt, so both anchors agreed. The later work has to
+#      come first, or this case pins two of its three claims and silently drops the third.
 #
 #      The base also moves on afterwards, at the same file the branch touched. That is what
 #      rules out comparing the branch against the base's tip: it is silent here, and it would
@@ -449,9 +458,9 @@ case "$out$mc" in *"exit=0"*1*) report "a branch joined by a real merge commit s
 r=$(make_repo sqarchived 1); park_spec "$r" 12-parked 0
 squash_merge "$r" 12-parked
 ( cd "$r" && git checkout -q main && mkdir -p .specs/_archive \
+  && echo later >> src/main.txt && git commit -qam "later work on main, same file" \
   && git mv .specs/12-parked .specs/_archive/12-parked \
   && git commit -qm "archive the shipped spec" \
-  && echo later >> src/main.txt && git commit -qam "later work on main, same file" \
   && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1
 out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "a swept spec still clears its branch, and a moving base does not un-clear it" ok ;;
@@ -524,6 +533,31 @@ case "$err" in *"12-parked"*) c2=ok ;; *) c2=no ;; esac
 case "$err" in *awk:*|*"newline in string"*) c3=no ;; *) c3=ok ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a multi-file footprint is not truncated to its first path" ok \
   || report "a multi-file footprint is not truncated to its first path" no "blocks=$c1 names=$c2 clean-stderr=$c3"
+
+# 140. #182 AC4 — a `- Source globs:` value that git REJECTS must not read as shipped.
+#
+#      Review round 1's BLOCKER. `git diff` exiting 128 prints nothing, and nothing is exactly
+#      what a branch with no footprint prints, so emptiness cannot carry both meanings. The
+#      value is consumer-authored and nothing validates it — assets/check-steering-anchors.sh
+#      says in its own header that it does not judge whether a value is any good — so
+#      `:(globs)` for `:(glob)`, a typo that echoes the key's own name, silenced the gate on
+#      both call sites with no diagnostic anywhere. That is the fail-open this whole change
+#      exists to close, reintroduced one git call below the one T3 caught.
+#
+#      The branch here is squash-merged AND carried on, so the only thing that can silence it
+#      is the skip firing wrongly. Exit status, not emptiness, is what tells the two apart.
+r=$(make_repo sqbadglobs 1 "':(globs)**/*.txt'"); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked && echo carried >> src/main.txt \
+  && git commit -qam "work after the merge" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a pathspec git rejects does not read as shipped" ok \
+  || report "a pathspec git rejects does not read as shipped" no "standing=$c1 scan=$c2 names=$c3"
 
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
