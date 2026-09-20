@@ -78,5 +78,5 @@ CAP-4 (Installation into a repository that already has opinions) and CAP-5 (Fixe
 
 - [x] T1: failing test in `scripts/test-gates.sh` asserting `scripts/package-release.py` packages runtime files, preserves symlinks, and strictly excludes internal dev assets — then implement `scripts/package-release.py` to make the test pass
 - [x] T2: add release workflow `.github/workflows/release.yml` with tag and workflow_dispatch triggers, and verify syntax and packaging step
-- [ ] T3: update `docs/fidelity.md` and `docs/layout.md` documenting the release artifact, consumption methods, and rejected alternatives
+- [x] T3: update `docs/fidelity.md` and `docs/layout.md` documenting the release artifact, consumption methods, and rejected alternatives
 - [ ] T4: refactor and verify all 12 repository validators and `scripts/test-gates.sh` pass cleanly
