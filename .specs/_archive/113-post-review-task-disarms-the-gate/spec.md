@@ -1,6 +1,6 @@
 # Spec: A post-review task disarms the review gate
-- Slug: 113-post-review-task-disarms-the-gate   Issue: 113   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-09-10
+- Slug: 113-post-review-task-disarms-the-gate   Issue: 113   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-09-10   Archived: 2026-09-17
 
 ## 1. Requirements (WHAT / WHY)
 - Reproduction: on a spec branch, write a Tasks section whose last task is deliberately sequenced *after* the review — the version bump, as `.steering/tech.md:16-20` prescribes. Tick every task but that one and end a turn. `hooks/review-gate.sh:55` reads one unticked box and exits 0. Repeat for every turn of the review: the gate is silent throughout, and arms only once the bump is ticked, which by then is after the reviewer has already run.

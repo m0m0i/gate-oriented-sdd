@@ -1,6 +1,6 @@
 # Spec: init and the checker disagree on a template's filename
-- Slug: 130-init-and-the-checker-disagree-on-a-filename   Issue: 130   Type: bug   Status: done
-- Author: Claude Opus 5   Date: 2026-09-13
+- Slug: 130-init-and-the-checker-disagree-on-a-filename   Issue: 130   Type: bug   Status: archived
+- Author: Claude Opus 5   Date: 2026-09-13   Archived: 2026-09-17
 
 ## 1. Requirements (WHAT / WHY)
 

@@ -1,6 +1,6 @@
 # Spec: One path for the reviewer contract
-- Slug: 82-one-path-for-the-reviewer-contract   Issue: 82   Type: bug   Status: done
-- Author: m0m0i   Date: 2026-09-12
+- Slug: 82-one-path-for-the-reviewer-contract   Issue: 82   Type: bug   Status: archived
+- Author: m0m0i   Date: 2026-09-12   Archived: 2026-09-17
 
 ## 1. Requirements (WHAT / WHY)
 - Reproduction: install this harness into a project, take the reviewer from the closest reference implementation, and read its first instruction. `agents/python-reviewer.md:10` — and both siblings — says **"Read `agents/_shared/reviewer-contract.md` first."** In an installed project that path does not exist: `agents/` is the *plugin's* directory, and the install has `.claude/agents/` (Claude Code) or `.agents/` (Antigravity).

@@ -1,6 +1,6 @@
 # Spec: Run init at 0.7.0 on a scratch project, and record what it detected, asked, wrote and armed
-- Slug: 126-run-init-on-a-scratch-project   Issue: 126   Type: chore   Status: done
-- Author: m0m0i   Date: 2026-09-12
+- Slug: 126-run-init-on-a-scratch-project   Issue: 126   Type: chore   Status: archived
+- Author: m0m0i   Date: 2026-09-12   Archived: 2026-09-17
 
 ## 1. Requirements (WHAT / WHY)
 - What changes: build a scratch project with a real toolchain, run `init` (plugin **0.7.0**, identical to `skills/`) inside it, and record what was observed at each of the skill's four steps — detection and which candidate validators ran before adoption; the interview's questions and answers; what was written and what was merged rather than overwritten; and what step 4 proved. The record is `observations.md` beside this spec and a `docs/verified.md` section. **The scratch project is discarded.** Nothing in this repository's shipped surface changes.
