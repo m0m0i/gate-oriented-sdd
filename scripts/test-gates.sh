@@ -365,6 +365,60 @@ out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "a deleted branch and an empty spec directory are litter, not work" ok ;;
                         *) report "a deleted branch and an empty spec directory are litter, not work" no "$out" ;; esac
 
+# Squash-merge <branch> into main and publish main as origin/main.
+#
+# Cases 8 and 82 above keep their `git merge -q` fixture; these are the siblings they needed.
+# A suite that covers only the merge style the project does NOT use is the whole of #182 — both
+# of those cases passed for three releases while the skip they assert never fired once here.
+squash_merge() { ( cd "$1" && git checkout -q main && git merge --squash -q "$2" >/dev/null \
+  && git commit -qm "squashed $2 (#1)" \
+  && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1; }
+
+# 132. #182 AC1, the scan — case 82 under this project's own merge style. A squash merge writes
+#      a commit with no parent link to the branch, so the tip is never an ancestor of the base
+#      and `merge-base --is-ancestor` at :111 can never succeed again. The skip therefore needs
+#      evidence that the WORK reached the base, not that the commit did.
+r=$(make_repo sqparkedmerged 1); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a squash-merged parked branch stays silent" ok ;;
+                        *) report "a squash-merged parked branch stays silent" no "$out" ;; esac
+
+# 133. #182 AC1, the current branch — case 8's sibling. Same defect one function up, at :63,
+#      and the commoner case: you merge your own pull request and stay standing on the branch.
+r=$(make_repo sqmergedstand 1); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a squash-merged branch you are standing on stays silent" ok ;;
+                        *) report "a squash-merged branch you are standing on stays silent" no "$out" ;; esac
+
+# 134. #182 AC2 — the fail-open the fix must not open, and the reason the skip cannot rest on
+#      the spec's presence alone. Merge, then carry on committing source to the same branch:
+#      the slug is in the base, but the branch now holds work nobody reviewed. A slug reaching
+#      the base is a fact about the SPEC, not about the branch, and reading the first as the
+#      second is #26's defect returning through the door built to close its side effects.
+#
+#      RED-CAPABLE under the named mutation "skip on evidence alone" — `return 0` in
+#      gate_work_reached_base immediately after the `git cat-file -e` pair, dropping the
+#      footprint half. Measured, not assumed: that mutation takes this case red on both paths
+#      and FIFTEEN cases red in total, which is every case in the suite that asserts a block.
+#      make_repo commits its spec on main at init, so every fixture satisfies the evidence half
+#      from its first commit, and a skip resting on evidence alone disarms the gate outright.
+#      The blast radius is the argument: step 1 is a filter, never a verdict.
+r=$(make_repo sqcarriedon 1); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked && echo carried >> src/main.txt \
+  && git commit -qam "work after the merge" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a shipped branch that carried on is not skipped" ok \
+  || report "a shipped branch that carried on is not skipped" no "standing=$c1 scan=$c2 names=$c3"
+
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
 #     gate cannot compare anything at all, so exiting 0 asserts a comparison it never made.

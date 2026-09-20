@@ -60,12 +60,17 @@ check_current_branch() {
     *) gate_block "No issue, no spec: the branch '$branch' has a spec at $spec but its slug does not start with an issue number. The slug is <issue>-<kebab-title>, and the issue is what recorded that this work was chosen. Create the issue and rename the branch and spec directory to match, or say explicitly that this is acknowledged unplanned work." ;;
   esac
 
-  if [ -n "$base" ] && git merge-base --is-ancestor HEAD "$base" 2>/dev/null; then
-    return 0
-  fi
-
   receipt=".specs/$branch/.review-receipt"
   head=$(git rev-parse HEAD 2>/dev/null || echo '')
+
+  # Two arms, because there are two ways work reaches the base and only one of them leaves a
+  # parent link. Ancestry is kept and asked first: it is exact when it fires, costs one call,
+  # and is the whole of the merge-commit and fast-forward case on the path those projects
+  # already take. The second arm is #182 — see gate_work_reached_base.
+  if [ -n "$base" ] && { git merge-base --is-ancestor HEAD "$base" 2>/dev/null \
+       || gate_work_reached_base "$branch" "$head" "$base"; }; then
+    return 0
+  fi
 
   # Two ways there is nothing to review, indistinguishable in a count of unticked boxes alone
   # — which is why that count used to block a spec still being drafted while telling its
@@ -108,7 +113,8 @@ scan_other_branches() {
   for ref in $(git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null); do
     [ "$ref" = "$branch" ] && continue
     tip=$(git rev-parse --verify -q "$ref^{commit}" 2>/dev/null) || continue
-    if [ -n "$base" ] && git merge-base --is-ancestor "$tip" "$base" 2>/dev/null; then
+    if [ -n "$base" ] && { git merge-base --is-ancestor "$tip" "$base" 2>/dev/null \
+         || gate_work_reached_base "$ref" "$tip" "$base"; }; then
       continue                        # shipped — case 8's reasoning, one branch over
     fi
     state=$(gate_spec_review_state ".specs/$ref" "$tip" "$ref")

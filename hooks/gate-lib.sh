@@ -184,6 +184,77 @@ gate_spec_review_state() {  # <spec dir> <tip sha> [<ref, empty for the working 
   printf 'stale=%s %s' "$_sha" "$(echo "$_changed" | tr '\n' ' ')"
 }
 
+# Has this branch's WORK reached the base — whatever merge style put it there?
+#
+# The skip beside this one asks `git merge-base --is-ancestor`, which answers whether a COMMIT
+# was joined into the base's history. That is a different question, and the two coincide only
+# under a merge commit or a fast-forward. A squash merge writes a new commit carrying the
+# branch's result with no parent link back to it, so the tip is not an ancestor and never will
+# be: the ancestry test is not failing intermittently, it is being asked something that can no
+# longer be true. In a squash-merging repository the skip therefore never fired at all, and
+# every shipped but undeleted spec branch stayed in the scan permanently. #182.
+#
+# Two steps, cheap first, and every unresolvable input leaves the skip unfired:
+#
+#   1. the base's tree carries this slug's spec, under .specs/ or .specs/_archive/
+#   2. the branch holds nothing beyond what shipped
+#
+# Both locations count and neither alone does: `_archive/` is timely only after a sweep that
+# `archive` runs on request, and `.specs/` is what that sweep empties.
+#
+# Step 1 alone is a fail-open, and it is the one this had to avoid — merge, then carry on
+# committing to the same branch, and the slug is in the base while the branch holds work nobody
+# reviewed. A slug reaching the base is a fact about the SPEC, not about the branch, and
+# reading the first as the second is #26's defect returning through the door built to close
+# its side effects. Case 134.
+#
+# Step 2's anchor is the FIRST commit on the base carrying the slug — the squash commit, since
+# a spec is its branch's first commit and reaches the base only when the branch does. First
+# rather than last, so `archive`'s later `git mv` into `_archive/` cannot drag the anchor
+# forward onto work the branch never had. The comparison is scoped to the branch's OWN
+# footprint rather than to all of `- Source globs:`, and that scoping is what makes it survive
+# a base that moves: the anchor carries the branch's content at exactly those paths, while
+# whatever else landed between the branch's fork and its squash is at other paths. Compared
+# against the base's tip instead, the skip would stop firing the moment anyone touched one of
+# those files again — the same permanent block wearing a new mechanism.
+#
+# The intersection is done in awk rather than by handing the footprint back to git as
+# pathspecs. Word-splitting a path list splits a path containing a space into two pathspecs
+# that match nothing, and a pathspec matching nothing makes `git diff` print nothing, which
+# reads here as "shipped". That is a fail-open produced by quoting, which is #1's whole family.
+gate_work_reached_base() {  # <slug> <tip sha> <base sha>
+  _wslug=$1; _wtip=$2; _wbase=$3
+  [ -n "$_wslug" ] && [ -n "$_wtip" ] && [ -n "$_wbase" ] || return 1
+
+  _wlive=".specs/$_wslug/spec.md"
+  _warch=".specs/_archive/$_wslug/spec.md"
+  git cat-file -e "$_wbase:$_wlive" 2>/dev/null \
+    || git cat-file -e "$_wbase:$_warch" 2>/dev/null \
+    || return 1
+
+  _wanchor=$(git rev-list --reverse "$_wbase" -- "$_wlive" "$_warch" 2>/dev/null | head -1)
+  [ -n "$_wanchor" ] || return 1
+
+  _wfork=$(git merge-base "$_wbase" "$_wtip" 2>/dev/null) || return 1
+  [ -n "$_wfork" ] || return 1
+
+  _wglobs=$(gate_steering_value .steering/tech.md 'Source globs')
+  [ -n "$_wglobs" ] || _wglobs='*'
+  _wglobs=$(printf '%s' "$_wglobs" | tr -d "\"'")
+  set -f
+  _wfoot=$(git diff --name-only "$_wfork" "$_wtip" -- $_wglobs 2>/dev/null)
+  _wnow=$(git diff --name-only "$_wanchor" "$_wtip" -- $_wglobs 2>/dev/null)
+  set +f
+
+  # No reviewable source of its own. Step 1 already established the work is in the base.
+  [ -n "$_wfoot" ] || return 0
+
+  [ -z "$(printf '%s\n' "$_wnow" | awk -v foot="$_wfoot" '
+    BEGIN { n = split(foot, a, "\n"); for (i = 1; i <= n; i++) f[a[i]] = 1 }
+    $0 in f { print }
+  ')" ]
+}
+
 # One state, one sentence — for callers naming a branch that is not the one in hand, where
 # the tailored second person of the gate's own messages would be wrong.
 gate_review_state_sentence() {  # <state from gate_spec_review_state>
