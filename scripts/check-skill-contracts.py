@@ -14,10 +14,10 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Twenty-three today. A twenty-fourth needs an argument, in the spec that proposes it, for why review cannot
+Twenty-four today. A twenty-fifth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
-with it; a cap that is not moved with the entry reads as already exceeded, and the next author
+with it, and #26 the twenty-fourth; a cap that is not moved with the entry reads as already exceeded, and the next author
 cannot tell whether the list is at its limit or the sentence is stale.
 """
 
@@ -141,6 +141,18 @@ CONTRACTS = (
         "the check-steering-anchors entry exists: what the deletion removes is a check that "
         "then says nothing, and a check saying nothing is indistinguishable from a check "
         "passing.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "copy `assets/check-unreviewed-work.sh` to the project's `scripts/` directory and add it to the project's CI",
+        "The only layer of #26's fix that cannot be stepped around is the CI one, and this "
+        "sentence is the only route by which an install gets it. Delete it and every new "
+        "project is back to a review gate that one `git checkout` silences, with nothing "
+        "failing here or there to say so. It must NOT join the `- Validators:` line: the "
+        "review gate already asks this question on turn end, and a second, differently "
+        "worded block in the same place buys nothing. Review cannot defend it — the "
+        "deletion reads as trimming an optional CI suggestion, and the damage lands in "
+        "installs that never appear in this repository's diffs.",
     ),
     (
         "skills/init/SKILL.md",

@@ -95,6 +95,16 @@ jobs:
       - name: Review gate behaves
         run: ./scripts/test-gates.sh
 
+      # The review gate is a hook, so it can be switched off, and until #26 it asked only about
+      # the branch HEAD pointed at — `git checkout main` silenced it and left no trace. This is
+      # the same question where neither move is available. PR-only: it reads the event's head
+      # branch and head commit, because actions/checkout leaves a pull request on a detached
+      # merge ref and a checker reading HEAD would be asking about a commit that exists nowhere
+      # else. On a push to main the work has already merged.
+      - name: No pull request carries unreviewed work
+        if: github.event_name == 'pull_request'
+        run: ./assets/check-unreviewed-work.sh "${{ github.event.pull_request.head.ref }}" "${{ github.event.pull_request.head.sha }}"
+
       # A shipped file that changed without a version bump is a fix consumers never
       # receive: `claude plugin update` compares version strings, not commit shas, so it
       # reports success and keeps serving the old content. PR-only, because on a push to
