@@ -77,11 +77,12 @@ gate_total_tasks_text() {
   _gate_tasks_section_text "$1" | grep -c '^ *- \[[ xX]\]'
 }
 
-# The file forms. An unreadable or absent file yields empty text and therefore zero, which is
+# The file forms, kept because a project's own scripts may source this library and ask about a
+# spec on disk; the private section wrapper went with #26, having lost its last caller.
+# An unreadable or absent file yields empty text and therefore zero, which is
 # the reading `review-gate.sh` already depends on and which #8 and its AC7 pinned: zero total
 # means "nothing authored", and telling that apart from "cannot be read" is the CALLER's job,
 # done before it counts anything.
-_gate_tasks_section() { _gate_tasks_section_text "$(cat -- "$1" 2>/dev/null)"; }
 gate_open_tasks()     { gate_open_tasks_text     "$(cat -- "$1" 2>/dev/null)"; }
 gate_total_tasks()    { gate_total_tasks_text    "$(cat -- "$1" 2>/dev/null)"; }
 
@@ -118,6 +119,7 @@ _gate_read() {  # <ref, empty for the working tree> <path>
 #   no-receipt          finished, and no receipt was ever written
 #   receipt-unreadable  finished, and the receipt is there and cannot be read
 #   verdict=<v>         finished, with a receipt that does not say CLEAN
+#   unresolved-sha=<v>  finished and CLEAN, and <v> is absent or not a commit here
 #   stale=<sha> <files> finished and CLEAN, but reviewable source moved since <sha>
 gate_spec_review_state() {  # <spec dir> <tip sha> [<ref, empty for the working tree>]
   _dir=$1; _tip=$2; _ref=${3:-}
@@ -139,6 +141,21 @@ gate_spec_review_state() {  # <spec dir> <tip sha> [<ref, empty for the working 
   _sha=$(printf '%s\n' "$_receipt" | sed -n 's/^reviewed_sha=//p' | head -1)
   [ "$_sha" = "$_tip" ] && return 0
 
+  # A receipt whose sha this repository cannot resolve is worse than a stale one: nothing can
+  # be compared, so returning "nothing changed" asserts a comparison that never happened.
+  # Two shapes reach here, and the first is the sharper — `git diff ..<tip>` resolves an
+  # omitted left side to HEAD, so a receipt recording no commit at all used to read as current
+  # on the branch it was written on, and in CI compared two unrelated commits.
+  #
+  # This is the one new way to block, so its no-false-block argument is the line above: a
+  # receipt written at the tip returns before ever reaching it. What does reach it is an
+  # orphaned sha after a post-review rebase, which SHOULD block — the receipt describes
+  # commits that no longer exist.
+  if [ -z "$_sha" ] || ! git rev-parse --verify -q "$_sha^{commit}" >/dev/null 2>&1; then
+    printf 'unresolved-sha=%s' "${_sha:-missing}"
+    return 0
+  fi
+
   # HEAD moved after the review. That is expected and fine when the trailing commits are the
   # work log and the spec's own Status flip. It is not fine when reviewable source moved,
   # because then the receipt describes code that no longer exists. Source globs come from
@@ -158,7 +175,7 @@ gate_spec_review_state() {  # <spec dir> <tip sha> [<ref, empty for the working 
   [ -n "$_globs" ] || _globs='*'
   _globs=$(printf '%s' "$_globs" | tr -d "\"'")
   set -f
-  _changed=$(git diff "$_sha".."$_tip" -- $_globs 2>/dev/null)
+  _changed=$(git diff --name-only "$_sha".."$_tip" -- $_globs 2>/dev/null)
   set +f
   [ -z "$_changed" ] && return 0
   printf 'stale=%s %s' "$_sha" "$(echo "$_changed" | tr '\n' ' ')"
@@ -172,6 +189,7 @@ gate_review_state_sentence() {  # <state from gate_spec_review_state>
     no-receipt)         printf 'every task is ticked and no reviewer receipt exists' ;;
     receipt-unreadable) printf 'its receipt exists and cannot be read' ;;
     verdict=*)          printf "the recorded review verdict is '%s', not CLEAN" "${1#verdict=}" ;;
+    unresolved-sha=*)   printf "its receipt records reviewed_sha '%s', which cannot be resolved here" "${1#unresolved-sha=}" ;;
     stale=*)            _r=${1#stale=}; printf 'source changed since the review at %s: %s' "${_r%% *}" "${_r#* }" ;;
     *)                  printf 'it holds finished work with no usable review' ;;
   esac

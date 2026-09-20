@@ -28,9 +28,17 @@ reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 
 # Already-merged work has nothing left to review. Without this, every historical
 # feature branch trips the gate the moment the harness is installed.
+#
+# The candidate list is longer since #26 widened the scan, because an unresolvable base costs
+# far more than it used to. It used to mean one false block, while you stood on your own
+# merged branch; now it means the merged check never fires for ANY branch, so every shipped
+# but undeleted spec branch blocks every turn from everywhere. `master` is the common case
+# that was missing, and a repository with no remote at all has no origin/* to fall back on.
 base=$(git rev-parse --verify -q origin/HEAD 2>/dev/null \
      || git rev-parse --verify -q origin/main 2>/dev/null \
-     || git rev-parse --verify -q main 2>/dev/null) || base=""
+     || git rev-parse --verify -q origin/master 2>/dev/null \
+     || git rev-parse --verify -q main 2>/dev/null \
+     || git rev-parse --verify -q master 2>/dev/null) || base=""
 
 # The branch you are standing on, with the messages written in the second person because you
 # are the person who can act on them. Every exit from here is a `return`, never a pass: the
@@ -39,13 +47,6 @@ base=$(git rev-parse --verify -q origin/HEAD 2>/dev/null \
 check_current_branch() {
   spec=".specs/$branch/spec.md"
   [ -f "$spec" ] || return 0          # not a spec branch — nothing of its own to gate
-
-  # A spec that exists but cannot be read is NOT the same as a spec with nothing in it, and
-  # the difference is invisible downstream: both task counters come back 0 for a file they
-  # cannot open, and a zero total is read as "nothing authored, stay silent". Without this
-  # line the gate exits 0 in precisely the case where it could not do its job. Fail closed —
-  # an unreadable spec is a broken working tree, not an empty one.
-  [ -r "$spec" ] || gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass."
 
   # No issue, no spec. The slug is <issue-number>-<kebab-title>, so a spec directory
   # without a numeric prefix is work that never had an issue — unplanned work that
@@ -78,12 +79,20 @@ check_current_branch() {
   case "$state" in
     '')
       return 0 ;;
+    unreadable)
+      # A spec that exists but cannot be read is NOT the same as a spec with nothing in it,
+      # and the difference is invisible downstream: both task counters come back 0 for a file
+      # they cannot open, and a zero total is read as "nothing authored, stay silent". Fail
+      # closed — an unreadable spec is a broken working tree, not an empty one.
+      gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass." ;;
     no-receipt)
       gate_block "Review gate: every task in $spec is ticked, but no reviewer receipt exists. Run $reviewer on the branch diff, then write its Receipt block to $receipt. If $reviewer is already running, wait for it and write the receipt from its result — do not start a second one." ;;
     receipt-unreadable)
       gate_block "Review gate: $receipt exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass." ;;
     verdict=*)
       gate_block "Review gate: the recorded review verdict is '${state#verdict=}', not CLEAN. Address every BLOCKER and HIGH finding, re-run $reviewer, and update $receipt." ;;
+    unresolved-sha=*)
+      gate_block "Review gate: $receipt records reviewed_sha '${state#unresolved-sha=}', which cannot be resolved in this repository, so the gate cannot tell whether the review covers the code that is here now. Re-run $reviewer and rewrite $receipt rather than treating an uncheckable receipt as a pass." ;;
     stale=*)
       rest=${state#stale=}
       gate_block "Review gate: source changed since the recorded review (${rest%% *}): ${rest#* }. Re-run $reviewer and update $receipt before opening the PR." ;;
@@ -110,10 +119,14 @@ scan_other_branches() {
 
   [ -n "$found" ] || return 0
 
-  gate_block "Review gate: this repository holds finished work that nobody has reviewed, on a branch you are not standing on:
+  # "a branch you are not standing on" would be false under a detached HEAD, which is a path
+  # this deliberately blocks (case 77): `git rev-parse --abbrev-ref HEAD` yields the literal
+  # `HEAD`, so the branch you are detached at is reported like any other.
+  gate_block "Review gate: this repository holds finished work that nobody has reviewed, on a branch other than the one this turn is on:
 $found
 
-The gate asks what this repository contains, not which branch HEAD points at, so moving HEAD does not clear this and neither does a detached checkout. For each branch above: run $reviewer against it and write the receipt, merge it, or delete the branch if the work is abandoned."
+The gate asks what this repository contains, not which branch HEAD points at, so moving HEAD does not clear this and neither does a detached checkout. For each branch above: run $reviewer against it and write the receipt, merge it, or delete the branch if the work is abandoned.${base:+}${base:-
+(This repository has no resolvable default branch — origin/HEAD, origin/main, origin/master, main and master are all missing — so the gate cannot tell which of these branches have already shipped, and is naming them all.)}"
 }
 
 check_current_branch

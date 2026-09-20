@@ -67,6 +67,19 @@ if [ -z "$sha" ]; then
   exit 1
 fi
 
+# The commit came from the event, so it is an assertion about a repository this process has
+# not checked. Verify it before asking anything about it: `git cat-file -e <sha>:<path>` fails
+# both for "that commit has no such file" and for "that commit is not in this clone", and
+# reading the second as the first passes every pull request while printing a success
+# sentence. The live trigger is the default `actions/checkout` — on a pull_request event with
+# fetch-depth 1, only the merge commit is fetched and the head commit is absent.
+if ! git rev-parse --verify -q "$sha^{commit}" >/dev/null 2>&1; then
+  echo "check-unreviewed-work: cannot resolve commit '$sha' in this clone, so nothing about it was checked." >&2
+  echo "  A shallow checkout hides it: check out with fetch-depth: 0. A force-push after the" >&2
+  echo "  run started does too, in which case re-run against the new head." >&2
+  exit 1
+fi
+
 spec=".specs/$branch/spec.md"
 short=$(git rev-parse --short "$sha" 2>/dev/null || printf '%s' "$sha")
 
