@@ -419,6 +419,83 @@ case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a shipped branch that carried on is not skipped" ok \
   || report "a shipped branch that carried on is not skipped" no "standing=$c1 scan=$c2 names=$c3"
 
+# 135. #182 AC3 — a true merge commit, which this suite has never actually had. Cases 8, 82,
+#      94 and 97 all call `git merge -q` on a base that has not moved, so every one of them
+#      fast-forwards and none produces a merge commit. That is #182's own shape one style over:
+#      a fixture asserting a general property while exercising a single case of it.
+#
+#      NOT red-capable by a single-arm mutation, and that was measured rather than assumed:
+#      under "drop the ancestry arm" this case stays green, because gate_work_reached_base
+#      answers the merge-commit shape too. Two arms cover it, so no one mutation removes the
+#      refusal. Case 138 is where ancestry is pinned on its own.
+r=$(make_repo noffmerged 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git merge -q --no-ff -m "merge commit" 12-parked \
+  && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1
+out=$(run_gate "$r"); mc=$( cd "$r" && git rev-list --count --merges HEAD )
+case "$out$mc" in *"exit=0"*1*) report "a branch joined by a real merge commit stays silent" ok ;;
+                             *) report "a branch joined by a real merge commit stays silent" no "$out merges=$mc" ;; esac
+
+# 136. #182 AC1 and AC3 after the sweep, and the case that pins two decisions at once.
+#
+#      `archive` git-mv's a shipped spec into .specs/_archive/, so the slug leaves the location
+#      the skip looks in first — which is why both locations count and neither alone does.
+#      And that `git mv` is a LATER commit touching the very paths the anchor is resolved from,
+#      so an anchor taken as the last such commit instead of the first would land on it and
+#      compare the branch against a tree it never had.
+#
+#      The base also moves on afterwards, at the same file the branch touched. That is what
+#      rules out comparing the branch against the base's tip: it is silent here, and it would
+#      go back to blocking the moment anyone touched src/main.txt again.
+r=$(make_repo sqarchived 1); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q main && mkdir -p .specs/_archive \
+  && git mv .specs/12-parked .specs/_archive/12-parked \
+  && git commit -qm "archive the shipped spec" \
+  && echo later >> src/main.txt && git commit -qam "later work on main, same file" \
+  && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a swept spec still clears its branch, and a moving base does not un-clear it" ok ;;
+                        *) report "a swept spec still clears its branch, and a moving base does not un-clear it" no "$out" ;; esac
+
+# 137. #182 AC4 — evidence absent is not evidence of shipping. The branch's source reached the
+#      base, byte for byte, but its spec never did: the slug is in neither location, so the
+#      skip must not fire and the branch is gated exactly as it was before this change.
+#      Fail closed, and degrade to the status quo rather than to silence.
+#
+#      RED-CAPABLE under the named mutation "no evidence reads as shipped", which takes BOTH
+#      guards: `|| :` in place of the `git cat-file -e` pair's `|| return 1`, and
+#      `|| _wanchor="$_wbase"` in place of the anchor's. Measured: either alone leaves this
+#      case green, because the other still refuses — the anchor cannot resolve for a slug that
+#      is nowhere on the base. Removing both flips exactly this case and nothing else in the
+#      suite, since it is the only fixture whose source matches the base with its spec missing.
+r=$(make_repo sqspecmissing 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git checkout 12-parked -- src/main.txt \
+  && git commit -qm "source only — the spec never reached the base" \
+  && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"12-parked"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "source in the base without its spec is not a skip" ok \
+  || report "source in the base without its spec is not a skip" no "exit=$c1 names=$c2"
+
+# 138. #182 — what ancestry, and only ancestry, still answers. `archive` moves a shipped spec
+#      to .specs/_archive/, but nothing stops a project deleting one outright, and then the
+#      slug is in neither location while the branch is plainly merged. The evidence arm refuses
+#      (correctly — it has nothing to read) and ancestry carries it.
+#
+#      This is the case that justifies keeping both arms rather than replacing one with the
+#      other, which #182 left open. RED-CAPABLE under the named mutation "drop the ancestry
+#      arm" — `false ||` in place of the `git merge-base --is-ancestor` call at either site —
+#      which flips this case alone; case 135 stays green under the same mutation, which is how
+#      the two arms were shown to overlap everywhere except here.
+r=$(make_repo specdeleted 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git merge -q 12-parked \
+  && git rm -rq .specs/12-parked && git commit -qm "spec deleted outright, not archived" \
+  && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a merged branch whose spec was deleted is carried by ancestry" ok ;;
+                        *) report "a merged branch whose spec was deleted is carried by ancestry" no "$out" ;; esac
+
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
 #     gate cannot compare anything at all, so exiting 0 asserts a comparison it never made.
