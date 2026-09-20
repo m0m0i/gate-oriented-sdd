@@ -119,14 +119,21 @@ scan_other_branches() {
 
   [ -n "$found" ] || return 0
 
+  # Held in a variable rather than expanded inline. `${base:-TEXT}` substitutes the VALUE of
+  # base whenever base is set and non-null — and line 41 always sets it — so the inline form
+  # appended the base sha to every block instead of a note to none of them.
+  nobase=''
+  [ -n "$base" ] || nobase='
+
+(This repository has no resolvable default branch — origin/HEAD, origin/main, origin/master, main and master are all missing — so the gate cannot tell which of these branches have already shipped, and is naming them all.)'
+
   # "a branch you are not standing on" would be false under a detached HEAD, which is a path
   # this deliberately blocks (case 77): `git rev-parse --abbrev-ref HEAD` yields the literal
   # `HEAD`, so the branch you are detached at is reported like any other.
   gate_block "Review gate: this repository holds finished work that nobody has reviewed, on a branch other than the one this turn is on:
 $found
 
-The gate asks what this repository contains, not which branch HEAD points at, so moving HEAD does not clear this and neither does a detached checkout. For each branch above: run $reviewer against it and write the receipt, merge it, or delete the branch if the work is abandoned.${base:+}${base:-
-(This repository has no resolvable default branch — origin/HEAD, origin/main, origin/master, main and master are all missing — so the gate cannot tell which of these branches have already shipped, and is naming them all.)}"
+The gate asks what this repository contains, not which branch HEAD points at, so moving HEAD does not clear this and neither does a detached checkout. For each branch above: run $reviewer against it and write the receipt, merge it, or delete the branch if the work is abandoned.$nobase"
 }
 
 check_current_branch

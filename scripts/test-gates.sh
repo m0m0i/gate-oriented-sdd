@@ -277,16 +277,28 @@ park_spec() {
     && git checkout -q "$_cur" ) >/dev/null 2>&1
 }
 
+# Park a finished spec branch on a named base and merge it back. Three cases build their own
+# repository rather than using make_repo, which hardcodes `-b main` and would resolve the base
+# through the wrong fallback.
+park_spec_on() { ( cd "$1" && git checkout -q -b "$2" "$3" && mkdir -p ".specs/$2" \
+  && printf '# Spec: parked\n- Slug: %s   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' "$2" > ".specs/$2/spec.md" \
+  && echo parked >> src/main.txt && git add ".specs/$2" src/main.txt && git commit -qm parked \
+  && git checkout -q "$3" && git merge -q "$2" ) >/dev/null 2>&1; }
+
 # 76. THE BUG. Finished, unreviewed work on a parked branch blocks from a branch with no spec
 #     — on both channels, naming the branch, and saying that moving HEAD does not clear it.
 r=$(make_repo parked 1); park_spec "$r" 12-parked 0
 ( cd "$r" && git checkout -q main ) >/dev/null 2>&1
-out=$(run_gate "$r"); err=$(cat "$TMP/err")
+out=$(run_gate "$r"); err=$(cat "$TMP/err"); basesha=$( cd "$r" && git rev-parse main )
 case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
 case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
 case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
-[ "$c1$c2$c3" = "okokok" ] && report "parked unreviewed work blocks from another branch" ok \
-  || report "parked unreviewed work blocks from another branch" no "exit=$c1 json=$c2 names-branch=$c3"
+# The message must carry no stray payload. `${base:-...}` substitutes the VALUE of base when
+# base is set and non-null, which is always — so an attempt to append a note "only when the
+# base is missing" appended the base sha instead, to every block, with no separator.
+case "$err" in *"$basesha"*) c4=no ;; *) c4=ok ;; esac
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "parked unreviewed work blocks from another branch" ok \
+  || report "parked unreviewed work blocks from another branch" no "exit=$c1 json=$c2 names-branch=$c3 no-stray-sha=$c4"
 
 # 77. A detached HEAD is not an exit either. `git checkout <sha>` leaves no branch name for
 #     the branch-scoped question to be asked about, which is the same hole one step quieter.
@@ -372,14 +384,12 @@ out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out$err" in *"exit=2"*"cannot be resolved"*) report "a receipt naming an unreachable commit blocks" ok ;;
                  *) report "a receipt naming an unreachable commit blocks" no "$out $err" ;; esac
 
-# 91. And a receipt that IS current must not reach that check — it short-circuits on the sha
-#     matching the tip, so the new block cannot fire on the ordinary case. Case 5 covers the
-#     verdict; this covers the ordering, which is the whole of its no-false-block argument.
-r=$(make_repo shafresh 0)
-printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(cd "$r" && git rev-parse HEAD)" > "$r/.specs/9-feature/.review-receipt"
-out=$(run_gate "$r")
-case "$out" in *"exit=0"*) report "a current receipt never reaches the sha-resolution check" ok ;;
-                        *) report "a current receipt never reaches the sha-resolution check" no "$out" ;; esac
+# There is deliberately no case here for "a current receipt must not reach the sha check".
+# It was written and removed: its fixture was byte-identical to case 5, and moving the
+# resolution check above the short-circuit leaves it green, because a current sha resolves.
+# The ordering is only observable when the sha equals the tip AND does not resolve, which
+# cannot happen. Case 5 covers the behaviour; a second case that cannot fail would have
+# asserted the ordering was pinned when it was not.
 
 # 92. The scan must report a parked branch's non-CLEAN verdict, not merely its existence.
 r=$(make_repo parkedblocked 1); park_spec "$r" 12-parked 0 BLOCKED
@@ -419,14 +429,57 @@ cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/review-gate.sh" "$r/hooks/"
 printf -- '- Reviewer: test-reviewer\n- Source globs: %s\n' "'*.txt'" > "$r/.steering/tech.md"
 ( cd "$r" && git init -q -b master && git config user.email t@t && git config user.name t \
   && echo one > src/main.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
-park_spec_on() { ( cd "$1" && git checkout -q -b "$2" "$3" && mkdir -p ".specs/$2" \
-  && printf '# Spec: parked\n- Slug: %s   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' "$2" > ".specs/$2/spec.md" \
-  && echo parked >> src/main.txt && git add ".specs/$2" src/main.txt && git commit -qm parked \
-  && git checkout -q "$3" && git merge -q "$2" ) >/dev/null 2>&1; }
 park_spec_on "$r" 12-shipped master
 out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "a merged branch on a master-default repo with no origin stays silent" ok ;;
                         *) report "a merged branch on a master-default repo with no origin stays silent" no "$out" ;; esac
+
+# 96. A repository whose default branch resolves to nothing must SAY so when it blocks.
+#
+# `base` falls back through five refs and can still come back empty — a `trunk` default with
+# no remote. The merged check then never fires for any branch, so every finished spec branch
+# is named, including ones that shipped long ago. Blocking is the fail-closed direction and
+# is kept; what must not happen is naming them with no explanation of why an obviously
+# merged branch is in the list.
+r="$TMP/nobase"; mkdir -p "$r/hooks" "$r/.steering" "$r/src"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/review-gate.sh" "$r/hooks/"
+printf -- '- Reviewer: test-reviewer\n- Source globs: %s\n' "'*.txt'" > "$r/.steering/tech.md"
+( cd "$r" && git init -q -b trunk && git config user.email t@t && git config user.name t \
+  && echo one > src/main.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+park_spec_on "$r" 12-parked trunk
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"no resolvable default branch"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "an unresolvable default branch is named in the block, not hidden" ok \
+  || report "an unresolvable default branch is named in the block, not hidden" no "exit=$c1 says-why=$c2"
+
+# 97. The other half of the widened fallback chain: a remote-only `origin/master`, with no
+#     local branch of that name. Without it, case 94 pins `master` and leaves `origin/master`
+#     free to be deleted from the chain.
+r="$TMP/originmaster"; mkdir -p "$r/hooks" "$r/.steering" "$r/src"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/review-gate.sh" "$r/hooks/"
+printf -- '- Reviewer: test-reviewer\n- Source globs: %s\n' "'*.txt'" > "$r/.steering/tech.md"
+( cd "$r" && git init -q -b trunk && git config user.email t@t && git config user.name t \
+  && echo one > src/main.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+park_spec_on "$r" 12-shipped trunk
+( cd "$r" && git update-ref refs/remotes/origin/master refs/heads/trunk && git branch -qD trunk 2>/dev/null
+  git checkout -q --detach refs/remotes/origin/master ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a branch merged into a remote-only origin/master stays silent" ok ;;
+                        *) report "a branch merged into a remote-only origin/master stays silent" no "$out" ;; esac
+
+# 98. The scan names an unresolvable reviewed_sha as such, rather than falling through to the
+#     generic sentence. Cases 92 and 93 do this for the other two states.
+r=$(make_repo parkedghost 1); park_spec "$r" 12-parked 0 CLEAN
+( cd "$r" && git checkout -q 12-parked \
+  && printf 'reviewed_sha=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\nverdict=CLEAN\n' > .specs/12-parked/.review-receipt \
+  && git commit -qam "ghost receipt" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"12-parked"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"cannot be resolved"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "the scan names an unresolvable reviewed_sha" ok \
+  || report "the scan names an unresolvable reviewed_sha" no "exit=$c1 names-branch=$c2 says-why=$c3"
 
 # --- assets/check-unreviewed-work.sh, the layer with no working tree (#26) --------
 #

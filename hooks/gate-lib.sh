@@ -98,7 +98,10 @@ _gate_read() {  # <ref, empty for the working tree> <path>
     cat -- "$2"
   else
     git cat-file -e "$1:$2" 2>/dev/null || return 1
-    git show "$1:$2" 2>/dev/null
+    # The existence test passing and the read failing is object-store corruption, which the
+    # working-tree branch above distinguishes and this one used to flatten into "empty file"
+    # — and an empty spec counts zero tasks, which is silence.
+    git show "$1:$2" 2>/dev/null || return 2
   fi
 }
 

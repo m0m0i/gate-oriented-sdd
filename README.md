@@ -24,7 +24,7 @@ Sort every rule by **how much it can be talked out of**, and put it at the layer
 | :-- | :-- | :-- |
 | **Process** | skills — `spec`, `clarify`, `implement`, `worklog`, `archive` | Yes. It is guidance, and that is appropriate. |
 | **Judgment** | a read-only reviewer subagent with a vendored, hash-pinned rulebook | It can be skipped — so a receipt records whether it ran. |
-| **Determinism** | `Stop` hook: format, lint, types, and receipt freshness | **No.** |
+| **Determinism** | `Stop` hook: format, lint, types, and receipt freshness — and, for the last of those, a pull-request check the hook's own weaknesses do not reach | **No.** |
 
 The bottom row is the only one that is a guarantee, and it takes two places to be one. The `Stop` hook is the fast local half; a check on the pull request is the half with no working tree to step out of. Until #26 there was only the hook, and it asked whether you were *standing on* a finished spec branch rather than whether the repository *held* one — so `git checkout main` turned the only enforced rule off and left no trace. The design work is deciding what earns a place in this row — and keeping that list short enough that the gate stays welcome.
 
