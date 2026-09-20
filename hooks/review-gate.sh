@@ -29,8 +29,10 @@ reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 # Already-merged work has nothing left to review. What that buys is narrower than this comment
 # used to claim, and the difference matters to anyone changing the skip: it said every
 # historical feature branch would trip the gate on install, and that case cannot occur. A
-# branch with no spec of its own returns empty from gate_spec_review_state before ancestry is
-# ever consulted, whatever the merge style. The branch that needs this skip is one that shipped
+# branch with no spec of its own is already silent whatever the merge style, and by two
+# different routes: the current-branch path returns at the absent spec.md before reaching any
+# of this, while the scan does consult ancestry first and then gets an empty state back from
+# gate_spec_review_state. Case 83. The branch that needs this skip is one that shipped
 # WITH a spec and was not deleted — which, in a squash-merging repository, is every branch
 # anyone has merged. #182 measured that and corrected the sentence.
 #

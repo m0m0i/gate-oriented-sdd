@@ -422,11 +422,12 @@ case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a shipped branch that carried on is not skipped" ok \
   || report "a shipped branch that carried on is not skipped" no "standing=$c1 scan=$c2 names=$c3"
 
-# 135. #182 AC3 — a true merge commit, which this suite has never actually had. Cases 8, 82,
-#      83, 94, 96 and 97 all merge — the last three through park_spec_on — and every one of
-#      them merges a base that has NOT moved, so all seven fast-forward and none produces a
-#      merge commit. That is #182's own shape one style over:
-#      a fixture asserting a general property while exercising a single case of it.
+# 135. #182 AC3 — a true merge commit, which this suite has never actually had. Seven cases
+#      merge: 8, 79, 82, 83, 94, 96 and 97, the last three through park_spec_on. Every one of
+#      them merges a base that has NOT moved, so all seven fast-forward and not one produces a
+#      merge commit. That is #182's own shape one style over — a fixture asserting a general
+#      property while exercising a single case of it. This comment's own count was wrong in
+#      each of three review rounds; recount against the file, do not carry it forward.
 #
 #      NOT red-capable by a single-arm mutation, and that was measured rather than assumed:
 #      under "drop the ancestry arm" this case stays green, because gate_work_reached_base
@@ -546,6 +547,13 @@ case "$err" in *awk:*|*"newline in string"*) c3=no ;; *) c3=ok ;; esac
 #
 #      The branch here is squash-merged AND carried on, so the only thing that can silence it
 #      is the skip firing wrongly. Exit status, not emptiness, is what tells the two apart.
+#
+#      Pins the FORK diff's guard only, and that is measured: the rejected pathspec makes the
+#      first `git diff` fail, so the anchor diff is never reached and dropping ITS guard leaves
+#      the suite green. The two are symmetric and the second is unpinned — a fixture would need
+#      the anchor commit's tree unreadable while the fork's is not, which no cheap fixture
+#      produces. Recorded rather than implied, because an over-claimed mutation record is the
+#      thing two earlier rounds of this same spec had to correct.
 r=$(make_repo sqbadglobs 1 "':(globs)**/*.txt'"); park_spec "$r" 12-parked 0
 squash_merge "$r" 12-parked
 ( cd "$r" && git checkout -q 12-parked && echo carried >> src/main.txt \
@@ -558,6 +566,28 @@ case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
 case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a pathspec git rejects does not read as shipped" ok \
   || report "a pathspec git rejects does not read as shipped" no "standing=$c1 scan=$c2 names=$c3"
+
+# 141. #182 AC4's last clause — a shallow clone must not be QUIETER than a full one.
+#
+#      Round 2 found this argued in prose and pinned nowhere. At depth 1 the branch and the
+#      base are both grafted tips with no common ancestor, so `git merge-base` fails and the
+#      skip returns unfired. The full clone of this same fixture is silent (case 132); this one
+#      blocks. Louder is allowed and quieter is not, which is the whole of the clause.
+r=$(make_repo sqshallow 1); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+sc="$TMP/sqshallow-clone"
+if git clone -q --depth 1 --no-single-branch "file://$r" "$sc" 2>/dev/null \
+   && [ "$( cd "$sc" && git rev-parse --is-shallow-repository 2>/dev/null )" = true ]; then
+  ( cd "$sc" && git checkout -q -b 12-parked origin/12-parked && git checkout -q main ) >/dev/null 2>&1
+  out=$(run_gate "$sc"); err=$(cat "$TMP/err")
+  case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+  case "$err" in *"12-parked"*) c2=ok ;; *) c2=no ;; esac
+  [ "$c1$c2" = "okok" ] && report "a shallow clone is louder than a full one, never quieter" ok \
+    || report "a shallow clone is louder than a full one, never quieter" no "blocks=$c1 names=$c2"
+else
+  note_skip "a shallow clone is louder than a full one, never quieter" \
+            "git clone --depth 1 over file:// did not produce a shallow repository here"
+fi
 
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the

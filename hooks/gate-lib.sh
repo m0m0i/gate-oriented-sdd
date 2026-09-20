@@ -267,11 +267,14 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   # carried on in any other reads as shipped — a fail-open produced by quoting, which is #1's
   # family, and the warning lands on the stderr a Stop hook hands to the user. A blank line is
   # a safe separator because `git diff --name-only` never emits an empty path. Case 139.
+  # `|| return 1` for the same reason the two git calls above have it, and it was missing here
+  # for two rounds: an awk that exits non-zero prints nothing, and nothing is what an empty
+  # intersection prints. `$(a | b)` carries b's status in POSIX sh, so this is one token.
   _wleft=$(printf '%s\n\n%s\n' "$_wfoot" "$_wnow" | awk '
     !split_seen && NF == 0 { split_seen = 1; next }
     !split_seen { foot[$0] = 1; next }
     NF > 0 && $0 in foot { print }
-  ')
+  ') || return 1
   [ -z "$_wleft" ]
 }
 
