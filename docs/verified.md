@@ -167,7 +167,7 @@ Full working record: `.specs/58-regroom-the-backlog/observations.md`. Spec: #58.
 | Question | Observed |
 | :-- | :-- |
 | What does "start from the walking skeleton — it is always first" do when there is none? | **binds nothing.** `EPICS.md` records that no epic is one and names EPIC-1 to lead; the grooming led with the test-queue runs instead, by decision. The skill has no instruction for this case. |
-| Do "Next up" and "Not ready" exist? | **not in the template.** The rules and red flags name both; the template defines neither, so a consumer following it cannot trip those red flags. |
+| Do "Next up" and "Not ready" exist? | **not in the template.** The rules and red flags name both; the template defines neither, so a consumer following it cannot trip those red flags. _Discharged by #174 on 2026-09-21: the rule now names `Why here` and the red flag `## Unshaped`, both of which the template defines. The observation stands as what the 0.4.2 run saw — #74 remains open on its other two bullets._ |
 | Does the `Blocks` column's `#3, #7` form survive a repository whose items are issues? | **no.** It reads as issue numbers. Written as `row n`. |
 | Can the backlog carry work that is not an issue yet? | **yes, two rows** — the `sprint` and `init` runs, and the `epics` re-run. The other twelve rows are issues or pairs of issues; the inversion the file's preamble names is reduced, not undone. |
 | Did the epics reach the backlog? | **yes.** Every row cites an `EPIC-n` or `—`; seven issues postdate `epics` and two of them sit in rows under an epic that does not list them, recorded for the re-run. |
