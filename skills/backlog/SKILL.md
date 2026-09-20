@@ -19,6 +19,8 @@ It deliberately creates **no issues**. That is `sprint`'s job, and the separatio
 
 **Two doors stay open that no skill can close**: an issue closed by a merge, and an issue filed outside a grooming. Nothing runs at either moment, so nothing can be instructed to write them down. Compare the list against the tracker instead — no open issue missing from it, and no `Item` cell citing work that has finished — and start a grooming from what that comparison turns up rather than from a re-read of the whole document. Whether a command does the comparing or a person does it by hand, it is the half of a grooming nobody can do from memory.
 
+When that comparison finds a row whose work has finished **between** groomings, the correction is bounded and does not wait for the next one: append the row to `## Discharged since last grooming`, drop it from the table, and change nothing else. No order is revisited and no reasoning rewritten. Treating a discharge as a re-groom is why it gets deferred to a grooming that is months away, and why the trace ends up wherever the person writing it could find room.
+
 Ordering is the entire value. A list of everything that must be built is not a backlog; it is an inventory.
 
 ## Where it goes
@@ -34,7 +36,7 @@ Ordering is the entire value. A list of everything that must be built is not a b
 3. **Force a total order.** No ties. When two items feel equal, that is the comparison worth making, not the one to avoid — ask which you would drop if only one could ship, and order by the answer.
 4. **Flag the ones that block others.** A slip on a blocking item moves everything after it, so mark it on its row. It is an attribute of the item, not a second ranking.
 5. **Note roughly how many issues each item is worth.** One backlog item usually becomes several issues — a change, the tests that were missing around it, the migration it forces. An item nobody can size at all is a signal: it needs a spike, or it needs to go back to `epics`.
-6. Record the order and the reasoning, so the next grooming starts from the argument rather than from scratch. Then hand to `sprint`, which decomposes the top items into issues.
+6. **Record what left before recording the order.** Every row discharged since the last grooming goes under `## Discharged since last grooming`, one line and all four parts of it, and that section is pruned to the two most recent groomings' worth on the way past. Then record the order and the reasoning, so the next grooming starts from the argument rather than from scratch, and hand to `sprint`, which decomposes the top items into issues.
 
 ## Template
 
@@ -50,6 +52,18 @@ Ordering is the entire value. A list of everything that must be built is not a b
 | 2 | <item> | EPIC-n | — | <~n issues> | <why above #3 specifically> |
 
 The **Item** cell names the issues this row is live work for. `Why here` may cite any issue, including closed ones, as reasoning — "#146 left this row by shipping" is correct and has to stay sayable. That split is what lets the list be compared against the tracker without every piece of history reading as stale work.
+
+## Discharged since last grooming
+Rows that have left. One line each, and all four parts of it: the issue, the position it held, the date, and how it left — shipped by a named pull request, closed without shipping, or folded into a named row. A line missing one of the four is not a record; each is the question the next reader asks first.
+
+- <#n> — row <n>, <YYYY-MM-DD> — shipped as <#n> | closed without shipping: <why> | folded into row <n>
+
+This is the only home a discharge has, and appending to it is a bounded edit rather than a re-groom. Without it the trace lands in a surviving row's `Why here`, or in **What changed at this grooming**, or in the work log, or nowhere at all — a row that ships whole leaves no cell to carry the sentence. Prune at each grooming to the **two most recent groomings' worth** and drop what is older: the spec archive and the work log hold the detail, and a third grooming's worth makes this a second history of the list.
+
+A rescoped row is not discharged. It did not leave, it was retitled, and its position still exists — that belongs below.
+
+## What changed at this grooming
+The **judgments** this grooming made: what moved and why, what was re-argued, what it deliberately did not do. Facts about rows that left go in the section above. A grooming whose whole record is "row 1 shipped" has recorded no judgment at all, and the next grooming starts from scratch rather than from the argument.
 
 ## Unshaped
 Items that cannot be ordered yet because nobody knows what they are. This is a queue to empty, not a tier — anything sitting here is undecided work, and it does not get built while it stays here.
