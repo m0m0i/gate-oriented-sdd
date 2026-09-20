@@ -67,6 +67,14 @@ ISSUE = re.compile(r"#(\d+)")
 UNSHAPED_HEADING = "## Unshaped"
 NOT_PLANNED_HEADING = "## Open, not planned"
 
+#: Where a discharged row is written down (#174). Named here and read NOWHERE: a discharge
+#: describes work that has finished, so counting it in the absent direction would hand every
+#: issue it mentions a silent exemption — `## Open, not planned` without the reason, the
+#: falsifier, or the staleness check above. It is a constant rather than a literal because the
+#: remedy below is the only automated instruction anyone receives about a row that has left,
+#: and a heading that drifts from the template turns that instruction into a wrong address.
+DISCHARGED_HEADING = "## Discharged since last grooming"
+
 #: An exclusion's SUBJECT: the first issue cited on a `- ` entry line, and nothing else on it.
 #:
 #: Found by running this checker against this repository's own document. The entry excluding #36
@@ -300,8 +308,11 @@ def main():
             if state == "CLOSED":
                 problems.append(
                     f"row {position} names #{number} in its `{ITEM_COLUMN}` cell, and "
-                    f"#{number} is closed. That cell states live work; move the citation into "
-                    f"`Why here` if it is now history."
+                    f"#{number} is closed. That cell states live work, so one of two things "
+                    f"is now true. If the row survives, move the citation into `Why here`, "
+                    f"where history is allowed. If the row is discharged, append it to "
+                    f"`{DISCHARGED_HEADING}` — the issue, the position it held, the date, and "
+                    f"how it left — and drop the row."
                 )
             elif state is None:
                 # `--state all` was asked for, so absence is knowledge rather than a gap: a
