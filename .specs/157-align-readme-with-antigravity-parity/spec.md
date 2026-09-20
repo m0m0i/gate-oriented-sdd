@@ -60,5 +60,5 @@ None needed — requirements were unambiguous and follow directly from previous 
 ## 3. Tasks (TDD-ordered)
 - [x] T1: verify baseline guards pass (`scripts/check-readme-claims.py`, `scripts/check-markdown-fences.py`, `scripts/test-gates.sh`)
 - [x] T2: update `README.md` with Antigravity release archive and clone install options, updated rulebook pointer phrasing, `Rules discovery` fidelity row, and `init` harness detection note
-- [ ] T3: update `README.ja.md` in lockstep with matching Japanese translations
+- [x] T3: update `README.ja.md` in lockstep with matching Japanese translations
 - [ ] T4: confirm `scripts/check-readme-claims.py`, `scripts/check-markdown-fences.py`, and `scripts/test-gates.sh` pass cleanly
