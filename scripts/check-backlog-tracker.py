@@ -41,9 +41,20 @@ STEERING = pathlib.Path(".steering/tech.md")
 #: every project. Only the directory is configurable, and it comes from `- Docs:`.
 BACKLOG_NAME = "BACKLOG.md"
 
-#: An ordered row: a table line whose first cell is the position. The header (`| # | Item |`)
-#: and the separator (`| :-- |`) do not match, so the table's extent needs no heading parsing.
-ROW = re.compile(r"^\|\s*(\d+)\s*\|")
+#: A table line, and an ordered row within it. Up to three leading spaces, because Markdown
+#: allows them and such a row renders identically — one that picked a space up used to vanish
+#: from BOTH directions at once: its Item cell went unchecked, and when its issues closed the
+#: absent direction had nothing to say either. The quietest failure this guard had.
+TABLE_LINE = re.compile(r"^\s{0,3}\|")
+ROW = re.compile(r"^\s{0,3}\|\s*(\d+)\s*\|")
+
+#: The column carrying the live-work claim, located BY NAME rather than by position. Position
+#: is not stable: the `Epic` column was deleted from this repository's own table in 2026-09 and
+#: #164 is scheduled to replace it with version lines, so a column arriving before `Item` is
+#: planned work rather than a hypothetical. Bound to "the second cell", such a column would push
+#: `Item` sideways and leave the finished-work direction reading a cell that never carries a
+#: citation — finding nothing, and printing `no drift`.
+ITEM_COLUMN = "Item"
 
 #: Any issue citation. `\d+` is greedy, so `#146` yields 146 rather than 14 — the bug a
 #: shorter pattern would introduce silently, reporting row after row for issues nobody wrote.
@@ -64,7 +75,7 @@ NOT_PLANNED_HEADING = "## Open, not planned"
 #: while specing #<open issue>" it is an exemption granted by a sentence of prose, which is this
 #: guard's own fail-open. It is also exactly the Item-versus-`Why here` split one section over:
 #: an entry states what is excluded, and its reason may cite anything.
-ENTRY = re.compile(r"^\s*[-*]\s+.*?#(\d+)")
+ENTRY = re.compile(r"^\s{0,3}[-*]\s+(.*?)#(\d+)(.*)$")
 
 #: How many issues to ask the tracker for. A cap that silently truncates is a fail-open: the
 #: absent direction would stop seeing the issues past it and report agreement about a list it
@@ -203,18 +214,38 @@ def main():
     except OSError as exc:
         fail(f"{backlog} cannot be read ({exc.strerror}).")
 
+    lines = text.split("\n")
+    item_index = None
+    for line in lines:
+        if not TABLE_LINE.match(line) or ROW.match(line):
+            continue
+        for i, cell in enumerate(line.split("|")):
+            if cell.strip() == ITEM_COLUMN:
+                item_index = i
+                break
+        if item_index is not None:
+            break
+    if item_index is None:
+        # Guessing an index here is the whole defect. A header that no longer names `Item`
+        # means the table's shape has moved under the guard, and the finished-work direction
+        # has no claim to read — which must be a refusal, not a column number picked by hope.
+        fail(
+            f"{backlog} has no table header naming an `{ITEM_COLUMN}` column, so the cell that "
+            f"states live work cannot be located and the finished-work direction cannot run."
+        )
+
     rows = []
-    for line in text.split("\n"):
+    for line in lines:
         m = ROW.match(line)
         if not m:
             continue
         cells = line.split("|")
-        if len(cells) < 4:
+        if len(cells) <= item_index:
             fail(
-                f"{backlog}: row {m.group(1)} has {len(cells) - 2} cell(s), so its Item cell "
-                f"cannot be isolated and the finished-work direction cannot run on it."
+                f"{backlog}: row {m.group(1)} has {len(cells) - 2} cell(s), fewer than the "
+                f"header's `{ITEM_COLUMN}` column, so its claim cannot be read."
             )
-        rows.append((m.group(1), cells[2]))
+        rows.append((m.group(1), cells[item_index]))
     if not rows:
         # An empty work-set makes both loops run zero times and prints `0 row(s), no drift` at
         # exit 0 — a guard certifying a comparison it never made. check-contract-path.py:96
@@ -226,11 +257,18 @@ def main():
 
     states = tracker_state()
 
-    exempt = set()
+    exempt, unreasoned = set(), []
     for line in section(text, NOT_PLANNED_HEADING).split("\n"):
         entry = ENTRY.match(line)
-        if entry:
-            exempt.add(int(entry.group(1)))
+        if not entry:
+            continue
+        number = int(entry.group(2))
+        exempt.add(number)
+        # G-8: an exemption needs a stated reason, or it is a number someone added to make a
+        # guard quiet. The threshold is arbitrary and deliberately low — it separates a
+        # sentence from a bare citation, and nothing finer would survive being argued about.
+        if len((entry.group(1) + entry.group(3)).replace("*", "").strip(" -—:")) < 20:
+            unreasoned.append(number)
 
     # The generous region for the absent direction: every cell of every row, plus Unshaped.
     # Deliberately wider than the Item cells the finished-work direction reads below.
@@ -251,12 +289,38 @@ def main():
         )
     for position, item in rows:
         for number in sorted({int(n) for n in ISSUE.findall(item)}):
-            if states.get(number) == "CLOSED":
+            state = states.get(number)
+            if state == "CLOSED":
                 problems.append(
-                    f"row {position} names #{number} in its Item cell, and #{number} is "
-                    f"closed. The Item cell states live work; move the citation into "
+                    f"row {position} names #{number} in its `{ITEM_COLUMN}` cell, and "
+                    f"#{number} is closed. That cell states live work; move the citation into "
                     f"`Why here` if it is now history."
                 )
+            elif state is None:
+                # `--state all` was asked for, so absence is knowledge rather than a gap: a
+                # typo, a pull request number (`gh issue list` never returns one), or another
+                # repository's issue. Throwing that away would leave `no drift` covering it.
+                problems.append(
+                    f"row {position} names #{number} in its `{ITEM_COLUMN}` cell, and this "
+                    f"tracker has no such issue — a typo, a pull request number, or another "
+                    f"repository's."
+                )
+
+    # An exclusion outlives the decision that made it unless something compares it, which is
+    # #14's and #23's class reappearing inside the fix for it.
+    for number in sorted(exempt):
+        state = states.get(number)
+        if state != "OPEN":
+            was = "is closed" if state == "CLOSED" else "is not an issue in this tracker"
+            problems.append(
+                f"`{NOT_PLANNED_HEADING}` excludes #{number}, which {was}. An exclusion is a "
+                f"claim about open work and stops being true when the issue does."
+            )
+    for number in sorted(unreasoned):
+        problems.append(
+            f"`{NOT_PLANNED_HEADING}` excludes #{number} with no stated reason. An exemption "
+            f"without one is a number added to keep a guard quiet (G-8)."
+        )
 
     if problems:
         print("check-backlog-tracker FAILED", file=sys.stderr)
@@ -270,10 +334,15 @@ def main():
         )
         raise SystemExit(1)
 
+    # The excluded issues are NAMED, not counted. A count leaves the CI log unable to say which
+    # issues were waved through, and an exemption nobody can see is one nobody revisits (G-8).
+    excluded = ""
+    if exempt:
+        excluded = (f"; excluded by `{NOT_PLANNED_HEADING}`: "
+                    + ", ".join(f"#{n}" for n in sorted(exempt)))
     print(
         f"check-backlog-tracker: {len(open_issues)} open issue(s) against {len(rows)} row(s), "
-        f"no drift"
-        + (f"; {len(exempt)} excluded by `{NOT_PLANNED_HEADING}`" if exempt else "")
+        f"no drift{excluded}"
     )
 
 

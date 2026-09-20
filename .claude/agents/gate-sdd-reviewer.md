@@ -33,6 +33,7 @@ Evidence gathering only:
   - `./scripts/check-reviewer-allow-list.py`
   - `./scripts/test-gates.sh`
   - `./scripts/check-version-bump.py <base-sha>` — read-only, safe to run for evidence
+  - `./scripts/check-backlog-tracker.py` — read-only, safe to run for evidence. Off the `- Validators:` line because it needs the tracker, not because running it is unsafe; without it a reviewer can only infer this guard's behaviour from its source
 - `claude plugin validate . --strict`
 
 Nothing else. You do not edit, commit, or push.

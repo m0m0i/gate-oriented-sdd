@@ -17,7 +17,7 @@ It deliberately creates **no issues**. That is `sprint`'s job, and the separatio
 
 `sprint` is the one other skill that writes here, and only one way: when it turns a row into issues it records those issue numbers on the row it took, and changes nothing else. That is not a second author — it is the single moment when this document is knowably wrong and the skill that made it wrong is still running (#79).
 
-**Two doors stay open that no skill can close**: an issue closed by a merge, and an issue filed outside a grooming. Nothing runs at either moment, so nothing can be instructed to write them down. The list is compared against the tracker instead — no open issue missing from it, and no `Item` cell citing work that has finished — and a grooming starts from what that comparison reports rather than from a re-read of the whole document.
+**Two doors stay open that no skill can close**: an issue closed by a merge, and an issue filed outside a grooming. Nothing runs at either moment, so nothing can be instructed to write them down. Compare the list against the tracker instead — no open issue missing from it, and no `Item` cell citing work that has finished — and start a grooming from what that comparison turns up rather than from a re-read of the whole document. Whether a command does the comparing or a person does it by hand, it is the half of a grooming nobody can do from memory.
 
 Ordering is the entire value. A list of everything that must be built is not a backlog; it is an inventory.
 
