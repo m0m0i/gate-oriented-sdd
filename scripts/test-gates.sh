@@ -4789,7 +4789,7 @@ out=$(run_bt "$r"); bt_check remote "$out" "names another repository"
 
 # The document is simply not there.
 r=$(bt_repo bt-nofile); bt_issues "$r" "10 OPEN"; rm "$r/docs/BACKLOG.md"
-out=$(run_bt "$r"); bt_check nofile "$out" "does not exist"
+out=$(run_bt "$r"); bt_check nofile "$out" "BACKLOG.md does not exist"
 
 # An empty issue list. Both directions would pass with nothing to compare.
 r=$(bt_repo bt-noissues); : > "$r/issues.txt"
@@ -4815,7 +4815,7 @@ out=$(run_bt "$r"); bt_check norows "$out" "no ordered rows"
 
 # No steering file, so the document directory cannot be resolved.
 r=$(bt_repo bt-nosteer); bt_issues "$r" "10 OPEN"; rm "$r/.steering/tech.md"
-out=$(run_bt "$r"); bt_check nosteer "$out" "does not exist"
+out=$(run_bt "$r"); bt_check nosteer "$out" ".steering/tech.md does not exist"
 
 [ -z "$bt_bad" ] && report "check-backlog-tracker refuses every input it cannot check" ok \
   || report "check-backlog-tracker refuses every input it cannot check" no "exit/names/no-success:$bt_all"
@@ -4912,7 +4912,7 @@ case "$err" in *"#20"*) c8=ok ;; *) c8=no ;; esac
 # An Item cell citing a number this tracker does not have — a typo, a pull request, another
 # repository. `--state all` means absence is knowledge, not ignorance.
 r=$(bt_repo bt-unknown); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN"
-sed -i.bak 's/\*\*#12\*\*/**#1999**/' "$r/docs/BACKLOG.md"
+sed -i.bak 's/\*\*#12\*\*/**#1999** (formerly **#12**)/' "$r/docs/BACKLOG.md"
 out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
 [ "$out" = "1" ] && c9=ok || c9=no
 case "$err" in *"#1999"*) c10=ok ;; *) c10=no ;; esac
@@ -4925,10 +4925,20 @@ out=$(run_bt "$r"); btout=$(cat "$TMP/btout")
 [ "$out" = "0" ] && c11=ok || c11=no
 case "$btout" in *"#20"*) c12=ok ;; *) c12=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12" = "okokokokokokokokokokokokok" ] \
+# A sub-bullet under an entry is continuation prose, not an entry of its own — the same shape
+# case 130 closed one level up, at the reason rather than the indent.
+r=$(bt_repo bt-subbullet); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "20 OPEN" "21 OPEN"
+{ printf '\n## Open, not planned\n\n'
+  printf -- '- **#20** - held against a falsifier rather than planned work.\n'
+  printf -- '  - Blocked on #21, which nobody has placed.\n'; } >> "$r/docs/BACKLOG.md"
+out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
+[ "$out" = "1" ] && c13=ok || c13=no
+case "$err" in *"#21"*) c14=ok ;; *) c14=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14" = "okokokokokokokokokokokokokokok" ] \
   && report "check-backlog-tracker binds the Item column by name and names its exclusions" ok \
   || report "check-backlog-tracker binds the Item column by name and names its exclusions" no \
-     "col=$c0/$c1 nohdr=$c2/$c3/$c4 indent=$c5/$c6 stale-exempt=$c7/$c8 unknown=$c9/$c10 names=$c11/$c12"
+     "col=$c0/$c1 nohdr=$c2/$c3/$c4 indent=$c5/$c6 stale-exempt=$c7/$c8 unknown=$c9/$c10 names=$c11/$c12 subbullet=$c13/$c14"
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1

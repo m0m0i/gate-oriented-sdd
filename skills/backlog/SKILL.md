@@ -46,7 +46,7 @@ Ordering is the entire value. A list of everything that must be built is not a b
 
 | # | Item | Epic | Blocks | Rough size | Why here |
 | :-- | :-- | :-- | :-- | :-- | :-- |
-| 1 | <item> | EPIC-n | #3, #7 | <~n issues> | <the risk it retires, or what it unblocks> |
+| 1 | <item> — **#n**, **#n** | EPIC-n | #3, #7 | <~n issues> | <the risk it retires, or what it unblocks> |
 | 2 | <item> | EPIC-n | — | <~n issues> | <why above #3 specifically> |
 
 The **Item** cell names the issues this row is live work for. `Why here` may cite any issue, including closed ones, as reasoning — "#146 left this row by shipping" is correct and has to stay sayable. That split is what lets the list be compared against the tracker without every piece of history reading as stale work.

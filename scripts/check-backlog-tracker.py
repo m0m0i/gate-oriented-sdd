@@ -75,7 +75,14 @@ NOT_PLANNED_HEADING = "## Open, not planned"
 #: while specing #<open issue>" it is an exemption granted by a sentence of prose, which is this
 #: guard's own fail-open. It is also exactly the Item-versus-`Why here` split one section over:
 #: an entry states what is excluded, and its reason may cite anything.
-ENTRY = re.compile(r"^\s{0,3}[-*]\s+(.*?)#(\d+)(.*)$")
+#:
+#: Column 0 only, unlike every other pattern here: the section's contract is one line per entry, so an indented
+#: sub-bullet is continuation prose, and treating it as an entry would let `  - Blocked on #141.` buy #141 an
+#: exemption. Indenting an entry now costs it its exemption, which fails closed.
+#:
+#: This checks ONE of the section's three parts. The issue and a reason are enforced; the falsifier — the
+#: condition that would make it a row — is not, and a later author should not read this as complete.
+ENTRY = re.compile(r"^[-*]\s+(.*?)#(\d+)(.*)$")
 
 #: How many issues to ask the tracker for. A cap that silently truncates is a fail-open: the
 #: absent direction would stop seeing the issues past it and report agreement about a list it

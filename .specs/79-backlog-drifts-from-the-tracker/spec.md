@@ -62,4 +62,21 @@ Asked and answered 2026-09-20, before any Design existed. Four questions; two of
 - [x] **T4:** the `## Open, not planned` section naming #36 with its reason and falsifier, and the AC4 reading path. _Amended 2026-09-20, during T4, twice._ **(a)** The planned red — "a case asserting the checker exits 0 against this repository's own `docs/BACKLOG.md`" — cannot live in `scripts/test-gates.sh`, which builds throwaway repositories with no tracker. Asserting it there would need a snapshot of issue states that goes stale the first time anyone closes an issue. That assertion is CI's, on the real document, every pull request — T5 — and the by-hand run is recorded in the work log. **(b)** The real red came from running the checker against the real document and was a defect in this spec's own work: the exclusion section was parsed whole, so an entry's *reason* citing an issue exempted it. Harmless for #36, whose reason cites the closed #26, and a silent exemption the moment a reason cites an open one — the guard's own fail-open, and the Item-versus-`Why here` split one section over. Fixed to read only an entry's first citation, with case 130 covering it.
 - [x] **T4b:** place the drift the checker reported on its first real run. #182 enters at row 2 by the user's ordering judgment and rows 2–23 shift to 3–24, with the `Blocks` column and twenty-seven prose row references remapped. One reference was already stale — row 10's cell said "row 2 guards this list against the tracker", written when #79 was row 2 — and was corrected to row 1 before the renumber rather than carried into it. _Out of scope said "retrospective correction of the existing table", and this is not that: no order was revisited and no reasoning rewritten. It is the placement of one issue that arrived after the seventh grooming, which is the check working rather than a re-groom._
 - [x] **T5:** wire the PR-only step into `.github/workflows/ci.yml` with `issues: read`, and record in `.steering/tech.md` why the check is not on the `- Validators:` line. No red half — CI wiring is verified by CI on this spec's own pull request, and that is stated here rather than dressed up as a test.
+### Review triage
+
+Two rounds, capped there deliberately. Round 1: BLOCKED, 1 HIGH, 5 MEDIUM — all fixed, see the task amendments.
+Round 2: CLEAN, 0 BLOCKER, 0 HIGH, 1 MEDIUM, 4 LOW.
+
+Fixed from round 2: the two `### Triggers that have already fired` references the renumber missed (MEDIUM — and the
+boundary it exposed is now drawn, with that subsection stated as live because its entries claim present consequences);
+`row 6's class` (LOW, a pre-existing error the `+1` preserved); the `nofile`/`nosteer` needles, which shared
+`does not exist` and so could not tell AC5's two failures apart; `ENTRY` accepting an indented sub-bullet as an entry,
+now column 0 only, with a new red-capable half; the template's bare `<item>` placeholder, which showed none of the
+citation form the prose below it requires.
+
+**Recorded, not fixed:** `CONTRIBUTING.md:21` claims 67 covered paths against a suite now reporting 131. Pre-existing —
+it read 67 against 127 on `main` — and it is the surviving instance of #23 at row 22, which owns the class. Not fixed
+here because "paths" and "cases" are not the same unit and the correct number is not the suite's total; writing a count
+I have not verified to replace one I know is wrong would be the same defect with a fresher date (C-2).
+
 - [x] **T6:** refactor, and re-run every validator plus `test-gates.sh` — 13 on the `- Validators:` line, plus the new guard against the real document. _One edit outside the affected-files list:_ `AGENTS.md`'s guard block said "Run all ten before every commit — CI runs the same ten", which was already false by four before this branch (it omits `check-contract-path.py`, `check-readme-claims.py`, `check-reviewer-allow-list.py` and `check-document-set.py`). Adding an eleventh entry under a sentence claiming ten would have deepened a live C-2 drift rather than left it, so the sentence now names the two authorities instead of a count. The underlying instance belongs to #23 at row 22 and is not otherwise touched.
