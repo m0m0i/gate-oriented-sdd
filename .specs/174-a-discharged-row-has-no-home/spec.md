@@ -1,6 +1,6 @@
 # Spec: a discharged row has one place to be written down
 
-- Slug: 174-a-discharged-row-has-no-home   Issue: 174   Type: feature   Status: draft
+- Slug: 174-a-discharged-row-has-no-home   Issue: 174   Type: feature   Status: approved
 - Author: m0m0i   Date: 2026-09-21
 
 ## 1. Requirements (WHAT / WHY)
