@@ -256,6 +256,10 @@ case "$out" in *"exit=0"*) report "quoted globs do not cause a false block" ok ;
 # Park a second spec branch and come back. $1 repo, $2 slug, $3 open tasks (0|1),
 # $4 receipt verdict (optional; the receipt commit lands AFTER the reviewed sha, as it does
 # in the real flow, and must not be read as staleness because it touches no source).
+#
+# It stages its own paths rather than `-A`: a broad add sweeps up whatever the calling case
+# left untracked in the working tree — the copied checker, in cases 85 and 86 — and then
+# checking the branch back out deletes it, so the case runs against a script that is gone.
 park_spec() {
   _r=$1; _slug=$2; _open=$3; _verdict=${4:-}
   if [ "$_open" = 0 ]; then _box='- [x]'; else _box='- [ ]'; fi
@@ -265,10 +269,10 @@ park_spec() {
     && printf '# Spec: parked\n- Slug: %s   Status: approved\n\n## 3. Tasks (TDD-ordered)\n%s T1: do the thing\n' \
          "$_slug" "$_box" > ".specs/$_slug/spec.md" \
     && echo parked >> src/main.txt \
-    && git add -A && git commit -qm "parked work" \
+    && git add ".specs/$_slug" src/main.txt && git commit -qm "parked work" \
     && if [ -n "$_verdict" ]; then \
          printf 'reviewed_sha=%s\nverdict=%s\n' "$(git rev-parse HEAD)" "$_verdict" > ".specs/$_slug/.review-receipt" \
-         && git add -A && git commit -qm "receipt"; \
+         && git add ".specs/$_slug/.review-receipt" && git commit -qm "receipt"; \
        fi \
     && git checkout -q "$_cur" ) >/dev/null 2>&1
 }
@@ -348,6 +352,89 @@ r=$(make_repo debris 1); park_spec "$r" 12-parked 0
 out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "a deleted branch and an empty spec directory are litter, not work" ok ;;
                         *) report "a deleted branch and an empty spec directory are litter, not work" no "$out" ;; esac
+
+# --- assets/check-unreviewed-work.sh, the layer with no working tree (#26) --------
+#
+# The hook above is a fast local signal and it can be switched off. This is the same question
+# asked where the author cannot stand somewhere else: a pull request has no HEAD to move. It
+# takes the head branch and head commit as arguments because that is what the event carries —
+# `actions/checkout` leaves a PR on a detached merge ref, so a checker reading `HEAD` would be
+# asking about a commit that exists nowhere else.
+
+uw_repo() {  # <name> [<open tasks on 9-feature, default 1>]
+  _r=$(make_repo "$1" "${2:-1}")
+  mkdir -p "$_r/scripts"
+  cp "$ROOT/assets/check-unreviewed-work.sh" "$_r/scripts/"
+  echo "$_r"
+}
+run_uw() { _d=$1; shift; ( cd "$_d" || exit 9; sh scripts/check-unreviewed-work.sh "$@" 2>"$TMP/uwerr"; echo "exit=$?" ) }
+
+# 84. A head branch carrying finished, unreviewed work fails the check.
+r=$(uw_repo uw-unreviewed 0)
+out=$(run_uw "$r"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"9-feature"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work fails a pull request carrying an unreviewed spec" ok \
+  || report "check-unreviewed-work fails a pull request carrying an unreviewed spec" no "exit=$c1 names-branch=$c2"
+
+# 85. THE POINT OF THIS LAYER. The same repository, with HEAD parked somewhere else entirely,
+#     and the branch and commit supplied the way the pull-request event supplies them. Moving
+#     HEAD is what silences the hook; it must do nothing here.
+r=$(uw_repo uw-detached 1); park_spec "$r" 12-parked 0
+tip=$( cd "$r" && git rev-parse 12-parked )
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_uw "$r" 12-parked "$tip"); err=$(cat "$TMP/uwerr")
+# The exit code alone is not enough here: a missing script also exits non-zero, so this case
+# would have reported a pass against a checker that did not exist.
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"12-parked"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work cannot be satisfied by moving HEAD" ok \
+  || report "check-unreviewed-work cannot be satisfied by moving HEAD" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 86. A reviewed head branch passes.
+r=$(uw_repo uw-clean 1); park_spec "$r" 12-parked 0 CLEAN
+tip=$( cd "$r" && git rev-parse 12-parked )
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_uw "$r" 12-parked "$tip")
+case "$out" in *"exit=0"*) report "check-unreviewed-work passes a reviewed branch" ok ;;
+                        *) report "check-unreviewed-work passes a reviewed branch" no "$out — $(cat "$TMP/uwerr")" ;; esac
+
+# 87. A head branch with no spec passes — most pull requests in most projects — but it must
+#     say what it examined. "Nothing to check" and "checked, clean" sharing one sentence is
+#     #16's shape and the thing #39 is open about.
+r=$(uw_repo uw-nospec 1)
+( cd "$r" && git checkout -q -b bookkeeping ) >/dev/null 2>&1
+out=$(run_uw "$r"); said=$(printf '%s' "$out" | sed 's/exit=[0-9]*//')
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$said" in *"no spec"*|*"bookkeeping"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work passes a spec-less branch, and says so" ok \
+  || report "check-unreviewed-work passes a spec-less branch, and says so" no "exit=$c1 said=$c2 out=$out"
+
+# 88. It must FAIL, not skip, when it cannot find gate-lib.sh. A guard that cannot ask its
+#     question and reports success is the bug this whole spec is about, one layer out.
+r=$(uw_repo uw-nolib 0); rm -f "$r/hooks/gate-lib.sh"
+out=$(run_uw "$r"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=0"*) c1=no ;; *) c1=ok ;; esac
+case "$err" in *gate-lib*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work fails rather than skips without gate-lib.sh" ok \
+  || report "check-unreviewed-work fails rather than skips without gate-lib.sh" no "nonzero=$c1 names-lib=$c2"
+
+# 89. And with the RIGHT diagnosis when the library is there but predates the function — the
+#     state every project installed before this shipped is in. Case 29 is the same failure for
+#     the same reason: a correct diagnosis sends the author to re-copy the hook, a wrong one
+#     sends them to edit a spec that is fine.
+r=$(uw_repo uw-oldlib 0)
+cat > "$r/hooks/gate-lib.sh" <<'OLDLIB'
+gate_pass() { printf '{}\n'; exit 0; }
+gate_block() { printf '%s\n' "$1" >&2; exit 2; }
+gate_steering_value() { sed -n "s/^ *- *$2: *//p" "$1" 2>/dev/null | head -1; }
+OLDLIB
+out=$(run_uw "$r"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=0"*) c1=no ;; *) c1=ok ;; esac
+case "$err" in *"gate_spec_review_state"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"re-copy"*|*"Re-copy"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "check-unreviewed-work names a gate-lib.sh that predates the shared question" ok \
+  || report "check-unreviewed-work names a gate-lib.sh that predates the shared question" no "nonzero=$c1 names-fn=$c2 says-recopy=$c3"
 
 # --- quality-gate.sh -------------------------------------------------------------
 #
