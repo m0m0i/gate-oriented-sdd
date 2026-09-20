@@ -123,6 +123,14 @@ Issues that are open and deliberately not rows. One line each: the issue, why it
 
 The **Item** cell names the issues a row is live work for. `Why here` may cite any issue, including closed ones, as reasoning — "#146 left this row by shipping" is correct and has to stay sayable. `scripts/check-backlog-tracker.py` reads the split that way round, so history in the reasoning never reads as stale work.
 
+## Discharged since last grooming
+
+Rows that have left. One line each, and all four parts of it: the issue, the position it held, the date, and how it left — shipped by a named pull request, closed without shipping, or folded into a named row. Prune at each grooming to the two most recent groomings' worth; the spec archive and the work log hold the detail, and a third grooming's worth makes this a second history of the list.
+
+- **#182** — row 2, 2026-09-21 — shipped as #186.
+
+Added by #174, which is row 1 and was argued for by five consecutive groomings. It starts with one line because it starts with the eighth grooming's own discharge; the earlier ones are in the records below, where they were written, and stay there.
+
 ## Record of the sixth grooming (2026-09-20)
 
 - **#26 is row 1, at the fifth grooming's word.** It wrote that only #131 would go above #26, and #131 shipped. Nothing filed since is both cheaper and wider than the gate being one command from off, so the fourth displacement was the last.
