@@ -26,14 +26,23 @@ branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || gate_pass
 reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 [ -n "$reviewer" ] || reviewer="the reviewer named in .steering/tech.md"
 
-# Already-merged work has nothing left to review. Without this, every historical
-# feature branch trips the gate the moment the harness is installed.
+# Already-merged work has nothing left to review. What that buys is narrower than this comment
+# used to claim, and the difference matters to anyone changing the skip: it said every
+# historical feature branch would trip the gate on install, and that case cannot occur. A
+# branch with no spec of its own returns empty from gate_spec_review_state before ancestry is
+# ever consulted, whatever the merge style. The branch that needs this skip is one that shipped
+# WITH a spec and was not deleted — which, in a squash-merging repository, is every branch
+# anyone has merged. #182 measured that and corrected the sentence.
 #
 # The candidate list is longer since #26 widened the scan, because an unresolvable base costs
 # far more than it used to. It used to mean one false block, while you stood on your own
 # merged branch; now it means the merged check never fires for ANY branch, so every shipped
 # but undeleted spec branch blocks every turn from everywhere. `master` is the common case
 # that was missing, and a repository with no remote at all has no origin/* to fall back on.
+#
+# Both skip sites below ask two questions of this base, not one: was the COMMIT joined into its
+# history, and did the WORK reach it. The second exists because a squash merge answers no to
+# the first forever — #182, and gate_work_reached_base carries the reasoning.
 base=$(git rev-parse --verify -q origin/HEAD 2>/dev/null \
      || git rev-parse --verify -q origin/main 2>/dev/null \
      || git rev-parse --verify -q origin/master 2>/dev/null \

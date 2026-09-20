@@ -243,16 +243,28 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   _wglobs=$(printf '%s' "$_wglobs" | tr -d "\"'")
   set -f
   _wfoot=$(git diff --name-only "$_wfork" "$_wtip" -- $_wglobs 2>/dev/null)
+  set +f
+
+  # No reviewable source of its own. Step 1 already established the work is in the base, and
+  # the second diff is not worth paying for — this runs once per branch per turn end.
+  [ -n "$_wfoot" ] || return 0
+
+  set -f
   _wnow=$(git diff --name-only "$_wanchor" "$_wtip" -- $_wglobs 2>/dev/null)
   set +f
 
-  # No reviewable source of its own. Step 1 already established the work is in the base.
-  [ -n "$_wfoot" ] || return 0
-
-  [ -z "$(printf '%s\n' "$_wnow" | awk -v foot="$_wfoot" '
-    BEGIN { n = split(foot, a, "\n"); for (i = 1; i <= n; i++) f[a[i]] = 1 }
-    $0 in f { print }
-  ')" ]
+  # Both lists go in on STDIN, separated by a blank line, because `awk -v foot="$list"` cannot
+  # carry one: a -v assignment takes no newline, and BSD awk warns `newline in string` and
+  # truncates at the first path. Truncated, the intersection sees one file and a branch that
+  # carried on in any other reads as shipped — a fail-open produced by quoting, which is #1's
+  # family, and the warning lands on the stderr a Stop hook hands to the user. A blank line is
+  # a safe separator because `git diff --name-only` never emits an empty path. Case 139.
+  _wleft=$(printf '%s\n\n%s\n' "$_wfoot" "$_wnow" | awk '
+    !split_seen && NF == 0 { split_seen = 1; next }
+    !split_seen { foot[$0] = 1; next }
+    NF > 0 && $0 in foot { print }
+  ')
+  [ -z "$_wleft" ]
 }
 
 # One state, one sentence — for callers naming a branch that is not the one in hand, where

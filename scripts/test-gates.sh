@@ -496,6 +496,35 @@ out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "a merged branch whose spec was deleted is carried by ancestry" ok ;;
                         *) report "a merged branch whose spec was deleted is carried by ancestry" no "$out" ;; esac
 
+# 139. #182 AC2 with a footprint of more than ONE file, which is the shape every other fixture
+#      in this suite lacks — park_spec touches src/main.txt and nothing else.
+#
+#      Found in T3, on live data rather than by reading: the first cut passed the footprint to
+#      awk with `-v foot="$list"`, and a `-v` assignment cannot carry a newline. BSD awk warns
+#      `newline in string` and truncates at the first path; the warning goes to stderr, which a
+#      Stop hook hands straight to the user. Truncated, the intersection sees only the first
+#      file, so a branch that carried on in any OTHER file reads as shipped and goes silent —
+#      a fail-open produced by quoting, one layer down from #1 and invisible to a suite whose
+#      footprints are all one element long.
+#
+#      So the branch here touches two files and carries on in the SECOND. It also asserts the
+#      gate's stderr carries no awk diagnostics: a gate that works while complaining is one
+#      nobody trusts, and the complaint is what says the list was cut.
+r=$(make_repo sqmultifile 1)
+( cd "$r" && git checkout -q -b 12-parked main && mkdir -p .specs/12-parked \
+  && printf '# Spec: parked\n- Slug: 12-parked   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' > .specs/12-parked/spec.md \
+  && echo a >> src/main.txt && echo b > src/other.txt \
+  && git add .specs/12-parked src/main.txt src/other.txt && git commit -qm "two files" ) >/dev/null 2>&1
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked && echo carried >> src/other.txt \
+  && git commit -qam "carried on, in the second file only" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"12-parked"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *awk:*|*"newline in string"*) c3=no ;; *) c3=ok ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a multi-file footprint is not truncated to its first path" ok \
+  || report "a multi-file footprint is not truncated to its first path" no "blocks=$c1 names=$c2 clean-stderr=$c3"
+
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
 #     gate cannot compare anything at all, so exiting 0 asserts a comparison it never made.
