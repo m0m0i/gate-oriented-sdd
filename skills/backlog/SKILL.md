@@ -87,7 +87,7 @@ Issues that are open and deliberately not rows. One line each: the issue, why it
 - **The `Item` cell is the claim; `Why here` is the argument.** Only the Item cell asserts that an issue is live work, which is what lets a shipped issue stay quotable in the reasoning without reading as stale.
 - **An open issue is either a row, unshaped, or deliberately not planned.** There is no fourth state, and silence is not one of them — an issue nobody has placed is work the list does not know about.
 - Items are coarse on purpose. Fine-grained ordering of work nobody has decomposed is precision without accuracy.
-- Every "Next up" row states why *now*. Without it the order is preference, and preference gets re-argued.
+- Every row states why *now*, in `Why here`. Without it the order is preference, and preference gets re-argued.
 - Re-sequence when reality diverges. A backlog that has not moved in a month is either a finished plan or an ignored one.
 
 ## Red flags
@@ -95,7 +95,8 @@ Issues that are open and deliberately not rows. One line each: the issue, why it
 - A priority column has appeared beside the position column. One of them is now lying, and people will learn which by trial.
 - Half the list is flagged as blocking. Then blocking means nothing, and the flag has become a way of saying "important" without paying for a position.
 - The order matches the epic numbers. Ordering by the sequence things were thought of is not ordering.
-- "Unshaped" never empties. Those items are being deferred without anyone deciding to defer them.
+- `## Unshaped` never empties. Those items are being deferred without anyone deciding to defer them.
 - Items read like issue titles. Then they have been decomposed too early, and the decomposition is now frozen into an ordering decision that has to be redone.
 - The backlog has been created as issues. Then the tracker is a plan rather than a commitment, and every future search filters through work nobody chose.
-- Nothing is in "Not ready". Either the plan is unusually complete, or items with unresolved dependencies are being ordered as though they were actionable.
+- `## Unshaped` is empty while rows still carry unresolved dependencies. Either the plan is unusually complete, or work nobody can size is being ordered as though it were actionable.
+- `## What changed at this grooming` is a list of what shipped. Then the grooming recorded facts the section above it already holds and made no judgment at all, and the next grooming starts from scratch — which is the cost this whole document exists to avoid.
