@@ -30,7 +30,7 @@ The bottom row is the only one that is a guarantee. The design work is deciding 
 
 ### Two things worth stealing even if you don't use this
 
-**The rulebook lives inside the agent's directory.** A reviewer's rules sit in `agents/<reviewer>/rules/`, not in `CLAUDE.md` and not in session context. A normal session never loads them; only the reviewer does, and only the files the diff calls for.
+**The rulebook lives inside the agent's directory.** A reviewer's rules sit in `agents/<reviewer>/rules/`, not in `AGENTS.md` (or `CLAUDE.md` / `GEMINI.md`) and not in session context. A normal session never loads them; only the reviewer does, and only the files the diff calls for.
 
 That is measurable rather than asserted. `claude plugin details gate-sdd` reports **~1,300 tokens always-on** for the entire harness — thirteen skills and three reviewers. The rulebooks and the reviewer contract are another **~5,900 tokens**, and they contribute **zero** to that always-on figure, because they are not registered components at all.
 
@@ -103,7 +103,7 @@ Opt-in, and worth adding when the project justifies it — three skills, each fo
 | `epics` | nothing consumes it mechanically **yet** — the gap is #22, not a decision |
 | `contract` | run before there are commits and review findings to compile, it produces a *worse* rulebook rather than an absent one |
 
-**Every skill is always available.** `init` installs `.steering/`, `.specs/`, `.work_logs/`, the issue templates, the reviewer and the hooks — never the skills themselves, which ship with the plugin. The choice above governs which documents get created and which skills are in the flow, never whether one can be run.
+**Every skill is always available.** `init` detects the active harness (Claude Code, Google Antigravity, or both) and installs `.steering/`, `.specs/`, `.work_logs/`, the issue templates, the appropriate rule pointers (`CLAUDE.md` / `GEMINI.md`), the reviewer, and the hooks — never the skills themselves, which ship with the plugin. The choice above governs which documents get created and which skills are in the flow, never whether one can be run.
 
 **The choice is recorded, not inferred.** `init` writes `- Mode: bootstrap`, `- Mode: minimum` or `- Mode: full` into `.steering/tech.md`, and a checker on the `- Validators:` line verifies the filesystem against it whenever the quality gate runs — and in CI, which is where it actually bites, because the gate runs that line only when source changed and a document is never source. Declared rather than worked out later from which files happen to exist, because that derivation cannot tell a deliberate omission from an abandoned install — and telling those two apart is the only reason the line exists. **A fresh install is `bootstrap`** — the harness is in place and the inception documents are not written yet, which is neither of the other two and used to be recorded as one of them, so every first install armed its own gate red (#127). It expires at the first spec, because that is where a document starts being cited: a state that never ended would be a switch-off with a note attached. **And the choice survives that window.** `init` also records `- Target: minimum` or `- Target: full` — what the operator signed up for, as distinct from what is true yet — and the checker names that target's documents, with the skill that writes each, both in the advisory line and in the block at the first spec. The target changes no verdict: what is required still comes from `- Mode:` alone, so a mistyped target can misdescribe what you owe and can never let a document go unchecked.
 
@@ -115,7 +115,7 @@ The middle of that chain is not this plugin's invention — it is **GitHub's**. 
 
 | Skill | Does | Ends in |
 | :-- | :-- | :-- |
-| `init` | sets the harness up in a project — detects the toolchain, asks only what it cannot infer | everything below, wired |
+| `init` | sets the harness up in a project — detects the toolchain and active harness, asks only what it cannot infer | everything below, wired |
 | `northstar` | the metric, its levers, the quality laws in order | the `Owns:` anchor the reviewer reads for severity |
 | `prd` | users, capabilities with stable ids, the boundary | ids that specs cite |
 | `design-doc` | architecture, its seams, the decisions worth recording | `.steering/structure.md` + ADRs |
@@ -144,7 +144,16 @@ claude plugin marketplace add m0m0i/gate-oriented-sdd
 claude plugin install gate-sdd@gate-oriented-sdd
 ```
 
-**Google Antigravity** — no git-based plugin install exists yet, so clone first:
+**Google Antigravity** — install either from a standalone release archive or a clone:
+
+*Option 1: Standalone release archive (recommended — excludes repo-internal tooling):*
+Download and extract `gate-sdd.zip` from [GitHub Releases](https://github.com/m0m0i/gate-oriented-sdd/releases/latest), then:
+
+```bash
+agy plugin install /path/to/extracted/gate-sdd
+```
+
+*Option 2: Direct clone:*
 
 ```bash
 git clone https://github.com/m0m0i/gate-oriented-sdd
@@ -160,6 +169,7 @@ Every row was produced by running it. Method, versions, and open questions: [`do
 | Capability | Claude Code | Antigravity |
 | :-- | :-- | :-- |
 | Skills, reviewers, rulebooks | full | full — same path, same format |
+| Rules discovery | root `AGENTS.md` (canonical context) | `rules/AGENTS.md` (auto-discovered and merged by plugin loader) |
 | Quality gate on turn end | full — `Stop`, exit 2 | full — `Stop`, `{"decision":"continue"}` |
 | Review-receipt gate | full | full |
 | Per-edit fast feedback | full — `PostToolUse` | full — `PostToolUse`, observe-only |
