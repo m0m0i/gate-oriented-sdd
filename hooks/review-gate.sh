@@ -26,14 +26,27 @@ branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || gate_pass
 reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 [ -n "$reviewer" ] || reviewer="the reviewer named in .steering/tech.md"
 
-# Already-merged work has nothing left to review. Without this, every historical
-# feature branch trips the gate the moment the harness is installed.
+# Already-merged work has nothing left to review. What that buys is narrower than this comment
+# used to claim, and the difference matters to anyone changing the skip: it said every
+# historical feature branch would trip the gate on install, and that case cannot occur. A
+# branch with no spec of its own is already silent whatever the merge style, and by two
+# different routes: the current-branch path returns at the absent spec.md before reaching any
+# of this, while the scan consults ancestry first and then gets an empty state back from
+# gate_spec_review_state. Case 83 pins the first, case 144 the second. Cases 1-7 were cited
+# for the second and do not reach it — their only other ref is main, which IS an ancestor of
+# itself, so the scan skips it before asking. The branch that needs this skip is one that
+# shipped WITH a spec and was not deleted — which, in a squash-merging repository, is every
+# branch anyone has merged. #182 measured that and corrected the sentence.
 #
 # The candidate list is longer since #26 widened the scan, because an unresolvable base costs
 # far more than it used to. It used to mean one false block, while you stood on your own
 # merged branch; now it means the merged check never fires for ANY branch, so every shipped
 # but undeleted spec branch blocks every turn from everywhere. `master` is the common case
 # that was missing, and a repository with no remote at all has no origin/* to fall back on.
+#
+# Both skip sites below ask two questions of this base, not one: was the COMMIT joined into its
+# history, and did the WORK reach it. The second exists because a squash merge answers no to
+# the first forever — #182, and gate_work_reached_base carries the reasoning.
 base=$(git rev-parse --verify -q origin/HEAD 2>/dev/null \
      || git rev-parse --verify -q origin/main 2>/dev/null \
      || git rev-parse --verify -q origin/master 2>/dev/null \
@@ -60,12 +73,17 @@ check_current_branch() {
     *) gate_block "No issue, no spec: the branch '$branch' has a spec at $spec but its slug does not start with an issue number. The slug is <issue>-<kebab-title>, and the issue is what recorded that this work was chosen. Create the issue and rename the branch and spec directory to match, or say explicitly that this is acknowledged unplanned work." ;;
   esac
 
-  if [ -n "$base" ] && git merge-base --is-ancestor HEAD "$base" 2>/dev/null; then
-    return 0
-  fi
-
   receipt=".specs/$branch/.review-receipt"
   head=$(git rev-parse HEAD 2>/dev/null || echo '')
+
+  # Two arms, because there are two ways work reaches the base and only one of them leaves a
+  # parent link. Ancestry is kept and asked first: it is exact when it fires, costs one call,
+  # and is the whole of the merge-commit and fast-forward case on the path those projects
+  # already take. The second arm is #182 — see gate_work_reached_base.
+  if [ -n "$base" ] && { git merge-base --is-ancestor HEAD "$base" 2>/dev/null \
+       || gate_work_reached_base "$branch" "$head" "$base"; }; then
+    return 0
+  fi
 
   # Two ways there is nothing to review, indistinguishable in a count of unticked boxes alone
   # — which is why that count used to block a spec still being drafted while telling its
@@ -108,7 +126,8 @@ scan_other_branches() {
   for ref in $(git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null); do
     [ "$ref" = "$branch" ] && continue
     tip=$(git rev-parse --verify -q "$ref^{commit}" 2>/dev/null) || continue
-    if [ -n "$base" ] && git merge-base --is-ancestor "$tip" "$base" 2>/dev/null; then
+    if [ -n "$base" ] && { git merge-base --is-ancestor "$tip" "$base" 2>/dev/null \
+         || gate_work_reached_base "$ref" "$tip" "$base"; }; then
       continue                        # shipped — case 8's reasoning, one branch over
     fi
     state=$(gate_spec_review_state ".specs/$ref" "$tip" "$ref")

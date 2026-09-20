@@ -365,6 +365,330 @@ out=$(run_gate "$r")
 case "$out" in *"exit=0"*) report "a deleted branch and an empty spec directory are litter, not work" ok ;;
                         *) report "a deleted branch and an empty spec directory are litter, not work" no "$out" ;; esac
 
+# Squash-merge <branch> into main and publish main as origin/main.
+#
+# Cases 8 and 82 above keep their `git merge -q` fixture; these are the siblings they needed.
+# A suite that covers only the merge style the project does NOT use is the whole of #182 — both
+# of those cases passed for three releases while the skip they assert never fired once here.
+squash_merge() { ( cd "$1" && git checkout -q main && git merge --squash -q "$2" >/dev/null \
+  && git commit -qm "squashed $2 (#1)" \
+  && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1; }
+
+# 132. #182 AC1, the scan — case 82 under this project's own merge style. A squash merge writes
+#      a commit with no parent link to the branch, so the tip is never an ancestor of the base
+#      and the `merge-base --is-ancestor` in scan_other_branches can never succeed again. The
+#      skip therefore needs evidence that the WORK reached the base, not that the commit did.
+#      Named by function rather than by line: this change moves both skip sites, so a line
+#      number written here is wrong by the time the commit that writes it lands.
+r=$(make_repo sqparkedmerged 1); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a squash-merged parked branch stays silent" ok ;;
+                        *) report "a squash-merged parked branch stays silent" no "$out" ;; esac
+
+# 133. #182 AC1, the current branch — case 8's sibling. The same defect in
+#      check_current_branch, and the commoner case: you merge your own pull request and stay
+#      standing on the branch.
+r=$(make_repo sqmergedstand 1); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a squash-merged branch you are standing on stays silent" ok ;;
+                        *) report "a squash-merged branch you are standing on stays silent" no "$out" ;; esac
+
+# 134. #182 AC2 — the fail-open the fix must not open, and the reason the skip cannot rest on
+#      the spec's presence alone. Merge, then carry on committing source to the same branch:
+#      the slug is in the base, but the branch now holds work nobody reviewed. A slug reaching
+#      the base is a fact about the SPEC, not about the branch, and reading the first as the
+#      second is #26's defect returning through the door built to close its side effects.
+#
+#      RED-CAPABLE under the named mutation "skip on evidence alone" — `return 0` in
+#      gate_work_reached_base immediately after the `git cat-file -e` pair, dropping the
+#      footprint half. Measured, not assumed, and re-measured after every case added since:
+#      that mutation takes this case red on both paths and SEVENTEEN cases red in total —
+#      every case whose fixture puts a spec on the base. That is NOT the same set as "every
+#      case that asserts a block", which is what this comment claimed for two rounds: many
+#      block-asserting cases stay green under it. Re-measure this number when adding a case.
+#      make_repo commits its spec on main at init, so every fixture satisfies the evidence half
+#      from its first commit, and a skip resting on evidence alone disarms the gate outright.
+#      The blast radius is the argument: step 1 is a filter, never a verdict.
+r=$(make_repo sqcarriedon 1); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked && echo carried >> src/main.txt \
+  && git commit -qam "work after the merge" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a shipped branch that carried on is not skipped" ok \
+  || report "a shipped branch that carried on is not skipped" no "standing=$c1 scan=$c2 names=$c3"
+
+# 135. #182 AC3 — a true merge commit, which this suite did not have before this change. Seven
+#      cases merged: 8, 79, 82, 83, 94, 96 and 97, the last three through park_spec_on. Every
+#      one of them merges a base that has NOT moved, so all seven fast-forward and not one
+#      produces a merge commit; case 138 adds an eighth fast-forward. That is #182's own shape
+#      one style over — a fixture asserting a general property while exercising a single case
+#      of it. This comment's own count was wrong in each of three review rounds, the last time
+#      because it was written in the present tense about a file this branch was still adding
+#      to. Recount against the file, and say which file you counted.
+#
+#      NOT red-capable by a single-arm mutation, and that was measured rather than assumed:
+#      under "drop the ancestry arm" this case stays green, because gate_work_reached_base
+#      answers the merge-commit shape too. Two arms cover it, so no one mutation removes the
+#      refusal. Case 138 is where ancestry is pinned on its own.
+r=$(make_repo noffmerged 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git merge -q --no-ff -m "merge commit" 12-parked \
+  && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1
+out=$(run_gate "$r"); mc=$( cd "$r" && git rev-list --count --merges HEAD )
+case "$out$mc" in *"exit=0"*1*) report "a branch joined by a real merge commit stays silent" ok ;;
+                             *) report "a branch joined by a real merge commit stays silent" no "$out merges=$mc" ;; esac
+
+# 136. #182 AC1 and AC3 after the sweep, and the case that pins two decisions at once.
+#
+#      `archive` git-mv's a shipped spec into .specs/_archive/, so the slug leaves the location
+#      the skip looks in first — which is why both locations count and neither alone does.
+#      And that `git mv` is a LATER commit touching the very paths the anchor is resolved from,
+#      so an anchor taken as the last such commit instead of the first would land on it and
+#      compare the branch against a tree it never had. RED-CAPABLE under the named mutation
+#      "drop --reverse", which flips this case alone. The commit ORDER below is what makes that
+#      true and is not incidental: review round 1 measured the first cut, where the sweep
+#      landed before the later work, and the mutation was undetectable — the mv commit's tree
+#      still matched the branch at src/main.txt, so both anchors agreed. The later work has to
+#      come first, or this case pins two of its three claims and silently drops the third.
+#
+#      The base also moves on afterwards, at the same file the branch touched. That is what
+#      rules out comparing the branch against the base's tip: it is silent here, and it would
+#      go back to blocking the moment anyone touched src/main.txt again.
+r=$(make_repo sqarchived 1); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q main && mkdir -p .specs/_archive \
+  && echo later >> src/main.txt && git commit -qam "later work on main, same file" \
+  && git mv .specs/12-parked .specs/_archive/12-parked \
+  && git commit -qm "archive the shipped spec" \
+  && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a swept spec still clears its branch, and a moving base does not un-clear it" ok ;;
+                        *) report "a swept spec still clears its branch, and a moving base does not un-clear it" no "$out" ;; esac
+
+# 137. #182 AC4 — evidence absent is not evidence of shipping. The branch's source reached the
+#      base, byte for byte, but its spec never did: the slug is in neither location, so the
+#      skip must not fire and the branch is gated exactly as it was before this change.
+#      Fail closed, and degrade to the status quo rather than to silence.
+#
+#      RED-CAPABLE under the named mutation "no evidence reads as shipped", which takes BOTH
+#      guards: `|| :` in place of the `git cat-file -e` pair's `|| return 1`, and
+#      `|| _wanchor="$_wbase"` in place of the anchor's. Measured: either alone leaves this
+#      case green, because the other still refuses — the anchor cannot resolve for a slug that
+#      is nowhere on the base. Removing both flips exactly this case and nothing else in the
+#      suite, since it is the only fixture whose source matches the base with its spec missing.
+r=$(make_repo sqspecmissing 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git checkout 12-parked -- src/main.txt \
+  && git commit -qm "source only — the spec never reached the base" \
+  && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"12-parked"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "source in the base without its spec is not a skip" ok \
+  || report "source in the base without its spec is not a skip" no "exit=$c1 names=$c2"
+
+# 138. #182 — what ancestry, and only ancestry, still answers. `archive` moves a shipped spec
+#      to .specs/_archive/, but nothing stops a project deleting one outright, and then the
+#      slug is in neither location while the branch is plainly merged. The evidence arm refuses
+#      (correctly — it has nothing to read) and ancestry carries it.
+#
+#      This is the case that justifies keeping both arms rather than replacing one with the
+#      other, which #182 left open. RED-CAPABLE under the named mutation "drop the ancestry
+#      arm" — `false ||` in place of the `git merge-base --is-ancestor` call at either site —
+#      which flips this case alone; case 135 stays green under the same mutation, which is how
+#      the two arms were shown to overlap everywhere except here.
+r=$(make_repo specdeleted 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git merge -q 12-parked \
+  && git rm -rq .specs/12-parked && git commit -qm "spec deleted outright, not archived" \
+  && git update-ref refs/remotes/origin/main refs/heads/main ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a merged branch whose spec was deleted is carried by ancestry" ok ;;
+                        *) report "a merged branch whose spec was deleted is carried by ancestry" no "$out" ;; esac
+
+# 139. #182 AC2 with a footprint of more than ONE file, which is the shape every other fixture
+#      in this suite lacks — park_spec touches src/main.txt and nothing else.
+#
+#      Found in T3, on live data rather than by reading: the first cut passed the footprint to
+#      awk with `-v foot="$list"`, and a `-v` assignment cannot carry a newline. BSD awk warns
+#      `newline in string` and truncates at the first path; the warning goes to stderr, which a
+#      Stop hook hands straight to the user. Truncated, the intersection sees only the first
+#      file, so a branch that carried on in any OTHER file reads as shipped and goes silent —
+#      a fail-open produced by quoting, one layer down from #1 and invisible to a suite whose
+#      footprints are all one element long.
+#
+#      So the branch here touches two files and carries on in the SECOND. It also asserts the
+#      gate's stderr carries no awk diagnostics: a gate that works while complaining is one
+#      nobody trusts, and the complaint is what says the list was cut.
+r=$(make_repo sqmultifile 1)
+( cd "$r" && git checkout -q -b 12-parked main && mkdir -p .specs/12-parked \
+  && printf '# Spec: parked\n- Slug: 12-parked   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' > .specs/12-parked/spec.md \
+  && echo a >> src/main.txt && echo b > src/other.txt \
+  && git add .specs/12-parked src/main.txt src/other.txt && git commit -qm "two files" ) >/dev/null 2>&1
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked && echo carried >> src/other.txt \
+  && git commit -qam "carried on, in the second file only" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"12-parked"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *awk:*|*"newline in string"*) c3=no ;; *) c3=ok ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a multi-file footprint is not truncated to its first path" ok \
+  || report "a multi-file footprint is not truncated to its first path" no "blocks=$c1 names=$c2 clean-stderr=$c3"
+
+# 140. #182 AC4 — a `- Source globs:` value that git REJECTS must not read as shipped.
+#
+#      Review round 1's BLOCKER. `git diff` exiting 128 prints nothing, and nothing is exactly
+#      what a branch with no footprint prints, so emptiness cannot carry both meanings. The
+#      value is consumer-authored and nothing validates it — assets/check-steering-anchors.sh
+#      says in its own header that it does not judge whether a value is any good — so
+#      `:(globs)` for `:(glob)`, a typo that echoes the key's own name, silenced the gate on
+#      both call sites with no diagnostic anywhere. That is the fail-open this whole change
+#      exists to close, reintroduced one git call below the one T3 caught.
+#
+#      The branch here is squash-merged AND carried on, so the only thing that can silence it
+#      is the skip firing wrongly. Exit status, not emptiness, is what tells the two apart.
+#
+#      Pins the FORK diff's guard only, and that is measured: the rejected pathspec makes the
+#      first `git diff` fail, so the anchor diff is never reached and dropping ITS guard leaves
+#      the suite green. The two are symmetric and the second is unpinned — a fixture would need
+#      the anchor commit's tree unreadable while the fork's is not, which no cheap fixture
+#      produces. Recorded rather than implied, because an over-claimed mutation record is the
+#      thing two earlier rounds of this same spec had to correct.
+r=$(make_repo sqbadglobs 1 "':(globs)**/*.txt'"); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked && echo carried >> src/main.txt \
+  && git commit -qam "work after the merge" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a pathspec git rejects does not read as shipped" ok \
+  || report "a pathspec git rejects does not read as shipped" no "standing=$c1 scan=$c2 names=$c3"
+
+# 141. #182 AC4's last clause — a shallow clone must not be QUIETER than a full one.
+#
+#      Round 2 found this argued in prose and pinned nowhere. Measured at depth 1, rather than
+#      reasoned: step 1's `cat-file` succeeds and the anchor DOES resolve — to the grafted tip
+#      — and it is `git merge-base` that refuses, the branch and the base being two grafted
+#      tips with no common ancestor. The full clone of this same fixture is silent (case 132);
+#      this one blocks. Louder is allowed and quieter is not, which is the whole of the clause.
+#
+#      RED-CAPABLE under the named mutation "an unresolvable fork reads as the base" — both
+#      `|| return 1` arms on `_wfork` replaced by `|| _wfork="$_wbase"` — which flips this case
+#      alone. It takes both arms: three guards defend this refusal and no single-line removal
+#      reaches it, which is why round 2's version of this case shipped with no record at all.
+r=$(make_repo sqshallow 1); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+sc="$TMP/sqshallow-clone"
+if git clone -q --depth 1 --no-single-branch "file://$r" "$sc" 2>/dev/null \
+   && [ "$( cd "$sc" && git rev-parse --is-shallow-repository 2>/dev/null )" = true ]; then
+  ( cd "$sc" && git checkout -q -b 12-parked origin/12-parked && git checkout -q main ) >/dev/null 2>&1
+  out=$(run_gate "$sc"); err=$(cat "$TMP/err")
+  case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+  case "$err" in *"12-parked"*) c2=ok ;; *) c2=no ;; esac
+  [ "$c1$c2" = "okok" ] && report "a shallow clone is louder than a full one, never quieter" ok \
+    || report "a shallow clone is louder than a full one, never quieter" no "blocks=$c1 names=$c2"
+else
+  note_skip "a shallow clone is louder than a full one, never quieter" \
+            "git clone --depth 1 over file:// did not produce a shallow repository here"
+fi
+
+# 142. #182 AC2 — carry-on that REVERTS, which every other carry-on case misses because they
+#      all add. Review round 3's HIGH.
+#
+#      The footprint was a net tree diff, `git diff <fork> <tip>`, so a path the branch changed
+#      and then changed back is simply absent from it. Add a file, squash-merge, then `git rm`
+#      it on the branch: fork and tip agree at that path because neither has it, the footprint
+#      comes back empty, and the empty-footprint return reads that as "nothing to review". The
+#      branch's tree now differs from the base at a shipped path that nobody reviewed — a new
+#      silence over work the base does not hold, which is the one direction `- Owns:` forbids.
+#      Before this change the same branch blocked, so the fix had opened it.
+#
+#      The footprint is now taken from the branch's own commits rather than its net tree, which
+#      keeps the scoping the design needs — what landed on the base between the fork and the
+#      squash is still not in the branch's log — while making the empty case mean what its
+#      comment claims. RED-CAPABLE under the named mutation "net footprint":
+#      `git diff --name-only "$_wfork" "$_wtip"` in place of the `git log` form, which takes
+#      this case red on both call sites and leaves the rest of the suite green.
+r=$(make_repo sqreverted 1)
+( cd "$r" && git checkout -q -b 12-parked main && mkdir -p .specs/12-parked \
+  && printf '# Spec: parked\n- Slug: 12-parked   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' > .specs/12-parked/spec.md \
+  && echo new > src/a.txt \
+  && git add .specs/12-parked src/a.txt && git commit -qm "add src/a.txt" ) >/dev/null 2>&1
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked && git rm -q src/a.txt \
+  && git commit -qm "remove the shipped file — nobody reviewed this" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "carry-on that reverts a shipped path is not skipped" ok \
+  || report "carry-on that reverts a shipped path is not skipped" no "standing=$c1 scan=$c2 names=$c3"
+
+# 143. #182 AC2 — carry-on inside a MERGE COMMIT. Review round 4's HIGH, and the shape that
+#      shows the two readings of "what did this branch touch" are complements, not rivals.
+#
+#      `git log --name-only` prints no diff for a merge commit, so content that exists only
+#      there — a conflict fixup, or a hand edit made between `git merge --no-commit` and the
+#      commit — is invisible to a commit-derived footprint. The net tree diff sees it, because
+#      it compares trees and does not care how they got that way. And the net diff is blind to
+#      case 142's revert, which the log catches. Measured on this fixture: the log footprint is
+#      {src/a.txt} and the net footprint is {src/b.txt}, and the unreviewed edit is in b.
+#
+#      So the footprint is the UNION. It can only ever grow, and a larger footprint intersects
+#      more, so the skip fires less — the fail-closed direction, which is why widening is the
+#      safe way to be wrong here. RED-CAPABLE under either half alone: drop the `git log` term
+#      and case 142 goes red, drop the `git diff` term and this one does.
+r=$(make_repo sqmergefixup 1)
+( cd "$r" && git checkout -q main && echo b0 > src/b.txt \
+  && git add src/b.txt && git commit -qm "b exists on main" \
+  && git checkout -q -b 12-parked main && mkdir -p .specs/12-parked \
+  && printf '# Spec: parked\n- Slug: 12-parked   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' > .specs/12-parked/spec.md \
+  && echo a > src/a.txt && git add .specs/12-parked src/a.txt && git commit -qm "add src/a.txt" ) >/dev/null 2>&1
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q main && echo b1 >> src/b.txt && git commit -qam "main moves on at src/b.txt" \
+  && git update-ref refs/remotes/origin/main refs/heads/main \
+  && git checkout -q 12-parked && { git merge --no-commit --no-ff -q main >/dev/null 2>&1 || true; } \
+  && echo "fixup nobody reviewed" >> src/b.txt && git add -A \
+  && git commit -qm "merge main, with a fixup inside the merge commit" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "an edit made inside a merge commit is not skipped" ok \
+  || report "an edit made inside a merge commit is not skipped" no "standing=$c1 scan=$c2 names=$c3"
+
+# 144. The scan's own route to silence for a branch with no spec, which review round 4 found
+#      asserted in a comment and pinned by nothing. Case 83 covers the CURRENT-branch route,
+#      where check_current_branch returns at the absent spec.md. This is the other one: a
+#      branch that is not the current one, not an ancestor of the base, and has no spec of its
+#      own, so the scan consults ancestry, gets false, and then gets an empty state back.
+#
+#      Cases 1-7 were cited for this and do not reach it: make_repo builds no origin/*, so the
+#      base falls through to the local main, main is the only other ref, and a branch is its
+#      own ancestor — the scan skips it at the ancestry arm before ever asking about its spec.
+#
+#      RED-CAPABLE under the named mutation "an absent spec reads as unreviewed": in
+#      gate_spec_review_state, `[ "$_rc" -eq 1 ] && return 0` returning `no-receipt` instead.
+r=$(make_repo scanroute 1)
+( cd "$r" && git checkout -q -b unrelated 9-feature && echo more >> src/main.txt \
+  && git commit -qam "work on a branch with no spec of its own" \
+  && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); anc=$( cd "$r" && git merge-base --is-ancestor unrelated main 2>/dev/null && echo yes || echo no )
+case "$out$anc" in *"exit=0"*no) report "a spec-less branch is silent through the scan, not only the current-branch path" ok ;;
+                             *) report "a spec-less branch is silent through the scan, not only the current-branch path" no "$out ancestor=$anc" ;; esac
+
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
 #     gate cannot compare anything at all, so exiting 0 asserts a comparison it never made.

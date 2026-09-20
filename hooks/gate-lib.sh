@@ -184,6 +184,142 @@ gate_spec_review_state() {  # <spec dir> <tip sha> [<ref, empty for the working 
   printf 'stale=%s %s' "$_sha" "$(echo "$_changed" | tr '\n' ' ')"
 }
 
+# Has this branch's WORK reached the base — whatever merge style put it there?
+#
+# The skip beside this one asks `git merge-base --is-ancestor`, which answers whether a COMMIT
+# was joined into the base's history. That is a different question, and the two coincide only
+# under a merge commit or a fast-forward. A squash merge writes a new commit carrying the
+# branch's result with no parent link back to it, so the tip is not an ancestor and never will
+# be: the ancestry test is not failing intermittently, it is being asked something that can no
+# longer be true. In a squash-merging repository the skip therefore never fired at all, and
+# every shipped but undeleted spec branch stayed in the scan permanently. #182.
+#
+# Two steps, cheap first, and every unresolvable input leaves the skip unfired:
+#
+#   1. the base's tree carries this slug's spec, under .specs/ or .specs/_archive/
+#   2. the branch holds nothing beyond what shipped
+#
+# Both locations count and neither alone does: `_archive/` is timely only after a sweep that
+# `archive` runs on request, and `.specs/` is what that sweep empties.
+#
+# Step 1 alone is a fail-open, and it is the one this had to avoid — merge, then carry on
+# committing to the same branch, and the slug is in the base while the branch holds work nobody
+# reviewed. A slug reaching the base is a fact about the SPEC, not about the branch, and
+# reading the first as the second is #26's defect returning through the door built to close
+# its side effects. Case 134.
+#
+# Step 2's anchor is the FIRST commit on the base carrying the slug — the squash commit, since
+# a spec is its branch's first commit and reaches the base only when the branch does. First
+# rather than last, so `archive`'s later `git mv` into `_archive/` cannot drag the anchor
+# forward onto work the branch never had. The comparison is scoped to the branch's OWN
+# footprint rather than to all of `- Source globs:`, and that scoping is what makes it survive
+# a base that moves: the anchor carries the branch's content at exactly those paths, while
+# whatever else landed between the branch's fork and its squash is at other paths. Compared
+# against the base's tip instead, the skip would stop firing the moment anyone touched one of
+# those files again — the same permanent block wearing a new mechanism.
+#
+# The intersection is done in awk rather than by handing the footprint back to git as
+# pathspecs. Word-splitting a path list splits a path containing a space into two pathspecs
+# that match nothing, and a pathspec matching nothing makes `git diff` print nothing, which
+# reads here as "shipped". That is a fail-open produced by quoting, which is #1's whole family.
+gate_work_reached_base() {  # <slug> <tip sha> <base sha>
+  _wslug=$1; _wtip=$2; _wbase=$3
+  [ -n "$_wslug" ] && [ -n "$_wtip" ] && [ -n "$_wbase" ] || return 1
+
+  _wlive=".specs/$_wslug/spec.md"
+  _warch=".specs/_archive/$_wslug/spec.md"
+  git cat-file -e "$_wbase:$_wlive" 2>/dev/null \
+    || git cat-file -e "$_wbase:$_warch" 2>/dev/null \
+    || return 1
+
+  _wanchor=$(git rev-list --reverse "$_wbase" -- "$_wlive" "$_warch" 2>/dev/null | head -1)
+  [ -n "$_wanchor" ] || return 1
+
+  _wfork=$(git merge-base "$_wbase" "$_wtip" 2>/dev/null) || return 1
+  [ -n "$_wfork" ] || return 1
+
+  _wglobs=$(gate_steering_value .steering/tech.md 'Source globs')
+  [ -n "$_wglobs" ] || _wglobs='*'
+  _wglobs=$(printf '%s' "$_wglobs" | tr -d "\"'")
+
+  # Exit status, never emptiness. `- Source globs:` is consumer-authored and nothing validates
+  # it — `check-steering-anchors.sh` says in its own header that it does not judge whether a
+  # value is any good — so a pathspec git rejects (`:(globs)` for `:(glob)`, a typo echoing the
+  # key's own name) makes this exit 128 having printed nothing. Nothing is also what a branch
+  # with no footprint prints, and reading the two as one silenced the gate on both call sites
+  # with no diagnostic anywhere. Review round 1's BLOCKER, case 140. A git that could not
+  # answer leaves the skip unfired, which is the same direction as every other guard here.
+  # What did this branch touch? Two readings, and they are COMPLEMENTS rather than rivals —
+  # each is blind to a shape the other catches, and "absent from the footprint" is read below
+  # as "nothing to review", so a blind spot here is a silenced gate.
+  #
+  #   git log   the branch's own commits. Sees a path changed and then changed back — add a
+  #             file, ship it, delete it on the branch — which a tree comparison cannot,
+  #             because fork and tip agree at a path neither of them has. Round 3, case 142.
+  #             Blind to a merge commit, for which --name-only prints no diff at all.
+  #   git diff  the net tree comparison. Sees content that exists ONLY in a merge commit — a
+  #             conflict fixup, or a hand edit between `git merge --no-commit` and the commit
+  #             — because it does not care how the trees came to differ. Round 4, case 143.
+  #
+  # So: the union. It can only grow, and a larger footprint intersects more below, so the skip
+  # fires LESS — widening is the safe way to be wrong here. Neither term widens the scoping the
+  # design turns on, because _wfork is the merge base: whatever the base carried before this
+  # branch forked is common to both sides and appears in neither term.
+  set -f
+  _wlog=$(git log --format= --name-only "$_wfork".."$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
+  _wnet=$(git diff --name-only "$_wfork" "$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
+  set +f
+
+  # Folded here rather than piped above, for two reasons. A pipeline's status is its LAST
+  # command's, so `git log ... | sort -u` hands back sort's success and undoes the exit-status
+  # reads two lines up — case 140 went red on exactly that regression. And `git log
+  # --name-only` separates each commit's paths with a BLANK line, which is the sentinel the
+  # intersection below splits its two lists on; left in, the first commit boundary would be
+  # read as the end of the footprint.
+  #
+  # `|| return 1` for the same reason every other step here has it, and it was missing for one
+  # round: an awk that exits non-zero prints nothing, and nothing is what a branch with no
+  # footprint prints — so the empty-footprint return below read "awk could not tell me" as
+  # "the branch touched nothing". UNPINNED, and said out loud rather than implied: nothing
+  # consumer-authored controls what awk DOES here — the program and its arguments are ours,
+  # and only path names flow through as data — so the trigger is awk itself failing rather
+  # than anything a project could write, and no cheap fixture produces that. This is the
+  # difference from the rejected pathspec above, where the consumer authors the argument. The
+  # anchor diff's guard is unpinned for its own reason, which case 140 records.
+  #
+  # `NF` and not `length($0)`: it is what guarantees _wfoot holds no blank-equivalent line,
+  # which is what makes the sentinel below safe. The cost is a corner — a path named entirely
+  # of spaces is dropped from the footprint, which narrows it, in the one place this function
+  # argues that only widening is safe. Fixing it means giving the two lists a separator git
+  # cannot emit; changing NF alone reintroduces case 139's truncation.
+  _wfoot=$(printf '%s\n%s\n' "$_wlog" "$_wnet" | awk 'NF && !seen[$0]++') || return 1
+
+  # Answered, and the answer is that the branch carries no reviewable source of its own. Step 1
+  # already established the work is in the base. Distinct from the line above on purpose: "git
+  # could not tell me" and "git told me nothing changed" must not collapse into one return.
+  [ -n "$_wfoot" ] || return 0
+
+  set -f
+  _wnow=$(git diff --name-only "$_wanchor" "$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
+  set +f
+
+  # Both lists go in on STDIN, separated by a blank line, because `awk -v foot="$list"` cannot
+  # carry one: a -v assignment takes no newline, and BSD awk warns `newline in string` and
+  # truncates at the first path. Truncated, the intersection sees one file and a branch that
+  # carried on in any other reads as shipped — a fail-open produced by quoting, which is #1's
+  # family, and the warning lands on the stderr a Stop hook hands to the user. A blank line is
+  # a safe separator because `git diff --name-only` never emits an empty path. Case 139.
+  # `|| return 1` for the same reason the two git calls above have it, and it was missing here
+  # for two rounds: an awk that exits non-zero prints nothing, and nothing is what an empty
+  # intersection prints. `$(a | b)` carries b's status in POSIX sh, so this is one token.
+  _wleft=$(printf '%s\n\n%s\n' "$_wfoot" "$_wnow" | awk '
+    !split_seen && NF == 0 { split_seen = 1; next }
+    !split_seen { foot[$0] = 1; next }
+    NF > 0 && $0 in foot { print }
+  ') || return 1
+  [ -z "$_wleft" ]
+}
+
 # One state, one sentence — for callers naming a branch that is not the one in hand, where
 # the tailored second person of the gate's own messages would be wrong.
 gate_review_state_sentence() {  # <state from gate_spec_review_state>
