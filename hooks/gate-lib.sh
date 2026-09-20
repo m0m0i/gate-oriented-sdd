@@ -276,7 +276,21 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   # --name-only` separates each commit's paths with a BLANK line, which is the sentinel the
   # intersection below splits its two lists on; left in, the first commit boundary would be
   # read as the end of the footprint.
-  _wfoot=$(printf '%s\n%s\n' "$_wlog" "$_wnet" | awk 'NF && !seen[$0]++')
+  #
+  # `|| return 1` for the same reason every other step here has it, and it was missing for one
+  # round: an awk that exits non-zero prints nothing, and nothing is what a branch with no
+  # footprint prints — so the empty-footprint return below read "awk could not tell me" as
+  # "the branch touched nothing". UNPINNED, and said out loud rather than implied: no
+  # consumer-authored value reaches this line, so the trigger is awk itself failing and no
+  # cheap fixture produces it. The anchor diff's guard is unpinned for its own reason, which
+  # case 140 records.
+  #
+  # `NF` and not `length($0)`: it is what guarantees _wfoot holds no blank-equivalent line,
+  # which is what makes the sentinel below safe. The cost is a corner — a path named entirely
+  # of spaces is dropped from the footprint, which narrows it, in the one place this function
+  # argues that only widening is safe. Fixing it means giving the two lists a separator git
+  # cannot emit; changing NF alone reintroduces case 139's truncation.
+  _wfoot=$(printf '%s\n%s\n' "$_wlog" "$_wnet" | awk 'NF && !seen[$0]++') || return 1
 
   # Answered, and the answer is that the branch carries no reviewable source of its own. Step 1
   # already established the work is in the base. Distinct from the line above on purpose: "git
