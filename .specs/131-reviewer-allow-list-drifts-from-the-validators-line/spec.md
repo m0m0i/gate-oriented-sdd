@@ -56,7 +56,7 @@
         *(#118's "What must NOT change")*
   - [x] **AC7:** `./scripts/check-version-bump.py` remains sanctioned for the dogfood reviewer while
         remaining off the `- Validators:` line, per `.steering/tech.md`'s stated reason.
-  - [ ] **AC8:** the new guard is itself named on `.steering/tech.md`'s `- Validators:` line and on
+  - [x] **AC8:** the new guard is itself named on `.steering/tech.md`'s `- Validators:` line and on
         the dogfood reviewer's allow-list, and therefore passes its own AC1.
   - [ ] **AC9:** the regression fails before the fix and passes after, and the control case runs
         first. Every new branch survives `python3 -O` (#28).
@@ -216,7 +216,7 @@ to fix it. The class closes because the guard's first subject is itself.
 - [x] **T2:** Category rule — cases for AC3, AC4, AC5 (a dropped category fails and is named; each
       of the three category-3 spellings passes; a bare N/A fails and a reasoned one passes); then
       the rule, and the dogfood reviewer's category-3 N/A declaration with its reason.
-- [ ] **T3:** AC8 — the guard onto `.steering/tech.md`'s `- Validators:` line, onto the dogfood
+- [x] **T3:** AC8 — the guard onto `.steering/tech.md`'s `- Validators:` line, onto the dogfood
       allow-list, and into `.github/workflows/ci.yml`. One task because the first edit reddens the
       turn-end gate until the second lands.
 - [ ] **T4:** Verification, README updates, and patch version bump (AC9, AC10, AC11) — extend the

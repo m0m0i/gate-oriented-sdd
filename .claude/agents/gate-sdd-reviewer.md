@@ -30,6 +30,7 @@ Evidence gathering only:
   - `./assets/check-document-set.py`
   - `./scripts/check-contract-path.py`
   - `./scripts/check-readme-claims.py`
+  - `./scripts/check-reviewer-allow-list.py`
   - `./scripts/test-gates.sh`
   - `./scripts/check-version-bump.py <base-sha>` — read-only, safe to run for evidence
 - `claude plugin validate . --strict`

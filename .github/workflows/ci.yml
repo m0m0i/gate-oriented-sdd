@@ -85,6 +85,11 @@ jobs:
       - name: Document set matches the declared mode
         run: ./assets/check-document-set.py
 
+      # .steering/tech.md's - Validators: line is the authority on which commands gate a turn;
+      # the reviewer's allow-list must cover it, and all 5 reviewers must respect the category rule.
+      - name: Reviewer allow-list covers steering validators and respects categories
+        run: ./scripts/check-reviewer-allow-list.py
+
       # The repo's central claim is that the review gate is enforced rather than
       # advisory. That is testable without a model, so it is tested.
       - name: Review gate behaves
