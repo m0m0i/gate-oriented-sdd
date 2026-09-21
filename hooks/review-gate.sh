@@ -100,7 +100,7 @@ check_current_branch() {
     # block reads as the gate inventing a file, and a gate that looks broken is a gate switched
     # off. Empty on every path that existed before this change, and appended with no separator,
     # so those messages are unchanged character for character.
-    note=" ($spec is not in your working tree, so the gate read it — and the receipt — from this branch's own tree at HEAD. A sparse checkout, a partial worktree, or a deletion nobody committed produces that, and it means a receipt written into the working tree alone does not clear this until it is committed.)"
+    note=" ($spec is not in your working tree, so the gate read it from this branch's own tree at HEAD. A sparse checkout, a partial worktree, or a deletion nobody committed produces that. The receipt is read from there too, so one written into the working tree alone does not clear this until it is committed.)"
     # The two unreadable states are the exception, and they need the opposite advice. A blob a
     # tree names is always readable, so neither can arise from a ref read in the ordinary way —
     # reaching one here means `git cat-file -e` succeeded and `git show` failed, which is a

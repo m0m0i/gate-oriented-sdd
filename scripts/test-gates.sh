@@ -716,6 +716,13 @@ case "$err" in *"9-feature"*) c3=ok ;; *) c3=no ;; esac
 case "$err" in *"not in your working tree"*) c4=ok ;; *) c4=no ;; esac
 # The fixture only means anything while the spec really is committed on the branch.
 [ "$committed" = yes ] && c5=ok || c5=no
+# NOT PINNED, and said rather than left silent, in the form the chmod-under-root notes above
+# use: the `$corrupt` clause the two unreadable states carry has no cheap fixture. Reaching
+# either from the branch's own tree needs `git cat-file -e` to succeed and `git show` to fail
+# on the same object, which is a damaged object store — not a file mode, so `chmod 000` does
+# not produce it, and neither does anything else a throwaway repository can do in one line.
+# It cannot change whether the gate blocks; it changes which remedy the block names.
+#
 # AC5. Reported ONCE, and by a path that can speak in the second person. The alternative fix
 # — letting the scan stop skipping this ref by name — would report it under a headline saying
 # "a branch other than the one this turn is on", which is false about the branch you are

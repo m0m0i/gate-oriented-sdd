@@ -75,6 +75,12 @@
     under row 2 with #39, which decides the vocabulary a guard uses to say it checked nothing.
   - Widening the **"No issue, no spec"** slug check to a spec that exists only in the committed
     tree. See the Design, which gates it deliberately rather than by omission.
+  - **#191**, filed from this branch's second review round: the fallback's own existence test
+    reads an unavailable object as an absent spec, so an offline blobless partial clone stays
+    silent. Considered and left, not missed. It is not a regression — `[ -f "$spec" ]` was
+    equally silent in the same state — and the fix means reading `git cat-file`'s stderr, which
+    is too brittle to settle one call site at a time. Same G-1 shape as #178, same sweep,
+    whose vocabulary #39 decides.
   - `assets/check-unreviewed-work.sh`. It already reads the head commit's tree and already
     catches this; nothing here changes what it asks, and the Design keeps
     `gate_spec_review_state`'s signature so that stays true.
