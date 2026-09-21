@@ -689,6 +689,171 @@ out=$(run_gate "$r"); anc=$( cd "$r" && git merge-base --is-ancestor unrelated m
 case "$out$anc" in *"exit=0"*no) report "a spec-less branch is silent through the scan, not only the current-branch path" ok ;;
                              *) report "a spec-less branch is silent through the scan, not only the current-branch path" no "$out ancestor=$anc" ;; esac
 
+# 146. #177 AC1 — the gap between the two readers, which is exactly one branch wide. The
+#      current-branch path reads the WORKING TREE, deliberately, so an uncommitted spec edit
+#      counts; the scan then skips that same ref BY NAME, because the current-branch path is
+#      supposed to have answered for it. Take the spec out of the working tree without
+#      committing the deletion and neither reader looks at the branch's own tree: the first
+#      returns at the absent file, the second was told the branch is spoken for. Every OTHER
+#      branch in the same repository is read from its own tree and reported.
+#
+#      A sparse checkout excluding `.specs/`, or a partial worktree, reaches this with nobody
+#      deleting anything. `rm` is the shortest fixture for the same state.
+#
+#      RED-CAPABLE under the named mutation "an absent working-tree spec is nothing to gate":
+#      in check_current_branch, restoring `[ -f "$spec" ] || return 0` in place of the fallback
+#      read. That is the code as it shipped before this change, and it exits 0 here.
+r=$(make_repo wtgone 0)
+( cd "$r" && rm .specs/9-feature/spec.md ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+committed=$( cd "$r" && git cat-file -e "HEAD:.specs/9-feature/spec.md" 2>/dev/null && echo yes || echo no )
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"9-feature"*) c3=ok ;; *) c3=no ;; esac
+# AC7. The remedy names a file the author cannot see, so the message has to say why it is not
+# there and which tree the answer came from. Without this the block reads as the gate
+# hallucinating a file, and a gate that looks broken is a gate switched off.
+case "$err" in *"not in your working tree"*) c4=ok ;; *) c4=no ;; esac
+# The fixture only means anything while the spec really is committed on the branch.
+[ "$committed" = yes ] && c5=ok || c5=no
+# NOT PINNED, and said rather than left silent, in the form the chmod-under-root notes above
+# use: the `$corrupt` clause the two unreadable states carry has no cheap fixture. Reaching
+# either from the branch's own tree needs `git cat-file -e` to succeed and `git show` to fail
+# on the same object, which is a damaged object store — not a file mode, so `chmod 000` does
+# not produce it, and neither does anything else a throwaway repository can do in one line.
+# It cannot change whether the gate blocks; it changes which remedy the block names.
+#
+# AC5. Reported ONCE, and by a path that can speak in the second person. The alternative fix
+# — letting the scan stop skipping this ref by name — would report it under a headline saying
+# "a branch other than the one this turn is on", which is false about the branch you are
+# standing on. The absence of that sentence is what says which path answered.
+case "$err" in *"other than the one this turn is on"*) c6=no ;; *) c6=ok ;; esac
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] \
+  && report "a spec committed on the branch and gone from the working tree still blocks" ok \
+  || report "a spec committed on the branch and gone from the working tree still blocks" no \
+     "exit=$c1 json=$c2 names-branch=$c3 names-the-tree=$c4 committed=$c5 second-person=$c6"
+
+# 147. #177 AC4 — the fallback is a fallback. The working tree is read FIRST and its answer
+#      stands, which is #26's deliberate choice and the reason an uncommitted spec edit counts;
+#      a fix that reached for the branch's own tree whenever it could would silence exactly the
+#      author who is mid-edit. Both directions, because either alone is satisfied by a gate that
+#      always reads one tree:
+#
+#        working tree open   + committed ticked  -> silent  (still implementing)
+#        working tree ticked + committed open    -> blocks  (finished, unreviewed)
+#
+#      RED-CAPABLE under the named mutation "the branch's own tree always wins": setting
+#      `tree=HEAD` unconditionally in check_current_branch inverts both halves at once. Run
+#      rather than reasoned — the mutation takes both halves red, and seven other cases with
+#      them. #185 is that a reviewer cannot check this claim, so the author says which it is.
+r=$(make_repo wtopen 0)
+( cd "$r" && sed 's/^- \[x\] T1/- [ ] T1/' .specs/9-feature/spec.md > "$TMP/s" \
+  && cp "$TMP/s" .specs/9-feature/spec.md ) >/dev/null 2>&1
+out=$(run_gate "$r")
+committed=$( cd "$r" && git show "HEAD:.specs/9-feature/spec.md" | grep -c '^- \[x\] T1' )
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+[ "$committed" = 1 ] && c2=ok || c2=no
+
+r=$(make_repo wtticked 1)
+( cd "$r" && sed 's/^- \[ \] T1/- [x] T1/' .specs/9-feature/spec.md > "$TMP/s" \
+  && cp "$TMP/s" .specs/9-feature/spec.md ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+committed=$( cd "$r" && git show "HEAD:.specs/9-feature/spec.md" | grep -c '^- \[ \] T1' )
+case "$out" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$committed" = 1 ] && c4=ok || c4=no
+# ...and the message is the one that shipped before #177. The note is appended to all six
+# blocks, so a working-tree read that carries it means every existing message changed.
+case "$err" in *"working tree"*) c5=no ;; *) c5=ok ;; esac
+
+[ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
+  && report "the working tree answers for the current branch, in both directions" ok \
+  || report "the working tree answers for the current branch, in both directions" no \
+     "open-silent=$c1 committed-ticked=$c2 ticked-blocks=$c3 committed-open=$c4 no-note=$c5"
+
+# 148. #177 AC3 — the fourth cell of {spec in the working tree} x {spec in the branch's own
+#      tree}, on the CURRENT branch: neither. Cases 83 and 144 cover the two litter shapes from
+#      elsewhere in the repository; this is the one the new fallback reaches first, and a
+#      gate that answered it wrong would fire on every ordinary branch in every project.
+#
+#      NOT RED-CAPABLE under any single mutation of the code as it stands, and that is worth
+#      writing down rather than dressing up: the silence here is over-determined. Drop the
+#      `|| return 0` from the existence test, widen it from the file to the directory, or set
+#      `tree=HEAD` unconditionally, and the case still passes — gate_spec_review_state reads an
+#      absent spec from HEAD and returns the empty state, which is silence by the other route.
+#      This file's own precedent — the comment following case 90's second fixture — says a case
+#      that cannot fail asserts a property nobody pinned, so this one states what it DOES
+#      constrain: the next change to this
+#      function is #176, a default `*)` arm that blocks on any state the `case` does not
+#      recognise, and the first refactor to route both readers through one helper will want to
+#      give "no spec at all" a state name. On that day this case is the difference between a
+#      name that means silence and one that reaches the new arm.
+r=$(make_repo nospecbranch 1)
+( cd "$r" && git checkout -q -b 12-nospec 9-feature && echo more >> src/main.txt \
+  && git commit -qam "work with no spec of its own" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+# The same branch with the directory present and empty — `archive` leaves this shape behind,
+# and `[ -f ]` and `git cat-file -e` must both decline on it.
+( cd "$r" && mkdir -p .specs/12-nospec ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a current branch with no spec in either tree is silent" ok \
+  || report "a current branch with no spec in either tree is silent" no "no-dir=$c1 empty-dir=$c2"
+
+# 149. #177 AC6 — the merged-work skip still reaches the branch through the fallback. Case 133
+#      is this case with the spec in the working tree; take it out and the question has to
+#      survive the new route, or every shipped-but-undeleted branch blocks every turn for
+#      anyone whose checkout does not carry `.specs/`. The skip runs BEFORE any state is read
+#      and asks git objects rather than the working tree, so the order inside the function is
+#      what this pins.
+#
+#      RED-CAPABLE under the named mutation "the merged-work skip stops guarding": replacing
+#      its `return 0` with `:`, so the fallback answers for a branch that shipped. Run rather
+#      than reasoned — it takes this case red, and two others with it.
+r=$(make_repo sqwtgone 1); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked && rm .specs/12-parked/spec.md ) >/dev/null 2>&1
+out=$(run_gate "$r")
+committed=$( cd "$r" && git cat-file -e "HEAD:.specs/12-parked/spec.md" 2>/dev/null && echo yes || echo no )
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+[ "$committed" = yes ] && c2=ok || c2=no
+[ "$c1$c2" = "okok" ] \
+  && report "a squash-merged branch whose working tree lacks the spec stays silent" ok \
+  || report "a squash-merged branch whose working tree lacks the spec stays silent" no \
+     "exit=$c1 committed=$c2"
+
+# 150. #177 AC8 — the receipt comes from the tree the spec came from. Reading the two halves
+#      of one question from two different trees is the shape of the defect this change closes,
+#      so the fallback moves both or neither. The consequence is stated rather than discovered:
+#      with `.specs/` absent from the working tree, a receipt written there alone does not
+#      clear the block until it is committed, and the message says so. That fails closed, which
+#      is the direction this project's anchor names.
+#
+#      RED-CAPABLE under the named mutation "the receipt is read from the working tree": in
+#      gate_spec_review_state, `_gate_read "" "$_dir/.review-receipt"` in place of
+#      `_gate_read "$_ref" ...`. It inverts both halves — the committed receipt stops being
+#      found, and the uncommitted one starts being honoured. Run, not reasoned.
+r=$(make_repo rcptcommitted 0)
+( cd "$r" && printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(git rev-parse HEAD)" \
+     > .specs/9-feature/.review-receipt \
+  && git add .specs/9-feature/.review-receipt && git commit -qm receipt \
+  && rm .specs/9-feature/spec.md .specs/9-feature/.review-receipt ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+
+r=$(make_repo rcptworktree 0)
+( cd "$r" && rm .specs/9-feature/spec.md \
+  && printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(git rev-parse HEAD)" \
+     > .specs/9-feature/.review-receipt ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+# And it has to say WHY a receipt that is right there did not count.
+case "$err" in *"until it is committed"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] \
+  && report "the receipt is read from the tree the spec was read from" ok \
+  || report "the receipt is read from the tree the spec was read from" no \
+     "committed-clears=$c1 worktree-only-blocks=$c2 says-why=$c3"
+
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
 #     gate cannot compare anything at all, so exiting 0 asserts a comparison it never made.
