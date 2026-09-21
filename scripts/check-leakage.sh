@@ -54,11 +54,14 @@ files() {
 
 # The work-set, read ONCE. Three scans over three separately computed lists could disagree
 # with each other and with the count below, and the count is only worth printing if it is the
-# count of what was actually handed to grep.
+# count of what was actually handed to grep — which is why the scans below run over `scanlist`,
+# the entries that survived classification, rather than over `list`. Those drifted apart for
+# one round: `absent` entries stayed in the list grep was given while leaving the count.
 list=$(files)
 
 scanned=0
 absent=0
+scanlist=""
 unreadable=""
 unscannable=""
 while IFS= read -r f; do
@@ -70,8 +73,37 @@ while IFS= read -r f; do
   # and unreadable fused, which is this issue's own subject reached one level down inside its
   # own fix. Counted rather than skipped in silence: "I scanned round three index entries" is
   # exactly the thing that must not hide inside `clean`. AC5, narrowed in review round 2.
-  [ -e "$f" ] || { absent=$((absent + 1)); continue; }
+  if [ ! -e "$f" ]; then
+    # Absent, or UNREACHABLE — and `[ -e ]` cannot tell you which. stat() returns EACCES
+    # through any prefix with no search permission, and `test` collapses that into false, so
+    # the arm above counted a file that IS in the working tree as one that is not: a planted
+    # hit under a mode-000 directory went from caught to `clean`, on exit 0, in the clean-room
+    # backstop. Introduced by the fix for the defect above it, which is this issue's own
+    # subject a third time. Review round 3.
+    #
+    # Walk UP to the first ancestor that can be stat'd at all. Testing only the immediate
+    # parent is not enough: under a mode-000 `a/`, `[ -d a/b ]` cannot be answered either, so
+    # `a/b/c.md` would fall through to "absent" by the same mechanism one level deeper. A path
+    # with no directory part has no ancestor to blame and is simply gone.
+    _d=$f; _blocked=0
+    while [ "${_d%/*}" != "$_d" ]; do
+      _d=${_d%/*}
+      if [ -d "$_d" ]; then
+        [ -x "$_d" ] || _blocked=1
+        break
+      fi
+    done
+    if [ "$_blocked" -eq 1 ]; then
+      unreadable="${unreadable}
+  $f"
+    else
+      absent=$((absent + 1))
+    fi
+    continue
+  fi
   scanned=$((scanned + 1))
+  scanlist="${scanlist}${f}
+"
   # git C-quotes a path holding `"`, a backslash or a control character whatever
   # core.quotePath says, and `ls-files -z`, the only way to get those verbatim, has no
   # portable reader in POSIX sh. Such a path genuinely cannot be scanned here, so it is named
@@ -95,9 +127,17 @@ EOF
 # `git ls-files`, or an SELF exclusion that grew all end here, and until now they all printed
 # `check-leakage: clean` on exit 0. AGENTS.md calls this the guard that matters most. #39.
 if [ "$scanned" -eq 0 ]; then
-  echo "check-leakage FAILED — the work-set is empty, so nothing was scanned." >&2
-  echo "  'found nothing' and 'looked at nothing' must not share an exit code. Check that" >&2
-  echo "  git ls-files works here, and that SELF still excludes only this script." >&2
+  if [ "$absent" -gt 0 ]; then
+    # It was not empty, and saying so would send the reader to `git ls-files` and to SELF,
+    # neither of which is the cause. A fully sparse checkout lands here. AC5's second clause.
+    echo "check-leakage FAILED — the work-set held $absent index entr(ies) and no working-tree" >&2
+    echo "  file for any of them, so nothing was scanned. A checkout this partial cannot be" >&2
+    echo "  cleared by this guard; check it out fully rather than treating this as a pass." >&2
+  else
+    echo "check-leakage FAILED — the work-set is empty, so nothing was scanned." >&2
+    echo "  'found nothing' and 'looked at nothing' must not share an exit code. Check that" >&2
+    echo "  git ls-files works here, and that SELF still excludes only this script." >&2
+  fi
   exit 1
 fi
 
@@ -131,7 +171,7 @@ fi
 # not C-quoted by git, so it passes every test above, is counted, and then reaches grep as an
 # OPTION — a valid one silently changing the scan, an invalid one exiting 2 into the discarded
 # stderr. Either way never read, while the count says it was. Review round 2.
-scan() { printf '%s\n' "$list" | tr '\n' '\0' | xargs -0 grep "$@" -- 2>/dev/null; }
+scan() { printf '%s\n' "$scanlist" | tr '\n' '\0' | xargs -0 grep "$@" -- 2>/dev/null; }
 
 fail=0
 

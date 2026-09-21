@@ -5160,6 +5160,9 @@ out=$(run_leak "$r"); [ "$out" = "1" ] && c11=ok || c11=no
 # counted, and then reaches grep as an OPTION because the file list follows the pattern with
 # nothing ending option parsing — never read, while the count says it was. The spaced path
 # wearing one more shape, and here it hides a real hit. Review round 2.
+# RED-CAPABLE by restoring scripts/check-leakage.sh as at 912b6ba: this half goes red there
+# — BSD getopt_long permutes, so `grep -HnE PAT -dash.md` parses `-d ash.md` and the planted
+# hit is never seen — while the rest of the suite stays green.
 r=$(leak_repo lkg-dash); printf 'see ADR-%s\n' 0001 > "$r/-dash.md"
 out=$(run_leak "$r"); [ "$out" = "1" ] && c12=ok || c12=no
 
@@ -5168,6 +5171,7 @@ out=$(run_leak "$r"); [ "$out" = "1" ] && c12=ok || c12=no
 # checkout — reached `[ -r ]`, false for a file that is not there, and this guard blocked the
 # turn saying "fix the permissions" about it. Absent and unreadable are different states: this
 # issue's own subject, one level down inside its own fix. It is a count, never a failure.
+# RED-CAPABLE at the same commit: all three halves go red there, the rest stays green.
 r=$(leak_repo lkg-deleted)
 printf 'nothing to see\n' > "$r/note.md"; printf 'nothing to see\n' > "$r/keep.md"
 ( cd "$r" && git add -A && git commit -qm two ) >/dev/null 2>&1
@@ -5177,10 +5181,37 @@ out=$(run_leak "$r")
 case "$(cat "$TMP/lkout")" in *"not in the working tree"*) c14=ok ;; *) c14=no ;; esac
 case "$(cat "$TMP/lkout")" in *"1 file(s) scanned"*) c15=ok ;; *) c15=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15" = "okokokokokokokokokokokokokokokok" ] \
+# A tracked file under a directory the process cannot SEARCH. `[ -e ]` is stat(), which
+# returns EACCES through an unsearchable prefix, and `test` reports that as false — so the
+# `absent` arm added in review round 2 counted a file that IS in the working tree as one that
+# is not, and a planted hit went from caught to `clean` on exit 0. A fail-open in the
+# clean-room backstop, introduced by the fix for the previous fail-open, three rounds running.
+# The mechanism was already written down twice on this branch: case 153, and #195. The nested
+# half matters separately — testing only the immediate parent misses `a/b/c.md` under a
+# mode-000 `a/`, because `[ -d a/b ]` cannot be answered either. Review round 3.
+# RED-CAPABLE at 6605fd3: all three halves go red there, the rest of the suite stays green.
+r=$(leak_repo lkg-unsearchable); mkdir -p "$r/sub/deep"
+printf 'see ADR-%s\n' 0001 > "$r/sub/secret.md"
+printf 'see ADR-%s\n' 0001 > "$r/sub/deep/deeper.md"
+printf 'nothing to see\n' > "$r/keep.md"
+( cd "$r" && git add -A && git commit -qm two ) >/dev/null 2>&1
+chmod 000 "$r/sub" 2>/dev/null
+if cat "$r/sub/secret.md" >/dev/null 2>&1; then
+  chmod 755 "$r/sub" 2>/dev/null
+  c16=ok; c17=ok; c18=ok
+  note_skip "leakage/unsearchable-dir" "permissions not enforced here (running as root?)"
+else
+  out=$(run_leak "$r")
+  chmod 755 "$r/sub" 2>/dev/null
+  [ "$out" = "1" ] && c16=ok || c16=no
+  case "$(cat "$TMP/lkerr")" in *"sub/secret.md"*) c17=ok ;; *) c17=no ;; esac
+  case "$(cat "$TMP/lkerr")" in *"sub/deep/deeper.md"*) c18=ok ;; *) c18=no ;; esac
+fi
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17$c18" = "okokokokokokokokokokokokokokokokokokok" ] \
   && report "check-leakage counts what it scanned, and fails on nothing or unreadable" ok \
   || report "check-leakage counts what it scanned, and fails on nothing or unreadable" no \
-     "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7 odd-exit=$c8 odd-count=$c9 space-hit=$c10 utf8-hit=$c11 dash-hit=$c12 del-exit=$c13 del-noted=$c14 del-count=$c15"
+     "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7 odd-exit=$c8 odd-count=$c9 space-hit=$c10 utf8-hit=$c11 dash-hit=$c12 del-exit=$c13 del-noted=$c14 del-count=$c15 unsearch=$c16/$c17/$c18"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
