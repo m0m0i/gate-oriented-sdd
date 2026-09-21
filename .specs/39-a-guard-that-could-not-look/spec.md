@@ -106,27 +106,30 @@ than dropped, so none of them is a silent deferral.
 - **A path holding a newline, in a non-git tree.** `find` does not quote it, so it splits across the line-delimited
   list and is counted twice. The fix is a NUL-safe reader, which POSIX `sh` has no portable form of; the git branch
   catches its own case through `unscannable`. Stated in the code at the classification loop.
+- **`scripts/test-gates.sh` — the `note_skip` paragraph says its two recipes "return one more than they should"
+  without the comment filter.** True for `note_skip "` (21 against 20, one comment line mentions it) and wrong for
+  `chmod 000` (22 against 18, because four do). Left because correcting one clause of one comment re-stales the
+  review receipt, and this branch had had seven rounds by the time it was found; the true figures are here instead,
+  for whoever recounts next.
 - **`hooks/quality-gate.sh` — an unreachable `.steering/` reads as absent and the gate passes.** Filed as #195 and
   recorded in `docs/BACKLOG.md` under `## Open, not planned`, beside #194. Unchanged from `main`, and AC7 scopes the
   directory case to `assets/check-steering-anchors.sh` deliberately.
 
-**Review rounds that found a defect: four**, and every one of those defects was introduced by an earlier fix on this
-branch, all in `scripts/check-leakage.sh`. Not a chain — **two fixes with two defects each**, which is the sharper
+**Review rounds that found a self-introduced defect in `scripts/check-leakage.sh`: four.** Every one of those was
+introduced by an earlier fix on this branch. Not a chain — **two fixes with two defects each**, which is the sharper
 shape:
 
 - **T4's readability check** produced the quotePath false-block, because `git ls-files` C-quotes a byte above 0x80 and
   `[ -r ]` cannot open the quoted form; and the `--cached` false-block, because that list is of index entries and
   `[ -r ]` is false for a tracked path nobody deleted from the index yet. Both were `[ -r ]` answering for a string
-  that was never a path.
+  that named no file on disk.
 - **Review round 2's `[ -e ]` arm** produced the EACCES misread, because `stat()` fails the same way through an
   unsearchable directory as it does for a file that is not there; and it silently disabled the `unscannable` arm added
   one round earlier, which then went two rounds unnoticed — no case exercised it, so deleting it outright left the
   suite green.
 
 That is #182's pattern in a second file: a guard reporting success it did not earn, written twice over by someone
-actively trying not to write one. The issue is the argument for the rule and this branch is now a witness to it. That is #182's pattern repeating in a second file, and it is the sharpest
-evidence #39 has: the guards that report success they did not earn are written, repeatedly, by people trying not to
-write them. Recorded here because the issue is the argument for the rule, and this branch is now a witness to it.
+actively trying not to write one. The issue is the argument for the rule and this branch is now a witness to it.
 
 ## 3. Tasks (TDD-ordered)
 
