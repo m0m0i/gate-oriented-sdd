@@ -201,7 +201,7 @@ Recorded 2026-09-21, before any Design existed.
       the four in the matrix the Design names. (AC4)
 - [x] T3: the silences the fix may not take away — the fourth cell, a current branch with no
       spec in either tree, and a squash-merged branch whose working tree lacks the spec. (AC3, AC6)
-- [ ] T4: the receipt comes from the same tree as the spec — a committed CLEAN receipt keeps the
+- [x] T4: the receipt comes from the same tree as the spec — a committed CLEAN receipt keeps the
       branch silent, and one written only into the working tree does not clear the block. (AC8)
 - [ ] T5: refactor — the header comment of `hooks/review-gate.sh` states the domain it now
       covers, and `docs/DESIGN.md`'s `Unreviewed work` row records that the turn-end gate's

@@ -809,6 +809,38 @@ case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
   || report "a squash-merged branch whose working tree lacks the spec stays silent" no \
      "exit=$c1 committed=$c2"
 
+# 150. #177 AC8 — the receipt comes from the tree the spec came from. Reading the two halves
+#      of one question from two different trees is the shape of the defect this change closes,
+#      so the fallback moves both or neither. The consequence is stated rather than discovered:
+#      with `.specs/` absent from the working tree, a receipt written there alone does not
+#      clear the block until it is committed, and the message says so. That fails closed, which
+#      is the direction this project's anchor names.
+#
+#      RED-CAPABLE under the named mutation "the receipt is read from the working tree": in
+#      gate_spec_review_state, `_gate_read "" "$_dir/.review-receipt"` in place of
+#      `_gate_read "$_ref" ...`. It inverts both halves — the committed receipt stops being
+#      found, and the uncommitted one starts being honoured. Run, not reasoned.
+r=$(make_repo rcptcommitted 0)
+( cd "$r" && printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(git rev-parse HEAD)" \
+     > .specs/9-feature/.review-receipt \
+  && git add .specs/9-feature/.review-receipt && git commit -qm receipt \
+  && rm .specs/9-feature/spec.md .specs/9-feature/.review-receipt ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+
+r=$(make_repo rcptworktree 0)
+( cd "$r" && rm .specs/9-feature/spec.md \
+  && printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(git rev-parse HEAD)" \
+     > .specs/9-feature/.review-receipt ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+# And it has to say WHY a receipt that is right there did not count.
+case "$err" in *"until it is committed"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] \
+  && report "the receipt is read from the tree the spec was read from" ok \
+  || report "the receipt is read from the tree the spec was read from" no \
+     "committed-clears=$c1 worktree-only-blocks=$c2 says-why=$c3"
+
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
 #     gate cannot compare anything at all, so exiting 0 asserts a comparison it never made.
