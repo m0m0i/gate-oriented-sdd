@@ -184,7 +184,7 @@ Recorded 2026-09-21, before any Design existed.
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced
 > after the review.
 
-- [ ] T1: regression test that fails for the right reason — a current branch whose committed
+- [x] T1: regression test that fails for the right reason — a current branch whose committed
       spec is finished and unreviewed while the working tree has no `spec.md` must block on both
       channels and say the file is not in the working tree — then the fix in
       `check_current_branch`: the fallback read from the branch's own tree, the slug check gated

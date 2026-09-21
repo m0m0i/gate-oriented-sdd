@@ -59,7 +59,40 @@ base=$(git rev-parse --verify -q origin/HEAD 2>/dev/null \
 # returns is another way to be standing somewhere the gate does not look.
 check_current_branch() {
   spec=".specs/$branch/spec.md"
-  [ -f "$spec" ] || return 0          # not a spec branch — nothing of its own to gate
+
+  # Which tree answers for this branch, and why there are two of them.
+  #
+  # The working tree is read first, deliberately: a spec edited and not yet committed is the
+  # state its author is in for most of the spec's life, and #26 chose to count it.
+  #
+  # What that USED to mean is that an absent file ended the question — and the scan below skips
+  # this ref BY NAME, on the understanding that this path has answered for it. So the one branch
+  # read from the working tree was the one branch nobody read from its own tree, and a spec
+  # committed on the branch but missing from the tree in front of you was silent on both paths
+  # while every other branch in the same repository was read from its tree and reported. Nobody
+  # has to delete anything for that: a sparse checkout excluding `.specs/`, or a partial
+  # worktree, is the same state. #177 — and it is #26's own sentence, the author choosing what
+  # the gate looks at, narrowed to one branch and reached through the tree rather than HEAD.
+  #
+  # The fix is not a second place to look so much as one question asked once: both readers now
+  # decline on "is there a spec for this branch at all" rather than on two different tests of
+  # it. A spec is its branch's FIRST commit, so the branch's own tree is where it lives whenever
+  # the working tree does not have it.
+  tree=''                             # empty — gate_spec_review_state reads the working tree
+  note=''
+  if [ ! -f "$spec" ]; then
+    # Under a detached HEAD `branch` is the literal `HEAD`, so this asks for
+    # `HEAD:.specs/HEAD/spec.md`, gets nothing, and returns — case 77 is unchanged and the scan
+    # goes on reporting the real branches. A repository with no commits returns here too.
+    git cat-file -e "HEAD:$spec" 2>/dev/null || return 0   # in neither tree — nothing to gate
+    tree=HEAD
+    # Appended to every block below. The remedy names a file the author cannot see, so the
+    # message has to say why it is not there and which tree the answer came from; without it the
+    # block reads as the gate inventing a file, and a gate that looks broken is a gate switched
+    # off. Empty on every path that existed before this change, and appended with no separator,
+    # so those messages are unchanged character for character.
+    note=" ($spec is not in your working tree, so the gate read it — and the receipt — from this branch's own tree at HEAD. A sparse checkout, a partial worktree, or a deletion nobody committed produces that, and it means a receipt written into the working tree alone does not clear this until it is committed.)"
+  fi
 
   # No issue, no spec. The slug is <issue-number>-<kebab-title>, so a spec directory
   # without a numeric prefix is work that never had an issue — unplanned work that
@@ -68,10 +101,18 @@ check_current_branch() {
   #
   # Current-branch only, on purpose: it is a rule about the spec you are authoring now, and
   # asking it of every directory in .specs/ would fire forever on anything predating it.
-  case "$branch" in
-    [0-9]*) : ;;
-    *) gate_block "No issue, no spec: the branch '$branch' has a spec at $spec but its slug does not start with an issue number. The slug is <issue>-<kebab-title>, and the issue is what recorded that this work was chosen. Create the issue and rename the branch and spec directory to match, or say explicitly that this is acknowledged unplanned work." ;;
-  esac
+  #
+  # Asked of the working-tree read ONLY, which is the same sentence applied rather than an
+  # exception carved out of it: a spec that is not in your working tree is not one you are
+  # authoring now. It also matters where this sits — before the merged-work skip — so widening
+  # it to the fallback would block on branches that shipped long ago, which is the false block
+  # that skip exists to prevent.
+  if [ -z "$tree" ]; then
+    case "$branch" in
+      [0-9]*) : ;;
+      *) gate_block "No issue, no spec: the branch '$branch' has a spec at $spec but its slug does not start with an issue number. The slug is <issue>-<kebab-title>, and the issue is what recorded that this work was chosen. Create the issue and rename the branch and spec directory to match, or say explicitly that this is acknowledged unplanned work." ;;
+    esac
+  fi
 
   receipt=".specs/$branch/.review-receipt"
   head=$(git rev-parse HEAD 2>/dev/null || echo '')
@@ -93,7 +134,7 @@ check_current_branch() {
   #   some still unticked    implementation is in progress
   #
   # Neither is the moment to demand a review. Both are an empty state below.
-  state=$(gate_spec_review_state ".specs/$branch" "$head")
+  state=$(gate_spec_review_state ".specs/$branch" "$head" "$tree")
   case "$state" in
     '')
       return 0 ;;
@@ -102,18 +143,18 @@ check_current_branch() {
       # and the difference is invisible downstream: both task counters come back 0 for a file
       # they cannot open, and a zero total is read as "nothing authored, stay silent". Fail
       # closed — an unreadable spec is a broken working tree, not an empty one.
-      gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass." ;;
+      gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass.$note" ;;
     no-receipt)
-      gate_block "Review gate: every task in $spec is ticked, but no reviewer receipt exists. Run $reviewer on the branch diff, then write its Receipt block to $receipt. If $reviewer is already running, wait for it and write the receipt from its result — do not start a second one." ;;
+      gate_block "Review gate: every task in $spec is ticked, but no reviewer receipt exists. Run $reviewer on the branch diff, then write its Receipt block to $receipt. If $reviewer is already running, wait for it and write the receipt from its result — do not start a second one.$note" ;;
     receipt-unreadable)
-      gate_block "Review gate: $receipt exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass." ;;
+      gate_block "Review gate: $receipt exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass.$note" ;;
     verdict=*)
-      gate_block "Review gate: the recorded review verdict is '${state#verdict=}', not CLEAN. Address every BLOCKER and HIGH finding, re-run $reviewer, and update $receipt." ;;
+      gate_block "Review gate: the recorded review verdict is '${state#verdict=}', not CLEAN. Address every BLOCKER and HIGH finding, re-run $reviewer, and update $receipt.$note" ;;
     unresolved-sha=*)
-      gate_block "Review gate: $receipt records reviewed_sha '${state#unresolved-sha=}', which cannot be resolved in this repository, so the gate cannot tell whether the review covers the code that is here now. Re-run $reviewer and rewrite $receipt rather than treating an uncheckable receipt as a pass." ;;
+      gate_block "Review gate: $receipt records reviewed_sha '${state#unresolved-sha=}', which cannot be resolved in this repository, so the gate cannot tell whether the review covers the code that is here now. Re-run $reviewer and rewrite $receipt rather than treating an uncheckable receipt as a pass.$note" ;;
     stale=*)
       rest=${state#stale=}
-      gate_block "Review gate: source changed since the recorded review (${rest%% *}): ${rest#* }. Re-run $reviewer and update $receipt before opening the PR." ;;
+      gate_block "Review gate: source changed since the recorded review (${rest%% *}): ${rest#* }. Re-run $reviewer and update $receipt before opening the PR.$note" ;;
   esac
 }
 

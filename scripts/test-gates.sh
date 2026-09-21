@@ -689,6 +689,38 @@ out=$(run_gate "$r"); anc=$( cd "$r" && git merge-base --is-ancestor unrelated m
 case "$out$anc" in *"exit=0"*no) report "a spec-less branch is silent through the scan, not only the current-branch path" ok ;;
                              *) report "a spec-less branch is silent through the scan, not only the current-branch path" no "$out ancestor=$anc" ;; esac
 
+# 146. #177 AC1 — the gap between the two readers, which is exactly one branch wide. The
+#      current-branch path reads the WORKING TREE, deliberately, so an uncommitted spec edit
+#      counts; the scan then skips that same ref BY NAME, because the current-branch path is
+#      supposed to have answered for it. Take the spec out of the working tree without
+#      committing the deletion and neither reader looks at the branch's own tree: the first
+#      returns at the absent file, the second was told the branch is spoken for. Every OTHER
+#      branch in the same repository is read from its own tree and reported.
+#
+#      A sparse checkout excluding `.specs/`, or a partial worktree, reaches this with nobody
+#      deleting anything. `rm` is the shortest fixture for the same state.
+#
+#      RED-CAPABLE under the named mutation "an absent working-tree spec is nothing to gate":
+#      in check_current_branch, restoring `[ -f "$spec" ] || return 0` in place of the fallback
+#      read. That is the code as it shipped before this change, and it exits 0 here.
+r=$(make_repo wtgone 0)
+( cd "$r" && rm .specs/9-feature/spec.md ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+committed=$( cd "$r" && git cat-file -e "HEAD:.specs/9-feature/spec.md" 2>/dev/null && echo yes || echo no )
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"9-feature"*) c3=ok ;; *) c3=no ;; esac
+# AC7. The remedy names a file the author cannot see, so the message has to say why it is not
+# there and which tree the answer came from. Without this the block reads as the gate
+# hallucinating a file, and a gate that looks broken is a gate switched off.
+case "$err" in *"not in your working tree"*) c4=ok ;; *) c4=no ;; esac
+# The fixture only means anything while the spec really is committed on the branch.
+[ "$committed" = yes ] && c5=ok || c5=no
+[ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
+  && report "a spec committed on the branch and gone from the working tree still blocks" ok \
+  || report "a spec committed on the branch and gone from the working tree still blocks" no \
+     "exit=$c1 json=$c2 names-branch=$c3 names-the-tree=$c4 committed=$c5"
+
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
 #     gate cannot compare anything at all, so exiting 0 asserts a comparison it never made.
