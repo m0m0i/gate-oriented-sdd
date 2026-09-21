@@ -190,7 +190,7 @@ Recorded 2026-09-21, before any Design existed.
       `check_current_branch`: the fallback read from the branch's own tree, the slug check gated
       to the working-tree read, and `$note` on the six messages. Record the case's red capability
       as a named mutation. (AC1, AC2, AC7)
-- [ ] T2: the working tree still wins, pinned in both directions — a working-tree copy with an
+- [x] T2: the working tree still wins, pinned in both directions — a working-tree copy with an
       open task is silent though the committed copy is ticked, and a ticked working-tree copy
       blocks though the committed copy has an open task. These two cells and T1's are three of
       the four in the matrix the Design names. (AC4)

@@ -721,6 +721,43 @@ case "$err" in *"not in your working tree"*) c4=ok ;; *) c4=no ;; esac
   || report "a spec committed on the branch and gone from the working tree still blocks" no \
      "exit=$c1 json=$c2 names-branch=$c3 names-the-tree=$c4 committed=$c5"
 
+# 147. #177 AC4 — the fallback is a fallback. The working tree is read FIRST and its answer
+#      stands, which is #26's deliberate choice and the reason an uncommitted spec edit counts;
+#      a fix that reached for the branch's own tree whenever it could would silence exactly the
+#      author who is mid-edit. Both directions, because either alone is satisfied by a gate that
+#      always reads one tree:
+#
+#        working tree open   + committed ticked  -> silent  (still implementing)
+#        working tree ticked + committed open    -> blocks  (finished, unreviewed)
+#
+#      RED-CAPABLE under the named mutation "the branch's own tree always wins": setting
+#      `tree=HEAD` unconditionally in check_current_branch inverts both halves at once. Run
+#      rather than reasoned — the mutation takes both halves red, and seven other cases with
+#      them. #185 is that a reviewer cannot check this claim, so the author says which it is.
+r=$(make_repo wtopen 0)
+( cd "$r" && sed 's/^- \[x\] T1/- [ ] T1/' .specs/9-feature/spec.md > "$TMP/s" \
+  && cp "$TMP/s" .specs/9-feature/spec.md ) >/dev/null 2>&1
+out=$(run_gate "$r")
+committed=$( cd "$r" && git show "HEAD:.specs/9-feature/spec.md" | grep -c '^- \[x\] T1' )
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+[ "$committed" = 1 ] && c2=ok || c2=no
+
+r=$(make_repo wtticked 1)
+( cd "$r" && sed 's/^- \[ \] T1/- [x] T1/' .specs/9-feature/spec.md > "$TMP/s" \
+  && cp "$TMP/s" .specs/9-feature/spec.md ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+committed=$( cd "$r" && git show "HEAD:.specs/9-feature/spec.md" | grep -c '^- \[ \] T1' )
+case "$out" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$committed" = 1 ] && c4=ok || c4=no
+# ...and the message is the one that shipped before #177. The note is appended to all six
+# blocks, so a working-tree read that carries it means every existing message changed.
+case "$err" in *"working tree"*) c5=no ;; *) c5=ok ;; esac
+
+[ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
+  && report "the working tree answers for the current branch, in both directions" ok \
+  || report "the working tree answers for the current branch, in both directions" no \
+     "open-silent=$c1 committed-ticked=$c2 ticked-blocks=$c3 committed-open=$c4 no-note=$c5"
+
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
 #     gate cannot compare anything at all, so exiting 0 asserts a comparison it never made.
