@@ -62,5 +62,5 @@ Asked and answered 2026-09-21.
 > A task that adds or removes a `note_skip` site re-runs the counting recipe in the suite's own header and corrects the number in the same commit; the header says how, and says why a stale count is worse than none.
 
 - [x] T1: three cases for `quality-gate.sh` — absent, unreadable, defines-nothing — each asserting exit 2, stdout that parses as JSON and names `gate-lib.sh`, and the message on stderr; then the guard in that file. AC1, AC2, AC5.
-- [ ] T2: the same three for `review-gate.sh`, on a fixture whose gate would otherwise be silent, so the case cannot pass on a block the gate was going to emit anyway; then the identical guard there. AC1, AC2, AC5.
+- [x] T2: the same three for `review-gate.sh`, on a fixture whose gate would otherwise be silent, so the case cannot pass on a block the gate was going to emit anyway; then the identical guard there. AC1, AC2, AC5.
 - [ ] T3: the drift pin — discover the blocking hooks, fail below two, compare their regions byte for byte, and assert the extracted emitter's stdout and exit against `gate_block`'s for the same message; then whatever alignment it demands. AC4, AC5.

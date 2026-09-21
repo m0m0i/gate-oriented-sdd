@@ -1205,7 +1205,7 @@ case "$out" in *"exit=2"*) report "quoted globs still match (no fail-open)" ok ;
 #
 # One list, read by all three cases and by the drift pin below. A gate joins by being added
 # here, which is how the review gate arrived a commit after the quality gate.
-BS_GATES="quality-gate.sh"
+BS_GATES="quality-gate.sh review-gate.sh"
 
 bs_repo() { # bs_repo <name>
   r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
