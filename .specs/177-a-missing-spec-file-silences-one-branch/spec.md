@@ -176,8 +176,13 @@ Recorded 2026-09-21, before any Design existed.
   the skip removes it while the two tests differ. After, both ask "is there a spec for this
   branch at all", and the current-branch reader answers it over both trees, so the partition
   has no gap left to fall into. The cases in T2 and T3 pin the four cells of
-  {spec in working tree} × {spec in committed tree} on the current branch, so the next edit that
-  makes one reader's predicate drift from the other's goes red on the cell it drifted into.
+  {spec in working tree} × {spec in committed tree} on the current branch. **Three of the four
+  go red under a named mutation and the fourth does not**, which is recorded in the case rather
+  than glossed: with a spec in neither tree the silence is over-determined — every local
+  mutation of the predicate still ends at `gate_spec_review_state` returning the empty state —
+  so that case constrains the next change to this function (#176's default `*)` arm, and any
+  refactor that gives "no spec at all" a state name) rather than this one. The other three go
+  red on the cell an edit drifts into.
 
 ## 3. Tasks (TDD-ordered)
 
@@ -194,7 +199,7 @@ Recorded 2026-09-21, before any Design existed.
       open task is silent though the committed copy is ticked, and a ticked working-tree copy
       blocks though the committed copy has an open task. These two cells and T1's are three of
       the four in the matrix the Design names. (AC4)
-- [ ] T3: the silences the fix may not take away — the fourth cell, a current branch with no
+- [x] T3: the silences the fix may not take away — the fourth cell, a current branch with no
       spec in either tree, and a squash-merged branch whose working tree lacks the spec. (AC3, AC6)
 - [ ] T4: the receipt comes from the same tree as the spec — a committed CLEAN receipt keeps the
       branch silent, and one written only into the working tree does not clear the block. (AC8)
