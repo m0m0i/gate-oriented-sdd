@@ -1,0 +1,94 @@
+# Spec: A missing library silences both gates
+- Slug: 194-a-missing-library-silences-both-gates   Issue: 194   Type: bug   Status: done
+- Author: m0m0i   Date: 2026-09-21
+
+## 1. Requirements (WHAT / WHY)
+
+- Reproduction: three states of `hooks/gate-lib.sh`, either gate, **nothing on stdout in any of them**.
+
+  ```sh
+  mv hooks/gate-lib.sh /tmp/;  sh hooks/quality-gate.sh; echo $?   # -> 1    stderr: No such file or directory
+  chmod 000 hooks/gate-lib.sh; sh hooks/review-gate.sh;  echo $?   # -> 1    stderr: Permission denied
+  : > hooks/gate-lib.sh;       sh hooks/quality-gate.sh; echo $?   # -> 127  stderr: six x command not found
+  ```
+
+  The source line is `hooks/quality-gate.sh:23` and `hooks/review-gate.sh:25`, and it is the same line in both.
+
+- Expected: a gate that cannot load its own plumbing blocks, on both channels, saying so. `.steering/product.md` carries `- Owns: gates never fail open` and grades this shape itself: a gate that silently stops checking is a BLOCKER. The neighbouring doors are already shut — `assets/check-steering-anchors.sh:36-45` and `assets/check-unreviewed-work.sh` both fail rather than skip when they cannot find the library (cases 25 and 88), and `assets/check-locks.py` handles its own missing dependency (#16, case 25). The two gates are the only readers of `gate-lib.sh` that do not answer for it, and they are the two whose failure is silent.
+- Actual: two distinct failures, one silence.
+  - **Cannot be sourced** (absent, or present and unreadable). `.` aborts the shell at the source line, before `gate_block` and `gate_pass` exist, so neither channel is emitted. Antigravity reads stdout for `{"decision":"continue"}`, finds nothing, and ends the turn — G-3, and no sign anything happened. Claude Code reads exit code 2 and gets the shell's status instead: 1 under bash 3.2, which is `sh` on macOS, and 1 is "hook errored", not "block". **The status is the shell's, not a decision** — under `dash` the identical state exits 2, which Claude Code does read as a block, so one condition produces two verdicts and neither is the gate's.
+  - **Sourced, defines nothing** (a zero-byte or truncated copy; a truncated one is a syntax error, which does not abort the caller either). Every function is undefined and the script runs to its last line. `quality-gate.sh:37` — the guard #39 added for a library that *predates* the shared reader — is `command -v gate_steering_read ... || gate_block "..."`, and `gate_block` is precisely what is missing, so the guard's own remedy is `command not found`: status 127, execution continues, and the script exits 127 with stdout empty. `review-gate.sh` does the same, two lines rather than six.
+- Impact: needs `hooks/gate-lib.sh` to be absent, unreadable or partial while the gate scripts are present — a partial copy, a half-finished `init`, a `hooks/*.sh` glob that skipped a file, a `git checkout` of one path. Rare, and its cost is the whole of what this repository sells: the turn ends with no review demanded and no validator run, and on Antigravity with no output at all. A fail-open that is indistinguishable from a working gate survives as long as it takes to matter, which is `.steering/product.md`'s own argument for why the anchor is this property and not another.
+- **Root cause:** a gate's ability to speak is loaded from the file whose absence it has to report. `gate_block` and `gate_pass` are defined *in* `gate-lib.sh`, and the library is sourced before anything else, so there is no state in which the gate both knows the library is missing and can say so through it. `set -u` does not catch an undefined function, which `quality-gate.sh:32` already says about the adjacent case. The two assets that guard this condition can afford a one-channel `echo ... >&2; exit 1`; a gate cannot, and the two-channel copy that closes it is the `#14`/`#23` shape `gate-lib.sh` exists to prevent. The cost of the guard is why this condition is answered everywhere except in the two files where its consequence is worst.
+- Acceptance criteria:
+  - [ ] **AC1:** WHEN `hooks/gate-lib.sh` is absent, or is present and cannot be read, THE quality gate and THE review gate SHALL each block the turn on **both** channels — `{"decision":"continue","reason":"..."}` on stdout and exit 2 — with a message naming `gate-lib.sh` and the remedy.
+  - [ ] **AC2:** WHEN `hooks/gate-lib.sh` is sourced and does not define `gate_block`, THE same block SHALL be emitted, rather than the script continuing with the function undefined.
+  - [ ] **AC3:** WHEN `hooks/gate-lib.sh` is present and whole THE gates SHALL behave exactly as they do today, on every path the suite already covers.
+  - [ ] **AC4:** THE hand-written copies SHALL be pinned: every hook that sources `gate-lib.sh` and blocks through it carries a byte-identical guard, and the guard's stdout and exit code equal `gate_block`'s for the same message. The pin SHALL fail when it discovers fewer than two such hooks, rather than agreeing about nothing.
+  - [ ] **AC5:** AC1, AC2 and AC4 each have a case in `scripts/test-gates.sh` that fails before its fix and passes after, asserting stdout and exit code together; where `chmod 000` is ineffective the case self-disables through `note_skip`.
+- Out of scope:
+  - **`hooks/steering-digest.sh:15`** — the same source line, and #194 answers it rather than leaving it open: the hook has no blocking channel, so its failure degrades an informational hook instead of turning a guarantee off. It is also why AC4's pin discovers by "sources the library **and** blocks through it" rather than by directory.
+  - **`assets/check-steering-anchors.sh`, `assets/check-unreviewed-work.sh`, `assets/check-locks.py`** — already answer for this condition, and are cited above as the asymmetry rather than as work.
+  - **#195** — an unreachable `.steering/` read as an absent one. The sibling entry under `## Open, not planned`, and the same family; a different subject.
+  - **#176, #178, #191** — the rest of row 1, two of them in `review-gate.sh`. Same files, separate branches.
+  - **Where `docs/BACKLOG.md` puts #194 now that it is being built.** It sits under `## Open, not planned`, which is what keeps `check-backlog-tracker.py` green while this branch is open; moving it is a grooming's judgment, not this branch's.
+
+### Clarifications
+
+Asked and answered 2026-09-21.
+
+- **Q1 — the fix cannot use the library it is reporting missing, which #194 calls the open question rather than the diagnosis. Inline copy in both gates, a second dependency-free `hooks/gate-bootstrap.sh`, or an inline copy with nothing pinning the two together?**
+  **A: inline in both, and pinned.** A bootstrap file moves the problem one file along — it is exactly as missable as the library, so either each gate still carries a last-resort line, which is the two copies again plus a third file, or the hole is accepted one level down. An unpinned copy is the `#14`/`#23` shape with no detector, which is how the two assets' hand-rolled `[ ! -r ]` tests came to disagree with the library in the first place (#39's root cause). So: the duplication is deliberate, contained, and made red when it drifts.
+- **Q2 — a zero-byte or truncated `gate-lib.sh` sources without aborting and defines nothing, which is not in the issue body. In this spec?**
+  **A: yes — AC2.** It is the same silence one step deeper, on the same trigger the issue already names: a partial copy, of which a truncated file is one. It costs one line once the emitter exists, and it closes a hole in the guard #39 shipped eight commits ago — `quality-gate.sh:37` answers a stale library with `|| gate_block`, and `gate_block` is the function a truncated library has not defined, so the remedy is `command not found`, which is 127 and keeps going.
+- **Q3 — how hard should AC4's pin bite: byte-compare in the suite, per-gate behavioural cases only, or a new validator script?**
+  **A: byte-compare, in the suite.** Case 30 is the precedent for a drift detector living there, and `scripts/test-gates.sh`'s own header argues for one file and one CI step. Behavioural cases alone would stay green while one copy was edited and the other was not, which is the whole of what is being pinned. A fifteenth validator buys running it in every install rather than only where the suite runs, at the cost of a second place to look for the same question — and the suite is already a validator, so it runs on every turn here anyway.
+
+## 2. Design (HOW)
+
+- **Fix approach, and why this rather than the narrower or wider fix.** Each gate gains, immediately after `DIR=` and before the source line, a region that is byte-identical between the two files: a `_gate_bootstrap_block` emitting both channels by hand, an `if [ ! -r ]` that splits absent from unreadable because the two remedies differ, and — after the source — `command -v gate_block || _gate_bootstrap_block`, which is AC2. The gate's own name is lifted into `_gate_name` above the region so that everything below it can be compared byte for byte; the messages are otherwise **fixed literals with nothing interpolated**, because `_gate_json_escape` also lives in the library and an interpolated path is an unescaped path.
+  The narrower fix is `[ -r ] || exit 2` with a message on stderr only: it serves Claude Code, leaves Antigravity reading an empty stdout, and is the failure `AGENTS.md` names for a change to `hooks/`. The wider fix is Q1's bootstrap file. What the guard deliberately does **not** do is try to work without the library — a gate that cannot load its plumbing has nothing left to check with, so it blocks; it does not degrade.
+- **Affected files:**
+  - `hooks/quality-gate.sh` — the guard (AC1, AC2).
+  - `hooks/review-gate.sh` — the same guard, byte for byte (AC1, AC2).
+  - `scripts/test-gates.sh` — six red-capable cases, the drift pin, and the `note_skip` site count in the header, recounted by the recipe the header itself carries (AC4, AC5).
+  - `plugin.json`, `.claude-plugin/plugin.json` — `hooks/**/*.sh` is on `- Source globs:`, so `check-version-bump.py` requires a bump off 0.20.0. A gate that blocks where it was silent is a behaviour change, so minor: **0.21.0**. This lands as a **step of `implement`**, after the review, never as a task (#113).
+- **Blast radius:** both gates run on every turn end in every install, and this region runs before anything else in each — so a mistake here is not one gate misfiring but every turn in every project blocking, including this repository's own, whose `.claude/settings.json` points at these files rather than at a copy. What bounds it is the direction: the only state the guard newly speaks about is one where the script aborts or falls through **today**, so the change is from a turn that ends silently to a turn that ends loudly, never from a pass to a block. Nothing else calls these two files, and `gate-lib.sh` is untouched, so its five other readers are unaffected by construction. `[ -r ]` is a prediction — `gate-lib.sh`'s own comment says so — and a library readable at the test and unopenable a microsecond later aborts exactly as it does now; that residue is unchanged rather than introduced. AC3 is what protects the ordinary path, and it is evidenced by the suite's existing cases rather than by a new one: every one of them runs these gates with a whole library, so a guard that fired when it should not would take the suite with it.
+- **Why this cannot recur:** the pin discovers its subjects instead of listing them. It reads `hooks/*.sh`, keeps the files that source `gate-lib.sh` **and** block through it — which is what distinguishes a gate from `steering-digest.sh`, whose failure degrades an informational hook and which the issue leaves alone — and requires the identical region of each. A third gate added later cannot be added without it, and a change to `gate_block`'s channels goes red in the same case rather than leaving two hand-written copies quietly describing the old ones. The pin fails when it discovers fewer than two hooks, because a detector matching nothing and reporting agreement is this repository's own most-repeated bug (G-8, case 35, #39 AC4) and there is no reason to add a fresh instance of it in the case that exists to prevent one.
+
+## 3. Tasks (TDD-ordered)
+
+> One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
+> A task that adds or removes a `note_skip` site re-runs the counting recipe in the suite's own header and corrects the number in the same commit; the header says how, and says why a stale count is worse than none.
+
+- [x] T1: three cases for `quality-gate.sh` — absent, unreadable, defines-nothing — each asserting exit 2, stdout that parses as JSON and names `gate-lib.sh`, and the message on stderr; then the guard in that file. AC1, AC2, AC5.
+- [x] T2: the same three for `review-gate.sh`, on a fixture whose gate would otherwise be silent, so the case cannot pass on a block the gate was going to emit anyway; then the identical guard there. AC1, AC2, AC5.
+- [x] T3: the drift pin — discover the blocking hooks, fail below two, compare their regions byte for byte, and assert the extracted emitter's stdout and exit against `gate_block`'s for the same message; then whatever alignment it demands. AC4, AC5.
+
+## 4. Accepted, not fixed
+
+Findings the reviewer raised below HIGH in round 1, and what this branch did with each. The verdict was CLEAN, so the
+branch stopped: acting on a MEDIUM here re-stales a receipt for a defect the reviewer graded as not blocking, and two
+of the five are identical on `main`. Recorded rather than dropped, and the two substantive ones are filed.
+
+- **A truncation past `gate_block` leaves `review-gate.sh` failing open again — filed as #198.** `gate_block` sits at
+  `hooks/gate-lib.sh:24-30` of 372 lines, so for most truncation points the new sentinel is satisfied and the gate
+  goes on to call `gate_spec_review_state`, which is not defined: 127, empty state, `gate_pass`. AC2 names `gate_block`
+  and is met; the residue is the same question about a different function, and `quality-gate.sh` is only safe from it
+  because #39 already asks it there. The fix is one line and belongs with whoever narrows the "empty or **truncated**"
+  wording the region currently carries — which, the region being byte-identical, changes in both gates or not at all.
+- **The pin discovers by spelling, and does not pin `_gate_name` — filed as #199**, with the three LOWs below riding
+  on it, all five being in the two files it names. Case 159 requires the literal `. "$DIR/gate-lib.sh"`, while
+  `gate-lib.sh:13` documents `. "$(dirname "$0")/gate-lib.sh"`, so a third gate written in the library's own form is
+  discovered by neither the pin nor `BS_GATES`; and `_gate_name` sits outside the region by construction, so a hook
+  carrying the region and omitting the assignment passes the pin while aborting under `set -u` in exactly the state
+  the region exists for. Both today are durability rather than live defects — the two gates that exist are correct and
+  cases 156-158 prove it — and the honest fix is one change to both, which is an issue rather than a patch.
+- **LOW — "Nothing is interpolated into the messages" is stronger than the code holds**, `$_gate_name` being
+  interpolated into all three. Valid JSON today and verified by `json.load` in cases 156-158; the sentence is what a
+  future editor reads before making it dynamic. Rides on #199.
+- **LOW — `run_bs` redirects inside `( cd "$1" && ... )`**, so a fixture that cannot `cd` asserts on the previous
+  case's output. Rides on #199.
+- **LOW — the `note_skip` label does not name the gate**, so under root two skips print identically. Rides on #199.
+- **INFO — the `[ -r ]`/`.` race**, unchanged from `main` and named in Blast radius as residue rather than as new.
+  `gate-lib.sh:56-59` says the same of its own `[ -r ]`.
