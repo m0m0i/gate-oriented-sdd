@@ -19,8 +19,45 @@
 # suite or a narrower validator list — not a demotion to advisory.
 set -u
 
+_gate_name='Quality gate'
+# --- bootstrap guard: byte-identical in every hook that blocks through gate-lib.sh ------
+#
+# The one thing a gate must always be able to do is speak, and until #194 its ability to
+# speak was loaded from the file whose absence it had to report. `.` on a file that is not
+# there aborts the shell AT the source line below, before gate_block and gate_pass exist:
+# stdout stays empty, so Antigravity ends the turn with no sign anything happened, and Claude
+# Code reads whatever status the shell chose — 1 under bash 3.2, 2 under dash — neither of
+# them a decision this gate made. An empty or truncated copy does not abort at all, and
+# leaves every later call answered by `command not found`, which is 127 and keeps going.
+#
+# So the block is written out by hand, above the source line. That copy is the #14/#23 shape
+# gate-lib.sh exists to prevent, and it is contained rather than avoided: everything between
+# these two markers is identical byte for byte in every hook that blocks through the library,
+# the hook's own name is lifted into $_gate_name above the region so that it can be, and the
+# bootstrap-drift case in scripts/test-gates.sh goes red when the copies drift from each
+# other or from gate_block.
+#
+# Nothing is interpolated into the messages. _gate_json_escape lives in the library too, so a
+# path spliced in here would be a path nobody escaped — and the cases that trigger these
+# messages parse the stdout they produce rather than grepping it.
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+_gate_bootstrap_block() {             # gate_block, for the one state that cannot call it
+  printf '{"decision":"continue","reason":"%s"}\n' "$1"
+  printf '%s\n' "$1" >&2
+  exit 2
+}
+if [ ! -r "$DIR/gate-lib.sh" ]; then
+  # Absent and unreadable send you to different places — re-copy the hooks, or fix a mode —
+  # so they are not fused into one sentence. #39, one file along.
+  if [ -e "$DIR/gate-lib.sh" ]; then
+    _gate_bootstrap_block "$_gate_name: gate-lib.sh is beside this hook and cannot be read, so this gate cannot load the plumbing it blocks through. Fix that file's permissions and run again rather than treating this turn as a pass."
+  else
+    _gate_bootstrap_block "$_gate_name: gate-lib.sh is missing from this hook's own directory, so this gate cannot load the plumbing it blocks through. Re-copy the plugin's hooks/ into this project and run again rather than treating this turn as a pass."
+  fi
+fi
 . "$DIR/gate-lib.sh"
+command -v gate_block >/dev/null 2>&1 || _gate_bootstrap_block "$_gate_name: gate-lib.sh loaded and defines no gate_block, so it is not the library this gate blocks through — an empty or truncated copy. Re-copy the plugin's hooks/ into this project and run again rather than treating this turn as a pass."
+# --- end bootstrap guard ----------------------------------------------------------------
 
 # Anchor to the repository root so relative paths (.steering/, .specs/) resolve
 # correctly regardless of the working directory the hook was invoked from.

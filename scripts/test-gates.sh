@@ -34,22 +34,22 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# TWENTY sites. The first cut converted ten and said seven; the recount that caught that
+# TWENTY-ONE sites. The first cut converted ten and said seven; the recount that caught that
 # said twelve and nine, in the paragraph whose subject is not counting. Two of the three the
 # first cut missed were worse than any half: they called `report ... ok` on the skip path,
 # manufacturing a pass and incrementing the counter. Those two are whole cases and now report
 # nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
 #
-# How to get twenty: count the GUARDS, not the `chmod 000` lines. There are eighteen of
-# those and SEVENTEEN guards among them, because case 14 has no self-disabling branch — under
+# How to get twenty-one: count the GUARDS, not the `chmod 000` lines. There are nineteen of
+# those and EIGHTEEN guards among them, because case 14 has no self-disabling branch — under
 # root it goes red rather than skipping, which is the safe direction and deliberately left
 # alone. Do not "fix" that asymmetry: `docs/BACKLOG.md` row 1 asked for it and was corrected
 # rather than obeyed, on #39's branch. The last three guards are not permission-based at all —
 # `bootstrap/symlinked-slug` and `bootstrap/dangling-symlink` self-disable when `ln -s` fails,
-# and the shallow-clone guard when the fixture cannot be shallowed. 17 + 3 = 20.
+# and the shallow-clone guard when the fixture cannot be shallowed. 18 + 3 = 21.
 #
 # The old figure was 13, by a formula that omitted the shallow-clone guard, so it was already
-# short by one on `main` against fourteen sites, before #39 added six. Counted by command and
+# short by one on `main` against fourteen sites, before #39 added six and #194 one. Counted by command and
 # then RECOUNTED by command after the last case landed, which is the step the first attempt
 # skipped: it said seventeen and nineteen, correct until review round 3 added one more of
 # each. Both recipes filter comments, or they match the line documenting them and return one
@@ -1187,6 +1187,80 @@ printf -- '- Validators: sh -c "exit 1"\n- Source globs: %s\n' "'*.txt'" > "$r/.
 echo more >> "$r/src.txt"; out=$(run_qg "$r")
 case "$out" in *"exit=2"*) report "quoted globs still match (no fail-open)" ok ;;
                         *) report "quoted globs still match (no fail-open)" no "$out" ;; esac
+
+
+# --- both gates: the library they block through ----------------------------------------
+#
+# Every case above runs these gates with a whole gate-lib.sh. The three states below are the
+# ones where there is no whole library to run with, and until #194 all three ended the turn
+# with an empty stdout: Antigravity reads {"decision":"continue"} and finds nothing, so the
+# turn ends with no sign anything happened, and Claude Code reads a status the SHELL chose —
+# 1 under bash 3.2, which is `sh` on macOS, and 2 under dash, which it DOES read as a block.
+# One condition, two verdicts, neither of them the gate's.
+#
+# The fixture is deliberately one where both gates are SILENT when the library is whole: the
+# branch it stands on has no spec, and its single validator passes. A case built on a
+# repository the gate was going to block anyway cannot tell a guard that fired from a gate
+# that was going to speak regardless.
+#
+# One list, read by all three cases and by the drift pin below. A gate joins by being added
+# here, which is how the review gate arrived a commit after the quality gate.
+BS_GATES="quality-gate.sh"
+
+bs_repo() { # bs_repo <name>
+  r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/review-gate.sh" "$r/hooks/"
+  printf -- '- Validators: true\n- Reviewer: test-reviewer\n' > "$r/.steering/tech.md"
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && echo one > src.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+  echo "$r"
+}
+run_bs() { ( cd "$1" && sh "hooks/$2" >"$TMP/bsout" 2>"$TMP/bserr"; echo "exit=$?" ) }
+
+# Both channels and the diagnosis, asked the same way of all three states. The stdout is
+# PARSED rather than grepped: the guard cannot call _gate_json_escape, which lives in the
+# library it is reporting on, so what keeps its hand-written messages JSON-safe is these
+# cases reading each of them back.
+bs_assert() { # bs_assert <repo> <gate> <report name>
+  _out=$(run_bs "$1" "$2")
+  case "$_out" in *"exit=2"*) _b1=ok ;; *) _b1=no ;; esac
+  if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("decision")=="continue" and "gate-lib.sh" in d.get("reason","") else 1)' \
+       "$TMP/bsout" 2>/dev/null; then _b2=ok; else _b2=no; fi
+  case "$(cat "$TMP/bserr")" in *gate-lib.sh*) _b3=ok ;; *) _b3=no ;; esac
+  [ "$_b1$_b2$_b3" = "okokok" ] && report "$3" ok \
+    || report "$3" no "exit=$_b1 json=$_b2 stderr=$_b3 ($_out)"
+}
+
+# 156. A gate whose library is not there must block, rather than abort at the source line.
+for gate in $BS_GATES; do
+  r=$(bs_repo "bs-absent-${gate%.sh}"); rm -f "$r/hooks/gate-lib.sh"
+  bs_assert "$r" "$gate" "$gate blocks when gate-lib.sh is absent"
+done
+
+# 157. Present and unreadable is the same abort reached differently, and it gets its own
+#      sentence because it gets its own remedy — fix a mode, rather than re-copy the hooks.
+#      That is #39's finding one file along: the states are distinct where the answers are.
+for gate in $BS_GATES; do
+  r=$(bs_repo "bs-unreadable-${gate%.sh}")
+  chmod 000 "$r/hooks/gate-lib.sh" 2>/dev/null
+  if cat "$r/hooks/gate-lib.sh" >/dev/null 2>&1; then
+    chmod 644 "$r/hooks/gate-lib.sh" 2>/dev/null
+    note_skip "gate-lib/unreadable" "permissions not enforced here (running as root?)"
+  else
+    bs_assert "$r" "$gate" "$gate blocks when gate-lib.sh cannot be read"
+    chmod 644 "$r/hooks/gate-lib.sh" 2>/dev/null
+  fi
+done
+
+# 158. A library that loads and defines nothing — an empty or truncated copy — does not abort
+#      the caller at all. Every function is undefined, the script runs to its last line, and
+#      each call is answered by `command not found`, which is 127 and keeps going. The guard
+#      the quality gate already carries for a library that PREDATES the shared reader is
+#      written `... || gate_block`, so in this state its own remedy is the missing function.
+for gate in $BS_GATES; do
+  r=$(bs_repo "bs-empty-${gate%.sh}"); : > "$r/hooks/gate-lib.sh"
+  bs_assert "$r" "$gate" "$gate blocks when gate-lib.sh defines nothing"
+done
 
 
 # --- guards: assets/check-locks.py -------------------------------------------------
