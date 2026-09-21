@@ -36,7 +36,12 @@ files() {
     # Plain `git ls-files` sees only tracked files, which means a fresh repo, or
     # a new file before `git add`, scans nothing and reports clean — the worst
     # possible failure mode for a guard.
-    git ls-files --cached --others --exclude-standard
+    # `core.quotePath` defaults to TRUE, and it renders any byte above 0x80 as a C-quoted
+    # literal — `"caf\303\251.md"` — which is not a path anything here can open. The
+    # readability check below then calls a readable file unreadable, and this script is the
+    # FIRST entry on the `- Validators:` line, so that is every turn stopped on a wrong
+    # diagnosis. A guard with a wrong diagnosis gets removed. #39 review round 1.
+    git -c core.quotePath=false ls-files --cached --others --exclude-standard
   else
     find . -type f -not -path './.git/*' | sed 's|^\./||'
   fi | grep -v "^${SELF}$"
@@ -49,9 +54,20 @@ list=$(files)
 
 scanned=0
 unreadable=""
+unscannable=""
 while IFS= read -r f; do
   [ -n "$f" ] || continue
   scanned=$((scanned + 1))
+  # git C-quotes a path holding `"`, a backslash or a control character whatever
+  # core.quotePath says, and `ls-files -z`, the only way to get those verbatim, has no
+  # portable reader in POSIX sh. Such a path genuinely cannot be scanned here, so it is named
+  # as exactly that rather than as a permissions problem it is not. In a non-git tree `find`
+  # does not quote, so a path holding a newline splits there and is counted twice — recorded
+  # rather than fixed, because the fix is the NUL reader this shell does not have.
+  case "$f" in
+    '"'*) unscannable="${unscannable}
+  $f"; continue ;;
+  esac
   [ -r "$f" ] || unreadable="${unreadable}
   $f"
 done <<EOF
@@ -74,6 +90,14 @@ fi
 # for, so the scan went round such a file in silence, on the same exit code and in the same
 # sentence. Checked once here rather than three times below, so the three scans keep their
 # stderr discard: after this, what they could still print is noise.
+if [ -n "$unscannable" ]; then
+  echo "check-leakage FAILED — in the work-set and cannot be handed to grep as a path:$unscannable" >&2
+  echo "" >&2
+  echo "  git C-quoted these because they hold a quote, a backslash or a control character." >&2
+  echo "  Rename them. This guard is the clean-room backstop and must not skip a file quietly." >&2
+  exit 1
+fi
+
 if [ -n "$unreadable" ]; then
   echo "check-leakage FAILED — in the work-set and could not be read:$unreadable" >&2
   echo "" >&2
@@ -82,23 +106,30 @@ if [ -n "$unreadable" ]; then
   exit 1
 fi
 
+# NUL-delimited into xargs. Split on whitespace, `docs/my file.md` reaches grep as two
+# pathspecs that match nothing — and grep finding nothing in a file it was never handed is
+# indistinguishable from a clean file, so a real private identifier in a path with a space
+# passed this guard silently while the count above said it had been read. That is the empty
+# work-set one layer in, and it was a fail-open before this branch as well. #39 review round 1.
+scan() { printf '%s\n' "$list" | tr '\n' '\0' | xargs -0 grep "$@" 2>/dev/null; }
+
 fail=0
 
-hits=$(printf '%s\n' "$list" | xargs grep -HniE "$PRIVATE" 2>/dev/null)
+hits=$(scan -HniE "$PRIVATE")
 if [ -n "$hits" ]; then
   echo "LEAK (private identifier):" >&2
   echo "$hits" | sed 's/^/  /' >&2
   fail=1
 fi
 
-hits=$(printf '%s\n' "$list" | xargs grep -HnE "$IDS" 2>/dev/null)
+hits=$(scan -HnE "$IDS")
 if [ -n "$hits" ]; then
   echo "LEAK (private cross-reference id):" >&2
   echo "$hits" | sed 's/^/  /' >&2
   fail=1
 fi
 
-hits=$(printf '%s\n' "$list" | xargs grep -HniE "$DOMAIN" 2>/dev/null)
+hits=$(scan -HniE "$DOMAIN")
 if [ -n "$hits" ]; then
   echo "WARNING (private domain noun — confirm this is a generic example):" >&2
   echo "$hits" | sed 's/^/  /' >&2

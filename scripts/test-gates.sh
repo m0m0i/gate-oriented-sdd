@@ -34,18 +34,23 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# THIRTEEN sites. The first cut converted ten and said seven; the recount that caught that said
-# twelve and nine, in the paragraph whose subject is not counting. Two of the three the first
-# cut missed were worse than any half: they called `report ... ok` on the skip path,
+# NINETEEN sites. The first cut converted ten and said seven; the recount that caught that
+# said twelve and nine, in the paragraph whose subject is not counting. Two of the three the
+# first cut missed were worse than any half: they called `report ... ok` on the skip path,
 # manufacturing a pass and incrementing the counter. Those two are whole cases and now report
 # nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
 #
-# How to get thirteen, since two recounts did not: count the GUARDS, not the `chmod 000` lines.
-# There are twelve of those and ELEVEN guards among them, because case 14 (the unguarded
-# `chmod 000` at :209) has no self-disabling branch — under root it goes red rather than
-# skipping, which is the safe direction and deliberately left alone; do not "fix" that
-# asymmetry. The last two guards are not permission-based at all: `bootstrap/symlinked-slug`
-# and `bootstrap/dangling-symlink` self-disable when `ln -s` fails. 11 + 2 = 13.
+# How to get nineteen: count the GUARDS, not the `chmod 000` lines. There are seventeen of
+# those and SIXTEEN guards among them, because case 14 has no self-disabling branch — under
+# root it goes red rather than skipping, which is the safe direction and deliberately left
+# alone. Do not "fix" that asymmetry: `docs/BACKLOG.md` row 1 asked for it and was corrected
+# rather than obeyed, on #39's branch. The last three guards are not permission-based at all —
+# `bootstrap/symlinked-slug` and `bootstrap/dangling-symlink` self-disable when `ln -s` fails,
+# and the shallow-clone guard when the fixture cannot be shallowed. 16 + 3 = 19.
+#
+# The old figure was 13, by a formula that omitted the shallow-clone guard, so it was already
+# short by one on `main` against fourteen sites, before #39 added five. Counted by command
+# this time rather than by eye: `grep "chmod 000" … | grep -v "^#"`, and `grep -c note_skip`.
 skipped=0
 note_skip() { skipped=$((skipped+1)); printf '  skip %s — %s\n' "$1" "$2"; }
 
@@ -1122,6 +1127,15 @@ case "$out" in *"exit=0"*) report "absent Validators line stays silent" ok ;;
 # calls the one guarantee. Case 18 locks the door beside it and must stay locked: an ABSENT
 # line still passes, because a project that has not declared validators is not one whose
 # turns should be blocked. #39.
+# The door beside it, and the one this widening could break: absence still passes. That test
+# used to be `[ -f .steering/tech.md ]` inside this file and is now gate_steering_read's
+# return of 1, in another — so nothing here pinned it, and flipping that arm to gate_block
+# would leave the suite green while every install without steering had every turn blocked.
+r=$(qg_repo qgnotech "true"); rm -f "$r/.steering/tech.md"
+out=$(run_qg "$r")
+case "$out" in *"exit=0"*) report "an absent tech.md still passes" ok ;;
+                        *) report "an absent tech.md still passes" no "$out" ;; esac
+
 r=$(qg_repo qgunread "true")
 chmod 000 "$r/.steering/tech.md" 2>/dev/null
 if cat "$r/.steering/tech.md" >/dev/null 2>&1; then
@@ -1506,8 +1520,14 @@ declared=$(sed -n 's/^\.steering\/[a-z]*\.md|//p' "$ROOT/assets/check-steering-a
 # The `s/"\$1"//` clause that used to be here could never match — grep's [A-Za-z ] class
 # excludes the quote — so it read as though the steer() wrapper were handled while the wrapper
 # was silently dropped instead. The wrapper is gone; every call site is literal.
-used=$(grep -ho "gate_steering_value [^ ]* '\?[A-Za-z ]*'\?" "$ROOT"/hooks/*.sh \
-       | sed "s/.*gate_steering_value [^ ]* //; s/'//g" | grep -v '^$' | sort -u)
+# `gate_steering_[a-z]*`, not the one function: quality-gate.sh reads Validators through
+# gate_steering_read since #39, and a pattern naming only gate_steering_value silently shrank
+# the population this case compares — the detector stopping detecting, which is #39's own
+# subject. The glob also covers the next sibling reader without anyone remembering to add it.
+# Comments stripped first, so prose naming a reader is not mistaken for a call site.
+used=$(sed 's/#.*//' "$ROOT"/hooks/*.sh \
+       | grep -ho "gate_steering_[a-z]* [^ ]* '\?[A-Za-z ]*'\?" \
+       | sed "s/.*gate_steering_[a-z]* [^ ]* //; s/'//g" | grep -v '^$' | sort -u)
 # The relation is containment, not equality. ANCHORS may legitimately hold more than the hooks
 # read — `Docs` is consumed by skills and no hook touches it — and that is not drift. Drift is
 # a hook reading an anchor the table does not cover, which is the direction that makes
@@ -1623,10 +1643,10 @@ else
   [ "$out" = "1" ] && c1=ok || c1=no
   case "$(cat "$TMP/aout")" in *"nothing was checked"*) c2=no ;; *) c2=ok ;; esac
   case "$(cat "$TMP/aerr")" in *".steering"*) c3=ok ;; *) c3=no ;; esac
-  n=$(grep -c "cannot be read" "$TMP/aerr")
+  n=$(grep -c "never reached" "$TMP/aerr")
   [ "$n" -eq 1 ] && c4=ok || c4=no
 
-  r=$(anchor_repo anc-nosteering '- Owns: x'); rm -rf "$r/.steering"
+  r=$(anchor_repo anc-absent-steering '- Owns: x'); rm -rf "$r/.steering"
   out=$(run_anchors_out "$r")
   [ "$out" = "0" ] && c5=ok || c5=no
   case "$(cat "$TMP/aout")" in *"nothing was checked"*) c6=ok ;; *) c6=no ;; esac
@@ -5031,10 +5051,25 @@ else
   case "$(cat "$TMP/mferr")" in *Traceback*) c6=no ;; *"cannot read"*) c6=ok ;; *) c6=no ;; esac
 fi
 
-[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] \
+# `json.loads("null")` returns None and raises nothing, so load() hands back the same sentinel
+# as a failed read with NOTHING recorded in errors — and a sentinel test then skips the
+# comparison and falls through to the success line. AC3's defect reached through AC3's fix.
+r=$(manifest_repo mf-null-template); printf 'null\n' > "$r/hooks/templates/antigravity.hooks.json"
+out=$(run_manifest_out "$r")
+[ "$out" = "1" ] && c8=ok || c8=no
+case "$(cat "$TMP/mfout")" in *"both manifests agree"*) c9=no ;; *) c9=ok ;; esac
+
+# Valid JSON that is not an object. `or {}` used to normalise this into a named event
+# mismatch; dropping it leaves .get() to raise, and a traceback is not a diagnosis.
+r=$(manifest_repo mf-list-template); printf '[]\n' > "$r/hooks/templates/claude-code.settings.json"
+out=$(run_manifest_out "$r")
+[ "$out" = "1" ] && c10=ok || c10=no
+case "$(cat "$TMP/mferr")" in *Traceback*) c11=no ;; *"not an object"*) c11=ok ;; *) c11=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokokok" ] \
   && report "an absent or unreadable hook template fails rather than agreeing" ok \
   || report "an absent or unreadable hook template fails rather than agreeing" no \
-     "agy-exit=$c0 not-claimed=$c1 agy-named=$c2 cc-exit=$c3 cc-named=$c4 unread-exit=$c5 unread-diagnosed=$c6"
+     "agy-exit=$c0 not-claimed=$c1 agy-named=$c2 cc-exit=$c3 cc-named=$c4 unread-exit=$c5 unread-diag=$c6 null-exit=$c8 null-not-claimed=$c9 list-exit=$c10 list-diag=$c11"
 
 # --- guards: scripts/check-leakage.sh ---------------------------------------
 #
@@ -5098,10 +5133,33 @@ out=$(run_leak "$r")
 [ "$out" = "1" ] && c6=ok || c6=no
 case "$(cat "$TMP/lkerr")" in *"cross-reference id"*) c7=ok ;; *) c7=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokokok" ] \
+# A path git C-quotes, and a path holding a space. `core.quotePath` defaults to TRUE, so one
+# byte above 0x80 arrives as the literal `"caf\303\251.md"` — a string `[ -r ]` cannot open,
+# so the readability check declares a perfectly readable file unreadable and blocks the turn.
+# check-leakage.sh is the FIRST entry on the `- Validators:` line, so that is every turn in
+# this repository stopped on a wrong diagnosis, which check-steering-anchors.sh's own header
+# calls the way a guard gets removed. The space is the mirror: it arrives bare, is counted,
+# and is then split by xargs into two paths matching nothing — `clean — N file(s) scanned`
+# printed over N-1 files actually read, which is AC4's promise broken by AC4's own fix.
+odd=$(printf 'caf\303\251')     # UTF-8 e-acute; constructed so this file stays ASCII
+r=$(leak_repo lkg-odd-names)
+printf 'nothing to see\n' > "$r/$odd.md"
+printf 'nothing to see\n' > "$r/my file.md"
+out=$(run_leak "$r")
+[ "$out" = "0" ] && c8=ok || c8=no
+case "$(cat "$TMP/lkout")" in *"2 file"*) c9=ok ;; *) c9=no ;; esac
+
+# Counted is not scanned. Plant a real hit in each odd path: if either is only counted, the
+# guard stays green and the count keeps saying it read them.
+r=$(leak_repo lkg-odd-hit); printf 'see ADR-%s\n' 0001 > "$r/my file.md"
+out=$(run_leak "$r"); [ "$out" = "1" ] && c10=ok || c10=no
+r=$(leak_repo lkg-odd-hit2); printf 'see ADR-%s\n' 0001 > "$r/$odd.md"
+out=$(run_leak "$r"); [ "$out" = "1" ] && c11=ok || c11=no
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokokok" ] \
   && report "check-leakage counts what it scanned, and fails on nothing or unreadable" ok \
   || report "check-leakage counts what it scanned, and fails on nothing or unreadable" no \
-     "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7"
+     "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7 odd-exit=$c8 odd-count=$c9 space-hit=$c10 utf8-hit=$c11"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #

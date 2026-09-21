@@ -77,9 +77,26 @@ agy_hooks = PLUGIN / "hooks" / "templates" / "antigravity.hooks.json"
 # exists for: it pairs Claude Code's SessionStart with Antigravity's PreInvocation, and
 # AGENTS.md's parity claim rests on it. load() records absence and unreadability itself, so
 # asking it is both the check and the diagnosis. #39.
+#
+# `is not None` is NOT the test, and that was this fix's own first version: json.loads("null")
+# returns None and raises nothing, so a template written as `null` reached the sentinel with
+# nothing recorded, skipped the block, and printed the success line -- the defect arriving
+# through its own repair. What load() RECORDED is the test, and the shape is checked here
+# because the comparison below indexes both documents as objects.
+n_before = len(errors)
 a = load(cc_hooks)
 b = load(agy_hooks)
-if a is not None and b is not None:
+if len(errors) == n_before:
+    for path, doc in ((cc_hooks, a), (agy_hooks, b)):
+        if not isinstance(doc, dict):
+            # `or {}` used to flatten this into an empty mapping, which produced a named event
+            # mismatch. Without it .get() raises, and a traceback is not a diagnosis either.
+            errors.append(
+                f"{path.relative_to(ROOT)} is valid JSON but not an object "
+                f"({type(doc).__name__}), so the two templates cannot be compared"
+            )
+
+if isinstance(a, dict) and isinstance(b, dict):
     a_events = set((a.get("hooks") or {}).keys())
     envelope = b.get(cc.get("name") if cc else "", {}) if isinstance(b, dict) else {}
     b_events = {k for k in envelope if k != "enabled"}

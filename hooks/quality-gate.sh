@@ -28,7 +28,7 @@ if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
   cd "$repo_root"
 fi
 
-# The validator list is read through gate_steering_value. If this hooks/ directory is a mix of
+# The validator list is read through gate_steering_read. If this hooks/ directory is a mix of
 # versions the function is undefined — and `set -u` does not catch an undefined FUNCTION, so
 # the read yields empty, the "no validators configured" branch below fires, and the gate exits
 # 0 having run nothing. That is a fail-open created by the migration to a shared reader, so the

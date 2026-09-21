@@ -48,9 +48,16 @@ gate_pass() {
 # Two forms, one expression. This one keeps "absent" and "unreadable" apart, the way
 # _gate_read below does for whole files:
 #
-#   0  the file was read; stdout is the value, and empty when the file does not carry the key
+#   0  the file was there and readable when tested; stdout is the value, and empty when the
+#      file does not carry the key
 #   1  no such file
 #   2  the file is there and could not be read
+#
+# "When tested" is doing real work in that first line: `[ -r ]` is a prediction, and the sed
+# below still discards its own stderr, so an EIO or a mode change between the test and the
+# open returns 0 with empty stdout — "read it, found nothing" for a read that failed. Narrower
+# than the residue `_gate_read` leaves, and left there on purpose: closing it means changing
+# the sed line, and every caller of gate_steering_value reads through it.
 #
 # An absent KEY stays fused with an empty value, deliberately: a steering file legitimately
 # omits `- Docs:`, so no caller treats a missing key as an error. What was never legitimate is

@@ -30,7 +30,7 @@ tree is where the guarantee can actually live.
 
 Both callers ask `gate_spec_review_state` in `hooks/gate-lib.sh` rather than carrying the
 question themselves, which is the same reason `check-steering-anchors.sh` calls
-`gate_steering_value`: a copy that can disagree with its subject is #14 and #23.
+`gate_steering_read`: a copy that can disagree with its subject is #14 and #23.
 
 ## Why `Source globs` excludes the manifests, and what that costs
 

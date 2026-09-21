@@ -86,11 +86,14 @@ for file in $files; do
   # Absent stays legitimate and silent, because this asset may be installed before init writes
   # steering; that door is the second half of the case beside this one.
   dir=${file%/*}
-  if [ "$dir" != "$file" ] && [ -d "$dir" ] && { [ ! -r "$dir" ] || [ ! -x "$dir" ]; }; then
+  # `-x`, not `-r`: this script opens two files by exact name and never lists the directory,
+  # so a mode-711 `.steering/` is entirely usable and must not be failed. Search permission is
+  # the whole of what it needs, and the whole of what a mode-000 directory denies.
+  if [ "$dir" != "$file" ] && [ -d "$dir" ] && [ ! -x "$dir" ]; then
     case "$NL$unreachable" in *"$NL$dir$NL"*) continue ;; esac
     unreachable="$unreachable$dir$NL"
     failed="${failed}
-  $dir/: exists and cannot be read, so the steering files in it were never reached.
+  $dir/: exists and cannot be searched, so the steering files in it were never reached.
       Fix the directory's permissions rather than treating this as a pass."
     continue
   fi
