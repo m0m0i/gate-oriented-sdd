@@ -64,3 +64,31 @@ Asked and answered 2026-09-21.
 - [x] T1: three cases for `quality-gate.sh` — absent, unreadable, defines-nothing — each asserting exit 2, stdout that parses as JSON and names `gate-lib.sh`, and the message on stderr; then the guard in that file. AC1, AC2, AC5.
 - [x] T2: the same three for `review-gate.sh`, on a fixture whose gate would otherwise be silent, so the case cannot pass on a block the gate was going to emit anyway; then the identical guard there. AC1, AC2, AC5.
 - [x] T3: the drift pin — discover the blocking hooks, fail below two, compare their regions byte for byte, and assert the extracted emitter's stdout and exit against `gate_block`'s for the same message; then whatever alignment it demands. AC4, AC5.
+
+## 4. Accepted, not fixed
+
+Findings the reviewer raised below HIGH in round 1, and what this branch did with each. The verdict was CLEAN, so the
+branch stopped: acting on a MEDIUM here re-stales a receipt for a defect the reviewer graded as not blocking, and two
+of the five are identical on `main`. Recorded rather than dropped, and the two substantive ones are filed.
+
+- **A truncation past `gate_block` leaves `review-gate.sh` failing open again — filed as #198.** `gate_block` sits at
+  `hooks/gate-lib.sh:24-30` of 372 lines, so for most truncation points the new sentinel is satisfied and the gate
+  goes on to call `gate_spec_review_state`, which is not defined: 127, empty state, `gate_pass`. AC2 names `gate_block`
+  and is met; the residue is the same question about a different function, and `quality-gate.sh` is only safe from it
+  because #39 already asks it there. The fix is one line and belongs with whoever narrows the "empty or **truncated**"
+  wording the region currently carries — which, the region being byte-identical, changes in both gates or not at all.
+- **The pin discovers by spelling, and does not pin `_gate_name` — filed as #199**, with the three LOWs below riding
+  on it, all five being in the two files it names. Case 159 requires the literal `. "$DIR/gate-lib.sh"`, while
+  `gate-lib.sh:13` documents `. "$(dirname "$0")/gate-lib.sh"`, so a third gate written in the library's own form is
+  discovered by neither the pin nor `BS_GATES`; and `_gate_name` sits outside the region by construction, so a hook
+  carrying the region and omitting the assignment passes the pin while aborting under `set -u` in exactly the state
+  the region exists for. Both today are durability rather than live defects — the two gates that exist are correct and
+  cases 156-158 prove it — and the honest fix is one change to both, which is an issue rather than a patch.
+- **LOW — "Nothing is interpolated into the messages" is stronger than the code holds**, `$_gate_name` being
+  interpolated into all three. Valid JSON today and verified by `json.load` in cases 156-158; the sentence is what a
+  future editor reads before making it dynamic. Rides on #199.
+- **LOW — `run_bs` redirects inside `( cd "$1" && ... )`**, so a fixture that cannot `cd` asserts on the previous
+  case's output. Rides on #199.
+- **LOW — the `note_skip` label does not name the gate**, so under root two skips print identically. Rides on #199.
+- **INFO — the `[ -r ]`/`.` race**, unchanged from `main` and named in Blast radius as residue rather than as new.
+  `gate-lib.sh:56-59` says the same of its own `[ -r ]`.
