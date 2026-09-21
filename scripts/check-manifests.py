@@ -23,8 +23,11 @@ def load(path: pathlib.Path):
         return json.loads(path.read_text())
     except FileNotFoundError:
         errors.append(f"missing: {path.relative_to(ROOT)}")
-    except OSError as e:
-        # Present and unreadable. This used to leave read_text() to raise through main and
+    except (OSError, UnicodeDecodeError) as e:
+        # Present and unreadable, or not decodable. UnicodeDecodeError is a ValueError rather
+        # than an OSError, so invalid UTF-8 went on raising through main after this arm was
+        # added -- the traceback this arm exists to replace, surviving in the one shape it did
+        # not name. This used to leave read_text() to raise through main and
         # exit 1 on a traceback -- fail-closed by accident rather than by decision, and a
         # traceback sends the reader looking for a bug in the guard rather than in the tree.
         errors.append(f"cannot read {path.relative_to(ROOT)}: {e}")

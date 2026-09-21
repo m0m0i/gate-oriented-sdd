@@ -5208,10 +5208,25 @@ else
   case "$(cat "$TMP/lkerr")" in *"sub/deep/deeper.md"*) c18=ok ;; *) c18=no ;; esac
 fi
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17$c18" = "okokokokokokokokokokokokokokokokokokok" ] \
+# A path git C-quotes, which is the state the `unscannable` arm exists for — and that arm has
+# been DEAD since the `[ -e ]` test was put in front of it: the quoted form is not a path, so
+# `[ -e ]` is false, the ancestor walk finds nothing to blame, and the entry is counted as
+# absent on exit 0. A planted hit is caught at 912b6ba and missed at 7d56992. The arm was
+# added in round 1, disabled in round 2 and preserved through round 3 with no case exercising
+# it, which is why nothing said so: deleting it outright left the suite green. Review round 4,
+# and the fourth consecutive round in which a fix to this file disabled the fix before it.
+# RED-CAPABLE at 7d56992: both halves go red there, the rest of the suite stays green.
+r=$(leak_repo lkg-quoted); printf 'see ADR-%s\n' 0001 > "$r/\"q\".md"
+printf 'nothing to see\n' > "$r/keep.md"
+( cd "$r" && git add -A && git commit -qm two ) >/dev/null 2>&1
+out=$(run_leak "$r")
+[ "$out" = "1" ] && c19=ok || c19=no
+case "$(cat "$TMP/lkerr")" in *"cannot be handed to grep"*) c20=ok ;; *) c20=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17$c18$c19$c20" = "okokokokokokokokokokokokokokokokokokokokok" ] \
   && report "check-leakage counts what it scanned, and fails on nothing or unreadable" ok \
   || report "check-leakage counts what it scanned, and fails on nothing or unreadable" no \
-     "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7 odd-exit=$c8 odd-count=$c9 space-hit=$c10 utf8-hit=$c11 dash-hit=$c12 del-exit=$c13 del-noted=$c14 del-count=$c15 unsearch=$c16/$c17/$c18"
+     "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7 odd-exit=$c8 odd-count=$c9 space-hit=$c10 utf8-hit=$c11 dash-hit=$c12 del-exit=$c13 del-noted=$c14 del-count=$c15 unsearch=$c16/$c17/$c18 quoted=$c19/$c20"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #

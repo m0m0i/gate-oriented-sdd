@@ -66,6 +66,22 @@ unreadable=""
 unscannable=""
 while IFS= read -r f; do
   [ -n "$f" ] || continue
+  # FIRST, before any filesystem test. git C-quotes a path holding `"`, a backslash or a
+  # control character whatever core.quotePath says, and `ls-files -z` -- the only way to get
+  # those verbatim -- has no portable reader in POSIX sh. The quoted form is not a path, so
+  # `[ -e ]` is false for it and the ancestor walk below has nothing to blame: put after them,
+  # this arm became unreachable and such a file was counted as absent on exit 0. It was added
+  # in review round 1, dead from round 2, and no case exercised it until round 4 -- deleting
+  # it outright left the suite green. In a non-git tree `find` does not quote, so a leading
+  # quote there is a real filename and this must not fire; a path holding a newline splits
+  # there instead and is counted twice, recorded rather than fixed because the fix is the NUL
+  # reader this shell does not have.
+  if [ "$IN_GIT" -eq 1 ]; then
+    case "$f" in
+      '"'*) unscannable="${unscannable}
+  $f"; continue ;;
+    esac
+  fi
   # `--cached` lists INDEX entries and filters on neither existence nor `skip-worktree`, so a
   # tracked path that is not on disk arrives here: an unstaged `rm`, a sparse checkout, a
   # partial worktree. `[ -r ]` is false for every one of them, and this guard blocked the turn
@@ -104,42 +120,11 @@ while IFS= read -r f; do
   scanned=$((scanned + 1))
   scanlist="${scanlist}${f}
 "
-  # git C-quotes a path holding `"`, a backslash or a control character whatever
-  # core.quotePath says, and `ls-files -z`, the only way to get those verbatim, has no
-  # portable reader in POSIX sh. Such a path genuinely cannot be scanned here, so it is named
-  # as exactly that rather than as a permissions problem it is not. In a non-git tree `find`
-  # does not quote, so a path holding a newline splits there and is counted twice — recorded
-  # rather than fixed, because the fix is the NUL reader this shell does not have.
-  if [ "$IN_GIT" -eq 1 ]; then
-    case "$f" in
-      '"'*) unscannable="${unscannable}
-  $f"; continue ;;
-    esac
-  fi
   [ -r "$f" ] || unreadable="${unreadable}
   $f"
 done <<EOF
 $list
 EOF
-
-# Zero files is not a clean tree. files()'s own comment calls a scan of nothing "the worst
-# possible failure mode for a guard" and then does not check for it: a fresh clone, a broken
-# `git ls-files`, or an SELF exclusion that grew all end here, and until now they all printed
-# `check-leakage: clean` on exit 0. AGENTS.md calls this the guard that matters most. #39.
-if [ "$scanned" -eq 0 ]; then
-  if [ "$absent" -gt 0 ]; then
-    # It was not empty, and saying so would send the reader to `git ls-files` and to SELF,
-    # neither of which is the cause. A fully sparse checkout lands here. AC5's second clause.
-    echo "check-leakage FAILED — the work-set held $absent index entr(ies) and no working-tree" >&2
-    echo "  file for any of them, so nothing was scanned. A checkout this partial cannot be" >&2
-    echo "  cleared by this guard; check it out fully rather than treating this as a pass." >&2
-  else
-    echo "check-leakage FAILED — the work-set is empty, so nothing was scanned." >&2
-    echo "  'found nothing' and 'looked at nothing' must not share an exit code. Check that" >&2
-    echo "  git ls-files works here, and that SELF still excludes only this script." >&2
-  fi
-  exit 1
-fi
 
 # A file this guard was handed and could not open is not a file it read and found clean.
 # `xargs grep … 2>/dev/null` discarded "Permission denied" along with the noise it was there
@@ -159,6 +144,25 @@ if [ -n "$unreadable" ]; then
   echo "" >&2
   echo "  Fix the permissions rather than treating this as a pass. A file that was not read" >&2
   echo "  is not a file that came back clean, and this guard is the clean-room backstop." >&2
+  exit 1
+fi
+
+# Zero files is not a clean tree. files()'s own comment calls a scan of nothing "the worst
+# possible failure mode for a guard" and then does not check for it: a fresh clone, a broken
+# `git ls-files`, or an SELF exclusion that grew all end here, and until now they all printed
+# `check-leakage: clean` on exit 0. AGENTS.md calls this the guard that matters most. #39.
+if [ "$scanned" -eq 0 ]; then
+  if [ "$absent" -gt 0 ]; then
+    # It was not empty, and saying so would send the reader to `git ls-files` and to SELF,
+    # neither of which is the cause. A fully sparse checkout lands here. AC5's second clause.
+    echo "check-leakage FAILED — the work-set held $absent index entr(ies) and no working-tree" >&2
+    echo "  file for any of them, so nothing was scanned. A checkout this partial cannot be" >&2
+    echo "  cleared by this guard; check it out fully rather than treating this as a pass." >&2
+  else
+    echo "check-leakage FAILED — the work-set is empty, so nothing was scanned." >&2
+    echo "  'found nothing' and 'looked at nothing' must not share an exit code. Check that" >&2
+    echo "  git ls-files works here, and that SELF still excludes only this script." >&2
+  fi
   exit 1
 fi
 
