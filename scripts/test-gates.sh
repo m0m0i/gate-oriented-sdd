@@ -34,23 +34,25 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# NINETEEN sites. The first cut converted ten and said seven; the recount that caught that
+# TWENTY sites. The first cut converted ten and said seven; the recount that caught that
 # said twelve and nine, in the paragraph whose subject is not counting. Two of the three the
 # first cut missed were worse than any half: they called `report ... ok` on the skip path,
 # manufacturing a pass and incrementing the counter. Those two are whole cases and now report
 # nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
 #
-# How to get nineteen: count the GUARDS, not the `chmod 000` lines. There are seventeen of
-# those and SIXTEEN guards among them, because case 14 has no self-disabling branch — under
+# How to get twenty: count the GUARDS, not the `chmod 000` lines. There are eighteen of
+# those and SEVENTEEN guards among them, because case 14 has no self-disabling branch — under
 # root it goes red rather than skipping, which is the safe direction and deliberately left
 # alone. Do not "fix" that asymmetry: `docs/BACKLOG.md` row 1 asked for it and was corrected
 # rather than obeyed, on #39's branch. The last three guards are not permission-based at all —
 # `bootstrap/symlinked-slug` and `bootstrap/dangling-symlink` self-disable when `ln -s` fails,
-# and the shallow-clone guard when the fixture cannot be shallowed. 16 + 3 = 19.
+# and the shallow-clone guard when the fixture cannot be shallowed. 17 + 3 = 20.
 #
 # The old figure was 13, by a formula that omitted the shallow-clone guard, so it was already
-# short by one on `main` against fourteen sites, before #39 added five. Counted by command
-# this time rather than by eye: `grep "chmod 000" … | grep -v "^#"`, and `grep -c note_skip`.
+# short by one on `main` against fourteen sites, before #39 added six. Counted by command and
+# then RECOUNTED by command after the last case landed, which is the step the first attempt
+# skipped: it said seventeen and nineteen, correct until review round 3 added one more of
+# each. `grep "chmod 000" … | grep -v "^#"`, and `grep -c 'note_skip "'`.
 skipped=0
 note_skip() { skipped=$((skipped+1)); printf '  skip %s — %s\n' "$1" "$2"; }
 

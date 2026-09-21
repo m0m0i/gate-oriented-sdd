@@ -90,7 +90,7 @@ Asked and answered 2026-09-21.
 Findings the reviewer raised below HIGH and this branch did not act on, each with the reason. Recorded here rather
 than dropped, so none of them is a silent deferral.
 
-- **`scripts/check-manifests.py:40` — `if cc and agy:` is a truthiness test.** A `plugin.json` holding `null` or `{}`
+- **`scripts/check-manifests.py` — `if cc and agy:` is a truthiness test.** A `plugin.json` holding `null` or `{}`
   skips every manifest comparison with nothing recorded, and the guard prints `both manifests agree` on exit 0. It is
   the same lesson AC3's fix writes down one block below, and it is pre-existing and outside AC3, which is scoped to
   the two hook templates. Left because widening it is a second guard's worth of decision about what an empty manifest
@@ -110,9 +110,11 @@ than dropped, so none of them is a silent deferral.
   recorded in `docs/BACKLOG.md` under `## Open, not planned`, beside #194. Unchanged from `main`, and AC7 scopes the
   directory case to `assets/check-steering-anchors.sh` deliberately.
 
-**Review rounds: four.** Three of them found a defect this branch's own previous fix had introduced, all four in
-`scripts/check-leakage.sh` — the quotePath block came out of T4's fix, the `--cached` block out of that one's, and the
-dead `unscannable` arm out of the one after. That is #182's pattern repeating in a second file, and it is the sharpest
+**Review rounds: five.** Four of them found a defect this branch's own previous fix had introduced, every one in
+`scripts/check-leakage.sh`: the quotePath false-block came out of T4's readability check; `--cached` listing index
+entries came out of the quotePath fix; `[ -e ]` reading EACCES as absent came out of the `--cached` fix; and the dead
+`unscannable` arm was disabled by that same `[ -e ]` test and went unnoticed for two rounds, because no case
+exercised it and deleting it outright left the suite green. That is #182's pattern repeating in a second file, and it is the sharpest
 evidence #39 has: the guards that report success they did not earn are written, repeatedly, by people trying not to
 write them. Recorded here because the issue is the argument for the rule, and this branch is now a witness to it.
 
