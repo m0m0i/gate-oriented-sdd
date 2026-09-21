@@ -42,7 +42,7 @@
   - **`test-gates.sh` case 14's behaviour under root.** See Clarifications Q3 — the case is correct as written and the backlog cell is not.
   - **`test-gates.sh` case 30's drift detector** — counting `gate_steering_value` call sites against extracted rows. Detector integrity, not subject readability.
   - **`test-gates.sh` case 35** — its literal three-directory work-set (G-8) and its structurally unexercisable `rc -eq 2` branch. #39's own comment calls the fix a refactor rather than a bug fix: the case has to take its work-set as a parameter first.
-  - **`. "$DIR/gate-lib.sh"` on a missing file**, which aborts the shell with no `{"decision":"continue"}` on stdout — silently advisory on Antigravity. Filed as its own issue by T5; see Clarifications Q2.
+  - **`. "$DIR/gate-lib.sh"` on a missing file**, which aborts the shell with no `{"decision":"continue"}` on stdout — silently advisory on Antigravity. Filed as #194; see Clarifications Q2.
   - **`hooks/steering-digest.sh`'s double blank line**, #39's last loose end.
   - **Red-capable cases for `check-receipt-schema.py` and `check-skill-contracts.py`.**
   - **#178, #176, #191 and #179** — the rest of backlog row 1. Same row, separate branches.
@@ -83,4 +83,4 @@ Asked and answered 2026-09-21.
 - [x] T2: cases that `check-steering-anchors.sh` repeats its unreadable-file block once per anchor row, and calls an unreachable `.steering/` "no steering files found" — then the asset opting in to `gate_steering_read`, reporting once per file, and separating unreachable from absent. (AC6, AC7, AC8)
 - [x] T3: case that `check-manifests.py` prints `both manifests agree` with a hook template moved away — then the fix. (AC3, AC8)
 - [x] T4: cases that `check-leakage.sh` prints `clean` over an empty work-set and over a file it cannot read — then the scanned count, the zero-count failure, and the read failure. (AC4, AC5, AC8)
-- [ ] T5: correct `docs/BACKLOG.md` row 1's case-14 sentence per Q3, file the Q2 issue, and record it under `## Open, not planned`.
+- [x] T5: correct `docs/BACKLOG.md` row 1's case-14 sentence per Q3, file the Q2 issue, and record it under `## Open, not planned`.
