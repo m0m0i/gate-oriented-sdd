@@ -110,11 +110,21 @@ than dropped, so none of them is a silent deferral.
   recorded in `docs/BACKLOG.md` under `## Open, not planned`, beside #194. Unchanged from `main`, and AC7 scopes the
   directory case to `assets/check-steering-anchors.sh` deliberately.
 
-**Review rounds: five.** Four of them found a defect this branch's own previous fix had introduced, every one in
-`scripts/check-leakage.sh`: the quotePath false-block came out of T4's readability check; `--cached` listing index
-entries came out of the quotePath fix; `[ -e ]` reading EACCES as absent came out of the `--cached` fix; and the dead
-`unscannable` arm was disabled by that same `[ -e ]` test and went unnoticed for two rounds, because no case
-exercised it and deleting it outright left the suite green. That is #182's pattern repeating in a second file, and it is the sharpest
+**Review rounds that found a defect: four**, and every one of those defects was introduced by an earlier fix on this
+branch, all in `scripts/check-leakage.sh`. Not a chain — **two fixes with two defects each**, which is the sharper
+shape:
+
+- **T4's readability check** produced the quotePath false-block, because `git ls-files` C-quotes a byte above 0x80 and
+  `[ -r ]` cannot open the quoted form; and the `--cached` false-block, because that list is of index entries and
+  `[ -r ]` is false for a tracked path nobody deleted from the index yet. Both were `[ -r ]` answering for a string
+  that was never a path.
+- **Review round 2's `[ -e ]` arm** produced the EACCES misread, because `stat()` fails the same way through an
+  unsearchable directory as it does for a file that is not there; and it silently disabled the `unscannable` arm added
+  one round earlier, which then went two rounds unnoticed — no case exercised it, so deleting it outright left the
+  suite green.
+
+That is #182's pattern in a second file: a guard reporting success it did not earn, written twice over by someone
+actively trying not to write one. The issue is the argument for the rule and this branch is now a witness to it. That is #182's pattern repeating in a second file, and it is the sharpest
 evidence #39 has: the guards that report success they did not earn are written, repeatedly, by people trying not to
 write them. Recorded here because the issue is the argument for the rule, and this branch is now a witness to it.
 

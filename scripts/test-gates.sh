@@ -52,7 +52,8 @@ report() { # report <name> <ok|no> <detail>
 # short by one on `main` against fourteen sites, before #39 added six. Counted by command and
 # then RECOUNTED by command after the last case landed, which is the step the first attempt
 # skipped: it said seventeen and nineteen, correct until review round 3 added one more of
-# each. `grep "chmod 000" … | grep -v "^#"`, and `grep -c 'note_skip "'`.
+# each. Both recipes filter comments, or they match the line documenting them and return one
+# more than they should: `grep "chmod 000" … | grep -v "^#"`, `grep 'note_skip "' … | grep -v "^#"`.
 skipped=0
 note_skip() { skipped=$((skipped+1)); printf '  skip %s — %s\n' "$1" "$2"; }
 
