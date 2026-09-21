@@ -50,8 +50,8 @@ fi
 # projects whose gate-lib.sh may predate the shared reader, and then every anchor comes back
 # empty and every correctly written line is reported unparseable — failing closed, which is
 # right, with a diagnosis that is wrong, which sends the author to edit steering that is fine.
-if ! command -v gate_steering_value >/dev/null 2>&1; then
-  echo "check-steering-anchors: $lib has no gate_steering_value — it predates the shared reader." >&2
+if ! command -v gate_steering_read >/dev/null 2>&1; then
+  echo "check-steering-anchors: $lib has no gate_steering_read — it predates the shared reader." >&2
   echo "  Re-copy the plugin's hooks/gate-lib.sh over it and run this again." >&2
   exit 1
 fi
@@ -59,43 +59,80 @@ fi
 failed=""
 resolved=0
 present=0
-old_ifs=$IFS
-IFS='
+unreachable=""
+NL='
 '
+old_ifs=$IFS
+IFS=$NL
+
+# The unique files ANCHORS names, in its order. A file is classified ONCE however many anchors
+# it carries: the unreadable-file block below used to sit in the row loop, so a mode-000
+# tech.md printed it once for each of six anchors and buried the one sentence that mattered
+# under five copies of itself. #34's own review called it right diagnosis, buried by volume.
+files=""
 for row in $ANCHORS; do
   [ -n "$row" ] || continue
-  file=${row%%|*}
-  key=${row#*|}
-  [ -f "$file" ] || continue
-  # Existence is not readability. A mode-000 steering file made gate_steering_value return
-  # empty (its own 2>/dev/null eats the sed error) and made the loose grep exit 2 — an ERROR,
-  # which `&&` cannot tell from a non-match — so the anchor was classified absent and the run
-  # went on to claim "none unreadable" about a file it could not read. Third state, same exit
-  # code, same sentence: exactly what this guard exists to prevent.
-  if [ ! -r "$file" ]; then
+  f=${row%%|*}
+  case "$NL$files" in *"$NL$f$NL"*) continue ;; esac
+  files="$files$f$NL"
+done
+
+for file in $files; do
+  # A directory that exists and cannot be searched is not a project without steering. `[ -f ]`
+  # and the reader both stat THROUGH it, so under a mode-000 .steering/ every anchor came back
+  # absent, `present` stayed 0, and the run ended on "no steering files found — nothing was
+  # checked": a sentence about having looked, printed by a check that could not look, on exit
+  # 0 — and this script is on the `- Validators:` line, so that is the turn's own verdict.
+  # Absent stays legitimate and silent, because this asset may be installed before init writes
+  # steering; that door is the second half of the case beside this one.
+  dir=${file%/*}
+  if [ "$dir" != "$file" ] && [ -d "$dir" ] && { [ ! -r "$dir" ] || [ ! -x "$dir" ]; }; then
+    case "$NL$unreachable" in *"$NL$dir$NL"*) continue ;; esac
+    unreachable="$unreachable$dir$NL"
     failed="${failed}
-  $file: exists but cannot be read, so its anchors were not checked.
-      Fix the file's permissions rather than treating this as a pass."
+  $dir/: exists and cannot be read, so the steering files in it were never reached.
+      Fix the directory's permissions rather than treating this as a pass."
     continue
   fi
-  value=$(gate_steering_value "$file" "$key")
-  # Anchored to the start of a line, modulo leading punctuation. Deliberately looser than the
-  # reader — it must still see `- **Owns:` and `  * Owns :` — but not so loose that ordinary
-  # prose trips it. Unanchored, `Docs *:` matched the word "docs:" inside this repo's own
-  # commit-convention paragraph, so deleting a legitimately optional `- Docs:` line would have
-  # failed the guard while pointing at prose.
-  if [ -z "$value" ] && grep -qi -- "^[^A-Za-z]*$key *:" "$file" 2>/dev/null; then
-    failed="${failed}
+
+  for row in $ANCHORS; do
+    [ -n "$row" ] || continue
+    [ "${row%%|*}" = "$file" ] || continue
+    key=${row#*|}
+    # Existence is not readability, and the reader is the one that says which: 1 for an absent
+    # file, 2 for one that is there and cannot be opened. This script used to recover that with
+    # a hand-rolled `[ ! -r ]` — a second copy of a question gate-lib.sh owns, which is the
+    # defect #14 and #23 are about, and the copy is why the library was never fixed. The old
+    # reader returned empty for both (its own 2>/dev/null eats the sed error) and made the
+    # loose grep below exit 2 — an ERROR, which `&&` cannot tell from a non-match — so the
+    # anchor was classified absent and the run went on to claim "none unreadable" about a file
+    # it could not read.
+    value=$(gate_steering_read "$file" "$key"); rc=$?
+    [ "$rc" -eq 1 ] && break
+    if [ "$rc" -eq 2 ]; then
+      failed="${failed}
+  $file: exists but cannot be read, so its anchors were not checked.
+      Fix the file's permissions rather than treating this as a pass."
+      break
+    fi
+    # Anchored to the start of a line, modulo leading punctuation. Deliberately looser than the
+    # reader — it must still see `- **Owns:` and `  * Owns :` — but not so loose that ordinary
+    # prose trips it. Unanchored, `Docs *:` matched the word "docs:" inside this repo's own
+    # commit-convention paragraph, so deleting a legitimately optional `- Docs:` line would have
+    # failed the guard while pointing at prose.
+    if [ -z "$value" ] && grep -qi -- "^[^A-Za-z]*$key *:" "$file" 2>/dev/null; then
+      failed="${failed}
   $file: '$key' is present but written in a form its reader cannot parse.
       found:  $(grep -i -- "^[^A-Za-z]*$key *:" "$file" | head -1 | sed 's/^ *//')
       The reader is: sed -n 's/^ *- *$key: *//p'  — so the line must begin with '- $key:',
       with no emphasis markers or other characters before the key."
-  fi
-  # Count what RESOLVED, not what had a file. Counting files meant a tech.md holding only
-  # `- Validators:` used to print "5 anchor(s) checked, all readable" having read one — the
-  # same room case 28 locks the other door to, and the likelier state in a real project.
-  [ -n "$value" ] && resolved=$((resolved + 1))
-  present=$((present + 1))
+    fi
+    # Count what RESOLVED, not what had a file. Counting files meant a tech.md holding only
+    # `- Validators:` used to print "5 anchor(s) checked, all readable" having read one — the
+    # same room case 28 locks the other door to, and the likelier state in a real project.
+    [ -n "$value" ] && resolved=$((resolved + 1))
+    present=$((present + 1))
+  done
 done
 IFS=$old_ifs
 

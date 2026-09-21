@@ -1573,6 +1573,70 @@ else
     || report "an unreadable steering file fails rather than reading as absent" no "exit=$c1 msg=$c2"
 fi
 
+# Captures stdout as well, because two of the cases below are about a sentence printed on it.
+run_anchors_out() { ( cd "$1" && sh assets/check-steering-anchors.sh >"$TMP/aout" 2>"$TMP/aerr"; printf '%s' "$?" ) }
+
+# 152. An unreadable file is reported once, not once per anchor it carries.
+#
+# The unreadable-file block sat inside the row loop, so a mode-000 tech.md printed the same
+# four lines once for each of its SIX anchors. #34's own review called it right diagnosis,
+# buried by volume; it has got worse since, because `- Mode:` and `- Target:` joined the table
+# after it was filed. Case 32 cannot see this — product.md carries one anchor, so its block is
+# correct by accident. #39.
+r=$(anchor_repo anc-unread-once '- Owns: x')
+chmod 000 "$r/.steering/tech.md" 2>/dev/null
+if cat "$r/.steering/tech.md" >/dev/null 2>&1; then
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  note_skip "anchors/unreadable-tech-md-once" "permissions not enforced here (running as root?)"
+else
+  out=$(run_anchors "$r")
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  n=$(grep -c "cannot be read" "$TMP/aerr")
+  [ "$out" = "1" ] && c1=ok || c1=no
+  [ "$n" -eq 1 ] && c2=ok || c2=no
+  case "$(cat "$TMP/aerr")" in *"tech.md"*) c3=ok ;; *) c3=no ;; esac
+  [ "$c1$c2$c3" = "okokok" ] \
+    && report "an unreadable steering file is reported once, not once per anchor" ok \
+    || report "an unreadable steering file is reported once, not once per anchor" no \
+       "exit=$c1 count=$c2(saw $n) names-file=$c3"
+fi
+
+# 153. A .steering/ that cannot be traversed is not a project without steering.
+#
+# `[ -f ]` needs to stat through the directory, so under a mode-000 .steering/ EVERY anchor
+# was classified absent, `present` stayed 0, and the run ended on "no steering files found —
+# nothing was checked" at exit 0. A sentence about having looked, printed by a check that
+# could not look, in the guard whose whole subject is keeping those apart — and this one is on
+# the `- Validators:` line, so it is the turn's own verdict. #39.
+#
+# The second half is what stops the fix being "fail whenever present is 0": an ABSENT
+# .steering/ stays silent and green, because this asset may legitimately be installed before
+# init writes steering. Both halves or neither.
+r=$(anchor_repo anc-unreach '- Owns: x')
+chmod 000 "$r/.steering" 2>/dev/null
+if cat "$r/.steering/tech.md" >/dev/null 2>&1; then
+  chmod 755 "$r/.steering" 2>/dev/null
+  note_skip "anchors/unreachable-steering-dir" "permissions not enforced here (running as root?)"
+else
+  out=$(run_anchors_out "$r")
+  chmod 755 "$r/.steering" 2>/dev/null
+  [ "$out" = "1" ] && c1=ok || c1=no
+  case "$(cat "$TMP/aout")" in *"nothing was checked"*) c2=no ;; *) c2=ok ;; esac
+  case "$(cat "$TMP/aerr")" in *".steering"*) c3=ok ;; *) c3=no ;; esac
+  n=$(grep -c "cannot be read" "$TMP/aerr")
+  [ "$n" -eq 1 ] && c4=ok || c4=no
+
+  r=$(anchor_repo anc-nosteering '- Owns: x'); rm -rf "$r/.steering"
+  out=$(run_anchors_out "$r")
+  [ "$out" = "0" ] && c5=ok || c5=no
+  case "$(cat "$TMP/aout")" in *"nothing was checked"*) c6=ok ;; *) c6=no ;; esac
+
+  [ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] \
+    && report "an unreachable .steering/ fails, and an absent one stays silent" ok \
+    || report "an unreachable .steering/ fails, and an absent one stays silent" no \
+       "unreach-exit=$c1 not-claimed=$c2 names-dir=$c3 once=$c4(saw $n) absent-exit=$c5 absent-msg=$c6"
+fi
+
 # 33. A stale gate-lib.sh must degrade the digest visibly, not silently.
 #
 # The digest has no blocking channel, so it cannot be made loud — but omitting Owns,

@@ -80,7 +80,7 @@ Asked and answered 2026-09-21.
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
 - [x] T1: case that `quality-gate.sh` exits 0 with `{}` on a present-but-unreadable `.steering/tech.md` — then `gate_steering_read` in `hooks/gate-lib.sh`, `gate_steering_value` reimplemented over it, and `quality-gate.sh` opting in. (AC1, AC2, AC8)
-- [ ] T2: cases that `check-steering-anchors.sh` repeats its unreadable-file block once per anchor row, and calls an unreachable `.steering/` "no steering files found" — then the asset opting in to `gate_steering_read`, reporting once per file, and separating unreachable from absent. (AC6, AC7, AC8)
+- [x] T2: cases that `check-steering-anchors.sh` repeats its unreadable-file block once per anchor row, and calls an unreachable `.steering/` "no steering files found" — then the asset opting in to `gate_steering_read`, reporting once per file, and separating unreachable from absent. (AC6, AC7, AC8)
 - [ ] T3: case that `check-manifests.py` prints `both manifests agree` with a hook template moved away — then the fix. (AC3, AC8)
 - [ ] T4: cases that `check-leakage.sh` prints `clean` over an empty work-set and over a file it cannot read — then the scanned count, the zero-count failure, and the read failure. (AC4, AC5, AC8)
 - [ ] T5: correct `docs/BACKLOG.md` row 1's case-14 sentence per Q3, file the Q2 issue, and record it under `## Open, not planned`.
