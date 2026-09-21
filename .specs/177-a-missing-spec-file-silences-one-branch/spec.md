@@ -1,5 +1,5 @@
 # Spec: A missing spec file silences the one branch nobody else reads
-- Slug: 177-a-missing-spec-file-silences-one-branch   Issue: 177   Type: bug   Status: approved
+- Slug: 177-a-missing-spec-file-silences-one-branch   Issue: 177   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-09-21
 
 ## 1. Requirements (WHAT / WHY)
