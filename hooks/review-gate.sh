@@ -5,8 +5,10 @@
 # holds: finished work cannot sit in this repository without a fresh, clean review.
 #
 # It asks that about the REPOSITORY, not about where HEAD happens to point, and not about
-# which files happen to be checked out. Those are three questions, and the gate has had to be
-# taught each of them in turn. Until #26 only the first was asked: on a branch with no spec the
+# whether the spec happens to be checked out. Those are three questions, and the gate has had
+# to be taught each of them in turn. Only the third's ABSENCE half is closed: which tree a
+# spec that IS checked out is read from is still the working tree's call, deliberately, and
+# check_current_branch says why. Until #26 only the first was asked: on a branch with no spec the
 # gate exited 0 and printed nothing, so `git checkout main` turned the one enforced rule off
 # and left no trace — a skipped review and a clean repository produced identical silence. #26
 # left the third behind, one branch wide: the branch you stand on was read from the working
@@ -86,6 +88,7 @@ check_current_branch() {
   # the working tree does not have it.
   tree=''                             # empty — gate_spec_review_state reads the working tree
   note=''
+  corrupt=''
   if [ ! -f "$spec" ]; then
     # Under a detached HEAD `branch` is the literal `HEAD`, so this asks for
     # `HEAD:.specs/HEAD/spec.md`, gets nothing, and returns — case 77 is unchanged and the scan
@@ -98,6 +101,12 @@ check_current_branch() {
     # off. Empty on every path that existed before this change, and appended with no separator,
     # so those messages are unchanged character for character.
     note=" ($spec is not in your working tree, so the gate read it — and the receipt — from this branch's own tree at HEAD. A sparse checkout, a partial worktree, or a deletion nobody committed produces that, and it means a receipt written into the working tree alone does not clear this until it is committed.)"
+    # The two unreadable states are the exception, and they need the opposite advice. A blob a
+    # tree names is always readable, so neither can arise from a ref read in the ordinary way —
+    # reaching one here means `git cat-file -e` succeeded and `git show` failed, which is a
+    # damaged object store rather than a file mode. The frozen messages above tell you to fix a
+    # permission, and on this path that is advice about a file which is not the subject.
+    corrupt=" The permission remedy above is for the working-tree read; a read that fails from the branch's own tree is object-store damage, so check the repository rather than the file mode."
   fi
 
   # No issue, no spec. The slug is <issue-number>-<kebab-title>, so a spec directory
@@ -149,11 +158,11 @@ check_current_branch() {
       # and the difference is invisible downstream: both task counters come back 0 for a file
       # they cannot open, and a zero total is read as "nothing authored, stay silent". Fail
       # closed — an unreadable spec is a broken working tree, not an empty one.
-      gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass.$note" ;;
+      gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass.$note$corrupt" ;;
     no-receipt)
       gate_block "Review gate: every task in $spec is ticked, but no reviewer receipt exists. Run $reviewer on the branch diff, then write its Receipt block to $receipt. If $reviewer is already running, wait for it and write the receipt from its result — do not start a second one.$note" ;;
     receipt-unreadable)
-      gate_block "Review gate: $receipt exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass.$note" ;;
+      gate_block "Review gate: $receipt exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass.$note$corrupt" ;;
     verdict=*)
       gate_block "Review gate: the recorded review verdict is '${state#verdict=}', not CLEAN. Address every BLOCKER and HIGH finding, re-run $reviewer, and update $receipt.$note" ;;
     unresolved-sha=*)

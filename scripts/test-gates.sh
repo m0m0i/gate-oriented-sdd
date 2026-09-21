@@ -716,10 +716,15 @@ case "$err" in *"9-feature"*) c3=ok ;; *) c3=no ;; esac
 case "$err" in *"not in your working tree"*) c4=ok ;; *) c4=no ;; esac
 # The fixture only means anything while the spec really is committed on the branch.
 [ "$committed" = yes ] && c5=ok || c5=no
-[ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
+# AC5. Reported ONCE, and by a path that can speak in the second person. The alternative fix
+# — letting the scan stop skipping this ref by name — would report it under a headline saying
+# "a branch other than the one this turn is on", which is false about the branch you are
+# standing on. The absence of that sentence is what says which path answered.
+case "$err" in *"other than the one this turn is on"*) c6=no ;; *) c6=ok ;; esac
+[ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] \
   && report "a spec committed on the branch and gone from the working tree still blocks" ok \
   || report "a spec committed on the branch and gone from the working tree still blocks" no \
-     "exit=$c1 json=$c2 names-branch=$c3 names-the-tree=$c4 committed=$c5"
+     "exit=$c1 json=$c2 names-branch=$c3 names-the-tree=$c4 committed=$c5 second-person=$c6"
 
 # 147. #177 AC4 — the fallback is a fallback. The working tree is read FIRST and its answer
 #      stands, which is #26's deliberate choice and the reason an uncommitted spec edit counts;
@@ -768,8 +773,9 @@ case "$err" in *"working tree"*) c5=no ;; *) c5=ok ;; esac
 #      `|| return 0` from the existence test, widen it from the file to the directory, or set
 #      `tree=HEAD` unconditionally, and the case still passes — gate_spec_review_state reads an
 #      absent spec from HEAD and returns the empty state, which is silence by the other route.
-#      The file's own precedent above case 90 says a case that cannot fail asserts a property
-#      nobody pinned, so this one states what it DOES constrain: the next change to this
+#      This file's own precedent — the comment following case 90's second fixture — says a case
+#      that cannot fail asserts a property nobody pinned, so this one states what it DOES
+#      constrain: the next change to this
 #      function is #176, a default `*)` arm that blocks on any state the `case` does not
 #      recognise, and the first refactor to route both readers through one helper will want to
 #      give "no spec at all" a state name. On that day this case is the difference between a
