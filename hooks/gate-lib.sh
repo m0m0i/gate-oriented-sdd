@@ -44,8 +44,45 @@ gate_pass() {
 #
 # Exact by design. `- **Owns: ...**` does not match, and that is correct: the consumer would
 # not match it either, so a checker using this function sees precisely what a gate sees.
-gate_steering_value() {  # <file> <key>
+#
+# Two forms, one expression. This one keeps "absent" and "unreadable" apart, the way
+# _gate_read below does for whole files:
+#
+#   0  the file was there and readable when tested; stdout is the value, and empty when the
+#      file does not carry the key
+#   1  no such file
+#   2  the file is there and could not be read
+#
+# "When tested" is doing real work in that first line: `[ -r ]` is a prediction, and the sed
+# below still discards its own stderr, so an EIO or a mode change between the test and the
+# open returns 0 with empty stdout — "read it, found nothing" for a read that failed. Narrower
+# than the residue `_gate_read` leaves, and left there on purpose: closing it means changing
+# the sed line, and every caller of gate_steering_value reads through it.
+#
+# An absent KEY stays fused with an empty value, deliberately: a steering file legitimately
+# omits `- Docs:`, so no caller treats a missing key as an error. What was never legitimate is
+# answering at all for a file nobody could open. The empty string said that too, and every
+# caller read it the one way — nothing found, so nothing wrong. quality-gate.sh reached
+# gate_pass on a mode-000 tech.md having run no validator, and check-steering-anchors.sh
+# recovered the distinction with a hand-rolled `[ ! -r ]`, which is what proves it was
+# recoverable and that here is where it should have been recovered. #39.
+gate_steering_read() {  # <file> <key>
+  [ -f "$1" ] || return 1
+  [ -r "$1" ] || return 2
   sed -n "s/^ *- *$2: *//p" "$1" 2>/dev/null | head -1
+}
+
+# The value-only form, for the callers that do not need the difference — which is most of
+# them, since an absent steering file and an unreadable one are equally "no value here" to a
+# digest line or an optional glob. Always exits 0, and prints exactly what it printed before
+# the reader above existed: empty for an absent file, an unreadable one, a directory, or a
+# file without the key. A wrapper rather than a second copy of the sed, for the reason this
+# function exists at all — and a caller that does not opt in is behaviourally unchanged,
+# which is the point. #182 spent seven review rounds inside gate_work_reached_base; this is
+# not the branch that reopens it.
+gate_steering_value() {  # <file> <key>
+  gate_steering_read "$1" "$2"
+  return 0
 }
 
 # Emit a spec's Tasks section ONLY — section 3, up to the next heading.

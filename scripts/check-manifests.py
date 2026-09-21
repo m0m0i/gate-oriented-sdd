@@ -23,6 +23,14 @@ def load(path: pathlib.Path):
         return json.loads(path.read_text())
     except FileNotFoundError:
         errors.append(f"missing: {path.relative_to(ROOT)}")
+    except (OSError, UnicodeDecodeError) as e:
+        # Present and unreadable, or not decodable. UnicodeDecodeError is a ValueError rather
+        # than an OSError, so invalid UTF-8 went on raising through main after this arm was
+        # added -- the traceback this arm exists to replace, surviving in the one shape it did
+        # not name. This used to leave read_text() to raise through main and
+        # exit 1 on a traceback -- fail-closed by accident rather than by decision, and a
+        # traceback sends the reader looking for a bug in the guard rather than in the tree.
+        errors.append(f"cannot read {path.relative_to(ROOT)}: {e}")
     except json.JSONDecodeError as e:
         errors.append(f"invalid JSON in {path.relative_to(ROOT)}: {e}")
     return None
@@ -65,11 +73,35 @@ if market and cc:
 # see hooks/templates/README.md and docs/verified.md.
 cc_hooks = PLUGIN / "hooks" / "templates" / "claude-code.settings.json"
 agy_hooks = PLUGIN / "hooks" / "templates" / "antigravity.hooks.json"
-if cc_hooks.is_file() and agy_hooks.is_file():
-    a = load(cc_hooks) or {}
-    b = load(agy_hooks) or {}
+# A comparison that could not run is not a comparison that agreed. This was
+# `if cc_hooks.is_file() and agy_hooks.is_file():` with no else, so a template renamed, moved
+# or unreadable skipped the whole block below and fell through to "both manifests agree" --
+# the same sentence, less checking, same exit code. The block is the one thing this guard
+# exists for: it pairs Claude Code's SessionStart with Antigravity's PreInvocation, and
+# AGENTS.md's parity claim rests on it. load() records absence and unreadability itself, so
+# asking it is both the check and the diagnosis. #39.
+#
+# `is not None` is NOT the test, and that was this fix's own first version: json.loads("null")
+# returns None and raises nothing, so a template written as `null` reached the sentinel with
+# nothing recorded, skipped the block, and printed the success line -- the defect arriving
+# through its own repair. What load() RECORDED is the test, and the shape is checked here
+# because the comparison below indexes both documents as objects.
+n_before = len(errors)
+a = load(cc_hooks)
+b = load(agy_hooks)
+if len(errors) == n_before:
+    for path, doc in ((cc_hooks, a), (agy_hooks, b)):
+        if not isinstance(doc, dict):
+            # `or {}` used to flatten this into an empty mapping, which produced a named event
+            # mismatch. Without it .get() raises, and a traceback is not a diagnosis either.
+            errors.append(
+                f"{path.relative_to(ROOT)} is valid JSON but not an object "
+                f"({type(doc).__name__}), so the two templates cannot be compared"
+            )
+
+if isinstance(a, dict) and isinstance(b, dict):
     a_events = set((a.get("hooks") or {}).keys())
-    envelope = b.get(cc.get("name") if cc else "", {}) if isinstance(b, dict) else {}
+    envelope = b.get(cc.get("name") if cc else "", {})
     b_events = {k for k in envelope if k != "enabled"}
 
     # Antigravity's schema is mixed: tool events nest under {matcher, hooks:[...]},

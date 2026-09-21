@@ -34,18 +34,26 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# THIRTEEN sites. The first cut converted ten and said seven; the recount that caught that said
-# twelve and nine, in the paragraph whose subject is not counting. Two of the three the first
-# cut missed were worse than any half: they called `report ... ok` on the skip path,
+# TWENTY sites. The first cut converted ten and said seven; the recount that caught that
+# said twelve and nine, in the paragraph whose subject is not counting. Two of the three the
+# first cut missed were worse than any half: they called `report ... ok` on the skip path,
 # manufacturing a pass and incrementing the counter. Those two are whole cases and now report
 # nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
 #
-# How to get thirteen, since two recounts did not: count the GUARDS, not the `chmod 000` lines.
-# There are twelve of those and ELEVEN guards among them, because case 14 (the unguarded
-# `chmod 000` at :209) has no self-disabling branch — under root it goes red rather than
-# skipping, which is the safe direction and deliberately left alone; do not "fix" that
-# asymmetry. The last two guards are not permission-based at all: `bootstrap/symlinked-slug`
-# and `bootstrap/dangling-symlink` self-disable when `ln -s` fails. 11 + 2 = 13.
+# How to get twenty: count the GUARDS, not the `chmod 000` lines. There are eighteen of
+# those and SEVENTEEN guards among them, because case 14 has no self-disabling branch — under
+# root it goes red rather than skipping, which is the safe direction and deliberately left
+# alone. Do not "fix" that asymmetry: `docs/BACKLOG.md` row 1 asked for it and was corrected
+# rather than obeyed, on #39's branch. The last three guards are not permission-based at all —
+# `bootstrap/symlinked-slug` and `bootstrap/dangling-symlink` self-disable when `ln -s` fails,
+# and the shallow-clone guard when the fixture cannot be shallowed. 17 + 3 = 20.
+#
+# The old figure was 13, by a formula that omitted the shallow-clone guard, so it was already
+# short by one on `main` against fourteen sites, before #39 added six. Counted by command and
+# then RECOUNTED by command after the last case landed, which is the step the first attempt
+# skipped: it said seventeen and nineteen, correct until review round 3 added one more of
+# each. Both recipes filter comments, or they match the line documenting them and return one
+# more than they should: `grep "chmod 000" … | grep -v "^#"`, `grep 'note_skip "' … | grep -v "^#"`.
 skipped=0
 note_skip() { skipped=$((skipped+1)); printf '  skip %s — %s\n' "$1" "$2"; }
 
@@ -1113,6 +1121,42 @@ r=$(qg_repo qgnone ""); out=$(run_qg "$r")
 case "$out" in *"exit=0"*) report "absent Validators line stays silent" ok ;;
                         *) report "absent Validators line stays silent" no "$out" ;; esac
 
+# 151. A tech.md that is there and cannot be read is not a project with no validators.
+#
+# `[ -f ]` passes for a mode-000 file, the reader's own 2>/dev/null eats the EACCES, and
+# `[ -n "$validators" ] || gate_pass` fires: the gate exits 0 with `{}` having run nothing,
+# printing the two characters it prints for a clean turn. That is .steering/product.md's own
+# BLOCKER wording — a gate that silently stops checking — inside the gate .steering/tech.md
+# calls the one guarantee. Case 18 locks the door beside it and must stay locked: an ABSENT
+# line still passes, because a project that has not declared validators is not one whose
+# turns should be blocked. #39.
+# The door beside it, and the one this widening could break: absence still passes. That test
+# used to be `[ -f .steering/tech.md ]` inside this file and is now gate_steering_read's
+# return of 1, in another — so nothing here pinned it, and flipping that arm to gate_block
+# would leave the suite green while every install without steering had every turn blocked.
+r=$(qg_repo qgnotech "true"); rm -f "$r/.steering/tech.md"
+out=$(run_qg "$r")
+case "$out" in *"exit=0"*) report "an absent tech.md still passes" ok ;;
+                        *) report "an absent tech.md still passes" no "$out" ;; esac
+
+r=$(qg_repo qgunread "true")
+chmod 000 "$r/.steering/tech.md" 2>/dev/null
+if cat "$r/.steering/tech.md" >/dev/null 2>&1; then
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  note_skip "qg/unreadable-tech-md" "permissions not enforced here (running as root?)"
+else
+  out=$(run_qg "$r"); err=$(cat "$TMP/err")
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+  case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+  case "$err" in *"cannot be read"*) c3=ok ;; *) c3=no ;; esac
+  case "$err" in *tech.md*) c4=ok ;; *) c4=no ;; esac
+  [ "$c1$c2$c3$c4" = "okokokok" ] \
+    && report "an unreadable tech.md blocks rather than passing as no validators" ok \
+    || report "an unreadable tech.md blocks rather than passing as no validators" no \
+       "exit=$c1 json=$c2 msg=$c3 names-file=$c4"
+fi
+
 # --- quality gate: only pays when something matching Source globs changed ---------------
 qg_repo() { # $1 = name
   r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
@@ -1479,8 +1523,14 @@ declared=$(sed -n 's/^\.steering\/[a-z]*\.md|//p' "$ROOT/assets/check-steering-a
 # The `s/"\$1"//` clause that used to be here could never match — grep's [A-Za-z ] class
 # excludes the quote — so it read as though the steer() wrapper were handled while the wrapper
 # was silently dropped instead. The wrapper is gone; every call site is literal.
-used=$(grep -ho "gate_steering_value [^ ]* '\?[A-Za-z ]*'\?" "$ROOT"/hooks/*.sh \
-       | sed "s/.*gate_steering_value [^ ]* //; s/'//g" | grep -v '^$' | sort -u)
+# `gate_steering_[a-z]*`, not the one function: quality-gate.sh reads Validators through
+# gate_steering_read since #39, and a pattern naming only gate_steering_value silently shrank
+# the population this case compares — the detector stopping detecting, which is #39's own
+# subject. The glob also covers the next sibling reader without anyone remembering to add it.
+# Comments stripped first, so prose naming a reader is not mistaken for a call site.
+used=$(sed 's/#.*//' "$ROOT"/hooks/*.sh \
+       | grep -ho "gate_steering_[a-z]* [^ ]* '\?[A-Za-z ]*'\?" \
+       | sed "s/.*gate_steering_[a-z]* [^ ]* //; s/'//g" | grep -v '^$' | sort -u)
 # The relation is containment, not equality. ANCHORS may legitimately hold more than the hooks
 # read — `Docs` is consumed by skills and no hook touches it — and that is not drift. Drift is
 # a hook reading an anchor the table does not cover, which is the direction that makes
@@ -1544,6 +1594,70 @@ else
   case "$err" in *"cannot be read"*) c2=ok ;; *) c2=no ;; esac
   [ "$c1$c2" = "okok" ] && report "an unreadable steering file fails rather than reading as absent" ok \
     || report "an unreadable steering file fails rather than reading as absent" no "exit=$c1 msg=$c2"
+fi
+
+# Captures stdout as well, because two of the cases below are about a sentence printed on it.
+run_anchors_out() { ( cd "$1" && sh assets/check-steering-anchors.sh >"$TMP/aout" 2>"$TMP/aerr"; printf '%s' "$?" ) }
+
+# 152. An unreadable file is reported once, not once per anchor it carries.
+#
+# The unreadable-file block sat inside the row loop, so a mode-000 tech.md printed the same
+# two lines once for each of its SIX anchors. #34's own review called it right diagnosis,
+# buried by volume; it has got worse since, because `- Mode:` and `- Target:` joined the table
+# after it was filed. Case 32 cannot see this — product.md carries one anchor, so its block is
+# correct by accident. #39.
+r=$(anchor_repo anc-unread-once '- Owns: x')
+chmod 000 "$r/.steering/tech.md" 2>/dev/null
+if cat "$r/.steering/tech.md" >/dev/null 2>&1; then
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  note_skip "anchors/unreadable-tech-md-once" "permissions not enforced here (running as root?)"
+else
+  out=$(run_anchors "$r")
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  n=$(grep -c "cannot be read" "$TMP/aerr")
+  [ "$out" = "1" ] && c1=ok || c1=no
+  [ "$n" -eq 1 ] && c2=ok || c2=no
+  case "$(cat "$TMP/aerr")" in *"tech.md"*) c3=ok ;; *) c3=no ;; esac
+  [ "$c1$c2$c3" = "okokok" ] \
+    && report "an unreadable steering file is reported once, not once per anchor" ok \
+    || report "an unreadable steering file is reported once, not once per anchor" no \
+       "exit=$c1 count=$c2(saw $n) names-file=$c3"
+fi
+
+# 153. A .steering/ that cannot be traversed is not a project without steering.
+#
+# `[ -f ]` needs to stat through the directory, so under a mode-000 .steering/ EVERY anchor
+# was classified absent, `present` stayed 0, and the run ended on "no steering files found —
+# nothing was checked" at exit 0. A sentence about having looked, printed by a check that
+# could not look, in the guard whose whole subject is keeping those apart — and this one is on
+# the `- Validators:` line, so it is the turn's own verdict. #39.
+#
+# The second half is what stops the fix being "fail whenever present is 0": an ABSENT
+# .steering/ stays silent and green, because this asset may legitimately be installed before
+# init writes steering. Both halves or neither.
+r=$(anchor_repo anc-unreach '- Owns: x')
+chmod 000 "$r/.steering" 2>/dev/null
+if cat "$r/.steering/tech.md" >/dev/null 2>&1; then
+  chmod 755 "$r/.steering" 2>/dev/null
+  note_skip "anchors/unreachable-steering-dir" "permissions not enforced here (running as root?)"
+else
+  out=$(run_anchors_out "$r")
+  chmod 755 "$r/.steering" 2>/dev/null
+  [ "$out" = "1" ] && c1=ok || c1=no
+  case "$(cat "$TMP/aout")" in *"nothing was checked"*) c2=no ;; *) c2=ok ;; esac
+  case "$(cat "$TMP/aerr")" in *".steering"*) c3=ok ;; *) c3=no ;; esac
+  n=$(grep -c "never reached" "$TMP/aerr")
+  [ "$n" -eq 1 ] && c4=ok || c4=no
+
+  r=$(anchor_repo anc-absent-steering '- Owns: x'); rm -rf "$r/.steering"
+  out=$(run_anchors_out "$r")
+  [ "$out" = "0" ] && c5=ok || c5=no
+  case "$(cat "$TMP/aout")" in *"nothing was checked"*) c6=ok ;; *) c6=no ;; esac
+
+  [ "$c1$c2$c3$c4$c5$c6" = "okokokokokok" ] \
+    && report "an unreachable .steering/ fails, and an absent one stays silent" ok \
+    || report "an unreachable .steering/ fails, and an absent one stays silent" no \
+       "unreach-exit=$c1 not-claimed=$c2 names-dir=$c3 once=$c4(saw $n) absent-exit=$c5 absent-msg=$c6"
 fi
 
 # 33. A stale gate-lib.sh must degrade the digest visibly, not silently.
@@ -4900,6 +5014,222 @@ case "$err" in *"antigravity PreInvocation: non-tool events need the flat {type,
      "missing-preinv-exit=$c7 missing-preinv-err=$c8 nested-preinv-exit=$c9 nested-preinv-err=$c10"
 
 
+
+# 154. A hook-template comparison that could not run is not a comparison that agreed.
+#
+# `if cc_hooks.is_file() and agy_hooks.is_file():` had no else, so a template that was renamed,
+# moved or unreadable skipped the whole event-pairing block and fell through to
+# `check-manifests: both manifests agree` — same sentence, less checking, same exit code. That
+# pairing is the one thing this guard exists for: it is what keeps Claude Code's SessionStart
+# and Antigravity's PreInvocation from drifting apart, and AGENTS.md's parity claim rests on
+# it. The control half above already proves a present pair passes. #39.
+run_manifest_out() { ( cd "$1" && python3 scripts/check-manifests.py >"$TMP/mfout" 2>"$TMP/mferr"; printf '%s' "$?" ) }
+
+r=$(manifest_repo mf-no-agy-template); rm -f "$r/hooks/templates/antigravity.hooks.json"
+out=$(run_manifest_out "$r")
+[ "$out" = "1" ] && c0=ok || c0=no
+case "$(cat "$TMP/mfout")" in *"both manifests agree"*) c1=no ;; *) c1=ok ;; esac
+case "$(cat "$TMP/mferr")" in *"antigravity.hooks.json"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(manifest_repo mf-no-cc-template); rm -f "$r/hooks/templates/claude-code.settings.json"
+out=$(run_manifest_out "$r")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$(cat "$TMP/mferr")" in *"claude-code.settings.json"*) c4=ok ;; *) c4=no ;; esac
+
+# Present and unreadable, which `is_file()` cannot tell from present and fine, and which
+# reached the same success line by a second route: read_text() raising inside load().
+r=$(manifest_repo mf-unread-template)
+chmod 000 "$r/hooks/templates/antigravity.hooks.json" 2>/dev/null
+if cat "$r/hooks/templates/antigravity.hooks.json" >/dev/null 2>&1; then
+  chmod 644 "$r/hooks/templates/antigravity.hooks.json" 2>/dev/null
+  c5=ok; c6=ok
+  note_skip "manifests/unreadable-template" "permissions not enforced here (running as root?)"
+else
+  out=$(run_manifest_out "$r")
+  chmod 644 "$r/hooks/templates/antigravity.hooks.json" 2>/dev/null
+  [ "$out" = "1" ] && c5=ok || c5=no
+  # It already exited 1 here, on an unhandled PermissionError out of read_text() -- fail-closed
+  # by accident rather than by decision, and a traceback is not a diagnosis. The guard has to
+  # SAY which file it could not read, or the reader goes looking for a bug in the guard.
+  case "$(cat "$TMP/mferr")" in *Traceback*) c6=no ;; *"cannot read"*) c6=ok ;; *) c6=no ;; esac
+fi
+
+# `json.loads("null")` returns None and raises nothing, so load() hands back the same sentinel
+# as a failed read with NOTHING recorded in errors — and a sentinel test then skips the
+# comparison and falls through to the success line. AC3's defect reached through AC3's fix.
+r=$(manifest_repo mf-null-template); printf 'null\n' > "$r/hooks/templates/antigravity.hooks.json"
+out=$(run_manifest_out "$r")
+[ "$out" = "1" ] && c7=ok || c7=no
+case "$(cat "$TMP/mfout")" in *"both manifests agree"*) c8=no ;; *) c8=ok ;; esac
+
+# Valid JSON that is not an object. `or {}` used to normalise this into a named event
+# mismatch; dropping it leaves .get() to raise, and a traceback is not a diagnosis.
+r=$(manifest_repo mf-list-template); printf '[]\n' > "$r/hooks/templates/claude-code.settings.json"
+out=$(run_manifest_out "$r")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$(cat "$TMP/mferr")" in *Traceback*) c10=no ;; *"not an object"*) c10=ok ;; *) c10=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10" = "okokokokokokokokokokok" ] \
+  && report "an absent or unreadable hook template fails rather than agreeing" ok \
+  || report "an absent or unreadable hook template fails rather than agreeing" no \
+     "agy-exit=$c0 not-claimed=$c1 agy-named=$c2 cc-exit=$c3 cc-named=$c4 unread-exit=$c5 unread-diag=$c6 null-exit=$c7 null-not-claimed=$c8 list-exit=$c9 list-diag=$c10"
+
+# --- guards: scripts/check-leakage.sh ---------------------------------------
+#
+# 155. "Scanned nothing" and "found nothing" are not the same sentence.
+#
+# This guard had no case of any kind, in a suite of a hundred and fifty-four. AGENTS.md calls
+# it the one that matters most — the extraction from a private polyrepo is clean-room and this
+# is the backstop — and it printed `check-leakage: clean` over a work-set of zero files, and
+# over a file it was handed and could not open, because all three scans discard stderr. Its
+# own files() comment calls the first of those "the worst possible failure mode for a guard"
+# and then does not check for it. #39.
+
+leak_repo() {  # $1 = name. A git repo holding only the guard, which SELF excludes: the
+               # work-set is therefore empty by construction, with no adversarial setup.
+               #
+               # `lkg-`, not `lk-`: $TMP is ONE flat namespace shared by every fixture here, and
+               # lock_repo already owns lk-*. The first draft of this case reused lk-empty, got
+               # that fixture's three files, and reported clean — a case failing for a reason
+               # that has nothing to do with its subject, which is #124's whole class.
+  r="$TMP/$1"; mkdir -p "$r/scripts"
+  cp "$ROOT/scripts/check-leakage.sh" "$r/scripts/"
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && git add -A && git commit -qm init ) >/dev/null 2>&1
+  echo "$r"
+}
+run_leak() { ( cd "$1" && sh scripts/check-leakage.sh >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" ) }
+
+r=$(leak_repo lkg-empty)
+out=$(run_leak "$r")
+[ "$out" = "1" ] && c0=ok || c0=no
+case "$(cat "$TMP/lkout")" in *clean*) c1=no ;; *) c1=ok ;; esac
+
+# The control, and the half that stops the fix from being "fail whenever it saw nothing":
+# readable files, nothing private, clean and green — and now saying how many it read.
+r=$(leak_repo lkg-clean); printf 'nothing to see\n' > "$r/note.md"
+out=$(run_leak "$r")
+[ "$out" = "0" ] && c2=ok || c2=no
+case "$(cat "$TMP/lkout")" in *"1 file"*) c3=ok ;; *) c3=no ;; esac
+
+# A file in the work-set it cannot open: `xargs grep … 2>/dev/null` swallowed the
+# "Permission denied" and the scan went round it in silence.
+r=$(leak_repo lkg-unread); printf 'nothing to see\n' > "$r/note.md"
+chmod 000 "$r/note.md" 2>/dev/null
+if cat "$r/note.md" >/dev/null 2>&1; then
+  chmod 644 "$r/note.md" 2>/dev/null
+  c4=ok; c5=ok
+  note_skip "leakage/unreadable-file" "permissions not enforced here (running as root?)"
+else
+  out=$(run_leak "$r")
+  chmod 644 "$r/note.md" 2>/dev/null
+  [ "$out" = "1" ] && c4=ok || c4=no
+  case "$(cat "$TMP/lkerr")" in *"note.md"*) c5=ok ;; *) c5=no ;; esac
+fi
+
+# And it still catches what it exists for. Assembled at run time rather than written out: this
+# file is in the work-set of every real run, so a pattern spelled literally here would make the
+# guard fire on the suite that tests it. `ADR-%s` does not match \bADR-[0-9]{4} — prefix and
+# digits only meet inside the fixture.
+r=$(leak_repo lkg-hit); printf 'see ADR-%s for the rationale\n' 0001 > "$r/doc.md"
+out=$(run_leak "$r")
+[ "$out" = "1" ] && c6=ok || c6=no
+case "$(cat "$TMP/lkerr")" in *"cross-reference id"*) c7=ok ;; *) c7=no ;; esac
+
+# A path git C-quotes, and a path holding a space. `core.quotePath` defaults to TRUE, so one
+# byte above 0x80 arrives as the literal `"caf\303\251.md"` — a string `[ -r ]` cannot open,
+# so the readability check declares a perfectly readable file unreadable and blocks the turn.
+# check-leakage.sh is the FIRST entry on the `- Validators:` line, so that is every turn in
+# this repository stopped on a wrong diagnosis, which check-steering-anchors.sh's own header
+# calls the way a guard gets removed. The space is the mirror: it arrives bare, is counted,
+# and is then split by xargs into two paths matching nothing — `clean — N file(s) scanned`
+# printed over N-1 files actually read, which is AC4's promise broken by AC4's own fix.
+odd=$(printf 'caf\303\251')     # UTF-8 e-acute; constructed so this file stays ASCII
+r=$(leak_repo lkg-odd-names)
+printf 'nothing to see\n' > "$r/$odd.md"
+printf 'nothing to see\n' > "$r/my file.md"
+out=$(run_leak "$r")
+[ "$out" = "0" ] && c8=ok || c8=no
+case "$(cat "$TMP/lkout")" in *"2 file"*) c9=ok ;; *) c9=no ;; esac
+
+# Counted is not scanned. Plant a real hit in each odd path: if either is only counted, the
+# guard stays green and the count keeps saying it read them.
+r=$(leak_repo lkg-odd-hit); printf 'see ADR-%s\n' 0001 > "$r/my file.md"
+out=$(run_leak "$r"); [ "$out" = "1" ] && c10=ok || c10=no
+r=$(leak_repo lkg-odd-hit2); printf 'see ADR-%s\n' 0001 > "$r/$odd.md"
+out=$(run_leak "$r"); [ "$out" = "1" ] && c11=ok || c11=no
+
+# A path beginning with `-`. git does not C-quote it, so it passes every test above, is
+# counted, and then reaches grep as an OPTION because the file list follows the pattern with
+# nothing ending option parsing — never read, while the count says it was. The spaced path
+# wearing one more shape, and here it hides a real hit. Review round 2.
+# RED-CAPABLE by restoring scripts/check-leakage.sh as at 912b6ba: this half goes red there
+# — BSD getopt_long permutes, so `grep -HnE PAT -dash.md` parses `-d ash.md` and the planted
+# hit is never seen — while the rest of the suite stays green.
+r=$(leak_repo lkg-dash); printf 'see ADR-%s\n' 0001 > "$r/-dash.md"
+out=$(run_leak "$r"); [ "$out" = "1" ] && c12=ok || c12=no
+
+# A tracked path that is not on disk. `--cached` lists INDEX entries and filters on neither
+# existence nor skip-worktree, so a plain `rm` before the deletion is staged — or a sparse
+# checkout — reached `[ -r ]`, false for a file that is not there, and this guard blocked the
+# turn saying "fix the permissions" about it. Absent and unreadable are different states: this
+# issue's own subject, one level down inside its own fix. It is a count, never a failure.
+# RED-CAPABLE at the same commit: all three halves go red there, the rest stays green.
+r=$(leak_repo lkg-deleted)
+printf 'nothing to see\n' > "$r/note.md"; printf 'nothing to see\n' > "$r/keep.md"
+( cd "$r" && git add -A && git commit -qm two ) >/dev/null 2>&1
+rm "$r/note.md"
+out=$(run_leak "$r")
+[ "$out" = "0" ] && c13=ok || c13=no
+case "$(cat "$TMP/lkout")" in *"not in the working tree"*) c14=ok ;; *) c14=no ;; esac
+case "$(cat "$TMP/lkout")" in *"1 file(s) scanned"*) c15=ok ;; *) c15=no ;; esac
+
+# A tracked file under a directory the process cannot SEARCH. `[ -e ]` is stat(), which
+# returns EACCES through an unsearchable prefix, and `test` reports that as false — so the
+# `absent` arm added in review round 2 counted a file that IS in the working tree as one that
+# is not, and a planted hit went from caught to `clean` on exit 0. A fail-open in the
+# clean-room backstop, introduced by the fix for the previous fail-open, three rounds running.
+# The mechanism was already written down twice on this branch: case 153, and #195. The nested
+# half matters separately — testing only the immediate parent misses `a/b/c.md` under a
+# mode-000 `a/`, because `[ -d a/b ]` cannot be answered either. Review round 3.
+# RED-CAPABLE at 6605fd3: all three halves go red there, the rest of the suite stays green.
+r=$(leak_repo lkg-unsearchable); mkdir -p "$r/sub/deep"
+printf 'see ADR-%s\n' 0001 > "$r/sub/secret.md"
+printf 'see ADR-%s\n' 0001 > "$r/sub/deep/deeper.md"
+printf 'nothing to see\n' > "$r/keep.md"
+( cd "$r" && git add -A && git commit -qm two ) >/dev/null 2>&1
+chmod 000 "$r/sub" 2>/dev/null
+if cat "$r/sub/secret.md" >/dev/null 2>&1; then
+  chmod 755 "$r/sub" 2>/dev/null
+  c16=ok; c17=ok; c18=ok
+  note_skip "leakage/unsearchable-dir" "permissions not enforced here (running as root?)"
+else
+  out=$(run_leak "$r")
+  chmod 755 "$r/sub" 2>/dev/null
+  [ "$out" = "1" ] && c16=ok || c16=no
+  case "$(cat "$TMP/lkerr")" in *"sub/secret.md"*) c17=ok ;; *) c17=no ;; esac
+  case "$(cat "$TMP/lkerr")" in *"sub/deep/deeper.md"*) c18=ok ;; *) c18=no ;; esac
+fi
+
+# A path git C-quotes, which is the state the `unscannable` arm exists for — and that arm has
+# been DEAD since the `[ -e ]` test was put in front of it: the quoted form is not a path, so
+# `[ -e ]` is false, the ancestor walk finds nothing to blame, and the entry is counted as
+# absent on exit 0. A planted hit is caught at 912b6ba and missed at 7d56992. The arm was
+# added in round 1, disabled in round 2 and preserved through round 3 with no case exercising
+# it, which is why nothing said so: deleting it outright left the suite green. Review round 4,
+# and the fourth consecutive round in which a fix to this file disabled the fix before it.
+# RED-CAPABLE at 7d56992: both halves go red there, the rest of the suite stays green.
+r=$(leak_repo lkg-quoted); printf 'see ADR-%s\n' 0001 > "$r/\"q\".md"
+printf 'nothing to see\n' > "$r/keep.md"
+( cd "$r" && git add -A && git commit -qm two ) >/dev/null 2>&1
+out=$(run_leak "$r")
+[ "$out" = "1" ] && c19=ok || c19=no
+case "$(cat "$TMP/lkerr")" in *"cannot be handed to grep"*) c20=ok ;; *) c20=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17$c18$c19$c20" = "okokokokokokokokokokokokokokokokokokokokok" ] \
+  && report "check-leakage counts what it scanned, and fails on nothing or unreadable" ok \
+  || report "check-leakage counts what it scanned, and fails on nothing or unreadable" no \
+     "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7 odd-exit=$c8 odd-count=$c9 space-hit=$c10 utf8-hit=$c11 dash-hit=$c12 del-exit=$c13 del-noted=$c14 del-count=$c15 unsearch=$c16/$c17/$c18 quoted=$c19/$c20"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
