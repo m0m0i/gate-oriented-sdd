@@ -42,23 +42,63 @@ files() {
   fi | grep -v "^${SELF}$"
 }
 
+# The work-set, read ONCE. Three scans over three separately computed lists could disagree
+# with each other and with the count below, and the count is only worth printing if it is the
+# count of what was actually handed to grep.
+list=$(files)
+
+scanned=0
+unreadable=""
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  scanned=$((scanned + 1))
+  [ -r "$f" ] || unreadable="${unreadable}
+  $f"
+done <<EOF
+$list
+EOF
+
+# Zero files is not a clean tree. files()'s own comment calls a scan of nothing "the worst
+# possible failure mode for a guard" and then does not check for it: a fresh clone, a broken
+# `git ls-files`, or an SELF exclusion that grew all end here, and until now they all printed
+# `check-leakage: clean` on exit 0. AGENTS.md calls this the guard that matters most. #39.
+if [ "$scanned" -eq 0 ]; then
+  echo "check-leakage FAILED — the work-set is empty, so nothing was scanned." >&2
+  echo "  'found nothing' and 'looked at nothing' must not share an exit code. Check that" >&2
+  echo "  git ls-files works here, and that SELF still excludes only this script." >&2
+  exit 1
+fi
+
+# A file this guard was handed and could not open is not a file it read and found clean.
+# `xargs grep … 2>/dev/null` discarded "Permission denied" along with the noise it was there
+# for, so the scan went round such a file in silence, on the same exit code and in the same
+# sentence. Checked once here rather than three times below, so the three scans keep their
+# stderr discard: after this, what they could still print is noise.
+if [ -n "$unreadable" ]; then
+  echo "check-leakage FAILED — in the work-set and could not be read:$unreadable" >&2
+  echo "" >&2
+  echo "  Fix the permissions rather than treating this as a pass. A file that was not read" >&2
+  echo "  is not a file that came back clean, and this guard is the clean-room backstop." >&2
+  exit 1
+fi
+
 fail=0
 
-hits=$(files | xargs grep -HniE "$PRIVATE" 2>/dev/null)
+hits=$(printf '%s\n' "$list" | xargs grep -HniE "$PRIVATE" 2>/dev/null)
 if [ -n "$hits" ]; then
   echo "LEAK (private identifier):" >&2
   echo "$hits" | sed 's/^/  /' >&2
   fail=1
 fi
 
-hits=$(files | xargs grep -HnE "$IDS" 2>/dev/null)
+hits=$(printf '%s\n' "$list" | xargs grep -HnE "$IDS" 2>/dev/null)
 if [ -n "$hits" ]; then
   echo "LEAK (private cross-reference id):" >&2
   echo "$hits" | sed 's/^/  /' >&2
   fail=1
 fi
 
-hits=$(files | xargs grep -HniE "$DOMAIN" 2>/dev/null)
+hits=$(printf '%s\n' "$list" | xargs grep -HniE "$DOMAIN" 2>/dev/null)
 if [ -n "$hits" ]; then
   echo "WARNING (private domain noun — confirm this is a generic example):" >&2
   echo "$hits" | sed 's/^/  /' >&2
@@ -71,5 +111,5 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
-echo "check-leakage: clean"
+echo "check-leakage: clean — $scanned file(s) scanned"
 exit 0

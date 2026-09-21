@@ -5036,6 +5036,73 @@ fi
   || report "an absent or unreadable hook template fails rather than agreeing" no \
      "agy-exit=$c0 not-claimed=$c1 agy-named=$c2 cc-exit=$c3 cc-named=$c4 unread-exit=$c5 unread-diagnosed=$c6"
 
+# --- guards: scripts/check-leakage.sh ---------------------------------------
+#
+# 155. "Scanned nothing" and "found nothing" are not the same sentence.
+#
+# This guard had no case of any kind, in a suite of a hundred and fifty-four. AGENTS.md calls
+# it the one that matters most — the extraction from a private polyrepo is clean-room and this
+# is the backstop — and it printed `check-leakage: clean` over a work-set of zero files, and
+# over a file it was handed and could not open, because all three scans discard stderr. Its
+# own files() comment calls the first of those "the worst possible failure mode for a guard"
+# and then does not check for it. #39.
+
+leak_repo() {  # $1 = name. A git repo holding only the guard, which SELF excludes: the
+               # work-set is therefore empty by construction, with no adversarial setup.
+               #
+               # `lkg-`, not `lk-`: $TMP is ONE flat namespace shared by every fixture here, and
+               # lock_repo already owns lk-*. The first draft of this case reused lk-empty, got
+               # that fixture's three files, and reported clean — a case failing for a reason
+               # that has nothing to do with its subject, which is #124's whole class.
+  r="$TMP/$1"; mkdir -p "$r/scripts"
+  cp "$ROOT/scripts/check-leakage.sh" "$r/scripts/"
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && git add -A && git commit -qm init ) >/dev/null 2>&1
+  echo "$r"
+}
+run_leak() { ( cd "$1" && sh scripts/check-leakage.sh >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" ) }
+
+r=$(leak_repo lkg-empty)
+out=$(run_leak "$r")
+[ "$out" = "1" ] && c0=ok || c0=no
+case "$(cat "$TMP/lkout")" in *clean*) c1=no ;; *) c1=ok ;; esac
+
+# The control, and the half that stops the fix from being "fail whenever it saw nothing":
+# readable files, nothing private, clean and green — and now saying how many it read.
+r=$(leak_repo lkg-clean); printf 'nothing to see\n' > "$r/note.md"
+out=$(run_leak "$r")
+[ "$out" = "0" ] && c2=ok || c2=no
+case "$(cat "$TMP/lkout")" in *"1 file"*) c3=ok ;; *) c3=no ;; esac
+
+# A file in the work-set it cannot open: `xargs grep … 2>/dev/null` swallowed the
+# "Permission denied" and the scan went round it in silence.
+r=$(leak_repo lkg-unread); printf 'nothing to see\n' > "$r/note.md"
+chmod 000 "$r/note.md" 2>/dev/null
+if cat "$r/note.md" >/dev/null 2>&1; then
+  chmod 644 "$r/note.md" 2>/dev/null
+  c4=ok; c5=ok
+  note_skip "leakage/unreadable-file" "permissions not enforced here (running as root?)"
+else
+  out=$(run_leak "$r")
+  chmod 644 "$r/note.md" 2>/dev/null
+  [ "$out" = "1" ] && c4=ok || c4=no
+  case "$(cat "$TMP/lkerr")" in *"note.md"*) c5=ok ;; *) c5=no ;; esac
+fi
+
+# And it still catches what it exists for. Assembled at run time rather than written out: this
+# file is in the work-set of every real run, so a pattern spelled literally here would make the
+# guard fire on the suite that tests it. `ADR-%s` does not match \bADR-[0-9]{4} — prefix and
+# digits only meet inside the fixture.
+r=$(leak_repo lkg-hit); printf 'see ADR-%s for the rationale\n' 0001 > "$r/doc.md"
+out=$(run_leak "$r")
+[ "$out" = "1" ] && c6=ok || c6=no
+case "$(cat "$TMP/lkerr")" in *"cross-reference id"*) c7=ok ;; *) c7=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokokok" ] \
+  && report "check-leakage counts what it scanned, and fails on nothing or unreadable" ok \
+  || report "check-leakage counts what it scanned, and fails on nothing or unreadable" no \
+     "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7"
+
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
 # #145. check-version-bump.py must include rules/ in SHIPPED so any change
