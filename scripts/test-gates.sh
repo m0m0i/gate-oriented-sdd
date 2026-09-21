@@ -1263,6 +1263,61 @@ for gate in $BS_GATES; do
 done
 
 
+# 159. The copy must not drift — from the other copy, or from what it is a copy of.
+#
+# The guard above is a hand-written gate_block sitting where gate_block cannot be called,
+# which is the #14/#23 shape gate-lib.sh exists to prevent: two sites that can come to
+# disagree with their subject, and the way that is normally discovered is by one of them
+# being wrong in production. Clarify accepted the duplication on the condition that it is
+# pinned, so this is the pin.
+#
+# It DISCOVERS its subjects rather than naming them: every hooks/*.sh that sources the
+# library AND calls gate_block or gate_pass. That predicate is what separates a gate from
+# steering-digest.sh, which sources the library and has no blocking channel, so a third gate
+# added later cannot be added without the guard — where a hardcoded pair would simply not
+# mention it. Discovering fewer than two is a FAILURE and not a quiet pass: a detector that
+# matches nothing and reports agreement is G-8, case 35's subject, and the one bug this
+# repository has shipped most often.
+#
+# The channel comparison is behavioural rather than textual. Both are asked to block with the
+# same message and their stdout, stderr and exit status are compared byte for byte, so a
+# change to either channel IN THE LIBRARY goes red here rather than leaving two hand-written
+# copies faithfully describing the channels it used to have.
+#
+# Named mutations, all three run rather than reasoned about (#185):
+#   - `s/blocks through/blocks via/` in ONE region      -> c2 ok -> no
+#   - `"decision":"continue"` -> `"stop"` in gate-lib   -> c3 ok -> no
+#   - the source-line predicate changed to match nothing -> c1 ok -> no, discovered 0,
+#     and c3 with it, there being no region left to extract the emitter from
+bs_regions=0
+bs_ident=ok
+for f in "$ROOT"/hooks/*.sh; do
+  grep -qE '^\. "\$DIR/gate-lib\.sh"$' "$f" || continue                      # sources the library
+  grep -qE '(^|[^_[:alnum:]])gate_(block|pass)($|[^_[:alnum:]])' "$f" || continue   # and blocks through it
+  bs_regions=$((bs_regions+1))
+  sed -n '/^# --- bootstrap guard:/,/^# --- end bootstrap guard/p' "$f" > "$TMP/bs-region-$bs_regions"
+  # Empty is not agreement. Without this a hook carrying no region at all would compare equal
+  # to another carrying none, and the case would pass over two gates with no guard between
+  # them.
+  [ -s "$TMP/bs-region-$bs_regions" ] || bs_ident=no
+  cmp -s "$TMP/bs-region-1" "$TMP/bs-region-$bs_regions" || bs_ident=no
+done
+[ "$bs_regions" -ge 2 ] && c1=ok || c1=no
+c2=$bs_ident
+
+( . "$ROOT/hooks/gate-lib.sh"; gate_block 'bootstrap drift probe' ) \
+  >"$TMP/bs-lib-out" 2>"$TMP/bs-lib-err"; bs_libexit=$?
+sed -n '/^_gate_bootstrap_block() {/,/^}$/p' "$TMP/bs-region-1" > "$TMP/bs-fn.sh" 2>/dev/null
+( . "$TMP/bs-fn.sh"; _gate_bootstrap_block 'bootstrap drift probe' ) \
+  >"$TMP/bs-cp-out" 2>"$TMP/bs-cp-err"; bs_cpexit=$?
+if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-lib-out" "$TMP/bs-cp-out" \
+     && cmp -s "$TMP/bs-lib-err" "$TMP/bs-cp-err" && [ "$bs_libexit" = "$bs_cpexit" ]; then c3=ok; else c3=no; fi
+
+[ "$c1$c2$c3" = "okokok" ] && report "the bootstrap guard is one copy, and it still matches gate_block" ok \
+  || report "the bootstrap guard is one copy, and it still matches gate_block" no \
+     "discovered=$bs_regions/$c1 identical=$c2 channels=$c3 (lib exit=$bs_libexit, copy exit=$bs_cpexit)"
+
+
 # --- guards: assets/check-locks.py -------------------------------------------------
 #
 # The lock guard answers "has a rulebook drifted from what was agreed". It can also answer
