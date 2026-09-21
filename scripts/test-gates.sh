@@ -1113,6 +1113,33 @@ r=$(qg_repo qgnone ""); out=$(run_qg "$r")
 case "$out" in *"exit=0"*) report "absent Validators line stays silent" ok ;;
                         *) report "absent Validators line stays silent" no "$out" ;; esac
 
+# 151. A tech.md that is there and cannot be read is not a project with no validators.
+#
+# `[ -f ]` passes for a mode-000 file, the reader's own 2>/dev/null eats the EACCES, and
+# `[ -n "$validators" ] || gate_pass` fires: the gate exits 0 with `{}` having run nothing,
+# printing the two characters it prints for a clean turn. That is .steering/product.md's own
+# BLOCKER wording — a gate that silently stops checking — inside the gate .steering/tech.md
+# calls the one guarantee. Case 18 locks the door beside it and must stay locked: an ABSENT
+# line still passes, because a project that has not declared validators is not one whose
+# turns should be blocked. #39.
+r=$(qg_repo qgunread "true")
+chmod 000 "$r/.steering/tech.md" 2>/dev/null
+if cat "$r/.steering/tech.md" >/dev/null 2>&1; then
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  note_skip "qg/unreadable-tech-md" "permissions not enforced here (running as root?)"
+else
+  out=$(run_qg "$r"); err=$(cat "$TMP/err")
+  chmod 644 "$r/.steering/tech.md" 2>/dev/null
+  case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+  case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+  case "$err" in *"cannot be read"*) c3=ok ;; *) c3=no ;; esac
+  case "$err" in *tech.md*) c4=ok ;; *) c4=no ;; esac
+  [ "$c1$c2$c3$c4" = "okokokok" ] \
+    && report "an unreadable tech.md blocks rather than passing as no validators" ok \
+    || report "an unreadable tech.md blocks rather than passing as no validators" no \
+       "exit=$c1 json=$c2 msg=$c3 names-file=$c4"
+fi
+
 # --- quality gate: only pays when something matching Source globs changed ---------------
 qg_repo() { # $1 = name
   r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
