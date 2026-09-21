@@ -1,5 +1,5 @@
 # Spec: A guard that could not look does not report that it looked
-- Slug: 39-a-guard-that-could-not-look   Issue: 39   Type: bug   Status: approved
+- Slug: 39-a-guard-that-could-not-look   Issue: 39   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-09-21
 
 ## 1. Requirements (WHAT / WHY)
@@ -29,14 +29,14 @@
 - Impact: AC1 is the one that matters — `quality-gate.sh` is the bottom row of the harness's table and the only row `.steering/tech.md` calls a guarantee. On an unreadable `tech.md` it exits 0 having run no validator, and the failure is indistinguishable from a clean turn, so it survives as long as it takes to matter. The other three are guards this repository runs on itself; `AGENTS.md` names `check-leakage.sh` the one that matters most, and it is the one with no count.
 - **Root cause:** `hooks/gate-lib.sh` carries two readers with opposite contracts. `_gate_read` returns 1 for absent and 2 for unreadable — added during #26's review for exactly this reason, and its own comment says collapsing them "would make 'I could not check' indistinguishable from 'I checked'". `gate_steering_value` predates it, is `sed ... 2>/dev/null | head -1`, and returns the empty string for both. Every caller inherits a state it cannot recover, and then each re-derives *nothing found* as *nothing wrong* in its own words: `quality-gate.sh` reaches `[ -n "$validators" ] || gate_pass`; `assets/check-steering-anchors.sh` recovers the distinction by hand with its own `[ ! -r ]` test, which proves it is recoverable and that the library is the wrong place to have lost it. The two repo-local guards are the same class by a different mechanism: `scripts/check-manifests.py:68` gates the whole hook-template comparison on `is_file() and is_file()` and falls through to the success line, and `scripts/check-leakage.sh` prints `clean` with nothing to distinguish a scanned tree from an empty `files()`, over three scans whose `2>/dev/null` also discards every per-file read error.
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN `.steering/tech.md` exists and cannot be read THE quality gate SHALL block the turn naming that file, rather than exiting 0.
-  - [ ] **AC2:** WHEN a steering file is absent, and WHEN it exists and cannot be read, THE reader in `hooks/gate-lib.sh` SHALL report those as distinct states to its caller.
-  - [ ] **AC3:** WHEN either hook template is absent or unreadable THE `check-manifests.py` SHALL exit non-zero, and SHALL NOT print `check-manifests: both manifests agree`.
-  - [ ] **AC4:** WHEN `check-leakage.sh` finds no hit THE SYSTEM SHALL report how many files it scanned, and SHALL exit non-zero when that count is zero.
-  - [ ] **AC5:** WHEN a file in `check-leakage.sh`'s work-set cannot be read THE SYSTEM SHALL exit non-zero naming that file, rather than scanning around it.
-  - [ ] **AC6:** WHEN a steering file exists and cannot be read THE `check-steering-anchors.sh` SHALL report it once per file, not once per anchor row.
-  - [ ] **AC7:** WHEN `.steering/` exists and cannot be traversed THE `check-steering-anchors.sh` SHALL NOT report `no steering files found — nothing was checked`.
-  - [ ] **AC8:** each of AC1 and AC3–AC7 has a case in `scripts/test-gates.sh` that fails before its fix and passes after; where `chmod 000` is ineffective the case self-disables through `note_skip`, never `report … ok`.
+  - [x] **AC1:** WHEN `.steering/tech.md` exists and cannot be read THE quality gate SHALL block the turn naming that file, rather than exiting 0.
+  - [x] **AC2:** WHEN a steering file is absent, and WHEN it exists and cannot be read, THE reader in `hooks/gate-lib.sh` SHALL report those as distinct states to its caller.
+  - [x] **AC3:** WHEN either hook template is absent or unreadable THE `check-manifests.py` SHALL exit non-zero, and SHALL NOT print `check-manifests: both manifests agree`.
+  - [x] **AC4:** WHEN `check-leakage.sh` finds no hit THE SYSTEM SHALL report how many files it scanned, and SHALL exit non-zero when that count is zero.
+  - [x] **AC5:** WHEN a file in `check-leakage.sh`'s work-set cannot be read THE SYSTEM SHALL exit non-zero naming that file, rather than scanning around it.
+  - [x] **AC6:** WHEN a steering file exists and cannot be read THE `check-steering-anchors.sh` SHALL report it once per file, not once per anchor row.
+  - [x] **AC7:** WHEN `.steering/` exists and cannot be traversed THE `check-steering-anchors.sh` SHALL NOT report `no steering files found — nothing was checked`.
+  - [x] **AC8:** each of AC1 and AC3–AC7 has a case in `scripts/test-gates.sh` that fails before its fix and passes after; where `chmod 000` is ineffective the case self-disables through `note_skip`, never `report … ok`.
 - Out of scope — adjacent, and every one of them is already filed or is recorded here as a deliberate deferral:
   - **The `report` third state**, #39's own lead item. Superseded: `note_skip()` and a printed `skipped` count landed with #127 across thirteen sites, and the two cases that called `report … ok` on a skip path no longer do.
   - **`test-gates.sh` case 14's behaviour under root.** See Clarifications Q3 — the case is correct as written and the backlog cell is not.
