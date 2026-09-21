@@ -1,6 +1,6 @@
 # Spec: the ordered list is not told when work moves
 
-- Slug: 79-backlog-drifts-from-the-tracker   Issue: 79   Type: bug   Status: done
+- Slug: 79-backlog-drifts-from-the-tracker   Issue: 79   Type: bug   Status: archived   Archived: 2026-09-22
 - Author: m0m0i   Date: 2026-09-20
 
 ## 1. Requirements (WHAT / WHY)
