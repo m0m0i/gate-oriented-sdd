@@ -23,6 +23,11 @@ def load(path: pathlib.Path):
         return json.loads(path.read_text())
     except FileNotFoundError:
         errors.append(f"missing: {path.relative_to(ROOT)}")
+    except OSError as e:
+        # Present and unreadable. This used to leave read_text() to raise through main and
+        # exit 1 on a traceback -- fail-closed by accident rather than by decision, and a
+        # traceback sends the reader looking for a bug in the guard rather than in the tree.
+        errors.append(f"cannot read {path.relative_to(ROOT)}: {e}")
     except json.JSONDecodeError as e:
         errors.append(f"invalid JSON in {path.relative_to(ROOT)}: {e}")
     return None
@@ -65,9 +70,16 @@ if market and cc:
 # see hooks/templates/README.md and docs/verified.md.
 cc_hooks = PLUGIN / "hooks" / "templates" / "claude-code.settings.json"
 agy_hooks = PLUGIN / "hooks" / "templates" / "antigravity.hooks.json"
-if cc_hooks.is_file() and agy_hooks.is_file():
-    a = load(cc_hooks) or {}
-    b = load(agy_hooks) or {}
+# A comparison that could not run is not a comparison that agreed. This was
+# `if cc_hooks.is_file() and agy_hooks.is_file():` with no else, so a template renamed, moved
+# or unreadable skipped the whole block below and fell through to "both manifests agree" --
+# the same sentence, less checking, same exit code. The block is the one thing this guard
+# exists for: it pairs Claude Code's SessionStart with Antigravity's PreInvocation, and
+# AGENTS.md's parity claim rests on it. load() records absence and unreadability itself, so
+# asking it is both the check and the diagnosis. #39.
+a = load(cc_hooks)
+b = load(agy_hooks)
+if a is not None and b is not None:
     a_events = set((a.get("hooks") or {}).keys())
     envelope = b.get(cc.get("name") if cc else "", {}) if isinstance(b, dict) else {}
     b_events = {k for k in envelope if k != "enabled"}

@@ -4992,6 +4992,50 @@ case "$err" in *"antigravity PreInvocation: non-tool events need the flat {type,
 
 
 
+# 154. A hook-template comparison that could not run is not a comparison that agreed.
+#
+# `if cc_hooks.is_file() and agy_hooks.is_file():` had no else, so a template that was renamed,
+# moved or unreadable skipped the whole event-pairing block and fell through to
+# `check-manifests: both manifests agree` — same sentence, less checking, same exit code. That
+# pairing is the one thing this guard exists for: it is what keeps Claude Code's SessionStart
+# and Antigravity's PreInvocation from drifting apart, and AGENTS.md's parity claim rests on
+# it. The control half above already proves a present pair passes. #39.
+run_manifest_out() { ( cd "$1" && python3 scripts/check-manifests.py >"$TMP/mfout" 2>"$TMP/mferr"; printf '%s' "$?" ) }
+
+r=$(manifest_repo mf-no-agy-template); rm -f "$r/hooks/templates/antigravity.hooks.json"
+out=$(run_manifest_out "$r")
+[ "$out" = "1" ] && c0=ok || c0=no
+case "$(cat "$TMP/mfout")" in *"both manifests agree"*) c1=no ;; *) c1=ok ;; esac
+case "$(cat "$TMP/mferr")" in *"antigravity.hooks.json"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(manifest_repo mf-no-cc-template); rm -f "$r/hooks/templates/claude-code.settings.json"
+out=$(run_manifest_out "$r")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$(cat "$TMP/mferr")" in *"claude-code.settings.json"*) c4=ok ;; *) c4=no ;; esac
+
+# Present and unreadable, which `is_file()` cannot tell from present and fine, and which
+# reached the same success line by a second route: read_text() raising inside load().
+r=$(manifest_repo mf-unread-template)
+chmod 000 "$r/hooks/templates/antigravity.hooks.json" 2>/dev/null
+if cat "$r/hooks/templates/antigravity.hooks.json" >/dev/null 2>&1; then
+  chmod 644 "$r/hooks/templates/antigravity.hooks.json" 2>/dev/null
+  c5=ok; c6=ok
+  note_skip "manifests/unreadable-template" "permissions not enforced here (running as root?)"
+else
+  out=$(run_manifest_out "$r")
+  chmod 644 "$r/hooks/templates/antigravity.hooks.json" 2>/dev/null
+  [ "$out" = "1" ] && c5=ok || c5=no
+  # It already exited 1 here, on an unhandled PermissionError out of read_text() -- fail-closed
+  # by accident rather than by decision, and a traceback is not a diagnosis. The guard has to
+  # SAY which file it could not read, or the reader goes looking for a bug in the guard.
+  case "$(cat "$TMP/mferr")" in *Traceback*) c6=no ;; *"cannot read"*) c6=ok ;; *) c6=no ;; esac
+fi
+
+[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] \
+  && report "an absent or unreadable hook template fails rather than agreeing" ok \
+  || report "an absent or unreadable hook template fails rather than agreeing" no \
+     "agy-exit=$c0 not-claimed=$c1 agy-named=$c2 cc-exit=$c3 cc-named=$c4 unread-exit=$c5 unread-diagnosed=$c6"
+
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
 # #145. check-version-bump.py must include rules/ in SHIPPED so any change
