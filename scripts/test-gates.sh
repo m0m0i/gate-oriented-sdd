@@ -1599,7 +1599,7 @@ run_anchors_out() { ( cd "$1" && sh assets/check-steering-anchors.sh >"$TMP/aout
 # 152. An unreadable file is reported once, not once per anchor it carries.
 #
 # The unreadable-file block sat inside the row loop, so a mode-000 tech.md printed the same
-# four lines once for each of its SIX anchors. #34's own review called it right diagnosis,
+# two lines once for each of its SIX anchors. #34's own review called it right diagnosis,
 # buried by volume; it has got worse since, because `- Mode:` and `- Target:` joined the table
 # after it was filed. Case 32 cannot see this — product.md carries one anchor, so its block is
 # correct by accident. #39.
@@ -5056,20 +5056,20 @@ fi
 # comparison and falls through to the success line. AC3's defect reached through AC3's fix.
 r=$(manifest_repo mf-null-template); printf 'null\n' > "$r/hooks/templates/antigravity.hooks.json"
 out=$(run_manifest_out "$r")
-[ "$out" = "1" ] && c8=ok || c8=no
-case "$(cat "$TMP/mfout")" in *"both manifests agree"*) c9=no ;; *) c9=ok ;; esac
+[ "$out" = "1" ] && c7=ok || c7=no
+case "$(cat "$TMP/mfout")" in *"both manifests agree"*) c8=no ;; *) c8=ok ;; esac
 
 # Valid JSON that is not an object. `or {}` used to normalise this into a named event
 # mismatch; dropping it leaves .get() to raise, and a traceback is not a diagnosis.
 r=$(manifest_repo mf-list-template); printf '[]\n' > "$r/hooks/templates/claude-code.settings.json"
 out=$(run_manifest_out "$r")
-[ "$out" = "1" ] && c10=ok || c10=no
-case "$(cat "$TMP/mferr")" in *Traceback*) c11=no ;; *"not an object"*) c11=ok ;; *) c11=no ;; esac
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$(cat "$TMP/mferr")" in *Traceback*) c10=no ;; *"not an object"*) c10=ok ;; *) c10=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokokok" ] \
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10" = "okokokokokokokokokokok" ] \
   && report "an absent or unreadable hook template fails rather than agreeing" ok \
   || report "an absent or unreadable hook template fails rather than agreeing" no \
-     "agy-exit=$c0 not-claimed=$c1 agy-named=$c2 cc-exit=$c3 cc-named=$c4 unread-exit=$c5 unread-diag=$c6 null-exit=$c8 null-not-claimed=$c9 list-exit=$c10 list-diag=$c11"
+     "agy-exit=$c0 not-claimed=$c1 agy-named=$c2 cc-exit=$c3 cc-named=$c4 unread-exit=$c5 unread-diag=$c6 null-exit=$c7 null-not-claimed=$c8 list-exit=$c9 list-diag=$c10"
 
 # --- guards: scripts/check-leakage.sh ---------------------------------------
 #
@@ -5156,10 +5156,31 @@ out=$(run_leak "$r"); [ "$out" = "1" ] && c10=ok || c10=no
 r=$(leak_repo lkg-odd-hit2); printf 'see ADR-%s\n' 0001 > "$r/$odd.md"
 out=$(run_leak "$r"); [ "$out" = "1" ] && c11=ok || c11=no
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11" = "okokokokokokokokokokokok" ] \
+# A path beginning with `-`. git does not C-quote it, so it passes every test above, is
+# counted, and then reaches grep as an OPTION because the file list follows the pattern with
+# nothing ending option parsing — never read, while the count says it was. The spaced path
+# wearing one more shape, and here it hides a real hit. Review round 2.
+r=$(leak_repo lkg-dash); printf 'see ADR-%s\n' 0001 > "$r/-dash.md"
+out=$(run_leak "$r"); [ "$out" = "1" ] && c12=ok || c12=no
+
+# A tracked path that is not on disk. `--cached` lists INDEX entries and filters on neither
+# existence nor skip-worktree, so a plain `rm` before the deletion is staged — or a sparse
+# checkout — reached `[ -r ]`, false for a file that is not there, and this guard blocked the
+# turn saying "fix the permissions" about it. Absent and unreadable are different states: this
+# issue's own subject, one level down inside its own fix. It is a count, never a failure.
+r=$(leak_repo lkg-deleted)
+printf 'nothing to see\n' > "$r/note.md"; printf 'nothing to see\n' > "$r/keep.md"
+( cd "$r" && git add -A && git commit -qm two ) >/dev/null 2>&1
+rm "$r/note.md"
+out=$(run_leak "$r")
+[ "$out" = "0" ] && c13=ok || c13=no
+case "$(cat "$TMP/lkout")" in *"not in the working tree"*) c14=ok ;; *) c14=no ;; esac
+case "$(cat "$TMP/lkout")" in *"1 file(s) scanned"*) c15=ok ;; *) c15=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15" = "okokokokokokokokokokokokokokokok" ] \
   && report "check-leakage counts what it scanned, and fails on nothing or unreadable" ok \
   || report "check-leakage counts what it scanned, and fails on nothing or unreadable" no \
-     "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7 odd-exit=$c8 odd-count=$c9 space-hit=$c10 utf8-hit=$c11"
+     "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7 odd-exit=$c8 odd-count=$c9 space-hit=$c10 utf8-hit=$c11 dash-hit=$c12 del-exit=$c13 del-noted=$c14 del-count=$c15"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #

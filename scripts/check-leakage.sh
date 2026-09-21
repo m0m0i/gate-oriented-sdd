@@ -30,8 +30,13 @@ IDS='\bNS-[0-9]|\bCAP-[a-z]|\bCON-[a-z]|\bADR-[0-9]{4}'
 # a generic example, so they are reported as warnings for a human to judge.
 DOMAIN='card_rules|cardType|benefits[-_]digger|amex|chase_sapphire|venture_x'
 
+# Decided once and read twice: which lister runs, and whether a leading `"` can only be git's
+# doing. In a non-git tree nothing quotes, so a file genuinely named `"quoted".md` must not be
+# mistaken for one git could not represent. Review round 2.
+if git rev-parse --git-dir >/dev/null 2>&1; then IN_GIT=1; else IN_GIT=0; fi
+
 files() {
-  if git rev-parse --git-dir >/dev/null 2>&1; then
+  if [ "$IN_GIT" -eq 1 ]; then
     # --others so a file that is written but not yet staged is still checked.
     # Plain `git ls-files` sees only tracked files, which means a fresh repo, or
     # a new file before `git add`, scans nothing and reports clean — the worst
@@ -53,10 +58,19 @@ files() {
 list=$(files)
 
 scanned=0
+absent=0
 unreadable=""
 unscannable=""
 while IFS= read -r f; do
   [ -n "$f" ] || continue
+  # `--cached` lists INDEX entries and filters on neither existence nor `skip-worktree`, so a
+  # tracked path that is not on disk arrives here: an unstaged `rm`, a sparse checkout, a
+  # partial worktree. `[ -r ]` is false for every one of them, and this guard blocked the turn
+  # saying "could not be read … fix the permissions" about a file that is not there — absent
+  # and unreadable fused, which is this issue's own subject reached one level down inside its
+  # own fix. Counted rather than skipped in silence: "I scanned round three index entries" is
+  # exactly the thing that must not hide inside `clean`. AC5, narrowed in review round 2.
+  [ -e "$f" ] || { absent=$((absent + 1)); continue; }
   scanned=$((scanned + 1))
   # git C-quotes a path holding `"`, a backslash or a control character whatever
   # core.quotePath says, and `ls-files -z`, the only way to get those verbatim, has no
@@ -64,10 +78,12 @@ while IFS= read -r f; do
   # as exactly that rather than as a permissions problem it is not. In a non-git tree `find`
   # does not quote, so a path holding a newline splits there and is counted twice — recorded
   # rather than fixed, because the fix is the NUL reader this shell does not have.
-  case "$f" in
-    '"'*) unscannable="${unscannable}
+  if [ "$IN_GIT" -eq 1 ]; then
+    case "$f" in
+      '"'*) unscannable="${unscannable}
   $f"; continue ;;
-  esac
+    esac
+  fi
   [ -r "$f" ] || unreadable="${unreadable}
   $f"
 done <<EOF
@@ -111,7 +127,11 @@ fi
 # indistinguishable from a clean file, so a real private identifier in a path with a space
 # passed this guard silently while the count above said it had been read. That is the empty
 # work-set one layer in, and it was a fail-open before this branch as well. #39 review round 1.
-scan() { printf '%s\n' "$list" | tr '\n' '\0' | xargs -0 grep "$@" 2>/dev/null; }
+# `--` closes the class the NUL delimiter opened only half of: a path beginning with `-` is
+# not C-quoted by git, so it passes every test above, is counted, and then reaches grep as an
+# OPTION — a valid one silently changing the scan, an invalid one exiting 2 into the discarded
+# stderr. Either way never read, while the count says it was. Review round 2.
+scan() { printf '%s\n' "$list" | tr '\n' '\0' | xargs -0 grep "$@" -- 2>/dev/null; }
 
 fail=0
 
@@ -142,5 +162,7 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
-echo "check-leakage: clean — $scanned file(s) scanned"
+note=""
+[ "$absent" -gt 0 ] && note=", $absent index entr(ies) not in the working tree"
+echo "check-leakage: clean — $scanned file(s) scanned$note"
 exit 0

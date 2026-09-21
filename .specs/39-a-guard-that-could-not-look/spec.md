@@ -33,7 +33,7 @@
   - [x] **AC2:** WHEN a steering file is absent, and WHEN it exists and cannot be read, THE reader in `hooks/gate-lib.sh` SHALL report those as distinct states to its caller.
   - [x] **AC3:** WHEN either hook template is absent or unreadable THE `check-manifests.py` SHALL exit non-zero, and SHALL NOT print `check-manifests: both manifests agree`.
   - [x] **AC4:** WHEN `check-leakage.sh` finds no hit THE SYSTEM SHALL report how many files it scanned, and SHALL exit non-zero when that count is zero.
-  - [x] **AC5:** WHEN a file in `check-leakage.sh`'s work-set cannot be read THE SYSTEM SHALL exit non-zero naming that file, rather than scanning around it.
+  - [x] **AC5:** WHEN a file in `check-leakage.sh`'s work-set is **present** and cannot be read, or cannot be handed to `grep` as a path, THE SYSTEM SHALL exit non-zero naming that file, rather than scanning around it. WHEN an entry in the work-set has no working-tree file THE SYSTEM SHALL report it as a count, not a failure. _Narrowed in review round 2 — see Clarifications Q5._
   - [x] **AC6:** WHEN a steering file exists and cannot be read THE `check-steering-anchors.sh` SHALL report it once per file, not once per anchor row.
   - [x] **AC7:** WHEN `.steering/` exists and cannot be traversed THE `check-steering-anchors.sh` SHALL NOT report `no steering files found — nothing was checked`.
   - [x] **AC8:** each of AC1 and AC3–AC7 has a case in `scripts/test-gates.sh` that fails before its fix and passes after; where `chmod 000` is ineffective the case self-disables through `note_skip`, never `report … ok`.
@@ -59,6 +59,16 @@ Asked and answered 2026-09-21.
   **A: the code comment is right and the backlog cell is wrong.** A loud failure under root is the safe direction, and converting it would trade that for a quiet skip. T5 corrects the cell rather than the case.
 - **Q4 — `check-leakage.sh`'s three scans run through `xargs grep … 2>/dev/null`, so a file it cannot read is silently not scanned. Fold that in with AC4's count?**
   **A: yes — AC5.** Same guard, same axis, and a count of files scanned still cannot tell you that three of them were never read. `AGENTS.md` calls this the guard that matters most.
+
+- **Q5 — review round 2 narrowed AC5, and the finding was this issue's own subject one level down.**
+  AC5 originally said "a file in the work-set cannot be read". `files()` reads `git ls-files --cached`, which lists
+  **index entries** and filters on neither existence nor `skip-worktree` — so a tracked path that is not on disk (an
+  unstaged `rm`, a sparse checkout, a partial worktree) reached `[ -r "$f" ]`, which is false for a file that is not
+  there, and the guard blocked the turn saying *"could not be read … fix the permissions"* about it. `check-leakage.sh`
+  is the first entry on `- Validators:`, so that is every turn, on a wrong diagnosis. **The criterion licensed it**:
+  absent and unreadable are different states, which is the whole of this spec, and AC5 had fused them in the one place
+  the spec did not look. Amended rather than worked around, per C-8 — an absent entry is counted and reported, never
+  failed, because "I scanned round three index entries" is exactly what must not hide inside `clean`.
 
 ## 2. Design (HOW)
 

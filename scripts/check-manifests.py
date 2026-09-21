@@ -98,7 +98,7 @@ if len(errors) == n_before:
 
 if isinstance(a, dict) and isinstance(b, dict):
     a_events = set((a.get("hooks") or {}).keys())
-    envelope = b.get(cc.get("name") if cc else "", {}) if isinstance(b, dict) else {}
+    envelope = b.get(cc.get("name") if cc else "", {})
     b_events = {k for k in envelope if k != "enabled"}
 
     # Antigravity's schema is mixed: tool events nest under {matcher, hooks:[...]},
