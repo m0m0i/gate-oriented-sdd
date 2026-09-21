@@ -4,10 +4,15 @@
 # Everything else here is guidance a model can decline. This is the rule that
 # holds: finished work cannot sit in this repository without a fresh, clean review.
 #
-# It asks that about the REPOSITORY, not about where HEAD happens to point. Those are
-# different questions, and until #26 only the first was asked: on a branch with no spec the
+# It asks that about the REPOSITORY, not about where HEAD happens to point, and not about
+# which files happen to be checked out. Those are three questions, and the gate has had to be
+# taught each of them in turn. Until #26 only the first was asked: on a branch with no spec the
 # gate exited 0 and printed nothing, so `git checkout main` turned the one enforced rule off
-# and left no trace — a skipped review and a clean repository produced identical silence.
+# and left no trace — a skipped review and a clean repository produced identical silence. #26
+# left the third behind, one branch wide: the branch you stand on was read from the working
+# tree and then skipped by name in the scan, so the same silence was still available by
+# emptying the tree instead of moving HEAD. #177 closed it, and check_current_branch carries
+# the reasoning.
 #
 # It is still deliberately narrow. A gate that fires on ordinary turns is a gate people
 # disable, and a disabled gate protects nothing — so this is silent on every case that is not
@@ -30,9 +35,10 @@ reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 # used to claim, and the difference matters to anyone changing the skip: it said every
 # historical feature branch would trip the gate on install, and that case cannot occur. A
 # branch with no spec of its own is already silent whatever the merge style, and by two
-# different routes: the current-branch path returns at the absent spec.md before reaching any
-# of this, while the scan consults ancestry first and then gets an empty state back from
-# gate_spec_review_state. Case 83 pins the first, case 144 the second. Cases 1-7 were cited
+# different routes: the current-branch path returns before reaching any of this, when the spec
+# is in neither the working tree nor the branch's own tree, while the scan consults ancestry
+# first and then gets an empty state back from gate_spec_review_state. Cases 83 and 148 pin the
+# first — 148 is the one that reads both trees, since #177 — and case 144 the second. Cases 1-7 were cited
 # for the second and do not reach it — their only other ref is main, which IS an ancestor of
 # itself, so the scan skips it before asking. The branch that needs this skip is one that
 # shipped WITH a spec and was not deleted — which, in a squash-merging repository, is every
