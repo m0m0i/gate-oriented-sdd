@@ -1,5 +1,5 @@
 # Spec: A missing library silences both gates
-- Slug: 194-a-missing-library-silences-both-gates   Issue: 194   Type: bug   Status: done
+- Slug: 194-a-missing-library-silences-both-gates   Issue: 194   Type: bug   Status: archived   Archived: 2026-09-22
 - Author: m0m0i   Date: 2026-09-21
 
 ## 1. Requirements (WHAT / WHY)
