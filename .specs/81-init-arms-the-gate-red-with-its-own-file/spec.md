@@ -1,5 +1,5 @@
 # Spec: init arms the gate red with its own file
-- Slug: 81-init-arms-the-gate-red-with-its-own-file   Issue: 81   Type: bug   Status: approved
+- Slug: 81-init-arms-the-gate-red-with-its-own-file   Issue: 81   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-09-25
 
 ## 1. Requirements (WHAT / WHY)
