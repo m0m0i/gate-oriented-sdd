@@ -130,6 +130,53 @@ jobs:
         if: github.event_name == 'pull_request'
         run: ./scripts/check-version-bump.py "${{ github.event.pull_request.base.sha }}"
 
+  # `assets/` is the one shipped path whose files are COPIED into a consumer's tree and then
+  # named on that consumer's `- Validators:` line, so their cleanliness is judged by a toolchain
+  # this repository never ran: the `guard` job above runs this repository's own guards and no
+  # linter on any path. #81 is what that costs — `init` armed a real consumer's gate red on its
+  # first turn with `check-locks.py`, and `check-document-set.py` arrived two weeks after the
+  # issue was filed carrying the same class. Its own job rather than steps in `guard`, so a red
+  # check says "a lint drift" and not "a guard caught a defect". Deliberately not on
+  # `.steering/tech.md`'s `- Validators:` line either: neither tool is installed on the
+  # developing machine, and a turn-end gate that cannot run locally reports on a toolchain it
+  # never found. Both pins are deliberate — an unpinned linter reddens `main` on a day nobody
+  # touched the repository. Move them by hand.
+  lint:
+    name: Assets are clean under a consumer's linter
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+      - name: Install the pinned linters
+        run: python -m pip install ruff==0.16.9 shellcheck-py==0.11.0.1
+
+      # The configuration that reddened #76's consumer — line length 100, `E,F,I,UP,B,SIM,RUF` — a
+      # superset of ruff's defaults, so clean here is clean under anything narrower. `--isolated`
+      # is load-bearing: a `pyproject.toml` added to this repository later would otherwise be read
+      # here and could widen or narrow what this job asserts without anyone editing it, which is
+      # configuration reaching into a gate from outside. No `--target-version`: the one
+      # version-sensitive finding (`UP017`) was removed rather than suppressed, and the fix was
+      # measured clean at py39 and py313 both. Globs rather than the directory: ruff over a
+      # directory holding no Python files passes, and a glob that matches nothing is an error.
+      - name: Every shipped Python file passes a consumer's ruff check
+        run: ruff check --no-cache --isolated --line-length 100 --select E,F,I,UP,B,SIM,RUF --output-format concise assets/*.py
+
+      # `ruff format --check` was the first thing #76's gate ran and the first thing it failed on.
+      - name: Every shipped Python file is ruff-formatted
+        run: ruff format --no-cache --isolated --line-length 100 --check assets/*.py
+
+      # G-5 says the shipped shell is POSIX `sh`, and until now the claim was read, never run.
+      # `-s sh` rather than trusting the shebang, so a bashism is a finding even if a shebang
+      # drifts. Only `assets/`: `hooks/gate-lib.sh` carries four deliberate SC2086s — `$_globs`
+      # must word-split for `:(glob)` pathspecs, #1 — and is run from here, never copied anywhere.
+      - name: Every shipped shell file passes shellcheck as POSIX sh
+        run: shellcheck -s sh assets/*.sh
+
   validate:
     name: Claude Code plugin validation
     runs-on: ubuntu-latest

@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-09-12 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
+Last **updated**: 2026-09-26 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
 
 The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The two Antigravity rows carry the date they were verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
@@ -250,6 +250,21 @@ Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy
 
 **Filed from this run:** #127, #128, #129 — and, from its review, #130 (the second cause above) and #131 (this reviewer's allow-list has drifted from the `- Validators:` line, so only 9 of 11 validators were independently re-run).
 
+## `assets/` under a consumer's linter
+
+**Run on 2026-09-26 (#81), ruff 0.16.9 and shellcheck 0.11.0 through `uvx`**, on this repository rather than on a consumer's: the commands are the ones `.github/workflows/ci.yml`'s `lint` job runs, executed by hand in detached worktrees at the branch's merge-base and at its tip. The configuration is the one that reddened #76's consumer — line length 100, `E,F,I,UP,B,SIM,RUF` — with `--isolated`, so no configuration file in either tree could reach it.
+
+| Question | Observed |
+| :-- | :-- |
+| Was the tree red under a consumer's linter before the fix? | **yes, at the merge-base (`38b913f`).** `ruff check`: four findings — `I001` and two `E501` in `check-locks.py`, one `E501` in `check-document-set.py` — exit 1. `ruff format --check`: both files would be reformatted, exit 1. `shellcheck -s sh assets/*.sh`: clean, exit 0. `UP017` appears only at `--target-version` py311 and later; it is the finding #76's row above records as "a `datetime.UTC` alias". |
+| Is it green at the tip, and at every plausible target version? | **yes.** All three exit 0. `ruff check` also exits 0 at `--target-version` py39, py310, py311 and py313 — the `UP017` construct was removed rather than suppressed, so no target version reaches it. |
+| Did the fix change what the two guards do? | **no, measured rather than assumed.** Same stdout, stderr and exit status on this repository before and after. `check-locks.py --update`, run with the old and the new script on a deliberately drifted shipped lock in a scratch worktree, re-pinned it and wrote `generatedAt` in the same 20-byte form both times, and the two timestamp expressions are byte-identical at the same instant. `test-gates.sh` 163 passed / 0 failed / 0 skipped before and after. |
+| Does the `lint` job run on GitHub? | **not before its pull request opened.** The demonstration above is the job's commands run locally; the pull request's own check is the first GitHub run, and this file does not say it passed until it has. |
+
+**What is mechanical now:** every `*.py` under `assets/` is clean under `ruff check` and `ruff format --check` with the configuration above, and every `*.sh` under `assets/` under `shellcheck -s sh`, at the pinned versions, on every pull request and push to `main`. A file added to `assets/` tomorrow is covered the day it lands — which is how `check-document-set.py` escaped in September.
+
+**What is not, stated rather than implied:** a consumer selecting rules outside `E,F,I,UP,B,SIM,RUF`, or running a `ruff` newer than the pin, can still find something this job does not; the job narrows the window rather than closing it. `scripts/` and `hooks/` are not linted, for the reasons on #81's spec. And `init` still does not run the validators it adopts before declaring the gate armed — step 4.1 says it, nothing checks it, and that is #54.
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
@@ -263,7 +278,7 @@ Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy
 - [ ] Whether a reviewer under Antigravity picks the `.agents/` path its instruction names — #82 added both destinations and only the Claude Code one has been opened.
 - [ ] `init` on a greenfield repo — no `AGENTS.md`, no templates, no earlier install. Detection and the five-question interview ran on #76 against a real project with all three; the greenfield path did not.
 - [ ] Whether a non-default `- Docs:` path reaches every inception skill, or any of them hardcode `docs/`.
-- [ ] `--update` on a reviewer that has a lock and a changed rulebook — the shipped rulebooks were untouched, so only the unchanged path ran.
+- [x] `--update` on a reviewer that has a lock and a changed rulebook — run on 2026-09-26 for #81's AC5, on `agents/python-reviewer/` with `rules/types-and-style.md` deliberately drifted in a scratch worktree: it re-pinned the lock, rewrote `generatedAt`, and exited 0. Section above.
 - [ ] `contract` and `design-doc` on a second run, against a `CONTRACT.md` and a `structure.md` that already exist and disagree with the repository.
 - [ ] Whether a reviewer reaches `docs/decisions/` through `structure.md` when its rulebook and the repository conflict.
 - [ ] `backlog` on a project with a walking skeleton to start from, and a grooming that reorders against the author's stated preference — every call here was accepted.
