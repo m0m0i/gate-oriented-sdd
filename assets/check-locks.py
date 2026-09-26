@@ -22,12 +22,13 @@ Verifying nothing is not success. A run that hashed no files exits non-zero when
 exist, because a guard that did not run must not be indistinguishable from one that ran and
 found everything in order.
 """
-import datetime
+
 import hashlib
-import os
 import json
+import os
 import pathlib
 import sys
+import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -115,12 +116,12 @@ for lock_path in lock_paths:
         for src in meta.get("sources", []):
             if not src.get("pinnedBy") and not src.get("checkedOn"):
                 errors.append(
-                    f"{reviewer.name}: derived/{name} source {src.get('id')!r} is pinned by neither "
-                    "a version (pinnedBy) nor a date (checkedOn)"
+                    f"{reviewer.name}: derived/{name} source {src.get('id')!r} is pinned by "
+                    "neither a version (pinnedBy) nor a date (checkedOn)"
                 )
 
     if dirty:
-        lock["generatedAt"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        lock["generatedAt"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         lock_path.write_text(json.dumps(lock, indent=2) + "\n")
         print(f"re-pinned {lock_path.relative_to(ROOT)}")
 

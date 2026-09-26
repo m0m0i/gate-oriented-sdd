@@ -179,7 +179,7 @@ taken while writing the Design, and the reopening is recorded rather than smooth
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
-- [ ] T1: the two files — record the four `ruff check` findings and the two `ruff format` diffs
+- [x] T1: the two files — record the four `ruff check` findings and the two `ruff format` diffs
       against the current tree as the red, then sort the imports, swap `datetime` for `time.gmtime`,
       wrap the three long lines and apply the formatter, until `ruff check`, `ruff format --check`
       and `shellcheck -s sh` are all clean over `assets/`. Ends green on AC1, AC2 and AC6, with AC5

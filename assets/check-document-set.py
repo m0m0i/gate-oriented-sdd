@@ -28,6 +28,7 @@ that branched on mode would be a switch that turns enforcement down.
 
 Run from the repository root. Exits 0 when the filesystem matches the declared mode.
 """
+
 import os
 import pathlib
 import re
@@ -275,9 +276,7 @@ def main():
                 "renames an existing template into the canonical filename rather than adding a "
                 "second one, so the picker keeps one entry per type."
             )
-        fail(
-            f"mode is `{mode}` and {len(missing)} required item(s) are not found: {listed}.{note}"
-        )
+        fail(f"mode is `{mode}` and {len(missing)} required item(s) are not found: {listed}.{note}")
 
     if mode == "bootstrap":
         # Computed ONCE for both outputs in this window. The failure at the first spec and the
@@ -356,7 +355,9 @@ def main():
     # Never reachable on an empty work-set: `wanted` is built from module constants, so it is
     # non-empty by construction, and the count is printed rather than the word "all" so that a
     # shrinking set is visible in CI output rather than silent.
-    optional_note = "" if mode == "full" else " (the 3 opt-in documents are not required, and may be present)"
+    optional_note = (
+        "" if mode == "full" else " (the 3 opt-in documents are not required, and may be present)"
+    )
     # Counted in their own units. This spec exists partly because #109's section counted issue
     # templates once inside a total and again beside it; reintroducing that conflation in the
     # checker's own output would be the same defect one layer down.
