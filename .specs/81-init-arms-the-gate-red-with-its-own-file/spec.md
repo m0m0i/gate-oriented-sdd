@@ -184,7 +184,7 @@ taken while writing the Design, and the reopening is recorded rather than smooth
       wrap the three long lines and apply the formatter, until `ruff check`, `ruff format --check`
       and `shellcheck -s sh` are all clean over `assets/`. Ends green on AC1, AC2 and AC6, with AC5
       checked by running both scripts before and after and diffing their output.
-- [ ] T2: the `lint` job — add it to `.github/workflows/ci.yml` with both versions pinned, and prove
+- [x] T2: the `lint` job — add it to `.github/workflows/ci.yml` with both versions pinned, and prove
       it is not decorative by running the same three commands against the merge-base tree in a
       detached worktree (red on the four findings) and against the tip (green). Ends green on AC3
       and AC4 with the transcript captured for the pull request body.
