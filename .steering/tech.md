@@ -54,6 +54,26 @@ So it runs in CI on pull requests, and by hand as `./scripts/check-backlog-track
 
 It is also the one guard here deliberately **not** shipped. The shipped form needs a machine-read tracker line and a declared command to list issues, and that contract belongs to #128. Until it exists, `backlog` terminates in nothing a consumer's harness reads — C-4 open for them, stated here rather than implied. #79.
 
+## Why the `lint` job is not on the Validators line either
+
+A fourth exclusion, for a reason none of the three above give. `.github/workflows/ci.yml`'s `lint`
+job holds `assets/` — the one shipped path whose files are copied into a consumer's tree and then
+named on that consumer's `- Validators:` line — to a consumer's toolchain: `ruff check` and
+`ruff format --check` under a common configuration, and `shellcheck -s sh`. Neither tool is
+installed on the machine this repository is developed on, and the first paragraph of this file is
+why nothing here installs one. A `- Validators:` entry for a command that is absent locally would
+fail on the developing machine rather than in CI, and a turn-end gate that reports on a toolchain
+it never found is #195's shape: the person it blocks switches it off, which is the outcome every
+exclusion in this file exists to avoid.
+
+So it runs in CI, on pull requests and on pushes to `main`, as its own job rather than as steps in
+`guard`, so that a red check names a lint drift and not a guard catching a defect. Its two pins are
+the job's and move by hand. By hand it is the job's three commands with the same pins — on #81 they
+were run through `uvx`, which installs nothing into the repository. The subject is narrow on
+purpose: `scripts/` is never copied anywhere, and `hooks/gate-lib.sh` carries four deliberate
+`SC2086`s (`$_globs` must word-split, above), so neither is linted, and both are recorded as such on
+#81's spec rather than left for the next person to "fix". #81.
+
 ## Commit and branch convention
 
 Conventional commits — `feat:`, `fix:`, `docs:`, `chore:` — subject in the imperative, body explaining why over what. Branches are `<issue-number>-<kebab-title>`, which is also the spec directory name; the review gate blocks a spec branch whose slug has no issue number.

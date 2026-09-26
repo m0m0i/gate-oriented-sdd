@@ -58,7 +58,9 @@
         and py313, so no consumer's interpreter is excluded by it.
   - [ ] **AC7:** `docs/CONTRACT.md`'s G-5 cell and its copy in
         `.claude/agents/gate-sdd-reviewer/rules/gates-and-guards.md` no longer claim there is no
-        toolchain to run `shellcheck` with, since AC2 ships one.
+        toolchain to run `shellcheck` with, since AC2 ships one. *Amended at T3: the rulebook's G-5
+        carries no such note — the claim lived in `docs/CONTRACT.md` alone — so the rulebook is
+        unchanged and this criterion is one cell.*
 
 - Out of scope:
   - **`scripts/`** — 106 findings across 11 files under the same configuration. Never shipped, never
@@ -149,8 +151,8 @@ taken while writing the Design, and the reopening is recorded rather than smooth
   - `.github/workflows/ci.yml` — a new `lint` job: pinned `ruff` and `shellcheck-py`, then
     `ruff check`, `ruff format --check`, and `shellcheck -s sh assets/*.sh`, each with the comment
     this file's steps all carry explaining what it caught and why it exists.
-  - `.steering/tech.md` — a third "why this is not on the `- Validators:` line" section, beside the
-    two that exist.
+  - `.steering/tech.md` — a fourth "why this is not on the `- Validators:` line" section, beside the
+    three that exist (the spec said third; the file already held three).
   - `docs/CONTRACT.md` (G-5's note) and
     `.claude/agents/gate-sdd-reviewer/rules/gates-and-guards.md` (its copy) — AC7.
   - `docs/verified.md` — record what is now checked mechanically and what still is not.
@@ -188,7 +190,7 @@ taken while writing the Design, and the reopening is recorded rather than smooth
       it is not decorative by running the same three commands against the merge-base tree in a
       detached worktree (red on the four findings) and against the tip (green). Ends green on AC3
       and AC4 with the transcript captured for the pull request body.
-- [ ] T3: reconcile the prose the first two tasks made false — the third `- Validators:` exclusion in
+- [x] T3: reconcile the prose the first two tasks made false — the third `- Validators:` exclusion in
       `.steering/tech.md`, G-5's note in `docs/CONTRACT.md` and its copy in the reviewer's rulebook
       (AC7), and `docs/verified.md`'s record of what is now mechanical and what is not. Ends green on
       the full thirteen-validator run plus `test-gates.sh`.

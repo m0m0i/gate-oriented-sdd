@@ -12,13 +12,13 @@ POSIX `sh` for hooks, Python 3 standard library for guards, Markdown for everyth
 | | Command |
 | :-- | :-- |
 | test | `./scripts/test-gates.sh` |
-| lint | the commands on the `- Validators:` line of `.steering/tech.md`, run by the quality gate on turn end and by CI |
+| lint | the commands on the `- Validators:` line of `.steering/tech.md`, run by the quality gate on turn end and by CI; and, CI-only, a consumer's `ruff` and `shellcheck` over `assets/` — the `lint` job, `M-16` |
 | validate | `claude plugin validate . --strict` (CI) |
 | release check | `./scripts/check-version-bump.py <base>` (CI, pull requests only) |
 
 ## Style
 
-There is no formatter. `.vscode/settings.json` pins format-on-save off for Markdown because Prettier reverted a spec twice (#66). What a formatter would own is stated once instead:
+There is no formatter for the Markdown, which is most of the tree: `.vscode/settings.json` pins format-on-save off for it because Prettier reverted a spec twice (#66). The shipped Python under `assets/` is the one exception since #81 — CI holds it to `ruff format --check`, because a consumer's formatter will. What a formatter would own elsewhere is stated once instead:
 
 - Markdown is not hand-wrapped — `CONTRIBUTING.md`, "Markdown is not hand-wrapped".
 - Hooks are POSIX `sh`: `#!/bin/sh`, `set -u`, no bashisms (`G-5`).
@@ -58,11 +58,12 @@ The rulebook is the source for every Judgment row and holds each rule's rational
 | M-13 | A finished spec branch cannot end a turn without a fresh CLEAN receipt | Mechanical | — | `hooks/review-gate.sh` |
 | M-14 | A spec branch's slug carries its issue number | Mechanical | — | `hooks/review-gate.sh` |
 | M-15 | No live spec sequences a task after the review | Mechanical | — | `check-templates.py`; `C-6`'s bump is a step of `implement`, not a task (#113) |
+| M-16 | Shipped assets are clean under a consumer's linter | Mechanical | — | CI's `lint` job — pinned `ruff check`, `ruff format --check` and `shellcheck -s sh` over `assets/`; deliberately not on the `- Validators:` line, `.steering/tech.md` says why (#81) |
 | G-1 | A guard never exits 0 where it could not do its job | Judgment | BLOCKER | rulebook |
 | G-2 | A value interpolated into `git` reaches it intact | Judgment | BLOCKER | rulebook |
 | G-3 | A blocking gate speaks both channels | Judgment | BLOCKER | rulebook |
 | G-4 | Every new gate behaviour has a case that can fail | Judgment | HIGH | rulebook |
-| G-5 | Hooks are POSIX `sh` | Judgment | HIGH | rulebook — lintable by `shellcheck -s sh`, not done: no toolchain to install it with |
+| G-5 | Hooks are POSIX `sh` | Judgment | HIGH | rulebook — `shellcheck -s sh` runs over `assets/*.sh` in CI (`M-16`); `hooks/` is still read rather than linted, because `gate-lib.sh` carries four deliberate `SC2086`s that need suppressing with their reasons first (#81, out of scope) |
 | G-6 | A gate stays narrow | Judgment | HIGH | rulebook |
 | G-7 | Machine-read steering values stay on one line | Judgment | MEDIUM | rulebook |
 | G-8 | A guard's exemption list is part of the guard | Judgment | HIGH | rulebook |
