@@ -70,9 +70,17 @@ So it runs in CI, on pull requests and on pushes to `main`, as its own job rathe
 `guard`, so that a red check names a lint drift and not a guard catching a defect. Its two pins are
 the job's and move by hand. By hand it is the job's three commands with the same pins — on #81 they
 were run through `uvx`, which installs nothing into the repository. The subject is narrow on
-purpose: `scripts/` is never copied anywhere, and `hooks/gate-lib.sh` carries four deliberate
-`SC2086`s (`$_globs` must word-split, above), so neither is linted, and both are recorded as such on
-#81's spec rather than left for the next person to "fix". #81.
+purpose, for two different reasons. `scripts/` is never copied anywhere, so nothing a consumer
+runs is in it. `hooks/` is copied — `init` puts all five hooks into every project — and is not
+yet linted because its four entry hooks still carry ten findings under the same pin: `SC1007` ×4,
+the `CDPATH= cd` idiom; `SC1091` ×3, the sourced library not followed; and `SC2164` ×3, a
+`cd "$repo_root"` with nothing after it, which is a gate carrying on in the wrong directory and
+so the guard sweep's class rather than a lint fix. The five deliberate word-splits — `$_globs`
+above, and the quality gate's `set --` — are no longer among them: each is suppressed at its line
+with its reason, and each names the `test-gates.sh` case that goes red if the quote is added —
+the five whose report reads "a line of several globs reaches … one pathspec per glob" — so the
+file can be linted without being "fixed". `hooks/*.sh` joins the step when the
+ten are decided, which is #207's follow-up; the `SC2164`s go with the sweep. #81, #207.
 
 ## Commit and branch convention
 

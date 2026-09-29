@@ -172,8 +172,8 @@ jobs:
 
       # G-5 says the shipped shell is POSIX `sh`, and until now the claim was read, never run.
       # `-s sh` rather than trusting the shebang, so a bashism is a finding even if a shebang
-      # drifts. Only `assets/`: `hooks/gate-lib.sh` carries four deliberate SC2086s — `$_globs`
-      # must word-split for `:(glob)` pathspecs, #1 — and is run from here, never copied anywhere.
+      # drifts. Only `assets/` for now: `hooks/` is copied into every project too, by `init`, and
+      # waits on the findings `.steering/tech.md`'s `lint` section names. #207.
       - name: Every shipped shell file passes shellcheck as POSIX sh
         run: shellcheck -s sh assets/*.sh
 

@@ -263,7 +263,7 @@ Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy
 
 **What is mechanical now:** every `*.py` under `assets/` is clean under `ruff check` and `ruff format --check` with the configuration above, and every `*.sh` under `assets/` under `shellcheck -s sh`, at the pinned versions, on every pull request and push to `main`. A file added to `assets/` tomorrow is covered the day it lands — which is how `check-document-set.py` escaped in September.
 
-**What is not, stated rather than implied:** a consumer selecting rules outside `E,F,I,UP,B,SIM,RUF`, or running a `ruff` newer than the pin, can still find something this job does not; the job narrows the window rather than closing it. `scripts/` and `hooks/` are not linted, for the reasons on #81's spec. And `init` still does not run the validators it adopts before declaring the gate armed — step 4.1 says it, nothing checks it, and that is #54.
+**What is not, stated rather than implied:** a consumer selecting rules outside `E,F,I,UP,B,SIM,RUF`, or running a `ruff` newer than the pin, can still find something this job does not; the job narrows the window rather than closing it. `scripts/` is not linted, for the reasons on #81's spec; `hooks/` is not either, for the reasons in `.steering/tech.md`'s `lint` section — its deliberate word-splits are suppressed and pinned (#207), and the rest waits on the guard sweep. And `init` still does not run the validators it adopts before declaring the gate armed — step 4.1 says it, nothing checks it, and that is #54.
 
 ## Still to verify
 

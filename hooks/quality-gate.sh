@@ -103,6 +103,7 @@ if [ -n "$globs" ] && git rev-parse --git-dir >/dev/null 2>&1; then
   # git as its own pathspec. Quotes inside a variable are NOT removed on expansion, so a
   # line written '*.py' would hand git a literal quote and match nothing — the same
   # fail-open this script's sibling was fixed for, which is why they are stripped first.
+  # shellcheck disable=SC2046  # deliberate word-split: one pathspec per glob (#1); quoted, case 164 goes red
   set -- $(printf '%s' "$globs" | tr -d '\042\047')   # \042 = " and \047 = ', stripped so git sees bare globs
   git status --porcelain -- "$@" 2>/dev/null | grep -q . || gate_pass
 fi

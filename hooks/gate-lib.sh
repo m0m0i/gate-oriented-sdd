@@ -215,6 +215,7 @@ gate_spec_review_state() {  # <spec dir> <tip sha> [<ref, empty for the working 
   [ -n "$_globs" ] || _globs='*'
   _globs=$(printf '%s' "$_globs" | tr -d "\"'")
   set -f
+  # shellcheck disable=SC2086  # deliberate word-split: one :(glob) pathspec per argument (#1); quoted, case 160 goes red
   _changed=$(git diff --name-only "$_sha".."$_tip" -- $_globs 2>/dev/null)
   set +f
   [ -z "$_changed" ] && return 0
@@ -303,7 +304,9 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   # design turns on, because _wfork is the merge base: whatever the base carried before this
   # branch forked is common to both sides and appears in neither term.
   set -f
+  # shellcheck disable=SC2086  # deliberate word-split: one :(glob) pathspec per argument (#1); quoted, case 162 goes red
   _wlog=$(git log --format= --name-only "$_wfork".."$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
+  # shellcheck disable=SC2086  # deliberate word-split: one :(glob) pathspec per argument (#1); quoted, case 163 goes red
   _wnet=$(git diff --name-only "$_wfork" "$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
   set +f
 
@@ -337,6 +340,7 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   [ -n "$_wfoot" ] || return 0
 
   set -f
+  # shellcheck disable=SC2086  # deliberate word-split: one :(glob) pathspec per argument (#1); quoted, case 161 goes red
   _wnow=$(git diff --name-only "$_wanchor" "$_wtip" -- $_wglobs 2>/dev/null) || { set +f; return 1; }
   set +f
 

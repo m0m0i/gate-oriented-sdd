@@ -677,6 +677,124 @@ case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "an edit made inside a merge commit is not skipped" ok \
   || report "an edit made inside a merge commit is not skipped" no "standing=$c1 scan=$c2 names=$c3"
 
+# 160. #207 — the freshness check's word-split, which no case pinned. gate_spec_review_state
+#      leaves `$_globs` unquoted on purpose: `- Source globs:` holds several `:(glob)` patterns
+#      and each has to reach git as its own pathspec (#1). shellcheck reports that as SC2086, and
+#      the edit it invites — quoting — left this suite at 163/0/0 on 2026-09-27, because every
+#      fixture's line held ONE glob, and one glob quoted is still one pathspec. Quoted, a line of
+#      several is a single pathspec whose pattern is the rest of the line; git matches nothing,
+#      `_changed` is empty, and an empty diff reads as a current receipt. The gate passes, and
+#      says nothing, on this repository's own nine-glob line.
+#
+#      So the line here holds TWO patterns and the file that moves matches only the second. The
+#      docs-only commit first is the control: it must stay silent under the same line, which is
+#      what proves the line was READ — gate-lib.sh falls back to `*` when the read comes back
+#      empty, and under that fallback the blocking half passes for the wrong reason.
+#
+#      RED-CAPABLE under the named mutation "quote $_globs" — `"$_globs"` at the freshness
+#      check's `git diff`. The directive above that line names this case. Measured in the spec's
+#      mutation record, one line quoted at a time.
+r=$(make_repo multiglobstale 0 ':(glob)docs/*.md :(glob)src/*.txt')
+printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(cd "$r" && git rev-parse HEAD)" > "$r/.specs/9-feature/.review-receipt"
+( cd "$r" && echo note > NOTES.md && git add NOTES.md && git commit -qm docs ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && echo three >> src/main.txt && git commit -qam more ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"src/main.txt"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a line of several globs reaches the freshness check one pathspec per glob" ok \
+  || report "a line of several globs reaches the freshness check one pathspec per glob" no "docs-silent=$c1 blocks=$c2 names=$c3"
+
+# 161. #207 — the skip's anchor diff, `_wnow`, under the same line. gate_work_reached_base
+#      expands `$_wglobs` three times, unquoted for the reason above, and shellcheck reports all
+#      three. Quoted at the anchor diff, `_wnow` is empty, the intersection is empty, and the
+#      function returns 0 for a branch that carried on after its squash — case 134's fail-open,
+#      reopened by a quote. Quoting the footprint PAIR (`_wlog` and `_wnet`) together empties the
+#      footprint and reaches the same return one step earlier. Quoting either of the pair alone
+#      does NOT go red here, because the two are complements and the other still sees this
+#      carry-on; cases 162 and 163 pin each on its own.
+#
+#      Control first, as in 160: a docs-only carry-on under the same line stays silent.
+#
+#      RED-CAPABLE under "quote $_wglobs" at the `_wnow` diff, and under quoting `_wlog` and
+#      `_wnet` together. Measured in the spec's mutation record.
+r=$(make_repo multiglobcarried 1 ':(glob)docs/*.md :(glob)src/*.txt'); park_spec "$r" 12-parked 0
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked && echo note > NOTES.md && git add NOTES.md \
+  && git commit -qm "docs after the merge" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) c0=ok ;; *) c0=no ;; esac
+( cd "$r" && echo carried >> src/main.txt && git commit -qam "work after the merge" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "a line of several globs reaches the skip's anchor diff one pathspec per glob" ok \
+  || report "a line of several globs reaches the skip's anchor diff one pathspec per glob" no "docs-silent=$c0 standing=$c1 scan=$c2 names=$c3"
+
+# 162. #207 — the skip's log footprint, `_wlog`, under the same line: case 142's revert, which
+#      only the log sees. Quoted there, `_wlog` is empty; `_wnet` is empty too on this shape,
+#      because fork and tip agree at a path neither has; the footprint is empty, and the empty
+#      footprint reads as "nothing to review". Case 161 cannot see this quote — its carry-on is
+#      in the net diff as well — which is why this shape gets a multi-glob copy of its own.
+#
+#      RED-CAPABLE under "quote $_wglobs" at the `git log` footprint, alone. Also red under the
+#      anchor-diff quote, as every carry-on shape is. Measured in the spec's mutation record.
+r=$(make_repo multiglobreverted 1 ':(glob)docs/*.md :(glob)src/*.txt')
+( cd "$r" && git checkout -q -b 12-parked main && mkdir -p .specs/12-parked \
+  && printf '# Spec: parked\n- Slug: 12-parked   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' > .specs/12-parked/spec.md \
+  && echo new > src/a.txt \
+  && git add .specs/12-parked src/a.txt && git commit -qm "add src/a.txt" ) >/dev/null 2>&1
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q 12-parked && echo note > NOTES.md && git add NOTES.md \
+  && git commit -qm "docs after the merge" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) c0=ok ;; *) c0=no ;; esac
+( cd "$r" && git rm -q src/a.txt && git commit -qm "remove the shipped file — nobody reviewed this" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "a line of several globs reaches the skip's log footprint one pathspec per glob" ok \
+  || report "a line of several globs reaches the skip's log footprint one pathspec per glob" no "docs-silent=$c0 standing=$c1 scan=$c2 names=$c3"
+
+# 163. #207 — the skip's net footprint, `_wnet`, under the same line: case 143's fixup inside a
+#      merge commit, which only the tree diff sees. Quoted there, `_wnet` is empty, the footprint
+#      is the log's {src/a.txt} alone, the anchor diff is {src/b.txt}, and the two do not meet —
+#      the skip fires over an edit nobody reviewed. Case 161 cannot see this quote either.
+#
+#      RED-CAPABLE under "quote $_wglobs" at the `git diff` footprint, alone. Also red under the
+#      anchor-diff quote. Measured in the spec's mutation record.
+r=$(make_repo multiglobfixup 1 ':(glob)docs/*.md :(glob)src/*.txt')
+( cd "$r" && git checkout -q main && echo b0 > src/b.txt \
+  && git add src/b.txt && git commit -qm "b exists on main" \
+  && git checkout -q -b 12-parked main && mkdir -p .specs/12-parked \
+  && printf '# Spec: parked\n- Slug: 12-parked   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' > .specs/12-parked/spec.md \
+  && echo a > src/a.txt && git add .specs/12-parked src/a.txt && git commit -qm "add src/a.txt" ) >/dev/null 2>&1
+squash_merge "$r" 12-parked
+( cd "$r" && git checkout -q main && echo b1 >> src/b.txt && git commit -qam "main moves on at src/b.txt" \
+  && git update-ref refs/remotes/origin/main refs/heads/main \
+  && git checkout -q 12-parked && echo note > NOTES.md && git add NOTES.md \
+  && git commit -qm "docs after the merge" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) c0=ok ;; *) c0=no ;; esac
+( cd "$r" && { git merge --no-commit --no-ff -q main >/dev/null 2>&1 || true; } \
+  && echo "fixup nobody reviewed" >> src/b.txt && git add -A \
+  && git commit -qm "merge main, with a fixup inside the merge commit" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "a line of several globs reaches the skip's net footprint one pathspec per glob" ok \
+  || report "a line of several globs reaches the skip's net footprint one pathspec per glob" no "docs-silent=$c0 standing=$c1 scan=$c2 names=$c3"
+
 # 144. The scan's own route to silence for a branch with no spec, which review round 4 found
 #      asserted in a comment and pinned by nothing. Case 83 covers the CURRENT-branch route,
 #      where check_current_branch returns at the absent spec.md. This is the other one: a
@@ -1188,6 +1306,30 @@ echo more >> "$r/src.txt"; out=$(run_qg "$r")
 case "$out" in *"exit=2"*) report "quoted globs still match (no fail-open)" ok ;;
                         *) report "quoted globs still match (no fail-open)" no "$out" ;; esac
 
+
+# 164. #207 — the quality gate's own word-split, `set -- $(...)` in quality-gate.sh, which
+#      shellcheck reports as SC2046 and the issue did not count: the same expansion, one hook
+#      over, for the same reason. Quoted, `set --` receives the whole line as ONE pathspec,
+#      `git status` matches nothing, `grep -q .` fails, and the gate passes having run no
+#      validator. The `qg-src` case above cannot see that: its line holds one glob.
+#
+#      Two patterns, the dirty file matching only the second. The docs-only half is the control
+#      here for the opposite reason to case 160's: an EMPTY read of the line runs every validator
+#      (the fail-toward-more-checking branch), which would turn the silent half red rather than
+#      the blocking half green — so both halves together are what say the line was read and
+#      split.
+#
+#      RED-CAPABLE under "quote the substitution" — `"$(printf ...)"`. Measured in the spec's
+#      mutation record.
+r=$(qg_repo qg-multiglob)
+printf -- '- Validators: sh -c "echo RAN >&2; exit 1"\n- Source globs: :(glob)docs/*.md :(glob)*.txt\n' > "$r/.steering/tech.md"
+echo more >> "$r/NOTES.md"; out=$(run_qg "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+echo more >> "$r/src.txt"; out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *RAN*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a line of several globs reaches the quality gate one pathspec per glob" ok \
+  || report "a line of several globs reaches the quality gate one pathspec per glob" no "docs-silent=$c1 blocks=$c2 ran=$c3"
 
 # --- both gates: the library they block through ----------------------------------------
 #
