@@ -146,22 +146,36 @@
   the version bump goes with it.
 
 ### Mutation record
-Filled by T1 and T2. Each row is one line quoted in a scratch clone of the branch, the rest of the
-hooks as shipped.
+Measured 2026-09-29 in T1, on the hooks as shipped at `eca84d6` with cases 160-164 present. Each
+row is one clone of the branch with that line alone quoted; the suite is 168 passed / 0 failed /
+0 skipped unmutated (163 at the merge-base, AC2 and AC5).
 
 | Quoted | Cases red | Suite |
 | :-- | :-- | :-- |
-| `gate-lib.sh:218` | | |
-| `gate-lib.sh:306` | | |
-| `gate-lib.sh:307` | | |
-| `gate-lib.sh:340` | | |
-| `quality-gate.sh:106` | | |
-| all four `gate-lib.sh` lines | | |
+| `gate-lib.sh:218`, `$_globs` | 160 | 167 / 1 / 0 |
+| `gate-lib.sh:306`, `_wlog` | 162 | 167 / 1 / 0 |
+| `gate-lib.sh:307`, `_wnet` | 163 | 167 / 1 / 0 |
+| `gate-lib.sh:340`, `_wnow` | 160, 161, 162, 163 | 164 / 4 / 0 |
+| `quality-gate.sh:106`, `set --` | 164 | 167 / 1 / 0 |
+| `306` and `307` together | 160, 161, 162, 163 | 164 / 4 / 0 |
+| all four `gate-lib.sh` lines | 160, 161, 162, 163 | 164 / 4 / 0 |
+
+Every existing case stayed green in every row, so a quote on any of the five lines is now caught
+by a case that names it and by nothing else. One row corrects the prediction above: the table
+said 160 goes red under 218 only, and it also goes red under 340, the pair, and all four. That is
+not the freshness check: `make_repo` commits its spec on `main` at init, so on the current-branch
+path the skip runs before the freshness check (case 133's route), and a skip that returns 0 —
+empty `_wnow`, or an empty footprint — silences the branch before `$_globs` is ever expanded.
+Case 160 is red there because the same fail-open reaches it from the other side, which is
+consistent with case 134's blast-radius note. 306 alone and 307 alone each red exactly one case,
+as predicted: the pair are complements, and only the revert and the merge-commit fixup are visible
+to one of them alone.
 
 `shellcheck -s sh --include=SC2086,SC2046 hooks/*.sh` at the merge-base and at the tip (AC3):
+filled by T2.
 
 ## 3. Tasks (TDD-ordered)
-- [ ] T1: cases 160-164 in `scripts/test-gates.sh`, each with its control; run the suite on the
+- [x] T1: cases 160-164 in `scripts/test-gates.sh`, each with its control; run the suite on the
       hooks as shipped and record the count (AC2, AC5); then quote each of the five lines alone
       in a scratch clone and fill the mutation record (AC1). Ends green on the shipped hooks.
 - [ ] T2: the five directives (AC4); `shellcheck -s sh --include=SC2086,SC2046 hooks/*.sh` before
