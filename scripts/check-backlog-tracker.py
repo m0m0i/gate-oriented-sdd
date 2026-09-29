@@ -73,7 +73,7 @@ NOT_PLANNED_HEADING = "## Open, not planned"
 #: falsifier, or the staleness check below. It is a constant rather than a literal because the
 #: remedy below is the only automated instruction anyone receives about a row that has left,
 #: and a heading that drifts from the template turns that instruction into a wrong address.
-DISCHARGED_HEADING = "## Discharged since last grooming"
+DISCHARGED_HEADING = "## Discharged since last refinement"
 
 #: An exclusion's SUBJECT: the first issue cited on a `- ` entry line, and nothing else on it.
 #:
@@ -346,7 +346,7 @@ def main():
             print(f"  {p}", file=sys.stderr)
         print(
             f"\n  The list and the tracker disagree. `sprint` records the issue numbers on the "
-            f"rows it\n  takes; a merge closing an issue and an issue filed outside a grooming "
+            f"rows it\n  takes; a merge closing an issue and an issue filed outside a refinement "
             f"belong to no\n  skill, which is why this check exists rather than an instruction.",
             file=sys.stderr,
         )

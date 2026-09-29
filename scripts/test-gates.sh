@@ -5642,7 +5642,7 @@ bt_repo() { # bt_repo <name> [docs-value]
     *) mkdir -p "$r/$d" 2>/dev/null || true
        {
          printf '# Product backlog\n\n'
-         printf -- '- Last groomed: 2026-09-20\n\n'
+         printf -- '- Last refined: 2026-09-20\n\n'
          printf '| # | Item | Blocks | Rough size | Why here |\n'
          printf '| :-- | :-- | :-- | :-- | :-- |\n'
          printf '| 1 | A live item - **#10** | - | ~1 issue | Above row 2 because #11 left this row by shipping. |\n'
@@ -5898,7 +5898,7 @@ case "$err" in *"#21"*) c14=ok ;; *) c14=no ;; esac
 # heading it names is a constant this file can assert on rather than prose nobody compares.
 #
 # The second half is the fail-open the first half opens the door to. `## Discharged since last
-# grooming` is deliberately NOT a region either direction reads: a discharge names finished work,
+# refinement` is deliberately NOT a region either direction reads: a discharge names finished work,
 # and counting it in the absent direction would hand every issue it mentions a silent exemption —
 # `## Open, not planned` without the reason, the falsifier, or the staleness check case 131 added.
 # It holds by construction today, which is exactly why it needs a case: nothing else would notice
@@ -5908,7 +5908,7 @@ case "$err" in *"#21"*) c14=ok ;; *) c14=no ;; esac
 r=$(bt_repo bt-remedy); bt_issues "$r" "10 CLOSED" "11 CLOSED" "12 OPEN" "13 OPEN"
 out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
 [ "$out" = "1" ] && c0=ok || c0=no
-case "$err" in *"Discharged since last grooming"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"Discharged since last refinement"*) c1=ok ;; *) c1=no ;; esac
 case "$err" in *"Why here"*) c2=ok ;; *) c2=no ;; esac
 # Naming one outcome twice is not naming two. The surviving-row half was the whole message
 # before #174, so a change that only appended the new heading would pass c1 and c2 while
@@ -5925,7 +5925,7 @@ case "$err" in *"row survives"*) c3=ok ;; *) c3=no ;; esac
 # ok -> no — #22 stops being reported and the run reports `no drift`, i.e. the exemption is
 # granted and the guard says the list agrees with the tracker. Reverted.
 r=$(bt_repo bt-discharge); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "22 OPEN"
-{ printf '\n## Discharged since last grooming\n\n'
+{ printf '\n## Discharged since last refinement\n\n'
   printf -- '- **#22** - row 4, 2026-09-21 - folded into row 1.\n'; } >> "$r/docs/BACKLOG.md"
 out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
 [ "$out" = "1" ] && c4=ok || c4=no
@@ -5933,9 +5933,9 @@ case "$err" in *"#22"*) c5=ok ;; *) c5=no ;; esac
 
 # The same document with #22 CLOSED is the ordinary case — a discharge line citing finished
 # work — and it must be silent. A guard that reports every discharge it can see is a guard
-# switched off on the first grooming after it ships.
+# switched off on the first refinement after it ships.
 r=$(bt_repo bt-discharge-ok); bt_issues "$r" "10 OPEN" "11 CLOSED" "12 OPEN" "13 OPEN" "22 CLOSED"
-{ printf '\n## Discharged since last grooming\n\n'
+{ printf '\n## Discharged since last refinement\n\n'
   printf -- '- **#22** - row 4, 2026-09-21 - shipped as #99.\n'; } >> "$r/docs/BACKLOG.md"
 out=$(run_bt "$r"); err=$(cat "$TMP/bterr")
 [ "$out" = "0" ] && c6=ok || c6=no
@@ -5945,6 +5945,38 @@ case "$err" in *"#22"*) c7=no ;; *) c7=ok ;; esac
   && report "check-backlog-tracker points a discharged row at its section, and exempts nothing" ok \
   || report "check-backlog-tracker points a discharged row at its section, and exempts nothing" no \
      "remedy=$c0/$c1/$c2/$c3 open-in-discharge=$c4/$c5 closed-in-discharge=$c6/$c7"
+
+
+# 146. #209 — the heading the remedy names is the heading the template defines, and the one
+# this repository's own document carries.
+#
+# `DISCHARGED_HEADING` is, by its own comment, named in the checker and read nowhere. The remedy
+# is the only automated instruction anyone receives about a row that has left, and a heading
+# that drifts from the template turns that instruction into a wrong address. Case 145 asserts the
+# remedy against a literal and keeps doing so; nothing compared the constant with the template it
+# quotes, or with the document the checker runs against in this repository's CI, and a rename of
+# the word — #209 — is exactly when the three drift. `-x` is the point: a heading is a line, and
+# a substring match would pass a heading that had grown a suffix.
+#
+# `c0` is the empty-work-set guard (#16), and a one-line guard. An empty `$h` would make
+# `grep -Fx` match every blank line in both files and report the constant present; a two-line
+# `$h` — a second, stale assignment left in the script — would give `grep -F` two patterns and
+# pass on whichever one a file still carries.
+#
+# RED-CAPABILITY: passes on first run, so established by MUTATION rather than by sequence. Named
+# mutation: the last word of the heading line in `skills/backlog/SKILL.md` alone, swapped for the
+# word #209 retired (at T1), and after T3 the reverse swap. What flipped, both times: c1 ok -> no;
+# c0 and c2 unchanged. Reverted. The constant alone flipped c1 and c2 both, and case 145's c1
+# with them, which is the wrong-address failure in one line. Written without the retired word
+# on purpose: AC4 holds the live tree to zero uses, and a mutation record is not an exception.
+h=$(sed -n 's/^DISCHARGED_HEADING = "\(.*\)"$/\1/p' "$ROOT/scripts/check-backlog-tracker.py")
+[ -n "$h" ] && [ "$(printf '%s\n' "$h" | wc -l)" -eq 1 ] && c0=ok || c0=no
+grep -Fxq -- "$h" "$ROOT/skills/backlog/SKILL.md" && c1=ok || c1=no
+grep -Fxq -- "$h" "$ROOT/docs/BACKLOG.md" && c2=ok || c2=no
+[ "$c0$c1$c2" = "okokok" ] \
+  && report "check-backlog-tracker names the heading the template and this repository's document carry" ok \
+  || report "check-backlog-tracker names the heading the template and this repository's document carry" no \
+     "constant=$c0 template=$c1 document=$c2"
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1

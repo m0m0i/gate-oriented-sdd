@@ -50,7 +50,7 @@ Also on #14: this line duplicates by hand the definition `scripts/check-version-
 
 A third exclusion, and unlike the two above it is a capability rather than a judgment. Those two are calls about noise and duplication — one would block normal work mid-implementation, the other would print a second copy of a question already asked better elsewhere. This one cannot run in a hook at all: it compares `docs/BACKLOG.md` against the tracker, so it needs the network and an authenticated `gh`. A `Stop` hook that reaches the network is a turn that hangs when the network is down, and a gate that hangs is a gate switched off — which is the failure this project does not own but still has to avoid.
 
-So it runs in CI on pull requests, and by hand as `./scripts/check-backlog-tracker.py`. By hand is where a grooming should start: what it reports is the diff between the list and the tracker, which is the part of a grooming nobody can do from memory.
+So it runs in CI on pull requests, and by hand as `./scripts/check-backlog-tracker.py`. By hand is where a refinement should start: what it reports is the diff between the list and the tracker, which is the part of a refinement nobody can do from memory.
 
 It is also the one guard here deliberately **not** shipped. The shipped form needs a machine-read tracker line and a declared command to list issues, and that contract belongs to #128. Until it exists, `backlog` terminates in nothing a consumer's harness reads — C-4 open for them, stated here rather than implied. #79.
 
