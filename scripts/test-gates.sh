@@ -5958,15 +5958,19 @@ case "$err" in *"#22"*) c7=no ;; *) c7=ok ;; esac
 # the word — #209 — is exactly when the three drift. `-x` is the point: a heading is a line, and
 # a substring match would pass a heading that had grown a suffix.
 #
-# `c0` is the empty-work-set guard (#16). An empty `$h` would make `grep -Fx` match every blank
-# line in both files and report the constant present.
+# `c0` is the empty-work-set guard (#16), and a one-line guard. An empty `$h` would make
+# `grep -Fx` match every blank line in both files and report the constant present; a two-line
+# `$h` — a second, stale assignment left in the script — would give `grep -F` two patterns and
+# pass on whichever one a file still carries.
 #
 # RED-CAPABILITY: passes on first run, so established by MUTATION rather than by sequence. Named
-# mutation: the heading line in `skills/backlog/SKILL.md` alone, `refinement` -> `refinement`. What
-# flipped: c1 ok -> no; c0 and c2 unchanged. Reverted. The constant alone flipped c1 and c2 both,
-# and case 145's c1 with them, which is the wrong-address failure in one line.
+# mutation: the last word of the heading line in `skills/backlog/SKILL.md` alone, swapped for the
+# word #209 retired (at T1), and after T3 the reverse swap. What flipped, both times: c1 ok -> no;
+# c0 and c2 unchanged. Reverted. The constant alone flipped c1 and c2 both, and case 145's c1
+# with them, which is the wrong-address failure in one line. Written without the retired word
+# on purpose: AC4 holds the live tree to zero uses, and a mutation record is not an exception.
 h=$(sed -n 's/^DISCHARGED_HEADING = "\(.*\)"$/\1/p' "$ROOT/scripts/check-backlog-tracker.py")
-[ -n "$h" ] && c0=ok || c0=no
+[ -n "$h" ] && [ "$(printf '%s\n' "$h" | wc -l)" -eq 1 ] && c0=ok || c0=no
 grep -Fxq -- "$h" "$ROOT/skills/backlog/SKILL.md" && c1=ok || c1=no
 grep -Fxq -- "$h" "$ROOT/docs/BACKLOG.md" && c2=ok || c2=no
 [ "$c0$c1$c2" = "okokok" ] \
