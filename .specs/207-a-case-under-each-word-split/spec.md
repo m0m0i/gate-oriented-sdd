@@ -146,7 +146,7 @@
   the version bump goes with it.
 
 ### Mutation record
-Measured 2026-09-29 in T1, on the hooks as shipped at `eca84d6` with cases 160-164 present. Each
+Measured 2026-09-29 in T1, on the hooks as shipped at `eca84d6` with cases 160-164 present (the T1 commit was `ed493de` when measured and is `ab655ee` after the branch was rebuilt onto its own commits; same content, see the work log). Each
 row is one clone of the branch with that line alone quoted; the suite is 168 passed / 0 failed /
 0 skipped unmutated (163 at the merge-base, AC2 and AC5).
 
