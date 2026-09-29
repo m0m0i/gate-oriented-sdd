@@ -112,7 +112,7 @@ jobs:
 
       # The ordered list restates two facts the tracker also holds — which issues exist for an
       # item, and which are still live — and nothing compared them, so it was false by
-      # construction between groomings. This cannot be a turn-end validator: it needs the
+      # construction between refinements. This cannot be a turn-end validator: it needs the
       # network and an authenticated `gh`, and a Stop hook that reaches the network is a turn
       # that hangs when the network is down. PR-only, so a merge to main never reddens main on
       # its own; the next pull request is where a row citing newly-closed work is caught.

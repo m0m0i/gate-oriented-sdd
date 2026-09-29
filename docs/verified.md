@@ -160,13 +160,13 @@ Neither skill paused. `contract` derives everything from the repository, and `de
 
 ## The inception chain, third — backlog
 
-**Run on 2026-09-05, gate-sdd 0.4.2, Claude Code 2.1.252, against this repository**, the first grooming with epics to read. One pause — the whole order — accepted as drafted with zero changes, so the interview caveat stands as for the two halves above.
+**Run on 2026-09-05, gate-sdd 0.4.2, Claude Code 2.1.252, against this repository**, the first refinement with epics to read. One pause — the whole order — accepted as drafted with zero changes, so the interview caveat stands as for the two halves above.
 
 Full working record: `.specs/58-regroom-the-backlog/observations.md`. Spec: #58.
 
 | Question | Observed |
 | :-- | :-- |
-| What does "start from the walking skeleton — it is always first" do when there is none? | **binds nothing.** `EPICS.md` records that no epic is one and names EPIC-1 to lead; the grooming led with the test-queue runs instead, by decision. The skill has no instruction for this case. |
+| What does "start from the walking skeleton — it is always first" do when there is none? | **binds nothing.** `EPICS.md` records that no epic is one and names EPIC-1 to lead; the refinement led with the test-queue runs instead, by decision. The skill has no instruction for this case. |
 | Do "Next up" and "Not ready" exist? | **not in the template.** The rules and red flags name both; the template defines neither, so a consumer following it cannot trip those red flags. _Discharged by #174 on 2026-09-21: the rule now names `Why here` and the red flag `## Unshaped`, both of which the template defines. The observation stands as what the 0.4.2 run saw — #74 remains open on its other two bullets._ |
 | Does the `Blocks` column's `#3, #7` form survive a repository whose items are issues? | **no.** It reads as issue numbers. Written as `row n`. |
 | Can the backlog carry work that is not an issue yet? | **yes, two rows** — the `sprint` and `init` runs, and the `epics` re-run. The other twelve rows are issues or pairs of issues; the inversion the file's preamble names is reduced, not undone. |
@@ -188,10 +188,10 @@ Two decisions were the author's, made before the run: `sprint` ran directly rath
 | Can the tracker apply an issue template non-interactively? | **no.** `gh issue create` cannot combine a template's body with `--body-file`; the chore shape was reproduced by hand from `.github/ISSUE_TEMPLATE/chore.md`. A CLI-driven `sprint` does the same or produces an untemplated body. |
 | Do the type and label vocabularies agree? | **no.** Types are `feature`, `bug`, `chore`; labels are `enhancement`, `bug`, `task`. The mapping lives only in each template's `labels:` line, and `spec` has read `task` as `chore` on #55, #56, #58 by convention with no sentence stating it. |
 | What did step 6's milestone amount to? | **a label with a description.** GitHub has no sprint container; milestone 1 was created by API and six issues assigned one at a time. Nothing hangs off it, as the skill says. |
-| What was left out, and was it said? | **row 13 and rows 3–12, and yes.** Row 3 (#26) is displaced again by the grooming's decision, not by selection here. The README-version guard #48 raises belongs with #23, row 10. |
+| What was left out, and was it said? | **row 13 and rows 3–12, and yes.** Row 3 (#26) is displaced again by the refinement's decision, not by selection here. The README-version guard #48 raises belongs with #23, row 10. |
 | Did a red flag fire? | **one, inverted.** "Every issue is a feature" — every issue was a chore, because the iteration is observation work. Not a defect. |
-| Did running the skill falsify anything already written down? | **yes, by construction.** `BACKLOG.md` row 1 says *no issue yet* for work that is now #76 and #77, and row 2 omits #78. `sprint` writes no file and `backlog` grooms occasionally, so the backlog is stale from the moment `sprint` runs until the next grooming, and neither skill says so. Filed after this record landed as #79. |
-| Did `BACKLOG.md`'s own `sprint` trigger fire? | **partly.** Row 1 was a plan and decomposed into two issues; row 2 was three existing issues and was scoped, not split. The next grooming's fired-triggers section takes it from here. |
+| Did running the skill falsify anything already written down? | **yes, by construction.** `BACKLOG.md` row 1 says *no issue yet* for work that is now #76 and #77, and row 2 omits #78. `sprint` writes no file and `backlog` refines occasionally, so the backlog is stale from the moment `sprint` runs until the next refinement, and neither skill says so. Filed after this record landed as #79. |
+| Did `BACKLOG.md`'s own `sprint` trigger fire? | **partly.** Row 1 was a plan and decomposed into two issues; row 2 was three existing issues and was scoped, not split. The next refinement's fired-triggers section takes it from here. |
 | Did the gates and guards survive the run? | **yes.** Nine validators at exit 0 and 54/0; nothing but this file and the spec directory changed in the repository, while the tracker gained three issues, one scope comment and one milestone. |
 
 ### What this run does not support
@@ -221,7 +221,7 @@ Full working record: `.specs/76-run-init-on-a-scratch-clone/observations.md`. Sp
 ### What earlier records get wrong now
 
 - The first half's opening paragraph above says `init` "belong[s] on a throwaway repo and [is] still unobserved". It has now run on one; the cold interview and the `- Docs:` probe are still unobserved. Left as written, superseded here, as #56's section did for the row before it.
-- `docs/BACKLOG.md`'s "What would change this order" pre-registered *"`init` blocking a first turn on the scratch clone"* as a trigger. It fired — the quality gate exited 2 on the tree `init` armed, #81 — and row 1 of that list is now half done. The file is rightly untouched by this branch; the next grooming records the trigger as fired and moves what #81 is.
+- `docs/BACKLOG.md`'s "What would change this order" pre-registered *"`init` blocking a first turn on the scratch clone"* as a trigger. It fired — the quality gate exited 2 on the tree `init` armed, #81 — and row 1 of that list is now half done. The file is rightly untouched by this branch; the next refinement records the trigger as fired and moves what #81 is.
 
 ### What this run does not support
 
@@ -281,7 +281,7 @@ Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy
 - [x] `--update` on a reviewer that has a lock and a changed rulebook — run on 2026-09-26 for #81's AC5, on `agents/python-reviewer/` with `rules/types-and-style.md` deliberately drifted in a scratch worktree: it re-pinned the lock, rewrote `generatedAt`, and exited 0. Section above.
 - [ ] `contract` and `design-doc` on a second run, against a `CONTRACT.md` and a `structure.md` that already exist and disagree with the repository.
 - [ ] Whether a reviewer reaches `docs/decisions/` through `structure.md` when its rulebook and the repository conflict.
-- [ ] `backlog` on a project with a walking skeleton to start from, and a grooming that reorders against the author's stated preference — every call here was accepted.
+- [ ] `backlog` on a project with a walking skeleton to start from, and a refinement that reorders against the author's stated preference — every call here was accepted.
 - [ ] `sprint` on a backlog item that decomposes into a feature and a chore, and on an iteration with unplanned work to label.
 - [ ] `init` on a project that already has a harness install — the diff-and-upgrade path — including an existing `CONTRACT.md` whose compiled rules the installed rulebook must keep.
 - [ ] The known-failing validator path at `init` step 1, and the omit and record-as-known-failing answers at step 4.
