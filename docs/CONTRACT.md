@@ -63,7 +63,7 @@ The rulebook is the source for every Judgment row and holds each rule's rational
 | G-2 | A value interpolated into `git` reaches it intact | Judgment | BLOCKER | rulebook |
 | G-3 | A blocking gate speaks both channels | Judgment | BLOCKER | rulebook |
 | G-4 | Every new gate behaviour has a case that can fail | Judgment | HIGH | rulebook |
-| G-5 | Hooks are POSIX `sh` | Judgment | HIGH | rulebook — `shellcheck -s sh` runs over `assets/*.sh` in CI (`M-16`); `hooks/` is still read rather than linted, because `gate-lib.sh` carries four deliberate `SC2086`s that need suppressing with their reasons first (#81, out of scope) |
+| G-5 | Hooks are POSIX `sh` | Judgment | HIGH | rulebook — `shellcheck -s sh` runs over `assets/*.sh` in CI (`M-16`); `hooks/` is still read rather than linted — its five deliberate word-splits are suppressed at the line and pinned by `test-gates.sh` cases 160-164 (#207), and `.steering/tech.md`'s `lint` section names the ten findings that keep it out of the step until #207's follow-up |
 | G-6 | A gate stays narrow | Judgment | HIGH | rulebook |
 | G-7 | Machine-read steering values stay on one line | Judgment | MEDIUM | rulebook |
 | G-8 | A guard's exemption list is part of the guard | Judgment | HIGH | rulebook |

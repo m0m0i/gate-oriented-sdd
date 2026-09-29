@@ -197,4 +197,4 @@ five comment lines and removes none. The suite: 168 / 0 / 0 after, as before.
       in a scratch clone and fill the mutation record (AC1). Ends green on the shipped hooks.
 - [x] T2: the five directives (AC4); `shellcheck -s sh --include=SC2086,SC2046 hooks/*.sh` before
       and after, both recorded (AC3); the suite rerun (AC2, AC5).
-- [ ] T3: the three statements (AC6).
+- [x] T3: the three statements (AC6).
