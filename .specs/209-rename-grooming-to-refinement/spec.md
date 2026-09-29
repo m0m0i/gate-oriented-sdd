@@ -1,5 +1,5 @@
 # Spec: Rename "grooming" to "refinement" on every live surface
-- Slug: 209-rename-grooming-to-refinement   Issue: 209   Type: chore   Status: approved
+- Slug: 209-rename-grooming-to-refinement   Issue: 209   Type: chore   Status: done
 - Author: m0m0i   Date: 2026-09-29
 
 ## 1. Requirements (WHAT / WHY)
