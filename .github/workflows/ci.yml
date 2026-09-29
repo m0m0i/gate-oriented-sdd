@@ -172,9 +172,8 @@ jobs:
 
       # G-5 says the shipped shell is POSIX `sh`, and until now the claim was read, never run.
       # `-s sh` rather than trusting the shebang, so a bashism is a finding even if a shebang
-      # drifts. Only `assets/` for now: `hooks/` is copied into every project too, by `init`, but
-      # its four entry hooks still carry ten findings under this pin, three of them the guard
-      # sweep's — `.steering/tech.md`'s `lint` section says which, and why the step waits. #207.
+      # drifts. Only `assets/` for now: `hooks/` is copied into every project too, by `init`, and
+      # waits on the findings `.steering/tech.md`'s `lint` section names. #207.
       - name: Every shipped shell file passes shellcheck as POSIX sh
         run: shellcheck -s sh assets/*.sh
 
