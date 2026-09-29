@@ -171,13 +171,30 @@ consistent with case 134's blast-radius note. 306 alone and 307 alone each red e
 as predicted: the pair are complements, and only the revert and the merge-commit fixup are visible
 to one of them alone.
 
-`shellcheck -s sh --include=SC2086,SC2046 hooks/*.sh` at the merge-base and at the tip (AC3):
-filled by T2.
+`shellcheck -s sh --include=SC2086,SC2046 hooks/*.sh` under `shellcheck-py==0.11.0.1`, run
+2026-09-29 in T2 (AC3). Before, at the T1 tip `ed493de`, whose hooks are the merge-base's
+byte for byte — exit 1 and exactly the five:
+
+```
+hooks/gate-lib.sh:218:55: note: Double quote to prevent globbing and word splitting. [SC2086]
+hooks/gate-lib.sh:306:64: note: Double quote to prevent globbing and word splitting. [SC2086]
+hooks/gate-lib.sh:307:54: note: Double quote to prevent globbing and word splitting. [SC2086]
+hooks/gate-lib.sh:340:56: note: Double quote to prevent globbing and word splitting. [SC2086]
+hooks/quality-gate.sh:106:10: warning: Quote this to prevent word splitting. [SC2046]
+```
+
+After the directives — exit 0, no output. `shellcheck -s sh hooks/gate-lib.sh` with no filter is
+exit 0 as well. Over all five hooks with no filter, ten findings remain, all in the four entry
+hooks and none of them a word-split: `SC1007` at `quality-gate.sh:43`, `review-gate.sh:45`,
+`steering-digest-antigravity.sh:17`, `steering-digest.sh:14`; `SC1091` at `quality-gate.sh:58`,
+`review-gate.sh:60`, `steering-digest.sh:15`; `SC2164` at `quality-gate.sh:65`,
+`review-gate.sh:66`, `steering-digest-antigravity.sh:22`. AC4: `git diff main -- hooks/` adds
+five comment lines and removes none. The suite: 168 / 0 / 0 after, as before.
 
 ## 3. Tasks (TDD-ordered)
 - [x] T1: cases 160-164 in `scripts/test-gates.sh`, each with its control; run the suite on the
       hooks as shipped and record the count (AC2, AC5); then quote each of the five lines alone
       in a scratch clone and fill the mutation record (AC1). Ends green on the shipped hooks.
-- [ ] T2: the five directives (AC4); `shellcheck -s sh --include=SC2086,SC2046 hooks/*.sh` before
+- [x] T2: the five directives (AC4); `shellcheck -s sh --include=SC2086,SC2046 hooks/*.sh` before
       and after, both recorded (AC3); the suite rerun (AC2, AC5).
 - [ ] T3: the three statements (AC6).
