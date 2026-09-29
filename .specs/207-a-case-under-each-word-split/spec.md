@@ -1,5 +1,5 @@
 # Spec: a case under each deliberate word-split, then its suppression
-- Slug: 207-a-case-under-each-word-split   Issue: 207   Type: chore   Status: approved
+- Slug: 207-a-case-under-each-word-split   Issue: 207   Type: chore   Status: done
 - Author: m0m0i   Date: 2026-09-29
 
 ## 1. Requirements (WHAT / WHY)
