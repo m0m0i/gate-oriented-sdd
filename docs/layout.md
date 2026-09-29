@@ -83,7 +83,7 @@ A **milestone** (or Linear cycle, or Jira sprint) is an optional grouping label 
 
 ### What is a document and what is state
 
-`docs/` holds decisions — slow-moving, argued over, occasionally re-groomed. `.specs/` and `.work_logs/` hold the record of work — fast-moving, append-only, archived when done. `.steering/` is the bridge: a summary of the decisions, in the form the skills and gates actually read.
+`docs/` holds decisions — slow-moving, argued over, occasionally refined. `.specs/` and `.work_logs/` hold the record of work — fast-moving, append-only, archived when done. `.steering/` is the bridge: a summary of the decisions, in the form the skills and gates actually read.
 
 ## The harness repository
 

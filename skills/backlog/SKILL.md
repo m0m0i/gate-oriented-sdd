@@ -1,11 +1,11 @@
 ---
 name: backlog
-description: Order the whole of the known work into a product backlog, with an explicit critical path and reasons for the order. Use after epics, and to re-groom when reality diverges. Creates no issues — sprint does that.
+description: Order the whole of the known work into a product backlog, with an explicit critical path and reasons for the order. Use after epics, and to refine again when reality diverges. Creates no issues — sprint does that.
 ---
 
 # backlog — Everything known, in one order
 
-The **product backlog**: the whole of the known work in a single ordered list, with the reason for the order written down. It is groomed occasionally, not every iteration.
+The **product backlog**: the whole of the known work in a single ordered list, with the reason for the order written down. It is refined occasionally, not every iteration.
 
 **It is ordered, not prioritized** — and the distinction is the whole point. Scrum changed that word deliberately: ordering by priority is only one technique among several, and rarely the best one. A position reflects **value, risk, cost, and dependency together**, weighed against each other, which is precisely what a single priority label cannot express.
 
@@ -17,15 +17,15 @@ It deliberately creates **no issues**. That is `sprint`'s job, and the separatio
 
 `sprint` is the one other skill that writes here, and only one way: when it turns a row into issues it records those issue numbers on the row it took, and changes nothing else. That is not a second author — it is the single moment when this document is knowably wrong and the skill that made it wrong is still running (#79).
 
-**Two doors stay open that no skill can close**: an issue closed by a merge, and an issue filed outside a grooming. Nothing runs at either moment, so nothing can be instructed to write them down. Compare the list against the tracker instead — no open issue missing from it, and no `Item` cell citing work that has finished — and start a grooming from what that comparison turns up rather than from a re-read of the whole document. Whether a command does the comparing or a person does it by hand, it is the half of a grooming nobody can do from memory.
+**Two doors stay open that no skill can close**: an issue closed by a merge, and an issue filed outside a refinement. Nothing runs at either moment, so nothing can be instructed to write them down. Compare the list against the tracker instead — no open issue missing from it, and no `Item` cell citing work that has finished — and start a refinement from what that comparison turns up rather than from a re-read of the whole document. Whether a command does the comparing or a person does it by hand, it is the half of a refinement nobody can do from memory.
 
-When that comparison finds a row whose work has finished **between** groomings, the correction is bounded and does not wait for the next one: append the row to `## Discharged since last grooming` and drop it from the table. No order is revisited and no reasoning rewritten — though the positions below it do shift, which is the part of a discharge this section does not make cheaper. Treating a discharge as a re-groom is why it gets deferred to a grooming that is months away, and why the trace ends up wherever the person writing it could find room.
+When that comparison finds a row whose work has finished **between** refinements, the correction is bounded and does not wait for the next one: append the row to `## Discharged since last refinement` and drop it from the table. No order is revisited and no reasoning rewritten — though the positions below it do shift, which is the part of a discharge this section does not make cheaper. Treating a discharge as a refinement is why it gets deferred to a refinement that is months away, and why the trace ends up wherever the person writing it could find room.
 
 Ordering is the entire value. A list of everything that must be built is not a backlog; it is an inventory.
 
 ## Where it goes
 
-`<docs>/BACKLOG.md` — the product backlog, groomed in place.
+`<docs>/BACKLOG.md` — the product backlog, refined in place.
 
 `<docs>` is the `- Docs:` line in `.steering/tech.md`, which defaults to `docs/`. In a multi-repo product it points at the shared documentation repository instead, so product-level truth has one home rather than one per repo.
 
@@ -36,14 +36,14 @@ Ordering is the entire value. A list of everything that must be built is not a b
 3. **Force a total order.** No ties. When two items feel equal, that is the comparison worth making, not the one to avoid — ask which you would drop if only one could ship, and order by the answer.
 4. **Flag the ones that block others.** A slip on a blocking item moves everything after it, so mark it on its row. It is an attribute of the item, not a second ranking.
 5. **Note roughly how many issues each item is worth.** One backlog item usually becomes several issues — a change, the tests that were missing around it, the migration it forces. An item nobody can size at all is a signal: it needs a spike, or it needs to go back to `epics`.
-6. **Record what left before recording the order.** Every row discharged since the last grooming goes under `## Discharged since last grooming`, one line and all four parts of it, and that section is pruned to the two most recent groomings' worth on the way past. Then record the order and the reasoning, so the next grooming starts from the argument rather than from scratch, and hand to `sprint`, which decomposes the top items into issues.
+6. **Record what left before recording the order.** Every row discharged since the last refinement goes under `## Discharged since last refinement`, one line and all four parts of it, and that section is pruned to the two most recent refinements' worth on the way past. Then record the order and the reasoning, so the next refinement starts from the argument rather than from scratch, and hand to `sprint`, which decomposes the top items into issues.
 
 ## Template
 
 ```markdown
 # Product backlog
 
-- Last groomed: <YYYY-MM-DD>
+- Last refined: <YYYY-MM-DD>
 - Ordered, not prioritized. Position reflects value, risk, cost, and dependency together. There is no separate priority field, and adding one would contradict this.
 
 | # | Item | Epic | Blocks | Rough size | Why here |
@@ -53,19 +53,19 @@ Ordering is the entire value. A list of everything that must be built is not a b
 
 The **Item** cell names the issues this row is live work for. `Why here` may cite any issue, including closed ones, as reasoning — "#146 left this row by shipping" is correct and has to stay sayable. That split is what lets the list be compared against the tracker without every piece of history reading as stale work.
 
-## Discharged since last grooming
+## Discharged since last refinement
 Rows that have left. One line each, and all four parts of it: the issue, the position it held, the date, and how it left — shipped by a named pull request, closed without shipping, or folded into a named row. A line missing one of the four is not a record; each is the question the next reader asks first.
 
 - <#n> — row <n>, <YYYY-MM-DD> — shipped as <#n> | closed without shipping: <why> | folded into row <n>
 
-One bullet per discharge, and **never a table — here or in the section below it**. A command comparing this document against the tracker finds the ordered list by its rows, so a second table of numbered lines is the ordered list as far as it can tell, and every issue either section tabulated would stop being reported as missing. A person comparing by hand sees the heading and is not fooled; the exemption arrives silently on the day the comparison is automated, which is the wrong day to find out. Both sections are bullets for that reason, and `## What changed at this grooming` is the likelier of the two to reach for a table, because what it records is rows moving.
+One bullet per discharge, and **never a table — here or in the section below it**. A command comparing this document against the tracker finds the ordered list by its rows, so a second table of numbered lines is the ordered list as far as it can tell, and every issue either section tabulated would stop being reported as missing. A person comparing by hand sees the heading and is not fooled; the exemption arrives silently on the day the comparison is automated, which is the wrong day to find out. Both sections are bullets for that reason, and `## What changed at this refinement` is the likelier of the two to reach for a table, because what it records is rows moving.
 
-This is the only home a discharge has, and appending to it is a bounded edit rather than a re-groom. Without it the trace lands in a surviving row's `Why here`, or in **What changed at this grooming**, or in the work log, or nowhere at all — a row that ships whole leaves no cell to carry the sentence. Prune at each grooming to the **two most recent groomings' worth** and drop what is older: the spec archive and the work log hold the detail, and a third grooming's worth makes this a second history of the list.
+This is the only home a discharge has, and appending to it is a bounded edit rather than a refinement. Without it the trace lands in a surviving row's `Why here`, or in **What changed at this refinement**, or in the work log, or nowhere at all — a row that ships whole leaves no cell to carry the sentence. Prune at each refinement to the **two most recent refinements' worth** and drop what is older: the spec archive and the work log hold the detail, and a third refinement's worth makes this a second history of the list.
 
 A rescoped row is not discharged. It did not leave, it was retitled, and its position still exists — that belongs below.
 
-## What changed at this grooming
-The **judgments** this grooming made: what moved and why, what was re-argued, what it deliberately did not do. Facts about rows that left go in the section above. A grooming whose whole record is "row 1 shipped" has recorded no judgment at all, and the next grooming starts from scratch rather than from the argument.
+## What changed at this refinement
+The **judgments** this refinement made: what moved and why, what was re-argued, what it deliberately did not do. Facts about rows that left go in the section above. A refinement whose whole record is "row 1 shipped" has recorded no judgment at all, and the next refinement starts from scratch rather than from the argument.
 
 ## Unshaped
 Items that cannot be ordered yet because nobody knows what they are. This is a queue to empty, not a tier — anything sitting here is undecided work, and it does not get built while it stays here.
@@ -101,4 +101,4 @@ Issues that are open and deliberately not rows. One line each: the issue, why it
 - Items read like issue titles. Then they have been decomposed too early, and the decomposition is now frozen into an ordering decision that has to be redone.
 - The backlog has been created as issues. Then the tracker is a plan rather than a commitment, and every future search filters through work nobody chose.
 - `## Unshaped` is empty while the table carries items nobody can size. Either the plan is unusually complete, or work that has not been shaped is being ordered as though it were actionable.
-- `## What changed at this grooming` is a list of what shipped. Then the grooming recorded facts the section above it already holds and made no judgment at all, and the next grooming starts from scratch — which is the cost this whole document exists to avoid.
+- `## What changed at this refinement` is a list of what shipped. Then the refinement recorded facts the section above it already holds and made no judgment at all, and the next refinement starts from scratch — which is the cost this whole document exists to avoid.
