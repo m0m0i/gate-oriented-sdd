@@ -5946,6 +5946,34 @@ case "$err" in *"#22"*) c7=no ;; *) c7=ok ;; esac
   || report "check-backlog-tracker points a discharged row at its section, and exempts nothing" no \
      "remedy=$c0/$c1/$c2/$c3 open-in-discharge=$c4/$c5 closed-in-discharge=$c6/$c7"
 
+
+# 146. #209 — the heading the remedy names is the heading the template defines, and the one
+# this repository's own document carries.
+#
+# `DISCHARGED_HEADING` is, by its own comment, named in the checker and read nowhere. The remedy
+# is the only automated instruction anyone receives about a row that has left, and a heading
+# that drifts from the template turns that instruction into a wrong address. Case 145 asserts the
+# remedy against a literal and keeps doing so; nothing compared the constant with the template it
+# quotes, or with the document the checker runs against in this repository's CI, and a rename of
+# the word — #209 — is exactly when the three drift. `-x` is the point: a heading is a line, and
+# a substring match would pass a heading that had grown a suffix.
+#
+# `c0` is the empty-work-set guard (#16). An empty `$h` would make `grep -Fx` match every blank
+# line in both files and report the constant present.
+#
+# RED-CAPABILITY: passes on first run, so established by MUTATION rather than by sequence. Named
+# mutation: the heading line in `skills/backlog/SKILL.md` alone, `grooming` -> `refinement`. What
+# flipped: c1 ok -> no; c0 and c2 unchanged. Reverted. The constant alone flipped c1 and c2 both,
+# and case 145's c1 with them, which is the wrong-address failure in one line.
+h=$(sed -n 's/^DISCHARGED_HEADING = "\(.*\)"$/\1/p' "$ROOT/scripts/check-backlog-tracker.py")
+[ -n "$h" ] && c0=ok || c0=no
+grep -Fxq -- "$h" "$ROOT/skills/backlog/SKILL.md" && c1=ok || c1=no
+grep -Fxq -- "$h" "$ROOT/docs/BACKLOG.md" && c2=ok || c2=no
+[ "$c0$c1$c2" = "okokok" ] \
+  && report "check-backlog-tracker names the heading the template and this repository's document carry" ok \
+  || report "check-backlog-tracker names the heading the template and this repository's document carry" no \
+     "constant=$c0 template=$c1 document=$c2"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 

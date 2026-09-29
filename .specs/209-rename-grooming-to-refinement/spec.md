@@ -39,6 +39,6 @@ Run 2026-09-29. Four assumptions survived step 3; none needed the user, for the 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
-- [ ] T1: the case for AC2, in `scripts/test-gates.sh` beside case 145 — the constant, read from the script, is a whole line in the skill template and in this repository's document; establish it by the named mutation, record it, revert; confirm the suite passes with one more case than the merge-base (AC3, first half).
+- [x] T1: the case for AC2, in `scripts/test-gates.sh` beside case 145 — the constant, read from the script, is a whole line in the skill template and in this repository's document; establish it by the named mutation, record it, revert; confirm the suite passes with one more case than the merge-base (AC3, first half).
 - [ ] T2: place #209 at row 1 by the maintainer's judgment, #207 to row 2, rows 2–22 to 3–23, every live reference moved with them; run the two renumber checks and write their result into the commit body; `check-backlog-tracker.py` red before, exit 0 after (AC1, AC6).
 - [ ] T3: the rename across the affected files, fixtures included, as one vocabulary-only commit; re-run T1's mutation against the renamed files; AC4, AC5, AC7, AC8, and AC3's second half.
