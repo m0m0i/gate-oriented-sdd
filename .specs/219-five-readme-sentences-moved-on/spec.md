@@ -1,5 +1,5 @@
 # Spec: Five README sentences describe an implementation that has moved on
-- Slug: 219-five-readme-sentences-moved-on   Issue: 219   Type: chore   Status: approved
+- Slug: 219-five-readme-sentences-moved-on   Issue: 219   Type: chore   Status: done
 - Author: m0m0i   Date: 2026-09-30
 
 ## 1. Requirements (WHAT / WHY)
@@ -13,14 +13,14 @@
 - **What must NOT change:** #219's **What must NOT change**, stated as checks. `./scripts/check-readme-claims.py` prints at the tip the line it prints at the merge-base. `README.md:185` and `README.ja.md:186` are byte-identical to the merge-base. Against the merge-base, `git diff --numstat` names `README.md` with 5 lines changed, `README.ja.md` with 3, `evals/README.md` with 1 and `docs/BACKLOG.md` with 1, and no other path outside `.specs/219-five-readme-sentences-moved-on/` and `.work_logs/`. No row of the ordered list other than 19 changes in any cell; `## Unshaped` and `## Open, not planned` are untouched; nothing is written under `## What changed at this refinement`.
 - Why now: #219's **Why now**.
 - Acceptance criteria:
-  - [ ] **AC1:** every old string in the Design's grep table is absent from its file and every new one present exactly once.
-  - [ ] **AC2:** `./scripts/check-readme-claims.py` exits 0 and prints `check-readme-claims: 2 README(s) carry a version badge (plugin.json is at v0.21.3), 3 of 56 receipts inline, no behaviour count asserted`, the merge-base's line.
-  - [ ] **AC3:** `git diff --numstat <merge-base> -- . ':!.specs' ':!.work_logs'` lists exactly `README.md` 5/5, `README.ja.md` 3/3, `evals/README.md` 1/1 and `docs/BACKLOG.md` 1/1.
-  - [ ] **AC4:** `git diff <merge-base> -- README.md README.ja.md` contains no hunk touching `README.md:185` or `README.ja.md:186`.
+  - [x] **AC1:** every old string in the Design's grep table is absent from its file and every new one present exactly once.
+  - [x] **AC2:** `./scripts/check-readme-claims.py` exits 0 and prints `check-readme-claims: 2 README(s) carry a version badge (plugin.json is at v0.21.3), 3 of 56 receipts inline, no behaviour count asserted`, the merge-base's line.
+  - [x] **AC3:** `git diff --numstat <merge-base> -- . ':!.specs' ':!.work_logs'` lists exactly `README.md` 5/5, `README.ja.md` 3/3, `evals/README.md` 1/1 and `docs/BACKLOG.md` 1/1.
+  - [x] **AC4:** `git diff <merge-base> -- README.md README.ja.md` contains no hunk touching `README.md:185` or `README.ja.md:186`.
   - [ ] **AC5:** row 19's Item cell in `docs/BACKLOG.md` names **#219**; its `Why here` no longer says that `README.md:183` waits on row 16 or that three sit unfiled; `./scripts/check-backlog-tracker.py` exits 0 on the pull request, where CI runs it.
-  - [ ] **AC6:** `evals/README.md`'s `## Status` paragraph names the load rejection, and everything from `## Running them` down is byte-identical to the merge-base.
-  - [ ] **AC7:** every validator on `.steering/tech.md`'s `- Validators:` line exits as it does at the merge-base, and `./scripts/check-version-bump.py <merge-base>` prints `no shipped file changed`.
-  - [ ] **AC8:** the figures written for item 1 are the ones `claude --plugin-dir . plugin details gate-sdd` reports at the tip, summed over the seven components the Inception diagram names; the run is quoted in T2's commit body, because no guard reads these numbers.
+  - [x] **AC6:** `evals/README.md`'s `## Status` paragraph names the load rejection, and everything from `## Running them` down is byte-identical to the merge-base.
+  - [x] **AC7:** every validator on `.steering/tech.md`'s `- Validators:` line exits as it does at the merge-base, and `./scripts/check-version-bump.py <merge-base>` prints `no shipped file changed`.
+  - [x] **AC8:** the figures written for item 1 are the ones `claude --plugin-dir . plugin details gate-sdd` reports at the tip, summed over the seven components the Inception diagram names; the run is quoted in T2's commit body, because no guard reads these numbers.
 - Out of scope: #162, the "Tested against" line; `CONTRIBUTING.md:21` and `docs/DESIGN.md:13`, row 19's other unfiled counts; `.steering/product.md`'s "see #22", which points at a discussion and not at an open gap; any guard for these sentences, which is #137; any change to the order of the backlog.
 
 ### Clarifications
