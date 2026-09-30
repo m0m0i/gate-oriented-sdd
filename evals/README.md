@@ -13,7 +13,7 @@ A harness whose thesis is *enforcement* cannot ship unverified. These cases exis
 
 ## Status: under development — authored, unverified
 
-`claude plugin eval` is in early access and was not enabled on the account these were written on, so **these cases are unverified.** They are written to the documented bare shape (`prompt.md` plus `graders/*.md`) and should be treated as a specification of intent until someone runs them.
+`claude plugin eval` now loads this suite and rejects all four cases before running any — `invalid case.yaml: graders: Required` — so **these cases are unverified.** They were written to the bare shape the documentation described at the time (`prompt.md` plus `graders/*.md`), which is not the shape the tool reads, and should be treated as a specification of intent until they are re-authored to that shape and run.
 
 They are deliberately **not** wired into CI as a passing gate. Claiming a green eval suite that is unverified would be exactly the kind of unverified assertion this harness exists to prevent.
 

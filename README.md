@@ -23,7 +23,7 @@ Sort every rule by **how much it can be talked out of**, and put it at the layer
 | Layer | Mechanism | Can it be skipped? |
 | :-- | :-- | :-- |
 | **Process** | skills — `spec`, `clarify`, `implement`, `worklog`, `archive` | Yes. It is guidance, and that is appropriate. |
-| **Judgment** | a read-only reviewer subagent with a vendored, hash-pinned rulebook | It can be skipped — so a receipt records whether it ran. |
+| **Judgment** | a read-only reviewer subagent with a hash-pinned rulebook | It can be skipped — so a receipt records whether it ran. |
 | **Determinism** | `Stop` hook: format, lint, types, and receipt freshness — and, for the last of those, a pull-request check the hook's own weaknesses do not reach | **No.** |
 
 The bottom row is the only one that is a guarantee, and it takes two places to be one. The `Stop` hook is the fast local half; a check on the pull request is the half with no working tree to step out of. Until #26 there was only the hook, and it asked whether you were *standing on* a finished spec branch rather than whether the repository *held* one — so `git checkout main` turned the only enforced rule off and left no trace. The design work is deciding what earns a place in this row — and keeping that list short enough that the gate stays welcome.
@@ -34,7 +34,7 @@ The bottom row is the only one that is a guarantee, and it takes two places to b
 
 That is measurable rather than asserted. `claude plugin details gate-sdd` reports **~1,300 tokens always-on** for the entire harness — thirteen skills and three reviewers. The rulebooks and the reviewer contract are another **~5,900 tokens**, and they contribute **zero** to that always-on figure, because they are not registered components at all.
 
-The six inception skills account for ~450 of that always-on total while firing perhaps once per project — a real cost against the same principle this section argues. It is small enough to accept today; if the inception set grows, it should split into a second plugin rather than quietly inflate every session. Reference material you pay for on every turn is reference material you will eventually delete.
+The seven inception skills account for ~580 of that always-on total while firing perhaps once per project — a real cost against the same principle this section argues. It is small enough to accept today; if the inception set grows, it should split into a second plugin rather than quietly inflate every session. Reference material you pay for on every turn is reference material you will eventually delete.
 
 **The rulebook is pinned, and pinned honestly.** `rules-lock.json` distinguishes **vendored** files — upstream text reproduced byte-for-byte, whose hash must match upstream — from **derived** files, which are rules written here that cite first-party sources. Upstream moving does not make a derived rule wrong; it makes it *unverified*, which is a different problem with a different fix. Hashing live documentation HTML was tried and rejected: it changes for navigation edits, and an alarm that fires for non-reasons gets switched off.
 
@@ -73,7 +73,7 @@ The issue, the branch, the spec directory, and the PR all share one slug, and th
 
 **The chain ends at one pull request.** The spec is that PR's first commit rather than a pull request of its own, the work-log entry is one of its last, and the merge is the end — there is no follow-up PR to open. `archive` sits beside the chain for that reason: a `git mv` does not earn a branch, a review and a merge of its own, and nothing mechanical waits on it. The review gate does now look past the branch you are standing on, so a shipped spec left in `.specs/` is within its view — it stays silent about one because the receipt is clean and the branch is merged, which is silence earned — or, where the branch has been deleted, because there is no branch left to read the spec from, which is not. Sweeping is therefore paid per noisy directory, not per merge.
 
-Each inception skill has to terminate in something the harness mechanically uses, or it does not ship: `northstar` produces the quality anchor the reviewer reads for severity, `contract` compiles its enforceable rules into the rulebook, `backlog` creates the tracker issues `spec` consumes, `design-doc` writes `.steering/structure.md` and the ADRs the reviewer escalates to. A document that ends in prose alone is one this repo has no business generating.
+Each inception skill has to terminate in something the harness mechanically uses, or it does not ship: `northstar` produces the quality anchor the reviewer reads for severity, `contract` compiles its enforceable rules into the rulebook, `backlog` orders the list from which `sprint` creates the typed tracker issues `spec` consumes, `design-doc` writes `.steering/structure.md` and the ADRs the reviewer escalates to. A document that ends in prose alone is one this repo has no business generating.
 
 One issue = one spec = one branch = one PR. `clarify` is the phase most setups lack: the dominant failure of spec-driven development is not too little structure, it is a confident spec built on a misread requirement — and review cannot catch that, because the document reads the same either way.
 
@@ -100,7 +100,7 @@ Opt-in, and worth adding when the project justifies it — three skills, each fo
 | Skill | Why it is opt-in |
 | :-- | :-- |
 | `northstar` | `init`'s interview already produces the `- Owns:` anchor by another route |
-| `epics` | nothing consumes it mechanically **yet** — the gap is #22, not a decision |
+| `epics` | nothing consumes it mechanically **yet** — the gap is #166, not a decision |
 | `contract` | run before there are commits and review findings to compile, it produces a *worse* rulebook rather than an absent one |
 
 **Every skill is always available.** `init` detects the active harness (Claude Code, Google Antigravity, or both) and installs `.steering/`, `.specs/`, `.work_logs/`, the issue templates, the appropriate rule pointers (`CLAUDE.md` / `GEMINI.md`), the reviewer, and the hooks — never the skills themselves, which ship with the plugin. The choice above governs which documents get created and which skills are in the flow, never whether one can be run.
@@ -180,7 +180,7 @@ The last row is a real gap, not a rounding error. Re-injecting steering after co
 
 ## Status
 
-**Pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, and `claude plugin eval` is still in early access on this account.
+**Pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, but `claude plugin eval` now rejects them at load, because a `case.yaml` must declare `graders`, so they are still unrun.
 
 Tested against: Claude Code 2.1.252 (2026-09-05) · Antigravity CLI 1.1.17 and IDE 2.3.1 (2026-08-21) · macOS.
 
