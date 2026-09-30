@@ -17,7 +17,7 @@
   - [x] **AC2:** `./scripts/check-readme-claims.py` exits 0 and prints `check-readme-claims: 2 README(s) carry a version badge (plugin.json is at v0.21.3), 3 of 56 receipts inline, no behaviour count asserted`, the merge-base's line.
   - [x] **AC3:** `git diff --numstat <merge-base> -- . ':!.specs' ':!.work_logs'` lists exactly `README.md` 5/5, `README.ja.md` 3/3, `evals/README.md` 1/1 and `docs/BACKLOG.md` 1/1.
   - [x] **AC4:** `git diff <merge-base> -- README.md README.ja.md` contains no hunk touching `README.md:185` or `README.ja.md:186`.
-  - [ ] **AC5:** row 19's Item cell in `docs/BACKLOG.md` names **#219**; its `Why here` no longer says that `README.md:183` waits on row 16 or that three sit unfiled; `./scripts/check-backlog-tracker.py` exits 0 on the pull request, where CI runs it.
+  - [x] **AC5:** row 19's Item cell in `docs/BACKLOG.md` names **#219**; its `Why here` no longer says that `README.md:183` waits on row 16 or that three sit unfiled; `./scripts/check-backlog-tracker.py` exits 0 on the pull request, where CI runs it.
   - [x] **AC6:** `evals/README.md`'s `## Status` paragraph names the load rejection, and everything from `## Running them` down is byte-identical to the merge-base.
   - [x] **AC7:** every validator on `.steering/tech.md`'s `- Validators:` line exits as it does at the merge-base, and `./scripts/check-version-bump.py <merge-base>` prints `no shipped file changed`.
   - [x] **AC8:** the figures written for item 1 are the ones `claude --plugin-dir . plugin details gate-sdd` reports at the tip, summed over the seven components the Inception diagram names; the run is quoted in T2's commit body, because no guard reads these numbers.
