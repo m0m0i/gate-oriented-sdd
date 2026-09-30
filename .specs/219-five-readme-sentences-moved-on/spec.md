@@ -56,6 +56,6 @@ Run 2026-09-30. Three assumptions survived step 3. The first is the only one tha
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: record the baseline — the grep table with every old string at 1 and every new one at 0, `check-readme-claims.py`'s line, and the validators' exit codes at the merge-base — then place #219 on row 19 (AC5's text half); the tracker check is the failing test, and CI runs it on the pull request.
+- [x] T1: record the baseline — the grep table with every old string at 1 and every new one at 0, `check-readme-claims.py`'s line, and the validators' exit codes at the merge-base — then place #219 on row 19 (AC5's text half); the tracker check is the failing test, and CI runs it on the pull request.
 - [ ] T2: the five English edits and the three Japanese edits, one commit, with the `plugin details` run quoted in the body; AC1's README rows, AC2, AC4, AC8.
 - [ ] T3: `evals/README.md`'s `## Status` paragraph; AC1's last row, AC3, AC6, AC7.
