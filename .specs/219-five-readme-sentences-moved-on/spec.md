@@ -1,5 +1,5 @@
 # Spec: Five README sentences describe an implementation that has moved on
-- Slug: 219-five-readme-sentences-moved-on   Issue: 219   Type: chore   Status: draft
+- Slug: 219-five-readme-sentences-moved-on   Issue: 219   Type: chore   Status: approved
 - Author: m0m0i   Date: 2026-09-30
 
 ## 1. Requirements (WHAT / WHY)
