@@ -275,7 +275,7 @@ Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy
 - [ ] `northstar` meeting an `Owns:` line it disagrees with — the collision path #55 could not reach.
 - [ ] The cold interview: `northstar`, `prd`, `epics` answered by someone without the repository's context.
 - [ ] **`init` on a real project at 0.7.0** — #126 ran against a synthetic target, which tests CAP-4 weakly. The three findings it produced (#127, #128, #129) were all reachable on a project whose opinions were the installer's; a real one may reach more.
-- [ ] Whether a reviewer under Antigravity picks the `.agents/` path its instruction names — #82 added both destinations and only the Claude Code one has been opened.
+- [ ] Whether a reviewer under Antigravity picks the `.agents/agents/` path its instruction names — #82 added both destinations and only the Claude Code one has been opened; #217 moved the Antigravity one to the directory `init` writes, and did not open it either.
 - [ ] `init` on a greenfield repo — no `AGENTS.md`, no templates, no earlier install. Detection and the five-question interview ran on #76 against a real project with all three; the greenfield path did not.
 - [ ] Whether a non-default `- Docs:` path reaches every inception skill, or any of them hardcode `docs/`.
 - [x] `--update` on a reviewer that has a lock and a changed rulebook — run on 2026-09-26 for #81's AC5, on `agents/python-reviewer/` with `rules/types-and-style.md` deliberately drifted in a scratch worktree: it re-pinned the lock, rewrote `generatedAt`, and exited 0. Section above.

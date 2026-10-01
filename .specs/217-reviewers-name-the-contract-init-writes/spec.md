@@ -204,6 +204,6 @@ invariant the guard enforces and the issue's **Expected** names `.agents/agents/
       rules in `scripts/check-contract-path.py` and the four reviewer lines, until case 170 and
       cases 62–64 pass and the guard exits 0 on the tree with 12 sources. Ends green on AC1–AC6, with
       the red transcript captured for the pull request body.
-- [ ] T2: the blast radius — `docs/verified.md:278` reworded (AC7); every validator on the
+- [x] T2: the blast radius — `docs/verified.md:278` reworded (AC7); every validator on the
       `- Validators:` line and the full suite re-run; `check-receipt-schema.py` and `check-locks.py`
       confirmed byte-identical in output to `main`'s. Ends green on AC7 and the full validator run.
