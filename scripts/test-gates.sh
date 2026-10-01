@@ -4052,8 +4052,13 @@ out=$(unresolved "$r" ".claude/agents")
 case "$out" in *tpl-reviewer*) c0=no ;; *) c0=ok ;; esac
 [ -z "$out" ] && c1=ok || c1=no
 
-r=$(install_reviewers rv-antigravity ".agents")
-out2=$(unresolved "$r" ".agents")
+# The Antigravity layout is the one `init` writes — `.agents/agents/`, since #146. Until #217
+# this fixture installed into `.agents/`, the directory the reviewers named and no install had,
+# so the half that exists to catch a reviewer that cannot open its contract under Antigravity
+# passed on a layout `init` had stopped writing: the fixture agreed with the reviewers rather
+# than with the installer, which is #217's mechanism one file over.
+r=$(install_reviewers rv-antigravity ".agents/agents")
+out2=$(unresolved "$r" ".agents/agents")
 [ -z "$out2" ] && c2=ok || c2=no
 
 r=$(install_reviewers rv-broken ".claude/agents")
@@ -4088,6 +4093,12 @@ done
 # A NEW guard rather than an extension of check-receipt-schema.py: that one already has a
 # subject, and #117 records what happens when a guard acquires a second with a different
 # lifetime.
+#
+# #217, a year of releases later: the guard said `11 source(s) agree` while `init` wrote the
+# Antigravity contract to `.agents/agents/_shared/` and every shipped reviewer sent the reviewer
+# to `.agents/_shared/`. The document side was an `endswith` rule, so #146 could move `init`'s
+# path and leave the reviewers' tuple where it was — and its spec said so, as a mitigation. The
+# fixture below names the directory `init` writes, and case 170 is the shape that passed.
 
 # $1 = name. A repo holding every file the guard compares, all in agreement.
 cpath_repo() {
@@ -4095,17 +4106,20 @@ cpath_repo() {
   mkdir -p "$r/scripts" "$r/agents/_shared" "$r/agents/_template" "$r/skills/init" "$r/docs" "$r/.claude/agents" "$r/rules"
   cp "$ROOT/scripts/check-contract-path.py" "$r/scripts/"
   chmod +x "$r/scripts/check-contract-path.py"
-  rv='x\n\nRead `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/_shared/reviewer-contract.md` under Antigravity.\n'
+  rv='x\n\nRead `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/agents/_shared/reviewer-contract.md` under Antigravity.\n'
   for f in ts python dart-flutter; do printf "$rv" > "$r/agents/$f-reviewer.md"; done
   printf "$rv" > "$r/agents/_template/reviewer.md"
   printf 'x\n' > "$r/agents/_shared/reviewer-contract.md"
   printf 'Read `.claude/agents/_shared/reviewer-contract.md` first.\n' > "$r/.claude/agents/gate-sdd-reviewer.md"
-  printf 'copy `_shared/reviewer-contract.md` to it\n' > "$r/skills/init/SKILL.md"
+  # The file that WRITES the placement names both destinations, as the shipped reviewers must:
+  # since #217 the guard holds it to that, so the closed set below is anchored to something.
+  printf 'copy `_shared/reviewer-contract.md` to `.claude/agents/_shared/reviewer-contract.md` or `.agents/agents/_shared/reviewer-contract.md`\n' > "$r/skills/init/SKILL.md"
   printf '  |-- _shared/reviewer-contract.md\n' > "$r/docs/layout.md"
   printf '"agents/_shared/reviewer-contract.md",\n' > "$r/scripts/check-receipt-schema.py"
   printf '`.claude/agents/_shared/reviewer-contract.md`\n' > "$r/docs/CONTRACT.md"
   printf '`_shared/reviewer-contract.md`\n' > "$r/AGENTS.md"
   ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
+  printf 'sit under `.agents/agents/_shared/reviewer-contract.md`\n' > "$r/docs/fidelity.md"
   echo "$r"
 }
 # stdout is CAPTURED, not discarded: case 64 asserts the success line does NOT print, and
@@ -4171,7 +4185,7 @@ out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 # failure, so grepping for `.agents/_shared` alone was satisfied by the epilogue regardless of
 # which problem fired — and saying WHICH destination is missing is the entire value of the
 # SHIPPED rule. Second time on this branch that an assertion read the wrong text.
-case "$err" in *"is shipped to both harnesses and does not name .agents/_shared"*) c12=ok ;; *) c12=no ;; esac
+case "$err" in *"is shipped to both harnesses and does not name .agents/agents/_shared"*) c12=ok ;; *) c12=no ;; esac
 
 # …while the INSTALLED reviewer naming exactly one is correct and must stay green.
 r=$(cpath_repo cp-install-one)
@@ -4261,8 +4275,8 @@ case "$err" in *floor*) c2=ok ;; *) c2=no ;; esac
 sout=$(cat "$TMP/cpout")
 case "$sout" in *"source(s) agree"*) c3=no ;; *) c3=ok ;; esac   # the success line must NOT print
 
-r=$(cpath_repo cp-empty-suffix)
-if shrink_cpath "$r" SUFFIX; then cf2=ok; else cf2=no; fi
+r=$(cpath_repo cp-empty-documents)
+if shrink_cpath "$r" DOCUMENTS; then cf2=ok; else cf2=no; fi
 out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 # The REASON, not just the exit code: a guard that dies during import also exits 1, and the
 # floor these exist to test would be gone while the case read green. #124's own pattern, and
@@ -4331,9 +4345,9 @@ out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 [ "$out" = "1" ] && c10=ok || c10=no
 case "$err" in *"does not live under"*) c11=ok ;; *) c11=no ;; esac
 
-# And a reviewer demoted into SUFFIX, where only the canonical suffix is required — the rule
-# under which `agents/_shared/reviewer-contract.md`, the original defect, passes.
-r=$(cpath_repo cp-reviewer-in-suffix)
+# And a reviewer demoted into DOCUMENTS, where the plugin's own copy is an accepted form — the
+# rule under which `agents/_shared/reviewer-contract.md`, the original defect, passes.
+r=$(cpath_repo cp-reviewer-in-documents)
 if python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
@@ -4347,11 +4361,95 @@ PYEOF
 then cf4=ok; else cf4=no; fi
 out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 { [ "$out" = "1" ] && [ "$cf4" = ok ]; } && c12b=ok || c12b=no
-case "$err" in *"sits in SUFFIX"*) c13b=ok ;; *) c13b=no ;; esac
+case "$err" in *"sits in DOCUMENTS"*) c13b=ok ;; *) c13b=no ;; esac
 
 [ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12b$c13b" = "okokokokokokokokokokokokok" ] && report "an empty, duplicated or misgrouped contract-path work-set fails rather than agreeing" ok \
   || report "an empty, duplicated or misgrouped contract-path work-set fails rather than agreeing" no \
-     "shipped-exit=$c1 says-floor=$c2 no-success-line=$c3 suffix-exit=$c4 installed-exit=$c5 dupe-exit=$c6 says-dupe=$c7 misgrouped-exit=$c8 says-group=$c9 pad-shipped=$c10 says-prefix=$c11 reviewer-in-suffix=$c12b says-suffix=$c13b"
+     "shipped-exit=$c1 says-floor=$c2 no-success-line=$c3 documents-exit=$c4 installed-exit=$c5 dupe-exit=$c6 says-dupe=$c7 misgrouped-exit=$c8 says-group=$c9 pad-shipped=$c10 says-prefix=$c11 reviewer-in-documents=$c12b says-documents=$c13b"
+
+# 170. #217 — a document and a reviewer naming different directories for the same harness is
+# a disagreement, and the guard must say so.
+#
+# What shipped: `init` (0.13.0, #146) writes the Antigravity contract to `.agents/agents/_shared/`,
+# every shipped reviewer says `.agents/_shared/`, and the guard printed `11 source(s) agree`.
+# Two rules let it: the reviewers were held to a CONCRETE tuple #146 never moved, and the
+# documents were held to `endswith("_shared/reviewer-contract.md")`, which any directory
+# satisfies. Every sub-case below is RED against the guard as it stood on `main` at 4e58da2,
+# which is the point: each is a state that guard certified. The fixtures above already agree on
+# `.agents/agents/`, so each mutation here is one file disagreeing, in the direction #146 took.
+#
+# The shipped reviewer line, verbatim from `main`: a reviewer naming the directory no install has.
+r=$(cpath_repo cp-217-shipped-line)
+printf 'Read `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/_shared/reviewer-contract.md` under Antigravity.\n' > "$r/agents/ts-reviewer.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *'ts-reviewer.md: says `.agents/_shared/reviewer-contract.md`'*) c2=ok ;; *) c2=no ;; esac
+
+# A document naming the old directory, where only the closed set can object: `docs/CONTRACT.md`
+# is not held to naming both destinations, so "does not name" cannot fire, and the path ends in
+# the canonical suffix, so the old rule passed it. This is the sub-case that isolates the rule.
+r=$(cpath_repo cp-217-document-drifts)
+printf '`.agents/_shared/reviewer-contract.md`\n' > "$r/docs/CONTRACT.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *'docs/CONTRACT.md: says `.agents/_shared/reviewer-contract.md`, which is not a form the placement takes'*) c4=ok ;; *) c4=no ;; esac
+
+# The issue's own mutation: `init` and the reviewers disagree on the Antigravity directory. The
+# triage measured this against the proposed closed set and it went red naming `init`; the
+# guard on `main` passed it.
+r=$(cpath_repo cp-217-init-drifts)
+printf 'copy `_shared/reviewer-contract.md` to `.claude/agents/_shared/reviewer-contract.md` or `.agents/_shared/reviewer-contract.md`\n' > "$r/skills/init/SKILL.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *'skills/init/SKILL.md: says `.agents/_shared/reviewer-contract.md`'*) c6=ok ;; *) c6=no ;; esac
+
+# `init` naming only the bare form. Every mention is in the closed set, so only the PLACING
+# rule can object — without it the file that writes the placement is pinned to nothing, and the
+# set the documents are held to is anchored to nothing.
+r=$(cpath_repo cp-217-init-bare)
+printf 'copy `_shared/reviewer-contract.md` to it\n' > "$r/skills/init/SKILL.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c7=ok || c7=no
+case "$err" in *"skills/init/SKILL.md: writes the placement and does not name .claude/agents/_shared/reviewer-contract.md, .agents/agents/_shared/reviewer-contract.md"*) c8=ok ;; *) c8=no ;; esac
+
+# `docs/fidelity.md` states the placement and was outside the comparison from the day #146 added
+# it — the "unstated omission" the guard's own comment warns about. Pinned as a source: remove
+# it and the guard must report a source it cannot compare, not one fewer agreeing.
+r=$(cpath_repo cp-217-fidelity-gone); rm "$r/docs/fidelity.md"
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *"docs/fidelity.md: does not exist"*) c10=ok ;; *) c10=no ;; esac
+
+# The PLACING role, under the same two shape rules the other tuples carry. Emptied, it must hit
+# a floor rather than silently release `init` from its obligation …
+r=$(cpath_repo cp-217-empty-placing)
+if shrink_cpath "$r" PLACING; then cf5=ok; else cf5=no; fi
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+{ [ "$out" = "1" ] && [ "$cf5" = ok ]; } && c11=ok || c11=no
+case "$err" in *Traceback*) c11=no ;; esac
+case "$err" in *floor*) : ;; *) c11=no ;; esac
+
+# … and an entry that is not also a DOCUMENTS source is never iterated, so its obligation would
+# evaporate with the success line printing. A shape problem, reported before any file is read.
+r=$(cpath_repo cp-217-placing-outside)
+if python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
+src = p.read_text()
+out = src.replace('PLACING = ("skills/init/SKILL.md",)', 'PLACING = ("docs/nowhere.md",)')
+if out == src:
+    raise SystemExit("fixture no-op: PLACING tuple not found")
+p.write_text(out)
+PYEOF
+then cf6=ok; else cf6=no; fi
+out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
+{ [ "$out" = "1" ] && [ "$cf6" = ok ]; } && c12=ok || c12=no
+case "$err" in *Traceback*) c12=no ;; esac
+case "$err" in *"is in PLACING but not in DOCUMENTS"*) c13=ok ;; *) c13=no ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13" = "okokokokokokokokokokokokok" ] && report "a document and a reviewer naming different directories for one harness is a disagreement the contract guard reports" ok \
+  || report "a document and a reviewer naming different directories for one harness is a disagreement the contract guard reports" no \
+     "shipped-line=$c1 names=$c2 document-drifts=$c3 says-set=$c4 init-drifts=$c5 names-init=$c6 init-bare=$c7 says-placing=$c8 fidelity-gone=$c9 names-fidelity=$c10 empty-placing=$c11 placing-outside=$c12 says-shape=$c13"
 
 
 # --- guards: scripts/check-readme-claims.py -------------------------------------------

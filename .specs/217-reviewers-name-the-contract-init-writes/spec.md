@@ -1,5 +1,5 @@
 # Spec: the shipped reviewers name the contract path init writes, and the guard compares them
-- Slug: 217-reviewers-name-the-contract-init-writes   Issue: 217   Type: bug   Status: draft
+- Slug: 217-reviewers-name-the-contract-init-writes   Issue: 217   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-10-01
 
 ## 1. Requirements (WHAT / WHY)
@@ -155,7 +155,11 @@ invariant the guard enforces and the issue's **Expected** names `.agents/agents/
     reviewers do not fails and is named; `init` naming only the bare form fails for AC3's reason;
     `docs/fidelity.md` removed fails as a missing source; `PLACING` emptied fails at the floor; a
     `PLACING` entry outside `DOCUMENTS` fails as a shape problem. Each mutation edits the fixture or
-    the fixture's copy of the guard, never `$ROOT`'s.
+    the fixture's copy of the guard, never `$ROOT`'s. *Found at T1:* case 61's Antigravity half
+    installed the reviewers into `.agents/` — the directory they named and no install had — so it
+    passed on `main` with the broken line; its fixture moves to `.agents/agents/` and is then red
+    against `main`'s reviewers, which makes it the consumer-side regression test AC1's guard-side
+    one does not cover.
   - `agents/ts-reviewer.md:10`, `agents/python-reviewer.md:10`,
     `agents/dart-flutter-reviewer.md:10`, `agents/_template/reviewer.md:12` — `.agents/_shared/`
     becomes `.agents/agents/_shared/`; nothing else on the line moves.
@@ -194,7 +198,7 @@ invariant the guard enforces and the issue's **Expected** names `.agents/agents/
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
-- [ ] T1: case 170 in `scripts/test-gates.sh` with the fixture moved to `.agents/agents/`, run
+- [x] T1: case 170 in `scripts/test-gates.sh` with the fixture moved to `.agents/agents/`, run
       against the guard on `main` — red on every sub-case, since the old `CONCRETE` accepts
       `.agents/_shared/` in a reviewer and `endswith` accepts anything in a document — then the three
       rules in `scripts/check-contract-path.py` and the four reviewer lines, until case 170 and
