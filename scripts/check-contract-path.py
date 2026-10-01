@@ -17,6 +17,14 @@ can actually be opened. Both belong in the file.
 A separate guard rather than an extension of `check-receipt-schema.py`: that one already has a
 subject, and #117 records what a guard acquiring a second one with a different lifetime costs.
 
+#217: the guard then certified a disagreement of its own. #146 moved `init`'s Antigravity
+placement from `.agents/` to `.agents/agents/` and left `CONCRETE` where it was, and the
+document side was an `endswith` rule that any directory satisfies — so `init` and every
+shipped reviewer named different directories for one harness while this printed
+`11 source(s) agree`. Reported from an install. Since then the placement is stated once, in
+`CONCRETE`; a document may name nothing outside a closed set; and the file that writes the
+placement is held to naming every entry, so a move in any one place is red until all move.
+
 Run from the repository root. Exits 0 when every source names the same placement.
 """
 import pathlib
@@ -33,11 +41,24 @@ CANONICAL = "_shared/reviewer-contract.md"
 #: found by a reviewer following that line literally, failing, and guessing `agents/_shared/`,
 #: which is the plugin's copy rather than the install's. Identical here only by luck. The bare
 #: relative form is the right way to SAY where the file lives and is useless for opening it.
+#:
+#: The Antigravity entry is the directory `init` writes — `.agents/agents/`, beside the reviewer,
+#: since #146 — and it is stated here ONCE. #217 is what happens when it is stated here and
+#: also, differently, in `init`: the tuple held the reviewers to `.agents/` from 0.13.0 to
+#: 0.21.3 while `init` wrote elsewhere, and the rule below for documents could not see it.
 CONCRETE = (
     ".claude/agents/" + CANONICAL,   # Claude Code
-    ".agents/" + CANONICAL,          # Antigravity
+    ".agents/agents/" + CANONICAL,   # Antigravity
 )
 ALLOWED = (CANONICAL,) + CONCRETE
+
+#: The plugin's own copy — where the file lives in THIS repository, which `check-receipt-schema.py`
+#: reads and a document may cite. Never a destination: it exists in no install, and a reviewer
+#: naming it is #82's original defect. So it is a form a DOCUMENT may name and a reviewer may not,
+#: and it is listed rather than tolerated — the old rule, "ends in the canonical suffix", let it
+#: through by accident and let `.agents/_shared/` through by the same accident (#217).
+PLUGIN_COPY = "agents/" + CANONICAL
+DOCUMENTED = ALLOWED + (PLUGIN_COPY,)
 
 #: Files that state it, in two groups, because the rule genuinely differs between them.
 #: Fixed rather than globbed: `.specs/` holds records, and rewriting a record to satisfy a
@@ -68,11 +89,13 @@ INSTALLED = (".claude/agents/gate-sdd-reviewer.md",)
 
 EXACT = SHIPPED + INSTALLED
 
-#: SUFFIX — documents and sibling guards that draw or reference a CONCRETE tree, where
-#: `.claude/agents/_shared/reviewer-contract.md` is correct and must stay allowed. They are
-#: constrained to end in the canonical form, which is what rejects the flat sibling
-#: `.claude/agents/reviewer-contract.md` that `docs/layout.md` drew.
-SUFFIX = (
+#: DOCUMENTS — documents and sibling guards that draw or reference a CONCRETE tree, where
+#: `.claude/agents/_shared/reviewer-contract.md` is correct and must stay allowed. Each mention
+#: must be one of DOCUMENTED, and nothing else: that rejects the flat sibling
+#: `.claude/agents/reviewer-contract.md` that `docs/layout.md` drew (#82), and it rejects a
+#: directory no install has, which is what the rule this replaced — "ends in the canonical
+#: form" — could not do (#217). Named SUFFIX until #217, after the rule it no longer carries.
+DOCUMENTS = (
     "skills/init/SKILL.md",
     "docs/layout.md",
     "scripts/check-receipt-schema.py",
@@ -82,15 +105,25 @@ SUFFIX = (
     "docs/CONTRACT.md",
     "AGENTS.md",
     "rules/AGENTS.md",
+    # Added by #146 with the placement it moved, and outside the comparison until #217 — the
+    # same omission, one release after the paragraph above was written.
+    "docs/fidelity.md",
 )
 
-SOURCES = EXACT + SUFFIX
+#: PLACING — the file that WRITES the placement, held to the rule the shipped reviewers are held
+#: to: it must name every CONCRETE destination. A document may name only what is in the set; a
+#: reviewer must name every destination; and without this the one file that decides where the
+#: contract goes could drop to the bare form and the set would be anchored to nothing. Each
+#: entry must also be in DOCUMENTS, because that is the loop that reads it — see shape_problems.
+PLACING = ("skills/init/SKILL.md",)
+
+SOURCES = EXACT + DOCUMENTS
 
 #: Floors. An empty work-set makes every loop below run zero times, `problems` stay empty, and
 #: the success line print `0 source(s) agree` at exit 0 — a guard certifying a comparison it
 #: never made. `check-receipt-schema.py:150,256` already carries this for its two tuples and
 #: case 49 pins it; the same tuple arrived here without it one release later.
-MIN_SHIPPED, MIN_INSTALLED, MIN_SUFFIX = 4, 1, 6
+MIN_SHIPPED, MIN_INSTALLED, MIN_DOCUMENTS, MIN_PLACING = 4, 1, 7, 1
 
 #: Where each group's members must live. The grouping IS an exemption list — `SHIPPED` must name
 #: both destinations and `INSTALLED` only its own — so moving one entry between the tuples grants
@@ -98,7 +131,7 @@ MIN_SHIPPED, MIN_INSTALLED, MIN_SUFFIX = 4, 1, 6
 #: only in the comments beside them, which is the shape this branch spent three rounds proving is
 #: not enough.
 SHIPPED_PREFIX = "agents/"
-INSTALLED_PREFIXES = (".claude/agents/", ".agents/")
+INSTALLED_PREFIXES = (".claude/agents/", ".agents/agents/")
 
 #: Constraint this imposes, stated because it is real and otherwise invisible: a document must
 #: write the whole path on ONE physical line. Splitting `_shared/` onto its own tree row leaves
@@ -123,11 +156,17 @@ def shape_problems():
     scope outside this function, so a misplaced clause fails at authoring time.
     """
     shape = []
-    if len(SHIPPED) < MIN_SHIPPED or len(INSTALLED) < MIN_INSTALLED or len(SUFFIX) < MIN_SUFFIX:
+    if (
+        len(SHIPPED) < MIN_SHIPPED
+        or len(INSTALLED) < MIN_INSTALLED
+        or len(DOCUMENTS) < MIN_DOCUMENTS
+        or len(PLACING) < MIN_PLACING
+    ):
         shape.append(
             f"work-set below its floor: {len(SHIPPED)} shipped (min {MIN_SHIPPED}), "
             f"{len(INSTALLED)} installed (min {MIN_INSTALLED}), "
-            f"{len(SUFFIX)} suffix (min {MIN_SUFFIX})"
+            f"{len(DOCUMENTS)} documents (min {MIN_DOCUMENTS}), "
+            f"{len(PLACING)} placing (min {MIN_PLACING})"
         )
     # A floor counts entries, not distinct names, so a duplicate satisfies it while the source it
     # replaced stops being compared — a plausible copy-paste when a reviewer is added.
@@ -138,18 +177,25 @@ def shape_problems():
     for n in SHIPPED:
         if not n.startswith(SHIPPED_PREFIX):
             shape.append(f"`{n}` is in SHIPPED but does not live under `{SHIPPED_PREFIX}`")
-    for n in SUFFIX:
+    for n in DOCUMENTS:
         if n.startswith(SHIPPED_PREFIX) or n.startswith(INSTALLED_PREFIXES):
             shape.append(
-                f"`{n}` is a reviewer but sits in SUFFIX, where only the canonical suffix is "
-                f"required — `agents/_shared/reviewer-contract.md` passes that rule, and it is "
-                f"the original defect"
+                f"`{n}` is a reviewer but sits in DOCUMENTS, where the plugin's own copy is an "
+                f"accepted form — `{PLUGIN_COPY}` passes that rule, and it is the original defect"
             )
     for n in INSTALLED:
         if not n.startswith(INSTALLED_PREFIXES):
             shape.append(
                 f"`{n}` is in INSTALLED but does not live under "
                 f"{' or '.join(INSTALLED_PREFIXES)} — only an install may name one destination"
+            )
+    # A PLACING entry is checked inside the DOCUMENTS loop, so one that is not also a document is
+    # never read: its obligation evaporates and the success line prints.
+    for n in PLACING:
+        if n not in DOCUMENTS:
+            shape.append(
+                f"`{n}` is in PLACING but not in DOCUMENTS, so no loop reads it and the rule "
+                f"that it name every destination is checked by nothing"
             )
     return shape
 
@@ -215,10 +261,20 @@ def main():
                 )
         else:
             for stated in sorted(set(mentions)):
-                if not stated.endswith(CANONICAL):
+                if stated not in DOCUMENTED:
                     problems.append(
-                        f"{name}: says `{stated}`, which does not end in `{CANONICAL}`"
+                        f"{name}: says `{stated}`, which is not a form the placement takes "
+                        f"({', '.join(DOCUMENTED)})"
                     )
+            # The file that writes the placement states every destination, as a shipped reviewer
+            # does; the closed set above is a set of what it says.
+            missing = [c for c in CONCRETE if c not in mentions]
+            if name in PLACING and missing:
+                problems.append(
+                    f"{name}: writes the placement and does not name {', '.join(missing)} — "
+                    f"every other document is held to the destinations this file states, so it "
+                    f"must state both"
+                )
 
     if problems:
         print("check-contract-path FAILED", file=sys.stderr)
