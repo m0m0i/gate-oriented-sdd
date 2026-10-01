@@ -1,5 +1,5 @@
 # Spec: The contract's Bash policy forbids any evidence source a reviewer file adds, and every reviewer file adds one
-- Slug: 222-reviewer-files-add-evidence-sources   Issue: 222   Type: bug   Status: approved
+- Slug: 222-reviewer-files-add-evidence-sources   Issue: 222   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-10-01
 
 ## 1. Requirements (WHAT / WHY)
@@ -96,3 +96,5 @@ Round 1, `gate-sdd-reviewer` as a subagent at `8980dd1`: CLEAN, with 0 BLOCKER, 
 - **MEDIUM, fixed in `fb474ed` (AC8 amended alone) and `4dbb67e`.** Naming #222 in row 17's `Item` cell would leave the next pull request red after the merge. #222 is now cited in `Why here` only.
 - **INFO, not fixed here.** The dogfood reviewer's list names no form that can tie a hunk to its commit, such as `git log -p <base>..HEAD -- <spec.md>` or `git show --stat <sha>`, and C-8's own check needs one. The reviewer ran such forms off-list and said so. Under the new contract, naming one with its reason is how this would close. Which commands this reviewer's shell may run is #119's question, so it is left there rather than decided on this branch.
 - **Not observed:** `claude plugin validate . --strict` did not return within the review. CI's plugin validation job is the evidence for it.
+
+Round 2, the same reviewer on the delta `8980dd1..8d6691f`: APPROVE, CLEAN, with 0 findings above INFO. Both MEDIUMs were confirmed fixed. The one INFO is round 1's, still deferred to #119: this round the reviewer again ran one read-only `git log --stat` form that is off its list, and disclosed it. The receipt is for `8d6691f`.
