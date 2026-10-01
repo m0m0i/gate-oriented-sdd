@@ -85,5 +85,5 @@ Decided here, as the author's calls rather than the maintainer's:
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: record the grep table's "before" column and the validators' merge-base lines in the commit body, then place #222 on row 17. The tracker check is the failing test: it has been red on `main` since #222 was filed. AC8, and AC9's before half.
 - [x] T2: amend the contract, then `cp` it over the mirror, in one commit. Editing only the shipped copy is the red step, and `check-receipt-schema.py` must fail naming the mirror before the copy turns it green. AC1–AC3, AC6.
-- [ ] T3: the four shipped reviewer files and the dogfood reviewer. Run the section-only `shasum` count at 0 first. AC4.
+- [x] T3: the four shipped reviewer files and the dogfood reviewer. Run the section-only `shasum` count at 0 first. AC4.
 - [ ] T4: both READMEs in one commit, so no commit on the branch leaves the pair disagreeing. AC5, AC7, and AC9's after half.
