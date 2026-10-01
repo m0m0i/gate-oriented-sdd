@@ -1,5 +1,5 @@
 # Spec: the shipped reviewers name the contract path init writes, and the guard compares them
-- Slug: 217-reviewers-name-the-contract-init-writes   Issue: 217   Type: bug   Status: approved
+- Slug: 217-reviewers-name-the-contract-init-writes   Issue: 217   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-10-01
 
 ## 1. Requirements (WHAT / WHY)
@@ -47,31 +47,31 @@
   — and `docs/verified.md:278`'s open item names the `.agents/` path.
 
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN `./scripts/check-contract-path.py` runs on a tree where `skills/init/SKILL.md`
+  - [x] **AC1:** WHEN `./scripts/check-contract-path.py` runs on a tree where `skills/init/SKILL.md`
         names `.agents/agents/_shared/reviewer-contract.md` and a shipped reviewer names
         `.agents/_shared/reviewer-contract.md` — the tree on `main` today — THEN it exits 1 and names
-        the file that disagrees.
-  - [ ] **AC2:** WHEN a document source names any concrete path other than
+        the file that disagrees. *Evidence: the new guard on `main`'s tree (`4e58da2`) exits 1 naming all four reviewers twice — `says `.agents/_shared/…`, which is not one of the allowed forms` and `does not name .agents/agents/_shared/…`.*
+  - [x] **AC2:** WHEN a document source names any concrete path other than
         `.claude/agents/_shared/reviewer-contract.md`, `.agents/agents/_shared/reviewer-contract.md`,
         the bare `_shared/reviewer-contract.md`, or the plugin's own copy
         `agents/_shared/reviewer-contract.md` THEN the guard exits 1 naming that file and that path;
         the flat sibling `.claude/agents/reviewer-contract.md` stays rejected (case 62's `cp-layout`
-        and `cp-sibling`).
-  - [ ] **AC3:** WHEN `skills/init/SKILL.md` names fewer than both concrete destinations THEN the
+        and `cp-sibling`). *Evidence: case 170's `document-drifts` and `init-drifts` halves; case 62's `cp-layout` and `cp-sibling` unchanged and green.*
+  - [x] **AC3:** WHEN `skills/init/SKILL.md` names fewer than both concrete destinations THEN the
         guard exits 1 saying which is missing — the file that writes the placement is held to the
-        same rule as the files that read it, so the closed set in AC2 is anchored to something.
-  - [ ] **AC4:** `agents/ts-reviewer.md`, `agents/python-reviewer.md`,
+        same rule as the files that read it, so the closed set in AC2 is anchored to something. *Evidence: case 170's `init-bare` half, naming both missing destinations.*
+  - [x] **AC4:** `agents/ts-reviewer.md`, `agents/python-reviewer.md`,
         `agents/dart-flutter-reviewer.md` and `agents/_template/reviewer.md` name
         `.agents/agents/_shared/reviewer-contract.md` for Antigravity, and `check-contract-path.py`
-        exits 0 on the tip with `docs/fidelity.md` counted among its sources — 12, not 11.
-  - [ ] **AC5:** the regression case in `scripts/test-gates.sh` fails against the guard on `main`
+        exits 0 on the tip with `docs/fidelity.md` counted among its sources — 12, not 11. *Evidence: `check-contract-path: 12 source(s) agree` at the tip; the four lines read `.agents/agents/_shared/reviewer-contract.md` under Antigravity.*
+  - [x] **AC5:** the regression case in `scripts/test-gates.sh` fails against the guard on `main`
         (`4e58da2`) for AC1's reason and passes against the tip; every existing contract-path case
-        (62–64) still passes, with the fixture moved to `.agents/agents/`.
-  - [ ] **AC6:** the twelve other validators exit 0 on the tip; `assets/check-locks.py` reports every
-        lock intact, since it hashes `agents/*/rules/*.md` and no rule file moves.
-  - [ ] **AC7:** `docs/verified.md`'s open item about which path an Antigravity reviewer picks names
+        (62–64) still passes, with the fixture moved to `.agents/agents/`. *Evidence: against the guard on `main` every case-170 state exits 0 with `11 source(s) agree`; at the tip `test-gates.sh` is 170 passed, 0 failed, 0 skipped, cases 62–64 included. Case 61's moved fixture is red against `main`'s reviewers too.*
+  - [x] **AC6:** the twelve other validators exit 0 on the tip; `assets/check-locks.py` reports every
+        lock intact, since it hashes `agents/*/rules/*.md` and no rule file moves. *Evidence: twelve validators exit 0; `check-locks: 6 pinned file(s) match their locks`, byte-identical to `main`'s output.*
+  - [x] **AC7:** `docs/verified.md`'s open item about which path an Antigravity reviewer picks names
         `.agents/agents/`, and the question itself stays open — this branch makes every statement
-        agree with what `init` writes, and does not verify that Antigravity looks there.
+        agree with what `init` writes, and does not verify that Antigravity looks there. *Evidence: `docs/verified.md:278` names `.agents/agents/` and keeps its open box.*
 
 - Out of scope:
   - **Whether Antigravity discovers subagents under `.agents/agents/` at all.** `docs/verified.md:274`
