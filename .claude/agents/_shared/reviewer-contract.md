@@ -19,7 +19,7 @@ Reviewers get shell access because a reviewer that can run the type checker find
 - checking an installed version before claiming an API is wrong
 - reading the clock, for the receipt's `reviewed_at` and nothing else
 
-Those four are general. A reviewer file may also add an evidence source its own project's claims need — a header read against a host a claim names, a file's hash for a lock check — and each addition must be:
+Those four are general, and the conditions below bind only what a reviewer file adds beyond them. A reviewer file may also add an evidence source its own project's claims need — a header read against a host a claim names, a file's hash for a lock check — and each addition must be:
 
 - **named** on that file's allow-list, as the command form it permits rather than the whole tool: `git show`, not `git`
 - **read-only**: it writes nothing the project's validators do not already write — not to the working tree, not under `.git/`, and not to any remote, where a tracker comment counts as a write
