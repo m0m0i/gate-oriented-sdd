@@ -87,3 +87,12 @@ Decided here, as the author's calls rather than the maintainer's:
 - [x] T2: amend the contract, then `cp` it over the mirror, in one commit. Editing only the shipped copy is the red step, and `check-receipt-schema.py` must fail naming the mirror before the copy turns it green. AC1–AC3, AC6.
 - [x] T3: the four shipped reviewer files and the dogfood reviewer. Run the section-only `shasum` count at 0 first. AC4.
 - [x] T4: both READMEs in one commit, so no commit on the branch leaves the pair disagreeing. AC5, AC7, and AC9's after half.
+
+## 4. Review
+
+Round 1, `gate-sdd-reviewer` as a subagent at `8980dd1`: CLEAN, with 0 BLOCKER, 0 HIGH, two MEDIUM and one INFO.
+
+- **MEDIUM, fixed in `195a2e4`.** "A listed one that fails any of the four conditions" could be read as binding the four general purposes too. Those are written as descriptions and mostly carry no reason, so a literal reader would find the shipped reviewers out of scope. The paragraph's opening sentence now scopes the conditions to additions. The grep table is unchanged.
+- **MEDIUM, fixed in `fb474ed` (AC8 amended alone) and `4dbb67e`.** Naming #222 in row 17's `Item` cell would leave the next pull request red after the merge. #222 is now cited in `Why here` only.
+- **INFO, not fixed here.** The dogfood reviewer's list names no form that can tie a hunk to its commit, such as `git log -p <base>..HEAD -- <spec.md>` or `git show --stat <sha>`, and C-8's own check needs one. The reviewer ran such forms off-list and said so. Under the new contract, naming one with its reason is how this would close. Which commands this reviewer's shell may run is #119's question, so it is left there rather than decided on this branch.
+- **Not observed:** `claude plugin validate . --strict` did not return within the review. CI's plugin validation job is the evidence for it.
