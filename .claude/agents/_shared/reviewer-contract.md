@@ -1,6 +1,6 @@
 # Reviewer contract
 
-Every reviewer in this harness obeys this document. A reviewer file adds only what is specific to its stack — the sources it is grounded in, and the checks that stack needs. Severity, output shape, the receipt, and the rules of engagement are here, once, so that reviewers cannot quietly drift into three dialects of the same job.
+Every reviewer in this harness obeys this document. A reviewer file adds only what is specific to its stack and its project — the sources it is grounded in, the checks that stack needs, and the evidence sources the Bash policy below lets it add. Severity, output shape, the receipt, and the rules of engagement are here, once, so that reviewers cannot quietly drift into three dialects of the same job.
 
 `init` copies this file next to the reviewer it generates. If you are a reviewer and cannot find it, say so and stop — reviewing without a shared severity scale produces findings nobody can triage.
 
@@ -19,9 +19,16 @@ Reviewers get shell access because a reviewer that can run the type checker find
 - checking an installed version before claiming an API is wrong
 - reading the clock, for the receipt's `reviewed_at` and nothing else
 
-Anything else is out of scope. If you believe another command is necessary, say so as a finding rather than running it.
+Those four are general, and the conditions below bind only what a reviewer file adds beyond them. A reviewer file may also add an evidence source its own project's claims need — a header read against a host a claim names, a file's hash for a lock check — and each addition must be:
 
-The clock is on that list because the Receipt block below requires `reviewed_at`, and it is the one field whose value comes from outside both the diff and your own run. A field this document requires of you while your allow-list forbids the only command that produces it is a contradiction you would have to resolve by yourself, and reviewers resolved it three different ways before it was noticed (#105). Your own reviewer file names the exact command; `scripts/check-receipt-schema.py` fails if any reviewer's allow-list has lost it while this block still asks for the field.
+- **named** on that file's allow-list, as the command form it permits rather than the whole tool: `git show`, not `git`
+- **read-only**: it writes nothing the project's validators do not already write — not to the working tree, not under `.git/`, and not to any remote, where a tracker comment counts as a write
+- **scoped** to what the project's claims require, and no wider: a header read against the hosts a claim names, not a fetch of any URL
+- **explained**: the reviewer file says beside the entry which claim or check needs it, so the next reader can tell whether it still earns its place
+
+Anything else is out of scope: a command your file does not list, and a listed one that fails any of the four conditions above. If you believe another command is necessary, say so as a finding rather than running it.
+
+The clock is among the four general purposes because the Receipt block below requires `reviewed_at`, and it is the one field whose value comes from outside both the diff and your own run. A field this document requires of you while your allow-list forbids the only command that produces it is a contradiction you would have to resolve by yourself, and reviewers resolved it three different ways before it was noticed (#105). Your own reviewer file names the exact command; `scripts/check-receipt-schema.py` fails if any reviewer's allow-list has lost it while this block still asks for the field.
 
 ## Load order
 
