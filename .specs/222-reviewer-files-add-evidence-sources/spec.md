@@ -105,3 +105,13 @@ AC7, measured at `7fcdc22`:
 - `check-readme-claims.py` reads v0.21.4 and "3 of 58 receipts inline". Those are the two moves AC7 names.
 - `check-templates.py` counts 5 live specs, as expected.
 - `check-leakage.sh` scans 290 files: three above the merge-base, not the one AC7's second sentence predicts. This spec, its receipt and the work log are all files this branch adds, which AC7's general clause covers and its count undercounted. The true figure is recorded here rather than the criterion amended a third time.
+
+Round 3, the same reviewer at `0a3e464`, which merges `main` `9746eef` (#221, #223) into the branch: APPROVE, CLEAN, with INFO only.
+
+- The four reviewer files combine #217's contract-path line with this branch's `shasum` bullet.
+- `docs/BACKLOG.md` is byte-identical to `main`'s.
+- The work log keeps both sessions under the one date.
+- `test-gates.sh` reports 170 passed, 0 failed, 0 skipped. The 170th is #223's case.
+- The receipt is re-issued for `0a3e464`.
+- AC8's exit-0 half stays open. `main`'s row 1 still names the closed #217 in its `Item` cell, which is `main`'s state, not this branch's.
+- AC7's literal figures are the pre-merge base's, as measured at `7fcdc22`. After the merge, the base's own counts moved with #223's content.
