@@ -17,7 +17,7 @@
   - [x] **AC5:** THE allow-list sentence in `README.md` and the one in `README.ja.md` SHALL both state that a reviewer file may add a source with its reason, and SHALL make the same claim as each other (C-3).
   - [x] **AC6:** THE text this diff adds to the contract SHALL name no path that exists only in this repository. Evidence: the contract's word-level diff (`git diff --word-diff=porcelain`) adds no backticked path except `.git/`. Word level, because the clock paragraph's line is rewritten for one phrase, and a line diff would re-add the existing mention of `scripts/check-receipt-schema.py`. This is #188's class, and #188 owns the sentence already there.
   - [x] **AC7:** At the tip, every validator on `.steering/tech.md`'s `- Validators:` line SHALL exit 0. Every validator SHALL print its merge-base summary line, except for counts that include files this branch adds. `check-leakage.sh`'s scanned files and `check-templates.py`'s live specs each rise by one, for this spec. `check-readme-claims.py`'s line SHALL differ only in two numbers this branch moves: the version the bump moves, and the receipt total, which this branch's own receipt raises by one (inline stays 3 if the review runs as a subagent). `test-gates.sh` SHALL report 169 passed, 0 failed, 0 skipped, the same as at the merge-base.
-  - [ ] **AC8:** Row 17 of `docs/BACKLOG.md` SHALL cite #222 in its `Why here` cell and not in its `Item` cell. `./scripts/check-backlog-tracker.py` SHALL report nothing about #222, and SHALL exit 0 on the pull request once row 19's #219 citation, which is #221's, has left `main`.
+  - [x] **AC8:** Row 17 of `docs/BACKLOG.md` SHALL cite #222 in its `Why here` cell and not in its `Item` cell. `./scripts/check-backlog-tracker.py` SHALL report nothing about #222, and SHALL exit 0 on the pull request once row 19's #219 citation, which is #221's, has left `main`.
   - [x] **AC9:** THE grep table SHALL show every old string at 1 and every new one at 0 at the merge-base, and the reverse at the tip. It is this bug's regression test, recorded in T1's commit body before any edit.
 - Out of scope:
   - **#119**: whether `git grep` joins the dogfood reviewer's list. This change gives #119 a third resolution and does not choose it.
@@ -115,3 +115,10 @@ Round 3, the same reviewer at `0a3e464`, which merges `main` `9746eef` (#221, #2
 - The receipt is re-issued for `0a3e464`.
 - AC8's exit-0 half stays open. `main`'s row 1 still names the closed #217 in its `Item` cell, which is `main`'s state, not this branch's.
 - AC7's literal figures are the pre-merge base's, as measured at `7fcdc22`. After the merge, the base's own counts moved with #223's content.
+
+AC8, measured at `9597d78`, after `main` was merged in a second time:
+
+- The reviewer-contract row cites #222 in `Why here` only. It is row 16, not the row 17 AC8 names, because #225 discharged row 1 (#217, which #223 shipped) and moved every row up one. The number is recorded here rather than the criterion amended.
+- `check-backlog-tracker.py` exits 0 locally ("50 open issue(s) against 21 row(s), no drift") and on the pull request, in CI's "Guards, locks, and gate behaviour" job for `9597d78`.
+- Two citations had to leave `main` first, not the one AC8 names: row 19's #219 (#221) and row 1's #217 (#225).
+- The plugin validation that did not return locally in either review round passed in CI: "Claude Code plugin validation" for `9597d78`.
