@@ -9,11 +9,11 @@
 - **What must NOT change:** C-3 — every claim in `README.md` keeps a Japanese counterpart with the same content **at the same strength**: no added verb the English lacks, and no assertion weakened to a possibility. The half-width space between Latin text and Japanese is house style and stays. The `AではなくB` contrasts stay. The two authorial closing lines (`毎ターン支払っている参照資料は、いずれ消される参照資料です。`, `確かめたうえでの沈黙`) stay. The `検証環境:` line stays, because #162 owns it. `README.md` and every other file are untouched, and there is no version bump.
 - Why now: the author's request, 2026-10-03, after a trial run of the yomiyasu skill on this file. Unplanned work, entered out loud, like #90 and #104. The broken bold is a visible rendering defect on the Japanese landing page.
 - Acceptance criteria:
-  - [ ] **AC1:** No bold span in `README.ja.md` has a closing `**` preceded by `。` and followed by a non-space character. The check pairs the `**` markers on each line and tests each closing one. It counts 2 before the change and 0 after, and the yomiyasu linter's `bold_not_rendered` agrees (2, then 0).
-  - [ ] **AC2:** `observations.md` lists every changed sentence before and after, each with the English sentence it carries. The record also states, for each one, that the claim and its strength are unchanged (C-3).
-  - [ ] **AC3:** No half-width space between Latin text and Japanese is removed where both of its neighbours survive the change. The count may fall only by spaces whose Latin neighbour the change itself removes or moves, and `observations.md` accounts for each one. The count of `ではなく` is unchanged.
+  - [x] **AC1:** No bold span in `README.ja.md` has a closing `**` preceded by `。` and followed by a non-space character. The check pairs the `**` markers on each line and tests each closing one. It counts 2 before the change and 0 after, and the yomiyasu linter's `bold_not_rendered` agrees (2, then 0).
+  - [x] **AC2:** `observations.md` lists every changed sentence before and after, each with the English sentence it carries. The record also states, for each one, that the claim and its strength are unchanged (C-3).
+  - [x] **AC3:** No half-width space between Latin text and Japanese is removed where both of its neighbours survive the change. The count may fall only by spaces whose Latin neighbour the change itself removes or moves, and `observations.md` accounts for each one. The count of `ではなく` is unchanged.
   - *Amended 2026-10-03, during T2:* AC3 first read "the count does not fall". It fell 380 → 377, and all three were spaces next to a token the change removes: the `**` on the two token counts, and `#26` moving to the start of its own sentence. No surviving Latin–Japanese pair lost its space. A raw count could not tell the house style being stripped from bold markers being removed, so the criterion now states the property the invariant protects.
-  - [ ] **AC4:** `git diff --name-only origin/main` is confined to `README.ja.md` and this directory, and every validator on the `- Validators:` line exits 0 after the last write.
+  - [x] **AC4:** `git diff --name-only origin/main` is confined to `README.ja.md` and this directory, and every validator on the `- Validators:` line exits 0 after the last write.
 - Out of scope: the 検証環境 line (#162); `README.md`; the remaining "same sentence ending three times in a row" lint findings in passages that are otherwise natural, which the skill's own rules say to leave alone.
 
 ### Clarifications
@@ -30,4 +30,4 @@ None needed — requirements were unambiguous. The one reading that could have c
 ## 3. Tasks (TDD-ordered)
 
 - [x] T1: record the baseline in `observations.md`: the bold check at 2, the Latin–Japanese space count, the `ではなく` count, and every sentence to be changed, with its English counterpart.
-- [ ] T2: apply the replacements; record each sentence after, with its C-3 note; assert AC1 (0), AC3 (counts held) and AC4 (diff confined, validators at exit 0 after the last write).
+- [x] T2: apply the replacements; record each sentence after, with its C-3 note; assert AC1 (0), AC3 (counts held) and AC4 (diff confined, validators at exit 0 after the last write).
