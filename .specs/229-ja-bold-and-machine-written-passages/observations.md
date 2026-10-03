@@ -2,7 +2,7 @@
 
 ## T1 — before
 
-Measured on `README.ja.md` at `origin/main` 6dca392. The bold check pairs the `**` markers on each line and counts the closing ones that sit between `。` and a non-space character. The space count covers a half-width space between Latin text (letters, digits, backtick, bracket, `*`) and Japanese, in either order.
+Measured on `README.ja.md` at `origin/main` 6dca392. The bold check pairs the `**` markers on each line and counts the closing ones that sit between `。` and a non-space character. The space count covers a half-width space between Latin text (letters, digits, backtick, bracket, `*`, `#`) and Japanese, in either order.
 
 - unrendered bold closings: **2** (L75, L95). The yomiyasu linter's `bold_not_rendered` agrees: 2.
 - Latin–Japanese spaces: 380
@@ -33,6 +33,7 @@ The sentences to change, each with the English sentence it carries. Line numbers
 - unrendered bold closings: **0**. The yomiyasu linter's `bold_not_rendered`: 0.
 - Latin–Japanese spaces: 377. The three that went are `は **約1,300` and `に **約5,900` (the bold markers removed by item 3) and `が #26` (`#26` now opens its own sentence, item 5). No pair whose Latin and Japanese neighbours both survive lost its space (AC3 as amended).
 - `ではなく`: 17
+- AC4: `git diff --name-only origin/main` lists `README.ja.md`, `.specs/229-ja-bold-and-machine-written-passages/observations.md` and `.specs/229-ja-bold-and-machine-written-passages/spec.md`, and nothing else. All 13 validators on the `- Validators:` line exit 0 after the last write, including `test-gates.sh` at 170 passed, 0 failed.
 
 Each changed sentence after, numbered as in T1, with the C-3 reading against the English.
 
@@ -53,3 +54,7 @@ Each changed sentence after, numbered as in T1, with the C-3 reading against the
 15. `…解凍し、インストールします。` "then:" introduces the code block. `。` does the same in Japanese prose.
 16. `*方法2: 直接 clone*` The trailing colon goes.
 17. `初回ターンでの注入は` "initial turn 1 injection". 初回ターン already says turn 1, so the parenthetical only repeated it.
+
+## Consequences for existing documents
+
+None that this change makes false. `README.md` is unchanged, and every changed Japanese sentence still carries the English claim it did before. No other file quotes, counts or cites the sentences that changed. `check-readme-claims.py` reads the version badge and the receipt and behaviour counts, none of which moved. #162's `検証環境:` line is untouched, so that issue's acceptance criteria still describe the file as it stands.

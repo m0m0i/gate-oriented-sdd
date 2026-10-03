@@ -30,4 +30,4 @@ None needed — requirements were unambiguous. The one reading that could have c
 ## 3. Tasks (TDD-ordered)
 
 - [x] T1: record the baseline in `observations.md`: the bold check at 2, the Latin–Japanese space count, the `ではなく` count, and every sentence to be changed, with its English counterpart.
-- [x] T2: apply the replacements; record each sentence after, with its C-3 note; assert AC1 (0), AC3 (counts held) and AC4 (diff confined, validators at exit 0 after the last write).
+- [x] T2: apply the replacements; record each sentence after, with its C-3 note; assert AC1 (0), AC3 (no surviving Latin–Japanese pair loses its space, and each drop is accounted for) and AC4 (diff confined, validators at exit 0 after the last write).
