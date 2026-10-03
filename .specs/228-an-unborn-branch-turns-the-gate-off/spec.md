@@ -143,5 +143,5 @@ Asked and answered 2026-10-03.
   needs no file mode and so no root skip. Then line 68 as Design 1 → green, with case 77 (AC3) unchanged.
 - [x] T2: a case for AC5 — an unborn branch, a finished spec and a CLEAN receipt naming `main`'s commit
   in its working tree — red after T1. Then `head` via `--verify -q` and the guard (Design 2 and 3) → green.
-- [ ] T3: the comments (Design 4), and `docs/BACKLOG.md`: #232 into row 1's `Item`, #178's description
+- [x] T3: the comments (Design 4), and `docs/BACKLOG.md`: #232 into row 1's `Item`, #178's description
   down to `:219` and `:221`. Full suite green, and `check-backlog-tracker.py` clean.

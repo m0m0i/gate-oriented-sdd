@@ -149,7 +149,10 @@ check_current_branch() {
   if [ ! -f "$spec" ]; then
     # Under a detached HEAD `branch` is the literal `HEAD`, so this asks for
     # `HEAD:.specs/HEAD/spec.md`, gets nothing, and returns — case 77 is unchanged and the scan
-    # goes on reporting the real branches. A repository with no commits returns here too.
+    # goes on reporting the real branches. An unborn branch with no spec in its working tree
+    # returns here too — a fresh `git init`, or `git checkout --orphan` — since `HEAD:` names no
+    # tree yet. That sentence was written before either reached this line: until #228 the line in
+    # front of the scan passed first. Cases 171 and 172.
     git cat-file -e "HEAD:$spec" 2>/dev/null || return 0   # in neither tree — nothing to gate
     tree=HEAD
     # Appended to every block below. The remedy names a file the author cannot see, so the
