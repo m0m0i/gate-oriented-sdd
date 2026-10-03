@@ -316,6 +316,59 @@ out=$(run_gate "$r")
 case "$out" in *"exit=2"*) report "parked unreviewed work blocks from a detached HEAD" ok ;;
                         *) report "parked unreviewed work blocks from a detached HEAD" no "$out" ;; esac
 
+# 171. #228 — an unborn branch is case 77's hole one step further. `git checkout --orphan` names a
+#      branch with no commit yet, and the gate used to ask `rev-parse` for HEAD's name, which
+#      answers by resolving a commit: it exited 128, and the line in front of both checks passed.
+#      The scan has to run from here as from anywhere, and say what it says from a born branch.
+r=$(make_repo unborn 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git checkout -q --orphan scratch ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"12-parked"*) c3=ok ;; *) c3=no ;; esac
+case "$err" in *"on a branch other than the one this turn is on"*) c4=ok ;; *) c4=no ;; esac
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "parked unreviewed work blocks from an unborn branch" ok \
+  || report "parked unreviewed work blocks from an unborn branch" no "exit=$c1 json=$c2 names-branch=$c3 scan-sentence=$c4 ($out)"
+
+# 172. #228 — the door that has to stay open. A fresh `git init` is an unborn branch too, with no
+#      spec and no other branch, and every install passes through it before its first commit. A
+#      gate that blocked here would block every install, which is how a gate gets switched off.
+r="$TMP/freshinit"; mkdir -p "$r/hooks" "$r/.steering"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/review-gate.sh" "$r/hooks/"
+printf -- '- Reviewer: test-reviewer\n- Source globs: %s\n' "'*.txt'" > "$r/.steering/tech.md"
+( cd "$r" && git init -q -b main ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in "{}
+exit=0") report "a fresh git init with no commits stays silent" ok ;;
+                *) report "a fresh git init with no commits stays silent" no "$out" ;; esac
+
+# 173. #228 — the unborn branch's own working tree counts, as any branch's does: #26 counts a spec
+#      that is not committed yet, and an unborn branch is a branch with nothing committed. Finished
+#      and unreviewed there is the same block, worded the same way, as on a born branch.
+r=$(make_repo unbornown 1)
+( cd "$r" && git checkout -q main && git checkout -q --orphan 13-unborn && mkdir -p .specs/13-unborn \
+  && printf '# Spec: unborn\n- Slug: 13-unborn   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' \
+       > .specs/13-unborn/spec.md ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"every task in .specs/13-unborn/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a finished spec in an unborn branch's own tree blocks without a receipt" ok \
+  || report "a finished spec in an unborn branch's own tree blocks without a receipt" no "exit=$c1 says-no-receipt=$c2 ($out)"
+
+# 174. #228 — git that cannot say which branch HEAD is on. `git symbolic-ref` exits 128 when the ref
+#      store cannot be read, and the line that used to ask `rev-parse` passed on that too, before
+#      either check. A garbage line in `packed-refs` produces it with no file mode involved, so the
+#      case needs no root skip. The fixture is one the gate is silent on when healthy — its only
+#      spec has a task open — so a block here is the new arm and nothing else.
+r=$(make_repo badrefs 1)
+( cd "$r" && git pack-refs --all && printf 'garbage\n' >> .git/packed-refs ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"which branch HEAD is on"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a ref store git cannot read blocks rather than passing" ok \
+  || report "a ref store git cannot read blocks rather than passing" no "exit=$c1 json=$c2 says-why=$c3 ($out)"
+
 # 78. Standing on a spec branch of your own does not buy silence about someone else's. Without
 #     this, `git checkout -b` onto a directory holding a task-less spec is a second one-command
 #     bypass: the current branch's own checks return early at "no tasks authored" and the

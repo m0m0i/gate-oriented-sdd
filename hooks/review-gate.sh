@@ -65,7 +65,27 @@ git rev-parse --git-dir >/dev/null 2>&1 || gate_pass
 if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
   cd "$repo_root"
 fi
-branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || gate_pass
+
+# Which branch HEAD is on, asked of the symbolic ref rather than of a commit, because an unborn
+# branch — `git checkout --orphan`, or any fresh `git init` — has a name and no commit yet. This
+# line used to be `git rev-parse --abbrev-ref HEAD … || gate_pass`, from the first commit, when the
+# gate asked only about the branch you stood on and no commit meant no spec. #26 made it ask about
+# the repository and turned every exit inside check_current_branch into a return, so that the scan
+# always runs; this line sits in front of both and kept its pass, so an unborn branch turned the one
+# enforced rule off until its first commit. #228. Nothing in front of the scan may pass.
+#
+# `symbolic-ref -q` answers by exit status, three ways, where `rev-parse` gave two:
+#
+#   0    a branch, born or unborn: its name, shortened the way `rev-parse --abbrev-ref` shortens it
+#   1    a detached HEAD: the literal `HEAD`, which both checks below already handle (case 77)
+#   128  a ref store git cannot read — damage, and a gate that cannot name the branch it stands on
+#        cannot say what it checked (case 174)
+branch=$(git symbolic-ref -q --short HEAD 2>/dev/null); rc=$?
+case "$rc" in
+  0) : ;;
+  1) branch=HEAD ;;
+  *) gate_block "Review gate: git could not say which branch HEAD is on (git symbolic-ref exited $rc), so this gate cannot tell which spec is yours or which branches hold finished work. That is a ref store git cannot read: run git status to see it, and repair the repository rather than treating this turn as a pass." ;;
+esac
 
 reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 [ -n "$reviewer" ] || reviewer="the reviewer named in .steering/tech.md"
