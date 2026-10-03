@@ -11,7 +11,8 @@
 - Acceptance criteria:
   - [ ] **AC1:** No bold span in `README.ja.md` has a closing `**` preceded by `。` and followed by a non-space character. The check pairs the `**` markers on each line and tests each closing one. It counts 2 before the change and 0 after, and the yomiyasu linter's `bold_not_rendered` agrees (2, then 0).
   - [ ] **AC2:** `observations.md` lists every changed sentence before and after, each with the English sentence it carries. The record also states, for each one, that the claim and its strength are unchanged (C-3).
-  - [ ] **AC3:** The count of half-width spaces between Latin text and Japanese in `README.ja.md` does not fall, and the count of `ではなく` is unchanged.
+  - [ ] **AC3:** No half-width space between Latin text and Japanese is removed where both of its neighbours survive the change. The count may fall only by spaces whose Latin neighbour the change itself removes or moves, and `observations.md` accounts for each one. The count of `ではなく` is unchanged.
+  - *Amended 2026-10-03, during T2:* AC3 first read "the count does not fall". It fell 380 → 377, and all three were spaces next to a token the change removes: the `**` on the two token counts, and `#26` moving to the start of its own sentence. No surviving Latin–Japanese pair lost its space. A raw count could not tell the house style being stripped from bold markers being removed, so the criterion now states the property the invariant protects.
   - [ ] **AC4:** `git diff --name-only origin/main` is confined to `README.ja.md` and this directory, and every validator on the `- Validators:` line exits 0 after the last write.
 - Out of scope: the 検証環境 line (#162); `README.md`; the remaining "same sentence ending three times in a row" lint findings in passages that are otherwise natural, which the skill's own rules say to leave alone.
 
