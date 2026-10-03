@@ -187,7 +187,10 @@ check_current_branch() {
   fi
 
   receipt=".specs/$branch/.review-receipt"
-  head=$(git rev-parse HEAD 2>/dev/null || echo '')
+  # Empty on an unborn branch, which has no commit. `git rev-parse HEAD` there prints its argument
+  # before failing, so the `|| echo ''` this line used to carry appended to the literal `HEAD`
+  # rather than replacing it, and that word would have reached every reader below as a tip. #228.
+  head=$(git rev-parse --verify -q HEAD 2>/dev/null) || head=''
 
   # Two arms, because there are two ways work reaches the base and only one of them leaves a
   # parent link. Ancestry is kept and asked first: it is exact when it fires, costs one call,
@@ -207,6 +210,20 @@ check_current_branch() {
   #
   # Neither is the moment to demand a review. Both are an empty state below.
   state=$(gate_spec_review_state ".specs/$branch" "$head" "$tree")
+
+  # An unborn branch has no commit, so a receipt in its working tree cannot describe code on it:
+  # whatever reviewed_sha names is another branch's. Only the empty state needs saying so — every
+  # other receipt state already blocks — and it is empty here because the staleness diff compares
+  # the receipt against a HEAD that does not exist and reads git's refusal as "nothing changed",
+  # which is #232's line. Asked here rather than as a library state because only this reader can
+  # stand on an unborn branch: the scan reads refs, which have tips, and CI reads a pull request's
+  # head. Case 175.
+  if [ -z "$head" ] && [ -z "$state" ] && [ -f "$receipt" ] \
+       && [ "$(gate_total_tasks "$spec")" -gt 0 ] 2>/dev/null \
+       && [ "$(gate_open_tasks "$spec")" -eq 0 ] 2>/dev/null; then
+    gate_block "Review gate: every task in $spec is ticked and $receipt records a review, but this branch has no commits yet, so that review cannot describe any code on it. Commit the work, run $reviewer on the branch diff, and rewrite $receipt."
+  fi
+
   case "$state" in
     '')
       return 0 ;;

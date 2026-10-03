@@ -369,6 +369,24 @@ case "$err" in *"which branch HEAD is on"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a ref store git cannot read blocks rather than passing" ok \
   || report "a ref store git cannot read blocks rather than passing" no "exit=$c1 json=$c2 says-why=$c3 ($out)"
 
+# 175. #228 — a receipt on an unborn branch. The branch has no commit, so whatever reviewed_sha names
+#      is some other branch's, and the review cannot describe code here. Reached through the
+#      staleness diff, which compares the receipt against a HEAD that does not exist and reads
+#      git's refusal as "nothing changed" — #232's line — so with a CLEAN receipt naming `main`'s
+#      commit, the state comes back empty and the gate would pass. Red against case 173's fix alone.
+r=$(make_repo unbornrcpt 1)
+( cd "$r" && git checkout -q main && mainsha=$(git rev-parse HEAD) \
+  && git checkout -q --orphan 13-unborn && mkdir -p .specs/13-unborn \
+  && printf '# Spec: unborn\n- Slug: 13-unborn   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' \
+       > .specs/13-unborn/spec.md \
+  && printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$mainsha" > .specs/13-unborn/.review-receipt ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"has no commits yet"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a receipt on an unborn branch blocks, having no commit to describe" ok \
+  || report "a receipt on an unborn branch blocks, having no commit to describe" no "exit=$c1 json=$c2 says-why=$c3 ($out)"
+
 # 78. Standing on a spec branch of your own does not buy silence about someone else's. Without
 #     this, `git checkout -b` onto a directory holding a task-less spec is a second one-command
 #     bypass: the current branch's own checks return early at "no tasks authored" and the

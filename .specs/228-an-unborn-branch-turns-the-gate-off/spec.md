@@ -141,7 +141,7 @@ Asked and answered 2026-10-03.
 - [x] T1: cases for AC1, AC2, AC4 and AC6 (AC1, AC4 and AC6 red against `6b5047e`'s `hooks/`; AC2 green
   before and after, as the fresh-install pin). AC6's fixture is the garbage `packed-refs` line, which
   needs no file mode and so no root skip. Then line 68 as Design 1 → green, with case 77 (AC3) unchanged.
-- [ ] T2: a case for AC5 — an unborn branch, a finished spec and a CLEAN receipt naming `main`'s commit
+- [x] T2: a case for AC5 — an unborn branch, a finished spec and a CLEAN receipt naming `main`'s commit
   in its working tree — red after T1. Then `head` via `--verify -q` and the guard (Design 2 and 3) → green.
 - [ ] T3: the comments (Design 4), and `docs/BACKLOG.md`: #232 into row 1's `Item`, #178's description
   down to `:219` and `:221`. Full suite green, and `check-backlog-tracker.py` clean.
