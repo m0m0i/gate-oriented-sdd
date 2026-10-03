@@ -145,3 +145,25 @@ Asked and answered 2026-10-03.
   in its working tree — red after T1. Then `head` via `--verify -q` and the guard (Design 2 and 3) → green.
 - [x] T3: the comments (Design 4), and `docs/BACKLOG.md`: #232 into row 1's `Item`, #178's description
   down to `:219` and `:221`. Full suite green, and `check-backlog-tracker.py` clean.
+
+## 4. Review findings, and what this branch did with each
+
+`gate-sdd-reviewer` as a subagent at `9799408`: CLEAN in one round, 0 BLOCKER, 0 HIGH. The branch stopped there for
+source. Acting on a finding below HIGH in `hooks/` would re-stale the receipt. Two of the findings concern code that
+#233 rewrites anyway, and the one in `docs/` re-stales nothing.
+
+- **MEDIUM, fixed after the receipt:** row 1 grew past the counts two sentences still stated. "Three of these
+  seven" is now "three of the seven it then held", and row 2's "seven live fail-opens" no longer gives a number, so it
+  cannot drift again. Only `docs/BACKLOG.md` changed, and it is outside `- Source globs:`.
+- **INFO, measured and filed as #233:** a tag sharing a spec branch's name makes both naming commands shorten the
+  branch to `heads/<name>`. The gate then looks for a slug nobody wrote, from both sides. It exits 0 from `main` and
+  on the branch, with `6dca392`'s hooks and with this branch's. The fault predates this branch and needs no damage.
+  #233 is placed second in row 1.
+- **LOW, rides with #233:** the line-68 comment says `symbolic-ref --short` shortens "the way `rev-parse
+  --abbrev-ref` shortens it". Measured on a branch named `origin` beside `refs/remotes/origin/HEAD`, the first gives
+  `origin` and the second gives `heads/origin`. There is no false block and no fail-open, since the gate still blocks.
+  But the comment overstates what was measured, and #233's fix (full refnames on both sides) rewrites that line.
+- **LOW, rides with #233:** the scan's comment at `:282–284` still names `rev-parse --abbrev-ref` as the source of the
+  detached literal `HEAD`. Line 86's arm sets it now. The comment sits on the naming #233 rewrites.
+- **INFO, a step and not a finding:** the version bump. `hooks/` ships, so `implement` bumps the patch after this
+  receipt, and the manifests are outside `- Source globs:`.
