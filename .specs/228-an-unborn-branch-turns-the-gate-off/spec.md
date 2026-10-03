@@ -1,5 +1,5 @@
 # Spec: an unborn branch turns the review gate off
-- Slug: 228-an-unborn-branch-turns-the-gate-off   Issue: 228   Type: bug   Status: draft
+- Slug: 228-an-unborn-branch-turns-the-gate-off   Issue: 228   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-10-03
 
 ## 1. Requirements (WHAT / WHY)
