@@ -1,6 +1,6 @@
 # Spec: Two unrendered bold spans, and the Japanese README's machine-written passages
 
-- Slug: 229-ja-bold-and-machine-written-passages   Issue: 229   Type: chore   Status: approved
+- Slug: 229-ja-bold-and-machine-written-passages   Issue: 229   Type: chore   Status: done
 - Author: m0m0i   Date: 2026-10-03
 
 ## 1. Requirements (WHAT / WHY)
