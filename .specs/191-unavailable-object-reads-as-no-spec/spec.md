@@ -1,5 +1,5 @@
 # Spec: an object git cannot get reads as a spec that is not there
-- Slug: 191-unavailable-object-reads-as-no-spec   Issue: 191   Type: bug   Status: approved
+- Slug: 191-unavailable-object-reads-as-no-spec   Issue: 191   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-10-04
 
 ## 1. Requirements (WHAT / WHY)
@@ -32,7 +32,7 @@
   - `gate_work_reached_base`'s step 1 (`hooks/gate-lib.sh:304–305`), the same test. Its failure leaves the skip unfired, which is the safe direction, and it is #182's function.
   - #178 (the scan's `|| continue` on a tip that does not resolve), #176 (no default arm on the `case`) and #232.
   - Reading git's stderr. Exit statuses and stdout only, so the issue's stated risk, a match loose enough to block every fresh clone, has nothing to be loose about.
-  - The checker's failure footer, which says "carries finished work that no review covers" under every state. Under an unreadable spec that is not known; the line above the footer says which state it is.
+  - The checker's failure footer, and the scan's headline and footer, which speak of finished work nobody reviewed and offer review, merge or delete under every state. Under an unreadable spec that is not known, and none of the three clears it. The line naming the branch says which state it is, and why.
 
 ### Clarifications
 
@@ -58,10 +58,10 @@ Asked and answered 2026-10-04.
 - **Blast radius:**
   - **A full, healthy clone.** Every object is present, so "the tree names it" and "`cat-file -e` succeeds" are the same answer, and every existing case keeps its verdict.
   - **A partial clone, online.** `git show` makes the lazy fetch `cat-file -e` used to make. One fetch, same answer.
-  - **A partial clone, offline.** A local branch whose spec blob was never fetched now blocks (AC1). That includes a shipped, undeleted branch in that state when `gate_work_reached_base` cannot answer offline either. Louder, which case 141 already says is allowed where quieter is not.
+  - **A partial clone, offline.** A local branch whose spec blob was never fetched now blocks (AC1). That includes a shipped, undeleted branch in that state when `gate_work_reached_base` cannot answer offline either. Louder, which case 141 already says is allowed where quieter is not. A tree that was never fetched is the same block one level up, and it reaches the current branch even when that branch has no spec, because the gate cannot tell (AC5): a treeless clone under a sparse index that excludes `.specs/`.
   - **A fresh clone of any kind.** Its one local branch is the base, which the scan skips, and it has no `.specs/<default branch>/`, which is a 1. AC6 pins the blobless one.
   - **Callers.** `_gate_read` receives a full ref from the scan, `HEAD` from the current branch and a sha from CI, and `ls-tree` takes all three. CI's path through the checker is online and unchanged; a pull request with no spec still exits 0 with the same sentence.
-  - **Skew.** A new library under an older gate fixes the scan and leaves that gate's own line as it was. A new gate or checker over an older library is AC8.
+  - **Skew.** A new library under an older gate fixes the scan and leaves that gate's own line as it was, and under an older checker that checker's own line still says "carries no spec". A new gate or checker over an older library is AC8.
 
 - **Why this cannot recur:** the three sites no longer carry the test, and a needle case holds that. Outside whole-line comments, `cat-file -e` may appear in `hooks/*.sh` and `assets/*.sh` only on `gate_work_reached_base`'s two lines, which are out of scope above. Measured at `dbf51df`, the needle finds five lines: those two and the three sites. The next existence test that asks the object when it means the tree goes red before it ships.
 
@@ -71,3 +71,16 @@ Asked and answered 2026-10-04.
 - [x] T2: the gate. Cases for AC2, AC5's current-branch half and AC8's gate half, red. Then the fallback, the two tree-read sentences and the skew guard → green.
 - [x] T3: the checker. Cases for AC3, AC5's checker half and AC8's checker half, red. Then `check-unreviewed-work.sh` → green.
 - [x] T4: the needle case, and the comments this change made false (case 146's "not pinned" note, the fallback's own). Full suite green.
+
+## 4. Review findings, and what this branch did with each
+
+`gate-sdd-reviewer` as a subagent, round 1 at `1fc42f7`: **CLEAN**, 0 BLOCKER, 0 HIGH. That is the stop. It found no input that blocked at `dbf51df` and passes now, and skew fails closed in both directions. Its allow-list runs the validators and no mutation, so it checked AC7 and the "Run, not reasoned" notes by reading. Nothing below changed shipped source after the review, which would have orphaned the receipt; the three that want a code change are in the work log's next steps.
+
+- **MEDIUM, recorded, not changed (G-4): `unget_tree` builds only the status-128 shape of an unreadable tree.** A tip whose own tree is missing makes `ls-tree` exit 128. A missing subtree on the way to the spec makes it exit 1, the number the reader uses for "read, and not named", and no case holds that shape. The code is right, since any non-zero status is a 2, but a refactor that passed `ls-tree`'s status through would keep 194, 198 and 199 green. The deletion fixtures this branch began with did cover it, and the move to built fixtures at T3 lost it. A `git mktree --missing` sibling of `unget_tree` restores it.
+- **LOW, measured after the review, recorded, not changed (G-6): two environment variables make every tree read a 2.** `ls-tree` takes its path as a pathspec and exits 128 under `GIT_ICASE_PATHSPECS=1` or `GIT_GLOB_PATHSPECS=1`, where `cat-file -e` took no pathspec and exits 0. With either set, an unmerged branch whose spec is not in the working tree blocks as unreadable, with a partial-clone diagnosis. It fails closed, in an environment someone has to set up on purpose. The fix is to clear both on that one call.
+- **LOW, taken in the documents:** the scan's headline and footer offer review, merge or delete for a branch listed as unreadable, as the checker's footer does. Out of scope now names both, and `docs/DESIGN.md`'s row says only what is true: the scan and the checker name the cause, and the current-branch fallback alone carries a remedy.
+- **LOW, recorded, not changed:** case 196's first half names a constraint it cannot fail for. What it can catch is a scan widened past `refs/heads/`. Its over-determination was already declared.
+- **LOW, recorded, not changed:** two comments. `check-unreviewed-work.sh:70–72` describes a path the new guard exits ahead of, and `gate-lib.sh`'s state table still defines the two unreadable states as "is there and cannot be read", which an unreadable tree does not establish.
+- **INFO, taken:** Blast radius gains the unfetched-tree shape, and Skew the older-checker direction.
+- **INFO, a step and not a finding:** the version bump. `implement` makes it after the receipt.
+- **INFO:** the reviewer's allow-list cannot read a commit body, apply a mutation, or run the suite against another commit. The same gap as #237's C-8 next step.
