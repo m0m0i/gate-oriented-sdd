@@ -66,6 +66,14 @@ if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
   cd "$repo_root"
 fi
 
+# The two readers below came with #233, so a gate-lib.sh copied before them is a library older
+# than this gate. Unguarded, a missing gate_head_branch exits 127 and reaches the naming line's
+# damage arm, which sends the person to repair a healthy repository; a missing gate_ref_commit
+# empties the base without a word. quality-gate.sh guards its reader the same way. Case 190.
+for _gate_fn in gate_head_branch gate_ref_commit; do
+  command -v "$_gate_fn" >/dev/null 2>&1 || gate_block "Review gate: gate-lib.sh predates $_gate_fn, so this gate cannot name the branch HEAD is on or the branch work ships to. Re-copy the plugin's hooks/ into this project and run again rather than treating this turn as a pass."
+done
+
 # Which branch HEAD is on, asked of the symbolic ref rather than of a commit, because an unborn
 # branch — `git checkout --orphan`, or any fresh `git init` — has a name and no commit yet. This
 # line used to be `git rev-parse --abbrev-ref HEAD … || gate_pass`, from the first commit, when the

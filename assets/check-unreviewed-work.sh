@@ -57,7 +57,8 @@ fi
 # shares it, and git then lengthens the branch to `heads/<name>` or resolves the tag in its
 # place — either way this said "carries no spec" about a branch that carries one. #233. Against
 # a library older than those readers each comes back empty, which reaches the exit-1 messages
-# below; no guard is added for them, because one would fail CI, which calls neither.
+# below. No guard is added for them: both calls sit on paths CI never takes, and both already
+# fail closed there.
 branch=${1:-$(gate_head_branch 2>/dev/null)}
 if [ -z "$branch" ] || [ "$branch" = HEAD ]; then
   echo "check-unreviewed-work: no branch name available — pass the pull request's head branch as the first argument." >&2

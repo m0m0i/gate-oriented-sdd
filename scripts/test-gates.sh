@@ -487,28 +487,47 @@ case "$err" in *"no resolvable default branch"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a tag named like a full branch ref is not read as the base" ok \
   || report "a tag named like a full branch ref is not read as the base" no "exit=$c1 names-branch=$c2 no-base-note=$c3 ($out)"
 
+# 191. #233 — pin, green before the fix and after: gate_ref_commit follows the symbolic
+#      `refs/remotes/origin/HEAD`. In cases 178 and 182 it points at `origin/main`, the next
+#      candidate, so they pass whether or not it is followed. Here it points at `origin/trunk`,
+#      which has no `origin/main` or `origin/master` behind it, and local `main` has merged the
+#      unreviewed branch: if `show-ref --verify` stopped following the symref, the base would fall
+#      through to `main` and the branch would read as shipped. Review round 1's LOW.
+r=$(make_repo symrefbase 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git update-ref refs/remotes/origin/trunk main \
+  && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk && git merge -q 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "the base follows origin/HEAD to a branch that is not the next candidate" ok \
+  || report "the base follows origin/HEAD to a branch that is not the next candidate" no "exit=$c1 names-branch=$c2 ($out)"
+
 # 189. #233 — the class rather than the instance. A short ref name is ambiguous whenever another
 #      ref shares it, and every place this repository used one to name a branch hid that branch:
 #      the gate's two naming lines, its base, the by-hand checker and the digest. Cases 176–188
-#      pin those five sites; this one goes red at the sixth, before it ships. It reads every
-#      non-comment line of the shipped shell that names a branch, so prose citing the old commands
-#      as history stays sayable. `rev-parse --short <sha>` abbreviates a commit, not a ref, and is
-#      not matched. The matcher is exercised on known lines first, and awk's own status is read,
-#      so a broken pattern or an empty file list cannot report ok having checked nothing.
+#      pin those five sites; this one goes red at the sixth, before it ships. It reads every line
+#      of the shipped shell except whole-line comments, which is where prose cites the old
+#      commands as history. A trailing comment is NOT stripped: the first version cut from the
+#      first whitespace-`#` on the line, and `echo "see #16"; <a short-name read>` — an issue cite
+#      in a message, this repository's house style — lost the read with the comment. Review round
+#      1's HIGH. `rev-parse --short <sha>` abbreviates a commit, not a ref, and is not matched.
+#      The matcher is exercised on known lines first, and awk's own status is read, so a broken
+#      pattern or an empty file list cannot report ok having checked nothing.
 short_ref_re='refname:short|--abbrev-ref|symbolic-ref.*--short'
-short_ref_reads() {  # <file>... — prints file:line: text for each non-comment short-name read
-  awk -v re="$short_ref_re" '{ l = $0; if (l ~ /^[[:space:]]*#/) next; sub(/[[:space:]]#.*/, "", l)
-                               if (l ~ re) print FILENAME ":" FNR ": " l }' "$@"
+short_ref_reads() {  # <file>... — prints file:line: text for each short-name read outside a comment line
+  awk -v re="$short_ref_re" '!/^[[:space:]]*#/ && $0 ~ re { print FILENAME ":" FNR ": " $0 }' "$@"
 }
 printf '%s\n' 'b=$(git rev-parse --abbrev-ref HEAD)' 'x=${y#z}; b=$(git symbolic-ref -q --short HEAD)' \
-  "for r in \$(git for-each-ref --format='%(refname:short)')" > "$TMP/needle-hit.sh"
-printf '%s\n' '# b=$(git rev-parse --abbrev-ref HEAD)' 'b=$(git symbolic-ref -q HEAD)  # not --abbrev-ref' \
+  "for r in \$(git for-each-ref --format='%(refname:short)')" \
+  'echo "see #16"; b=$(git rev-parse --abbrev-ref HEAD)' 'b=$(git symbolic-ref -q HEAD)  # not --abbrev-ref' \
+  > "$TMP/needle-hit.sh"
+printf '%s\n' '# b=$(git rev-parse --abbrev-ref HEAD)' '    # b=$(git rev-parse --abbrev-ref HEAD)' \
   's=$(git rev-parse --short "$sha")' > "$TMP/needle-miss.sh"
 n_hit=$(short_ref_reads "$TMP/needle-hit.sh" | wc -l | tr -d ' ')
 n_miss=$(short_ref_reads "$TMP/needle-miss.sh" | wc -l | tr -d ' ')
-reads=$(short_ref_reads "$ROOT"/hooks/*.sh "$ROOT/assets/check-unreviewed-work.sh"); rc=$?
-if [ "$n_hit$n_miss" != 30 ]; then
-  report "no shipped shell names a branch by git's short form" no "matcher self-test: $n_hit of 3 hits, $n_miss of 0 misses"
+reads=$(short_ref_reads "$ROOT"/hooks/*.sh "$ROOT"/assets/*.sh); rc=$?
+if [ "$n_hit$n_miss" != 50 ]; then
+  report "no shipped shell names a branch by git's short form" no "matcher self-test: $n_hit of 5 hits, $n_miss of 0 misses"
 elif [ "$rc" -ne 0 ]; then
   report "no shipped shell names a branch by git's short form" no "awk exited $rc, so nothing was read"
 elif [ -n "$reads" ]; then
@@ -517,7 +536,32 @@ else
   report "no shipped shell names a branch by git's short form" ok
 fi
 
-# 78.Standing on a spec branch of your own does not buy silence about someone else's. Without
+# 190. #233 — a gate-lib.sh that predates the two readers this spec added. Without a guard the
+#      gate still blocked, since a missing gate_head_branch exits 127 and reaches the naming
+#      line's `*)` arm — but that arm says the ref store is damaged and sends the person to repair
+#      a healthy repository, every turn. A missing gate_ref_commit was quieter: the base came back
+#      empty and the gate went on, naming every branch as unshipped. Either one is the library
+#      being older than the gate, and the remedy is quality-gate.sh's: re-copy hooks/. Review
+#      round 1's MEDIUM. The fixture is one the gate is silent on when healthy.
+for fn in gate_head_branch gate_ref_commit; do
+  r=$(make_repo "skew-$fn" 1)
+  python3 - "$r" "$fn" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh")
+src = p.read_text()
+i = src.index(sys.argv[2] + "() {")
+j = src.index("\n}\n", i) + 3
+p.write_text(src[:i] + src[j:])
+PYEOF
+  out=$(run_gate "$r"); err=$(cat "$TMP/err")
+  case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+  case "$out" in *"predates $fn"*"Re-copy the plugin's hooks/"*) c2=ok ;; *) c2=no ;; esac
+  case "$out" in *"ref store"*) c3=no ;; *) c3=ok ;; esac
+  [ "$c1$c2$c3" = "okokok" ] && report "a gate-lib without $fn blocks the review gate with the re-copy remedy" ok \
+    || report "a gate-lib without $fn blocks the review gate with the re-copy remedy" no "exit=$c1 names-fn-and-remedy=$c2 no-damage-claim=$c3 ($out)"
+done
+
+# 78. Standing on a spec branch of your own does not buy silence about someone else's. Without
 #     this, `git checkout -b` onto a directory holding a task-less spec is a second one-command
 #     bypass: the current branch's own checks return early at "no tasks authored" and the
 #     repository-wide question is never reached.
