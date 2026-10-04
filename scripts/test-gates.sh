@@ -34,22 +34,23 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# TWENTY-ONE sites. The first cut converted ten and said seven; the recount that caught that
+# TWENTY-THREE sites. The first cut converted ten and said seven; the recount that caught that
 # said twelve and nine, in the paragraph whose subject is not counting. Two of the three the
 # first cut missed were worse than any half: they called `report ... ok` on the skip path,
 # manufacturing a pass and incrementing the counter. Those two are whole cases and now report
 # nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
 #
-# How to get twenty-one: count the GUARDS, not the `chmod 000` lines. There are nineteen of
+# How to get twenty-three: count the GUARDS, not the `chmod 000` lines. There are nineteen of
 # those and EIGHTEEN guards among them, because case 14 has no self-disabling branch — under
 # root it goes red rather than skipping, which is the safe direction and deliberately left
 # alone. Do not "fix" that asymmetry: `docs/BACKLOG.md` row 1 asked for it and was corrected
-# rather than obeyed, on #39's branch. The last three guards are not permission-based at all —
+# rather than obeyed, on #39's branch. The last five guards are not permission-based at all —
 # `bootstrap/symlinked-slug` and `bootstrap/dangling-symlink` self-disable when `ln -s` fails,
-# and the shallow-clone guard when the fixture cannot be shallowed. 18 + 3 = 21.
+# the shallow-clone guard when the fixture cannot be shallowed, and #191's two blobless-clone
+# guards when the clone comes back with every blob in it. 18 + 5 = 23.
 #
 # The old figure was 13, by a formula that omitted the shallow-clone guard, so it was already
-# short by one on `main` against fourteen sites, before #39 added six and #194 one. Counted by command and
+# short by one on `main` against fourteen sites, before #39 added six, #194 one and #191 two. Counted by command and
 # then RECOUNTED by command after the last case landed, which is the step the first attempt
 # skipped: it said seventeen and nineteen, correct until review round 3 added one more of
 # each. Both recipes filter comments, or they match the line documenting them and return one
@@ -1224,6 +1225,122 @@ case "$err" in *"until it is committed"*) c3=ok ;; *) c3=no ;; esac
   && report "the receipt is read from the tree the spec was read from" ok \
   || report "the receipt is read from the tree the spec was read from" no \
      "committed-clears=$c1 worktree-only-blocks=$c2 says-why=$c3"
+
+# --- review-gate.sh, an object git cannot get (#191) ------------------------------
+#
+# Cases 146–150 are about WHICH tree answers. These are about a tree that says "the spec is
+# here" of an object the repository does not have. Two fixtures reach that. A partial clone
+# that cannot reach its remote is the ordinary one, and cases 195 and 196 build it. The others
+# take one loose object out of `.git/objects/`: the same state with no network in the fixture,
+# and what damage looks like.
+
+# Take one object out of a repository's object store. It fails when the object is not a loose
+# file, and every case below reads that status, so none can pass on a fixture that never broke.
+drop_object() {  # <repo> <object id>
+  _o="$1/.git/objects/$(printf '%s' "$2" | cut -c1-2)/$(printf '%s' "$2" | cut -c3-)"
+  [ -f "$_o" ] && rm -f "$_o"
+}
+
+# 192. #191 AC1 — the scan. `_gate_read` asked `git cat-file -e <ref>:<path>`, which exits
+#      non-zero both when the tree does not name the path and when it names an object that is
+#      not here, and read both as "no spec": the gate printed `{}` over a finished, unreviewed
+#      branch. Case 76's fixture, with the spec's blob gone.
+r=$(make_repo objgone 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+id=$( cd "$r" && git rev-parse "12-parked:.specs/12-parked/spec.md" )
+drop_object "$r" "$id" && c0=ok || c0=no
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"  12-parked — its spec cannot be read"*"partial clone"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "a parked spec whose object git cannot get blocks from another branch" ok \
+  || report "a parked spec whose object git cannot get blocks from another branch" no "object-dropped=$c0 exit=$c1 json=$c2 names-branch-and-cause=$c3 ($out)"
+
+# 193. #191 AC4 — the receipt is read through the same line. Unavailable, it read as a receipt
+#      nobody wrote. That blocks, so it is not a fail-open, but the remedy it names is to run a
+#      review that has already run. Case 81's fixture, with the receipt's blob gone.
+r=$(make_repo rcptobjgone 1); park_spec "$r" 12-parked 0 CLEAN
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+id=$( cd "$r" && git rev-parse "12-parked:.specs/12-parked/.review-receipt" )
+drop_object "$r" "$id" && c0=ok || c0=no
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — its receipt cannot be read"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"no reviewer receipt exists"*) c3=no ;; *) c3=ok ;; esac
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "a parked receipt whose object git cannot get is unreadable, not unwritten" ok \
+  || report "a parked receipt whose object git cannot get is unreadable, not unwritten" no "object-dropped=$c0 exit=$c1 says-unreadable=$c2 not-unwritten=$c3 ($out)"
+
+# 194. #191 AC5, the scan — the same flattening one level up. With the slug's own tree object
+#      gone nothing can say whether the spec is there, and `cat-file -e` exits 128, which read
+#      as absent like any other non-zero status. `rev-parse --verify -q <ref>:<path>`, the
+#      replacement the triage proposed, exits 1 here with nothing on stderr, as it does for a
+#      path that is not there, so this case is also what holds the reader to `ls-tree`.
+#
+#      RED-CAPABLE under the named mutation "the reader asks rev-parse": gate_tree_names built
+#      on `git rev-parse --verify -q "$1:$2"`, 0 and 1 passed through and anything else a 2.
+#      Run, not reasoned: it takes this case red and no other.
+r=$(make_repo treegone 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+id=$( cd "$r" && git rev-parse "12-parked:.specs/12-parked" )
+drop_object "$r" "$id" && c0=ok || c0=no
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — its spec cannot be read"*) c2=ok ;; *) c2=no ;; esac
+[ "$c0$c1$c2" = "okokok" ] && report "a parked branch whose spec directory's tree cannot be read blocks" ok \
+  || report "a parked branch whose spec directory's tree cannot be read blocks" no "object-dropped=$c0 exit=$c1 names-branch=$c2 ($out)"
+
+# 195. #191 AC1 — the issue's own environment, with no damage. A blobless clone fetches a blob
+#      when something reads it, so a branch made without a checkout has a tree that names its
+#      spec and no blob behind the name. With the remote out of reach that fetch fails, and the
+#      gate read the failure as a branch with no spec. `origin` is re-pointed at a path that
+#      does not exist, which is offline as far as git can tell.
+r=$(make_repo blobless 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git config uploadpack.allowFilter true ) >/dev/null 2>&1
+id=$( cd "$r" && git rev-parse "12-parked:.specs/12-parked/spec.md" )
+bc="$TMP/blobless-clone"
+if git clone -q --filter=blob:none "file://$r" "$bc" 2>/dev/null \
+   && ( cd "$bc" && git branch -q 12-parked origin/12-parked \
+        && git rev-list --objects --missing=print 12-parked | grep -q "^?$id" ) 2>/dev/null; then
+  ( cd "$bc" && git remote set-url origin "file://$TMP/no-such-remote" ) >/dev/null 2>&1
+  out=$(run_gate "$bc"); err=$(cat "$TMP/err")
+  case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+  case "$err" in *"  12-parked — its spec cannot be read"*) c2=ok ;; *) c2=no ;; esac
+  [ "$c1$c2" = "okok" ] && report "an offline blobless clone blocks on a branch whose spec was never fetched" ok \
+    || report "an offline blobless clone blocks on a branch whose spec was never fetched" no "exit=$c1 names-branch=$c2 ($out)"
+else
+  note_skip "an offline blobless clone blocks on a branch whose spec was never fetched" \
+            "git clone --filter=blob:none over file:// did not leave the spec's blob out here"
+fi
+
+# 196. #191 AC6 — the issue's regression risk, pinned. Green before the fix and after, both
+#      halves, because the risk is the fix: a reader that blocked whenever an object was
+#      missing somewhere would block every partial clone on install.
+#
+#        a fresh blobless clone, offline, on its default branch      -> silent
+#        the same clone with the parked branch checked out once      -> the ordinary block
+#
+#      The first has one local branch, which is the base, and blobs missing behind every other
+#      ref. The second fetched the branch's blobs at that checkout, so offline it is read like
+#      any full clone's branch and says what case 76 says.
+bc="$TMP/blobless-fresh"; bd="$TMP/blobless-fetched"
+if git clone -q --filter=blob:none "file://$r" "$bc" 2>/dev/null \
+   && git clone -q --filter=blob:none "file://$r" "$bd" 2>/dev/null \
+   && ( cd "$bc" && git rev-list --objects --missing=print --all | grep -q "^?$id" ) 2>/dev/null; then
+  ( cd "$bc" && git remote set-url origin "file://$TMP/no-such-remote" ) >/dev/null 2>&1
+  out=$(run_gate "$bc")
+  case "$out" in "{}
+exit=0") c1=ok ;; *) c1=no ;; esac
+  ( cd "$bd" && git checkout -q 12-parked && git checkout -q main \
+    && git remote set-url origin "file://$TMP/no-such-remote" ) >/dev/null 2>&1
+  out=$(run_gate "$bd"); err=$(cat "$TMP/err")
+  case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+  case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c3=ok ;; *) c3=no ;; esac
+  [ "$c1$c2$c3" = "okokok" ] && report "a blobless clone is silent when fresh and blocks as usual once the branch is fetched" ok \
+    || report "a blobless clone is silent when fresh and blocks as usual once the branch is fetched" no "fresh-silent=$c1 fetched-blocks=$c2 ordinary-sentence=$c3 ($out)"
+else
+  note_skip "a blobless clone is silent when fresh and blocks as usual once the branch is fetched" \
+            "git clone --filter=blob:none over file:// did not leave the spec's blob out here"
+fi
 
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the

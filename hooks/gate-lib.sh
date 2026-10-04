@@ -158,6 +158,31 @@ gate_ref_commit() {  # <full refname>
   git rev-parse --verify -q "$1^{commit}" 2>/dev/null
 }
 
+# Does <ref>'s tree name <path>? Asked of the tree, never of the object behind the name.
+#
+# This used to be asked as `git cat-file -e <ref>:<path>`, which is two questions with one
+# status between them: whether the tree names the path, and whether the object it names is in
+# this repository. Every reader took the non-zero status as "no spec", so a spec whose blob git
+# could not get — a partial clone that cannot reach its remote, or a damaged object store — was
+# a branch with nothing to review. #191.
+#
+#   0  the tree names the path
+#   1  the tree was read, and does not
+#   2  git could not read the tree: any other status from `ls-tree`
+#
+# `ls-tree` rather than `rev-parse --verify -q <ref>:<path>`, which the issue's triage measured
+# for the blob and which is blind one level up: with a tree object on the way to the path gone
+# it exits 1 and prints nothing, exactly as for a path that is not there, where `ls-tree` exits
+# non-zero. Case 194. It reads trees only, so in a blobless clone it answers offline and fetches
+# nothing. `--full-tree` because without it the path is relative to the working directory.
+#
+# A ref with no commit is a 2, not a 1: `ls-tree` cannot tell an unborn HEAD from a ref it could
+# not read. The one caller that can stand on an unborn branch rules that out before asking.
+gate_tree_names() {  # <ref> <path from the repository root>
+  _tn=$(git ls-tree --full-tree "$1" -- "$2" 2>/dev/null) || return 2
+  [ -n "$_tn" ]
+}
+
 # Read a file from the working tree, or from a branch's own tree when <ref> is given.
 #
 # Absence returns 1 and unreadability returns 2, so the two stay distinguishable: the gate
@@ -169,10 +194,14 @@ _gate_read() {  # <ref, empty for the working tree> <path>
     [ -r "$2" ] || return 2
     cat -- "$2"
   else
-    git cat-file -e "$1:$2" 2>/dev/null || return 1
-    # The existence test passing and the read failing is object-store corruption, which the
-    # working-tree branch above distinguishes and this one used to flatten into "empty file"
-    # — and an empty spec counts zero tasks, which is silence.
+    # The tree's answer first and the object's second, so that 1 stays what it is above: a
+    # tree that was read and does not name the path. Everything git could not read is a 2,
+    # whether that is the tree or the blob the tree names.
+    gate_tree_names "$1" "$2"; _grc=$?
+    [ "$_grc" -eq 0 ] || return "$_grc"
+    # Named and unreadable is an object this repository does not have. The working-tree branch
+    # above distinguishes that, and this one used to flatten it into "empty file" — and an
+    # empty spec counts zero tasks, which is silence.
     git show "$1:$2" 2>/dev/null || return 2
   fi
 }
@@ -398,11 +427,18 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
 
 # One state, one sentence — for callers naming a branch that is not the one in hand, where
 # the tailored second person of the gate's own messages would be wrong.
+#
+# Such a branch is read from its own tree, where "cannot be read" is never a file mode: it is
+# an object git could not get. Until #191 the reader took that for a file that was not there,
+# so the two unreadable sentences were all but unreachable and said only that the file existed.
+# They name the cause now, because someone reading them in a partial clone with no network has
+# nothing to repair and needs to be told so.
 gate_review_state_sentence() {  # <state from gate_spec_review_state>
+  _rwhy='from its own tree, because git cannot get an object that tree needs: a partial clone that cannot reach its remote, or a damaged object store'
   case "$1" in
-    unreadable)         printf 'its spec exists and cannot be read' ;;
+    unreadable)         printf 'its spec cannot be read %s' "$_rwhy" ;;
     no-receipt)         printf 'every task is ticked and no reviewer receipt exists' ;;
-    receipt-unreadable) printf 'its receipt exists and cannot be read' ;;
+    receipt-unreadable) printf 'its receipt cannot be read %s' "$_rwhy" ;;
     verdict=*)          printf "the recorded review verdict is '%s', not CLEAN" "${1#verdict=}" ;;
     unresolved-sha=*)   printf "its receipt records reviewed_sha '%s', which cannot be resolved here" "${1#unresolved-sha=}" ;;
     stale=*)            _r=${1#stale=}; printf 'source changed since the review at %s: %s' "${_r%% *}" "${_r#* }" ;;
