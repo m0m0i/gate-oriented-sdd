@@ -65,7 +65,27 @@ git rev-parse --git-dir >/dev/null 2>&1 || gate_pass
 if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
   cd "$repo_root"
 fi
-branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null) || gate_pass
+
+# Which branch HEAD is on, asked of the symbolic ref rather than of a commit, because an unborn
+# branch — `git checkout --orphan`, or any fresh `git init` — has a name and no commit yet. This
+# line used to be `git rev-parse --abbrev-ref HEAD … || gate_pass`, from the first commit, when the
+# gate asked only about the branch you stood on and no commit meant no spec. #26 made it ask about
+# the repository and turned every exit inside check_current_branch into a return, so that the scan
+# always runs; this line sits in front of both and kept its pass, so an unborn branch turned the one
+# enforced rule off until its first commit. #228. Nothing in front of the scan may pass.
+#
+# `symbolic-ref -q` answers by exit status, three ways, where `rev-parse` gave two:
+#
+#   0    a branch, born or unborn: its name, shortened the way `rev-parse --abbrev-ref` shortens it
+#   1    a detached HEAD: the literal `HEAD`, which both checks below already handle (case 77)
+#   128  a ref store git cannot read — damage, and a gate that cannot name the branch it stands on
+#        cannot say what it checked (case 174)
+branch=$(git symbolic-ref -q --short HEAD 2>/dev/null); rc=$?
+case "$rc" in
+  0) : ;;
+  1) branch=HEAD ;;
+  *) gate_block "Review gate: git could not say which branch HEAD is on (git symbolic-ref exited $rc), so this gate cannot tell which spec is yours or which branches hold finished work. That is a ref store git cannot read: run git status to see it, and repair the repository rather than treating this turn as a pass." ;;
+esac
 
 reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 [ -n "$reviewer" ] || reviewer="the reviewer named in .steering/tech.md"
@@ -129,7 +149,10 @@ check_current_branch() {
   if [ ! -f "$spec" ]; then
     # Under a detached HEAD `branch` is the literal `HEAD`, so this asks for
     # `HEAD:.specs/HEAD/spec.md`, gets nothing, and returns — case 77 is unchanged and the scan
-    # goes on reporting the real branches. A repository with no commits returns here too.
+    # goes on reporting the real branches. An unborn branch with no spec in its working tree
+    # returns here too — a fresh `git init`, or `git checkout --orphan` — since `HEAD:` names no
+    # tree yet. That sentence was written before either reached this line: until #228 the line in
+    # front of the scan passed first. Cases 171 and 172.
     git cat-file -e "HEAD:$spec" 2>/dev/null || return 0   # in neither tree — nothing to gate
     tree=HEAD
     # Appended to every block below. The remedy names a file the author cannot see, so the
@@ -167,7 +190,10 @@ check_current_branch() {
   fi
 
   receipt=".specs/$branch/.review-receipt"
-  head=$(git rev-parse HEAD 2>/dev/null || echo '')
+  # Empty on an unborn branch, which has no commit. `git rev-parse HEAD` there prints its argument
+  # before failing, so the `|| echo ''` this line used to carry appended to the literal `HEAD`
+  # rather than replacing it, and that word would have reached every reader below as a tip. #228.
+  head=$(git rev-parse --verify -q HEAD 2>/dev/null) || head=''
 
   # Two arms, because there are two ways work reaches the base and only one of them leaves a
   # parent link. Ancestry is kept and asked first: it is exact when it fires, costs one call,
@@ -187,6 +213,20 @@ check_current_branch() {
   #
   # Neither is the moment to demand a review. Both are an empty state below.
   state=$(gate_spec_review_state ".specs/$branch" "$head" "$tree")
+
+  # An unborn branch has no commit, so a receipt in its working tree cannot describe code on it:
+  # whatever reviewed_sha names is another branch's. Only the empty state needs saying so — every
+  # other receipt state already blocks — and it is empty here because the staleness diff compares
+  # the receipt against a HEAD that does not exist and reads git's refusal as "nothing changed",
+  # which is #232's line. Asked here rather than as a library state because only this reader can
+  # stand on an unborn branch: the scan reads refs, which have tips, and CI reads a pull request's
+  # head. Case 175.
+  if [ -z "$head" ] && [ -z "$state" ] && [ -f "$receipt" ] \
+       && [ "$(gate_total_tasks "$spec")" -gt 0 ] 2>/dev/null \
+       && [ "$(gate_open_tasks "$spec")" -eq 0 ] 2>/dev/null; then
+    gate_block "Review gate: every task in $spec is ticked and $receipt records a review, but this branch has no commits yet, so that review cannot describe any code on it. Commit the work, run $reviewer on the branch diff, and rewrite $receipt."
+  fi
+
   case "$state" in
     '')
       return 0 ;;
