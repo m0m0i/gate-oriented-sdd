@@ -21,7 +21,7 @@
   - *Amended 2026-10-04, after the review:* AC1 first read "no tools". The behaviour-claims verifier that ran beside the reviewer showed that `--tools ""` disables only the built-in tools. Every MCP server stays loaded, about 75 tools in this environment, so a session could in principle have read `AGENTS.md` through one. The recorded runs made no tool call (the verifier re-ran one with `--output-format json`: one turn, no denials), so their results stand. The criterion now names the condition that makes "answers only from what loaded at start" true, and T1's and T2's probes are re-run under it.
   - [x] **AC2:** every command on the `- Validators:` line appears in `AGENTS.md`'s validator block, in the line's order. The two PR-only guards the block already names stay after them.
   - [x] **AC3:** neither `AGENTS.md` nor `.claude/agents/gate-sdd-reviewer.md` states the #16 reason. In each, the diff of that paragraph is the one sentence removed.
-  - [ ] **AC4:** `git diff --name-only origin/main...HEAD` names only these files: the three above, this spec's directory, `docs/BACKLOG.md`, `.work_logs/2026-10-04.md`, `plugin.json` and `.claude-plugin/plugin.json`. Every validator on the `- Validators:` line exits 0 after the last write.
+  - [x] **AC4:** `git diff --name-only origin/main...HEAD` names only these files: the three above, this spec's directory, `docs/BACKLOG.md`, `.work_logs/2026-10-04.md`, `plugin.json` and `.claude-plugin/plugin.json`. Every validator on the `- Validators:` line exits 0 after the last write.
 - Out of scope:
   - `AGENTS.md:63` on `main`, `:67` after (#235).
   - `init`'s pointer instruction, and the fidelity and README claims that Claude Code reads a root `AGENTS.md` (#239).
