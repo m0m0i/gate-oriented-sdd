@@ -1,5 +1,5 @@
 # Spec: a tag that shares a spec branch's name hides that branch from the gate
-- Slug: 233-a-tag-hides-a-spec-branch   Issue: 233   Type: bug   Status: draft
+- Slug: 233-a-tag-hides-a-spec-branch   Issue: 233   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-10-04
 
 ## 1. Requirements (WHAT / WHY)
