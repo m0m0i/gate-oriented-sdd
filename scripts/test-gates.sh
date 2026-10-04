@@ -2526,6 +2526,53 @@ case "$sweep" in *"on request"*) c3=ok ;; *) c3=no ;; esac
   || report "the digest names the chain and keeps archive out of it" no \
      "chain=$c1 no-archive=$c2 sweep-on-request=$c3 clean-stderr=$c4"
 
+# 186. #233 — the digest on a branch a tag shadows. It named the branch with `rev-parse
+#      --abbrev-ref HEAD`, which lengthens to `heads/12-parked`, and told the session that branch
+#      had no spec directory — at the start of the session about to implement that spec.
+r=$(make_repo dg-tagshadow 1); park_spec "$r" 12-parked 0
+cp "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+( cd "$r" && git tag 12-parked 12-parked && git checkout -q 12-parked ) >/dev/null 2>&1
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"The active branch 12-parked has spec .specs/12-parked/spec.md"*) c1=ok ;; *) c1=no ;; esac
+[ -s "$TMP/dgerr" ] && c2=no || c2=ok
+[ "$c1$c2" = "okok" ] && report "the digest names a branch a tag shadows, and finds its spec" ok \
+  || report "the digest names a branch a tag shadows, and finds its spec" no "names-and-finds=$c1 clean-stderr=$c2 ($(grep -F 'active branch' "$TMP/dgout"))"
+
+# 187. #233 — an unborn branch is named too, where `rev-parse` echoed its argument and the digest
+#      printed the literal `HEAD`. A detached HEAD still prints `HEAD`, unchanged: it has no
+#      branch to name, and this spec moves no line it does not have to.
+r=$(make_repo dg-unborn 1)
+cp "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+( cd "$r" && git checkout -q main && git checkout -q --orphan 13-unborn && mkdir -p .specs/13-unborn \
+  && printf '# Spec: unborn\n- Slug: 13-unborn   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [ ] T1: todo\n' \
+       > .specs/13-unborn/spec.md ) >/dev/null 2>&1
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"The active branch 13-unborn has spec .specs/13-unborn/spec.md"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && rm -rf .specs/13-unborn && git checkout -q -f main && git checkout -q "$(git rev-parse HEAD)" ) >/dev/null 2>&1
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"The active branch HEAD has no spec directory under .specs/."*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "the digest names an unborn branch, and a detached HEAD as before" ok \
+  || report "the digest names an unborn branch, and a detached HEAD as before" no "unborn-named=$c1 detached-unchanged=$c2 ($(grep -F 'active branch' "$TMP/dgout"))"
+
+# 188. #233 — case 33's guard, for the reader this spec added. A gate-lib.sh that predates
+#      gate_head_branch degrades the digest visibly, as one that predates gate_steering_value does,
+#      rather than leaving the branch line to a function that is not there.
+r=$(make_repo dg-nohb 1)
+cp "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh")
+src = p.read_text()
+i = src.index("gate_head_branch() {")
+j = src.index("\n}\n", i) + 3
+p.write_text(src[:i] + src[j:])
+PYEOF
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"degraded"*) c1=ok ;; *) c1=no ;; esac
+[ -s "$TMP/dgerr" ] && c2=no || c2=ok
+[ "$c1$c2" = "okok" ] && report "a gate-lib without gate_head_branch degrades the digest visibly" ok \
+  || report "a gate-lib without gate_head_branch degrades the digest visibly" no "visible=$c1 clean-stderr=$c2"
+
 # --- guards: scripts/check-markdown-fences.py ---------------------------------------
 #
 # #64. The no-hand-wrap convention carved out "fenced code", which states the exemption by
