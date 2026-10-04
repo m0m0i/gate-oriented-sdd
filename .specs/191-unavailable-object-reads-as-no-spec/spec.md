@@ -46,7 +46,7 @@ Asked and answered 2026-10-04.
 
 - **Fix approach.** One reader for the tree's half of the question, and the three sites ask it.
   - **`gate_tree_names <ref> <path>`** in `hooks/gate-lib.sh`, on `git ls-tree --full-tree <ref> -- <path>`. It returns 0 when the tree names the path, 1 when the tree was read and does not, and 2 when git could not read the tree (any non-zero status from `ls-tree`). Measured: it reads trees only, so it answers offline in a blobless clone with no fetch; a removed tree object exits 1 or 128, and a treeless clone offline exits 128. `--full-tree` because without it the path is relative to the working directory. A ref with no commit is 2, which is the caller's to rule out.
-  - **`_gate_read`'s ref branch** returns the reader's 1 or 2, then reads with `git show` as it does today, where a failure is already 2.
+  - **`_gate_read`'s ref branch** returns the reader's 1 or 2, then reads with `git show` as it does today, where a failure is already 2. Any status that is not the reader's own is a 2 as well: `gate_spec_review_state` reads whatever is neither 1 nor 2 as a file it read, which T3 found when a fixture took the reader out of the library (case 200).
   - **`review-gate.sh`'s fallback** resolves `head` first (the line moves up from below it) and returns for an unborn branch, which has no commit and so no tree; `ls-tree` exits 128 there, and cases 171 and 172 pin the silence. Then it returns only on 1. On 0 or 2 it sets `tree=HEAD` and goes on, so the shipped-work skip still runs first, and `gate_spec_review_state` says which state it is.
   - **`check-unreviewed-work.sh:96`** prints "carries no spec" only on 1, and otherwise asks the library as it does today. It also fails with the re-copy remedy when the library lacks the reader. #233 argued against a guard for its two readers because both sat on by-hand paths. This one sits on CI's path, where an older library would print "holds no finished, unreviewed work" for a branch with no spec, a sentence that claims a check.
   - **`review-gate.sh`'s skew guard** gains the reader's name. Its sentence names what #233's two readers do, so it is reworded to hold for three.
@@ -69,5 +69,5 @@ Asked and answered 2026-10-04.
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: the library. Cases for AC1 (a removed blob, and the issue's offline blobless clone), AC4 and AC5's scan half, red against `dbf51df`; AC6's two blobless pins, green before and after. Then `gate_tree_names`, `_gate_read` and the two sentences → green.
 - [x] T2: the gate. Cases for AC2, AC5's current-branch half and AC8's gate half, red. Then the fallback, the two tree-read sentences and the skew guard → green.
-- [ ] T3: the checker. Cases for AC3, AC5's checker half and AC8's checker half, red. Then `check-unreviewed-work.sh` → green.
+- [x] T3: the checker. Cases for AC3, AC5's checker half and AC8's checker half, red. Then `check-unreviewed-work.sh` → green.
 - [ ] T4: the needle case, and the comments this change made false (case 146's "not pinned" note, the fallback's own). Full suite green.

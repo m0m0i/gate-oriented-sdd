@@ -52,6 +52,17 @@ if ! command -v gate_spec_review_state >/dev/null 2>&1; then
   exit 1
 fi
 
+# The same for the reader #191 added. Against a library older than it, `gate_tree_names` below
+# is a command not found, and 127 is not the status this script reads as "no spec": a branch
+# with none would go on to "holds no finished, unreviewed work", a sentence that claims a
+# check. #233's two readers have no guard here because both sit on by-hand paths. This one is
+# on the path CI takes. Case 200.
+if ! command -v gate_tree_names >/dev/null 2>&1; then
+  echo "check-unreviewed-work: $lib has no gate_tree_names — it predates the reader that tells a spec that is not there from one git cannot get (#191)." >&2
+  echo "  Re-copy the plugin's hooks/gate-lib.sh over it and run this again." >&2
+  exit 1
+fi
+
 # By hand only, both of them: CI passes the branch and the commit from the event. Each goes
 # through the library's full-refname readers, because a short name is ambiguous whenever a tag
 # shares it, and git then lengthens the branch to `heads/<name>` or resolves the tag in its
@@ -75,11 +86,12 @@ if [ -z "$sha" ]; then
 fi
 
 # The commit came from the event, so it is an assertion about a repository this process has
-# not checked. Verify it before asking anything about it: `git cat-file -e <sha>:<path>` fails
-# both for "that commit has no such file" and for "that commit is not in this clone", and
-# reading the second as the first passes every pull request while printing a success
-# sentence. The live trigger is the default `actions/checkout` — on a pull_request event with
-# fetch-depth 1, only the merge commit is fetched and the head commit is absent.
+# not checked. Verify it before asking anything about it. A commit that is not in this clone
+# used to read as "that commit has no such file", which passed every pull request while
+# printing a success sentence. Since #191 it would read as a spec that cannot be read, which
+# fails, and names the wrong cause. The live trigger is the default `actions/checkout` — on a
+# pull_request event with fetch-depth 1, only the merge commit is fetched and the head commit
+# is absent.
 if ! git rev-parse --verify -q "$sha^{commit}" >/dev/null 2>&1; then
   echo "check-unreviewed-work: cannot resolve commit '$sha' in this clone, so nothing about it was checked." >&2
   echo "  A shallow checkout hides it: check out with fetch-depth: 0. A force-push after the" >&2
@@ -93,7 +105,15 @@ short=$(git rev-parse --short "$sha" 2>/dev/null || printf '%s' "$sha")
 # Asked separately from the state below, and only to choose the wording. "Nothing to check"
 # and "checked, and clean" must not share a sentence: that is #16's shape, and a guard that
 # reports a success it did not earn is what #39 is open about.
-if ! git cat-file -e "$sha:$spec" 2>/dev/null; then
+#
+# Asked of the TREE, and only a tree that was read and does not name the spec is "no spec".
+# This was `git cat-file -e "$sha:$spec"`, whose non-zero status is also a tree that names the
+# spec when git cannot get the object behind the name — a partial clone that cannot reach its
+# remote, or a damaged object store — and a tree git could not read at all. Both said "carries
+# no spec" and exited 0. They go on to the library now, which says the spec cannot be read.
+# #191, case 199.
+gate_tree_names "$sha" "$spec"; named=$?
+if [ "$named" -eq 1 ]; then
   echo "check-unreviewed-work: branch '$branch' carries no spec at $spec in $short — no review to demand, and nothing else examined."
   exit 0
 fi

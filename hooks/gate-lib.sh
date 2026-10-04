@@ -196,9 +196,11 @@ _gate_read() {  # <ref, empty for the working tree> <path>
   else
     # The tree's answer first and the object's second, so that 1 stays what it is above: a
     # tree that was read and does not name the path. Everything git could not read is a 2,
-    # whether that is the tree or the blob the tree names.
+    # whether that is the tree or the blob the tree names — and so is any status that is not
+    # the reader's own, because gate_spec_review_state reads whatever is neither 1 nor 2 as a
+    # file it read. Case 200.
     gate_tree_names "$1" "$2"; _grc=$?
-    [ "$_grc" -eq 0 ] || return "$_grc"
+    case "$_grc" in 0) : ;; 1) return 1 ;; *) return 2 ;; esac
     # Named and unreadable is an object this repository does not have. The working-tree branch
     # above distinguishes that, and this one used to flatten it into "empty file" — and an
     # empty spec counts zero tasks, which is silence.

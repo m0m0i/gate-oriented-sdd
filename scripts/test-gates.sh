@@ -1236,63 +1236,87 @@ case "$err" in *"until it is committed"*) c3=ok ;; *) c3=no ;; esac
 # Cases 146–150 are about WHICH tree answers. These are about a tree that says "the spec is
 # here" of an object the repository does not have. Two fixtures reach that. A partial clone
 # that cannot reach its remote is the ordinary one, and cases 195 and 196 build it. The others
-# take one loose object out of `.git/objects/`: the same state with no network in the fixture,
-# and what damage looks like.
+# build the same state with plumbing and no network: one more commit on the branch, whose tree
+# names a blob nobody wrote, or which names a tree nobody wrote.
+#
+# Built, not deleted. The first version of these cases removed the object's loose file from
+# `.git/objects/`, which assumes git stored it as one. One run of this suite on #191's branch
+# found the receipt's blob not at that path, in a repository that was otherwise as built. About
+# three thousand repetitions of that fixture met it once more, and the cause was not found. An
+# object that was never written depends on nothing about how git stores the ones that were.
 
-# Take one object out of a repository's object store. It fails when the object is not a loose
-# file, and every case below reads that status, so none can pass on a fixture that never broke.
-drop_object() {  # <repo> <object id>
-  _o="$1/.git/objects/$(printf '%s' "$2" | cut -c1-2)/$(printf '%s' "$2" | cut -c3-)"
-  [ -f "$_o" ] && rm -f "$_o"
+# Move a branch's tip to a commit whose tree names <path> as a blob nobody wrote. It uses a
+# scratch index, so the working tree and the real index are untouched. The last line is the
+# fixture checking itself, and every case reads this status, so none can pass on a state that
+# was not built.
+unget_blob() {  # <repo> <branch> <path>
+  ( cd "$1" && _i="$PWD/.git/unget-index" \
+    && _f=$(printf 'nobody wrote this: %s\n' "$3" | git hash-object --stdin) \
+    && GIT_INDEX_FILE="$_i" git read-tree "refs/heads/$2" \
+    && GIT_INDEX_FILE="$_i" git update-index --add --cacheinfo "100644,$_f,$3" \
+    && _t=$(GIT_INDEX_FILE="$_i" git write-tree --missing-ok) \
+    && _c=$(git commit-tree "$_t" -p "refs/heads/$2" -m "a tree that names an object nobody wrote") \
+    && git update-ref "refs/heads/$2" "$_c" && rm -f "$_i" \
+    && ! git cat-file -e "$_f" 2>/dev/null ) >/dev/null 2>&1
+}
+
+# Move a branch's tip to a commit whose own tree nobody wrote, so that nothing can say what the
+# branch carries. `commit-tree` refuses a tree that is not there; `hash-object` checks the
+# commit's form and not what it points at.
+unget_tree() {  # <repo> <branch>
+  ( cd "$1" && _f=$(printf 'nobody wrote this tree\n' | git hash-object --stdin) \
+    && _c=$(printf 'tree %s\nparent %s\nauthor t <t@t> 0 +0000\ncommitter t <t@t> 0 +0000\n\na commit whose tree nobody wrote\n' \
+              "$_f" "$(git rev-parse "refs/heads/$2")" | git hash-object -t commit -w --stdin) \
+    && git update-ref "refs/heads/$2" "$_c" \
+    && ! git cat-file -e "$_f" 2>/dev/null ) >/dev/null 2>&1
 }
 
 # 192. #191 AC1 — the scan. `_gate_read` asked `git cat-file -e <ref>:<path>`, which exits
 #      non-zero both when the tree does not name the path and when it names an object that is
 #      not here, and read both as "no spec": the gate printed `{}` over a finished, unreviewed
-#      branch. Case 76's fixture, with the spec's blob gone.
+#      branch. Case 76's fixture, with a tip whose tree names a spec nobody wrote.
 r=$(make_repo objgone 1); park_spec "$r" 12-parked 0
 ( cd "$r" && git checkout -q main ) >/dev/null 2>&1
-id=$( cd "$r" && git rev-parse "12-parked:.specs/12-parked/spec.md" )
-drop_object "$r" "$id" && c0=ok || c0=no
+unget_blob "$r" 12-parked .specs/12-parked/spec.md && c0=ok || c0=no
 out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
 case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
 case "$err" in *"  12-parked — its spec cannot be read"*"partial clone"*) c3=ok ;; *) c3=no ;; esac
 [ "$c0$c1$c2$c3" = "okokokok" ] && report "a parked spec whose object git cannot get blocks from another branch" ok \
-  || report "a parked spec whose object git cannot get blocks from another branch" no "object-dropped=$c0 exit=$c1 json=$c2 names-branch-and-cause=$c3 ($out)"
+  || report "a parked spec whose object git cannot get blocks from another branch" no "fixture=$c0 exit=$c1 json=$c2 names-branch-and-cause=$c3 ($out)"
 
 # 193. #191 AC4 — the receipt is read through the same line. Unavailable, it read as a receipt
 #      nobody wrote. That blocks, so it is not a fail-open, but the remedy it names is to run a
-#      review that has already run. Case 81's fixture, with the receipt's blob gone.
+#      review that has already run. Case 81's fixture, with a tip whose tree names a receipt
+#      nobody wrote.
 r=$(make_repo rcptobjgone 1); park_spec "$r" 12-parked 0 CLEAN
 ( cd "$r" && git checkout -q main ) >/dev/null 2>&1
-id=$( cd "$r" && git rev-parse "12-parked:.specs/12-parked/.review-receipt" )
-drop_object "$r" "$id" && c0=ok || c0=no
+unget_blob "$r" 12-parked .specs/12-parked/.review-receipt && c0=ok || c0=no
 out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
 case "$err" in *"  12-parked — its receipt cannot be read"*) c2=ok ;; *) c2=no ;; esac
 case "$err" in *"no reviewer receipt exists"*) c3=no ;; *) c3=ok ;; esac
 [ "$c0$c1$c2$c3" = "okokokok" ] && report "a parked receipt whose object git cannot get is unreadable, not unwritten" ok \
-  || report "a parked receipt whose object git cannot get is unreadable, not unwritten" no "object-dropped=$c0 exit=$c1 says-unreadable=$c2 not-unwritten=$c3 ($out)"
+  || report "a parked receipt whose object git cannot get is unreadable, not unwritten" no "fixture=$c0 exit=$c1 says-unreadable=$c2 not-unwritten=$c3 ($out)"
 
-# 194. #191 AC5, the scan — the same flattening one level up. With the slug's own tree object
-#      gone nothing can say whether the spec is there, and `cat-file -e` exits 128, which read
-#      as absent like any other non-zero status. `rev-parse --verify -q <ref>:<path>`, the
+# 194. #191 AC5, the scan — the same flattening one level up. With the tip's own tree gone
+#      nothing can say whether the spec is there, and `cat-file -e` exits 128, which read as
+#      absent like any other non-zero status. `rev-parse --verify -q <ref>:<path>`, the
 #      replacement the triage proposed, exits 1 here with nothing on stderr, as it does for a
-#      path that is not there, so this case is also what holds the reader to `ls-tree`.
+#      path that is not there, so the tree cases are also what holds the reader to `ls-tree`.
 #
 #      RED-CAPABLE under the named mutation "the reader asks rev-parse": gate_tree_names built
 #      on `git rev-parse --verify -q "$1:$2"`, 0 and 1 passed through and anything else a 2.
-#      Run, not reasoned: it takes this case red and no other.
+#      Run, not reasoned: it takes this case, case 198 and the tree half of case 199 red, and
+#      nothing else.
 r=$(make_repo treegone 1); park_spec "$r" 12-parked 0
 ( cd "$r" && git checkout -q main ) >/dev/null 2>&1
-id=$( cd "$r" && git rev-parse "12-parked:.specs/12-parked" )
-drop_object "$r" "$id" && c0=ok || c0=no
+unget_tree "$r" 12-parked && c0=ok || c0=no
 out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
 case "$err" in *"  12-parked — its spec cannot be read"*) c2=ok ;; *) c2=no ;; esac
-[ "$c0$c1$c2" = "okokok" ] && report "a parked branch whose spec directory's tree cannot be read blocks" ok \
-  || report "a parked branch whose spec directory's tree cannot be read blocks" no "object-dropped=$c0 exit=$c1 names-branch=$c2 ($out)"
+[ "$c0$c1$c2" = "okokok" ] && report "a parked branch whose tree cannot be read blocks" ok \
+  || report "a parked branch whose tree cannot be read blocks" no "fixture=$c0 exit=$c1 names-branch=$c2 ($out)"
 
 # 195. #191 AC1 — the issue's own environment, with no damage. A blobless clone fetches a blob
 #      when something reads it, so a branch made without a checkout has a tree that names its
@@ -1331,7 +1355,7 @@ fi
 #      RED-CAPABILITY: passes on first run, so established by mutation, and only for one half.
 #      Named mutation "a path the tree does not name is a 2": gate_tree_names ending
 #      `[ -n "$_tn" ] || return 2`. Run: the second half goes red, its missing receipt read as
-#      an unreadable one, and thirteen other cases with it. The first half stays green under
+#      an unreadable one, and fourteen other cases with it. The first half stays green under
 #      that and under case 194's mutation, and that is said rather than dressed up, as case 148
 #      does: standing on the base, the shipped-work skip returns before any state is read, and
 #      the scan skips the base, so the silence is over-determined. What it constrains is a
@@ -1359,18 +1383,18 @@ fi
 # 197. #191 AC2 — the line the issue names. Standing on the branch with the spec out of the
 #      working tree, check_current_branch asked `git cat-file -e HEAD:<spec> || return 0`, and
 #      the scan skips this ref by name, so an object git could not get was silence on both
-#      paths. Case 146's state, with the blob gone as well.
+#      paths. Case 146's state, with a tip whose tree names a spec nobody wrote.
 #
 #      The second half is AC4 on this path: the spec is readable and the receipt's object is
-#      not. That blocked before, through the library, but with a remedy for a file mode.
+#      not. That blocked before, as a receipt nobody wrote, and once the library could say
+#      "unreadable" it blocked with this gate's remedy for a file mode.
 #
 #      Both halves pin what case 146 said had no cheap fixture: the sentence the two unreadable
 #      states carry when the read came from the branch's own tree. It sends the person to the
 #      network or to the repository, and never to a permission.
 r=$(make_repo wtobjgone 1); park_spec "$r" 12-parked 0
 ( cd "$r" && git checkout -q 12-parked && rm .specs/12-parked/spec.md ) >/dev/null 2>&1
-id=$( cd "$r" && git rev-parse "HEAD:.specs/12-parked/spec.md" )
-drop_object "$r" "$id" && c0=ok || c0=no
+unget_blob "$r" 12-parked .specs/12-parked/spec.md && c0=ok || c0=no
 out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
 case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
@@ -1381,8 +1405,7 @@ case "$err" in *"permission"*|*"other than the one this turn is on"*) c5=no ;; *
 r=$(make_repo wtrcptobjgone 1); park_spec "$r" 12-parked 0 CLEAN
 ( cd "$r" && git checkout -q 12-parked \
   && rm .specs/12-parked/spec.md .specs/12-parked/.review-receipt ) >/dev/null 2>&1
-id=$( cd "$r" && git rev-parse "HEAD:.specs/12-parked/.review-receipt" )
-drop_object "$r" "$id" && c6=ok || c6=no
+unget_blob "$r" 12-parked .specs/12-parked/.review-receipt && c6=ok || c6=no
 out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out" in *"exit=2"*) c7=ok ;; *) c7=no ;; esac
 case "$err" in *".specs/12-parked/.review-receipt cannot be read from this branch's own tree"*"git fetch"*) c8=ok ;; *) c8=no ;; esac
@@ -1390,7 +1413,7 @@ case "$err" in *"permission"*) c9=no ;; *) c9=ok ;; esac
 [ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokokok" ] \
   && report "a current branch's spec or receipt git cannot get blocks, with a remedy for an object" ok \
   || report "a current branch's spec or receipt git cannot get blocks, with a remedy for an object" no \
-     "spec: dropped=$c0 exit=$c1 json=$c2 says-why=$c3 names-the-tree=$c4 no-file-mode=$c5; receipt: dropped=$c6 exit=$c7 says-why=$c8 no-file-mode=$c9 ($out)"
+     "spec: fixture=$c0 exit=$c1 json=$c2 says-why=$c3 names-the-tree=$c4 no-file-mode=$c5; receipt: fixture=$c6 exit=$c7 says-why=$c8 no-file-mode=$c9 ($out)"
 
 # 198. #191 AC5, the current branch — a tree that could not be read is not a tree that does not
 #      name the spec. The reader returns 2 for it, and the fallback returns only on 1.
@@ -1398,16 +1421,15 @@ case "$err" in *"permission"*) c9=no ;; *) c9=ok ;; esac
 #      RED-CAPABLE under the named mutation "anything but named is nothing to gate": the
 #      fallback written `gate_tree_names HEAD "$spec" || return 0`, which is how the line it
 #      replaces was shaped. Run, not reasoned: it takes this case red and no other, case 197
-#      included, because a removed blob leaves the tree readable and the reader answers 0.
+#      included, because a blob nobody wrote leaves the tree readable and the reader answers 0.
 r=$(make_repo wttreegone 1); park_spec "$r" 12-parked 0
 ( cd "$r" && git checkout -q 12-parked && rm .specs/12-parked/spec.md ) >/dev/null 2>&1
-id=$( cd "$r" && git rev-parse "HEAD:.specs/12-parked" )
-drop_object "$r" "$id" && c0=ok || c0=no
+unget_tree "$r" 12-parked && c0=ok || c0=no
 out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
 case "$err" in *".specs/12-parked/spec.md cannot be read from this branch's own tree"*) c2=ok ;; *) c2=no ;; esac
-[ "$c0$c1$c2" = "okokok" ] && report "a current branch whose spec directory's tree cannot be read blocks" ok \
-  || report "a current branch whose spec directory's tree cannot be read blocks" no "object-dropped=$c0 exit=$c1 says-why=$c2 ($out)"
+[ "$c0$c1$c2" = "okokok" ] && report "a current branch whose tree cannot be read blocks" ok \
+  || report "a current branch whose tree cannot be read blocks" no "fixture=$c0 exit=$c1 says-why=$c2 ($out)"
 
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
@@ -1647,6 +1669,67 @@ case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
 case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "check-unreviewed-work reads a named branch's own tip, not a tag's" ok \
   || report "check-unreviewed-work reads a named branch's own tip, not a tag's" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 199. #191 AC3 and AC5 — the checker carried its own copy of the test, in front of the library
+#      call: `git cat-file -e "$sha:$spec"`, and on any non-zero status "carries no spec … nothing
+#      else examined" with exit 0. The issue's triage said the checker reads through the library,
+#      which is true of every line after that one. Two fixtures, one reading: a tip whose tree
+#      names a spec nobody wrote, and a tip whose own tree nobody wrote. Case 95 is the same
+#      sentence refused for a commit that is not here; this is an object that is not.
+#
+#      RED-CAPABLE under the named mutation "anything but named is no spec": the checker's test
+#      written `if ! gate_tree_names "$sha" "$spec"; then`. Run, not reasoned: it takes the tree
+#      half red, leaves the blob half green as in case 198, and touches no other case.
+r=$(uw_repo uw-objgone 0)
+unget_blob "$r" 9-feature .specs/9-feature/spec.md && c0=ok || c0=no
+tip=$( cd "$r" && git rev-parse 9-feature )
+out=$(run_uw "$r" 9-feature "$tip"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  9-feature — its spec cannot be read"*) c2=ok ;; *) c2=no ;; esac
+case "$out" in *"carries no spec"*) c3=no ;; *) c3=ok ;; esac
+
+r=$(uw_repo uw-treegone 0)
+unget_tree "$r" 9-feature && c4=ok || c4=no
+tip=$( cd "$r" && git rev-parse 9-feature )
+out=$(run_uw "$r" 9-feature "$tip"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) c5=ok ;; *) c5=no ;; esac
+case "$err" in *"  9-feature — its spec cannot be read"*) c6=ok ;; *) c6=no ;; esac
+[ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] \
+  && report "check-unreviewed-work fails on a spec git cannot get, rather than saying there is none" ok \
+  || report "check-unreviewed-work fails on a spec git cannot get, rather than saying there is none" no \
+     "blob: fixture=$c0 exit=$c1 says-unreadable=$c2 not-no-spec=$c3; tree: fixture=$c4 exit=$c5 says-unreadable=$c6 ($out)"
+
+# 200. #191 AC8 — a gate-lib.sh without the reader, under this checker. Case 89 is the same
+#      guard for the question itself. Unlike #233's two readers, which sit on by-hand paths and
+#      got no guard, this one is on the path CI takes. Against a library that predates the
+#      reader the checker's own call is a command not found, 127 is not the status it reads as
+#      "no spec", and a branch with none goes on to "holds no finished, unreviewed work", a
+#      sentence that claims a check.
+#
+#      The fixture takes the reader out of the current library, as case 190 does, which is a
+#      harsher state than an old library: `_gate_read` calls the reader too. The second half
+#      holds `_gate_read` to its own contract there, since a project's own script may source
+#      the library with no guard of its own: anything that is not "named" or "read, and not
+#      named" is a 2. Before that mapping the 127 reached gate_spec_review_state, which reads
+#      any status but 1 and 2 as a spec it read, and this fixture's finished, unreviewed branch
+#      passed.
+r=$(uw_repo uw-noreader 0)
+python3 - "$r" gate_tree_names <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh")
+src = p.read_text()
+i = src.index(sys.argv[2] + "() {")
+j = src.index("\n}\n", i) + 3
+p.write_text(src[:i] + src[j:])
+PYEOF
+out=$(run_uw "$r"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"gate_tree_names"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"re-copy"*|*"Re-copy"*) c3=ok ;; *) c3=no ;; esac
+rd=$( cd "$r" && . hooks/gate-lib.sh && _gate_read HEAD .specs/9-feature/spec.md >/dev/null 2>&1; echo "$?" )
+[ "$rd" = 2 ] && c4=ok || c4=no
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "check-unreviewed-work names a gate-lib.sh that predates the tree reader" ok \
+  || report "check-unreviewed-work names a gate-lib.sh that predates the tree reader" no "exit=$c1 names-fn=$c2 says-recopy=$c3 read-status=$c4 ($rd)"
 
 # --- quality-gate.sh -------------------------------------------------------------
 #
