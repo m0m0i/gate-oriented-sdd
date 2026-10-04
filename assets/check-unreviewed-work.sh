@@ -52,7 +52,13 @@ if ! command -v gate_spec_review_state >/dev/null 2>&1; then
   exit 1
 fi
 
-branch=${1:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null)}
+# By hand only, both of them: CI passes the branch and the commit from the event. Each goes
+# through the library's full-refname readers, because a short name is ambiguous whenever a tag
+# shares it, and git then lengthens the branch to `heads/<name>` or resolves the tag in its
+# place — either way this said "carries no spec" about a branch that carries one. #233. Against
+# a library older than those readers each comes back empty, which reaches the exit-1 messages
+# below; no guard is added for them, because one would fail CI, which calls neither.
+branch=${1:-$(gate_head_branch 2>/dev/null)}
 if [ -z "$branch" ] || [ "$branch" = HEAD ]; then
   echo "check-unreviewed-work: no branch name available — pass the pull request's head branch as the first argument." >&2
   exit 1
@@ -60,7 +66,7 @@ fi
 
 sha=${2:-}
 if [ -z "$sha" ]; then
-  sha=$(git rev-parse --verify -q "$branch^{commit}" 2>/dev/null) || sha=""
+  sha=$(gate_ref_commit "refs/heads/$branch" 2>/dev/null) || sha=""
 fi
 if [ -z "$sha" ]; then
   echo "check-unreviewed-work: cannot resolve a commit for '$branch'." >&2

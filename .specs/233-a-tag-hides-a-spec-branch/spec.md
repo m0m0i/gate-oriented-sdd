@@ -62,6 +62,6 @@ Asked and answered 2026-10-04.
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: cases for AC1 (a tag, and `origin` beside `origin/HEAD`, each scanned from `main`) and AC2, all red against `7ef35ab`, plus AC6's slashed-name and linked-worktree pins, green before and after. Then `gate_head_branch` and the naming half of `review-gate.sh` (line 83, the scan) → green.
 - [x] T2: cases for AC3 (a tag `main` with no remote, a tag `origin/HEAD` with one, both red), plus a pin for a tag literally named `refs/heads/main` in a repository without a `main` branch, which is green before and must stay green. Then `gate_ref_commit` and the base chain → green.
-- [ ] T3: cases for AC4 (no arguments on a shadowed branch; the branch name alone, with a tag at another commit), both red. Then `check-unreviewed-work.sh` → green.
+- [x] T3: cases for AC4 (no arguments on a shadowed branch; the branch name alone, with a tag at another commit), both red. Then `check-unreviewed-work.sh` → green.
 - [ ] T4: cases for AC5 (a shadowed branch, and an unborn one, which is named rather than printed as `HEAD`), both red. Then `steering-digest.sh` and its guard → green.
 - [ ] T5: the needle case and the two comments. Full suite green.

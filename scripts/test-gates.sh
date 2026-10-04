@@ -1367,6 +1367,29 @@ case "$err" in *"fetch-depth"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "check-unreviewed-work fails on a head commit it cannot see" ok \
   || report "check-unreviewed-work fails on a head commit it cannot see" no "nonzero=$c1 says-why=$c2 names-remedy=$c3"
 
+# 184. #233 — run by hand with no arguments on a branch a tag shadows. The default name came from
+#      `rev-parse --abbrev-ref HEAD`, which lengthens to `heads/12-parked`, so the checker said
+#      the branch "carries no spec" and exited 0 over a finished, unreviewed one. CI passes both
+#      arguments from the event and never reached this; a person checking their own branch did.
+r=$(uw_repo uw-tagshadow 1); park_spec "$r" 12-parked 0
+( cd "$r" && git tag 12-parked 12-parked && git checkout -q 12-parked ) >/dev/null 2>&1
+out=$(run_uw "$r"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work by hand names a branch a tag shadows by its own name" ok \
+  || report "check-unreviewed-work by hand names a branch a tag shadows by its own name" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 185. #233 — the branch name given alone, with a tag of the same name at another commit. The
+#      commit came from resolving the bare name, which takes the tag first, so the checker read
+#      `main`'s tree in the branch's place and said it carried no spec.
+r=$(uw_repo uw-tagelsewhere 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git tag 12-parked main ) >/dev/null 2>&1
+out=$(run_uw "$r" 12-parked); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work reads a named branch's own tip, not a tag's" ok \
+  || report "check-unreviewed-work reads a named branch's own tip, not a tag's" no "exit=$c1 names-branch=$c2 ($out)"
+
 # --- quality-gate.sh -------------------------------------------------------------
 #
 # It reads its commands from the `- Validators:` line rather than carrying them, so the
