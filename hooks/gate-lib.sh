@@ -146,6 +146,18 @@ gate_head_branch() {
   esac
 }
 
+# The commit a full refname points at, or nothing, exactly.
+#
+# A full refname is not enough on its own: `rev-parse` disambiguates it like any other name, so
+# with no `main` branch `refs/heads/main` resolves a tag literally named `refs/heads/main`
+# (`refs/tags/refs/heads/main`). `show-ref --verify` matches only the exact ref, and follows a
+# symbolic one, so `refs/remotes/origin/HEAD` still resolves; once it has said the ref exists,
+# `rev-parse` takes that ref first. Case 183 goes red without the first line. #233.
+gate_ref_commit() {  # <full refname>
+  git show-ref --verify -q "$1" 2>/dev/null || return 1
+  git rev-parse --verify -q "$1^{commit}" 2>/dev/null
+}
+
 # Read a file from the working tree, or from a branch's own tree when <ref> is given.
 #
 # Absence returns 1 and unreadability returns 2, so the two stay distinguishable: the gate

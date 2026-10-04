@@ -451,6 +451,42 @@ case "$err" in *"every task in .specs/12-parked/spec.md is ticked, but no review
 [ "$c1$c2" = "okok" ] && report "a linked worktree's gate reads that worktree's branch" ok \
   || report "a linked worktree's gate reads that worktree's branch" no "exit=$c1 own-message=$c2 ($out)"
 
+# 181. #233 — the base, asked by bare name, is a short name too, and git resolves a bare name to a
+#      tag before a branch. A tag `main` at an unreviewed tip made that tip the base, so the scan
+#      read the branch as shipped and skipped it. The base is asked for by full refname now.
+r=$(make_repo tagbase 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git tag main 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a tag named main cannot make an unreviewed branch read as shipped" ok \
+  || report "a tag named main cannot make an unreviewed branch read as shipped" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 182. #233 — the same with a remote, where the first candidate is `origin/HEAD`: a tag of that name
+#      shadows the remote-tracking symref.
+r=$(make_repo tagoriginhead 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git update-ref refs/remotes/origin/main main \
+  && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main && git tag origin/HEAD 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a tag named origin/HEAD cannot make an unreviewed branch read as shipped" ok \
+  || report "a tag named origin/HEAD cannot make an unreviewed branch read as shipped" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 183. #233 — pin, green before the fix and after, for the half of the fix a plain full refname
+#      does not give. `rev-parse` disambiguates a full refname too: with no `main` branch,
+#      `refs/heads/main` resolves a tag literally named `refs/heads/main` — measured. The base is
+#      therefore asked whether that exact ref exists first, so here it is empty and the scan names
+#      the branch under the no-base note, rather than reading the tag's tip as shipped.
+r=$(make_repo tagfullname 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git branch -m main trunk && git tag refs/heads/main 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"no resolvable default branch"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a tag named like a full branch ref is not read as the base" ok \
+  || report "a tag named like a full branch ref is not read as the base" no "exit=$c1 names-branch=$c2 no-base-note=$c3 ($out)"
+
 # 78.Standing on a spec branch of your own does not buy silence about someone else's. Without
 #     this, `git checkout -b` onto a directory holding a task-less spec is a second one-command
 #     bypass: the current branch's own checks return early at "no tasks authored" and the

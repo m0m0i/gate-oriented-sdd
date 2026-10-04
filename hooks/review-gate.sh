@@ -112,11 +112,15 @@ reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 # Both skip sites below ask two questions of this base, not one: was the COMMIT joined into its
 # history, and did the WORK reach it. The second exists because a squash merge answers no to
 # the first forever — #182, and gate_work_reached_base carries the reasoning.
-base=$(git rev-parse --verify -q origin/HEAD 2>/dev/null \
-     || git rev-parse --verify -q origin/main 2>/dev/null \
-     || git rev-parse --verify -q origin/master 2>/dev/null \
-     || git rev-parse --verify -q main 2>/dev/null \
-     || git rev-parse --verify -q master 2>/dev/null) || base=""
+#
+# Each candidate is a full refname, resolved exactly. These used to be bare names, and git
+# resolves a bare name to a tag before a branch or a remote, so `git tag main <unreviewed tip>`
+# made that tip the base and the scan skipped its branch as shipped. #233, cases 181–183.
+base=$(gate_ref_commit refs/remotes/origin/HEAD \
+     || gate_ref_commit refs/remotes/origin/main \
+     || gate_ref_commit refs/remotes/origin/master \
+     || gate_ref_commit refs/heads/main \
+     || gate_ref_commit refs/heads/master) || base=""
 
 # The branch you are standing on, with the messages written in the second person because you
 # are the person who can act on them. Every exit from here is a `return`, never a pass: the
