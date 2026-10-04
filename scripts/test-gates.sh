@@ -387,7 +387,71 @@ case "$err" in *"has no commits yet"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a receipt on an unborn branch blocks, having no commit to describe" ok \
   || report "a receipt on an unborn branch blocks, having no commit to describe" no "exit=$c1 json=$c2 says-why=$c3 ($out)"
 
-# 78. Standing on a spec branch of your own does not buy silence about someone else's. Without
+# 176. #233 — a tag that shares a spec branch's name. Git shortens a name only as far as stays
+#      unambiguous, so the scan's short form for a tag-shadowed branch was `heads/12-parked`, and
+#      that string was used as the slug: `.specs/heads/12-parked/spec.md` exists nowhere, and the
+#      gate printed `{}`. One ordinary command, no damage. The branch is named by its own name.
+r=$(make_repo tagshadow 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git tag 12-parked 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c3=ok ;; *) c3=no ;; esac
+case "$err" in *"heads/12-parked"*) c4=no ;; *) c4=ok ;; esac
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "a branch a tag shadows blocks from another branch, by its own name" ok \
+  || report "a branch a tag shadows blocks from another branch, by its own name" no "exit=$c1 json=$c2 names-branch=$c3 no-heads-prefix=$c4 ($out)"
+
+# 177. #233 — the same tag, standing on the branch. `symbolic-ref --short` lengthened the name the
+#      same way, so the current-branch check looked for `.specs/heads/12-parked/` in both trees,
+#      found neither, and returned; the scan then skipped `heads/12-parked` by name. The block is
+#      the one an unshadowed branch gets in this state, worded the same way.
+r=$(make_repo tagshadowon 1); park_spec "$r" 12-parked 0
+( cd "$r" && git tag 12-parked 12-parked && git checkout -q 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"every task in .specs/12-parked/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "standing on a branch a tag shadows blocks as on any other" ok \
+  || report "standing on a branch a tag shadows blocks as on any other" no "exit=$c1 says-no-receipt=$c2 ($out)"
+
+# 178. #233 — a tag is not the only shadow. `refs/remotes/origin/HEAD` makes the bare name `origin`
+#      ambiguous, so a branch named `origin` shortened to `heads/origin` in the scan. #228's review
+#      measured this standing on the branch, where it blocks, and called it no fail-open; scanned
+#      from `main` it was one.
+r=$(make_repo originbranch 1); park_spec "$r" origin 0
+( cd "$r" && git checkout -q main && git update-ref refs/remotes/origin/main main \
+  && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  origin — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a branch named origin beside origin/HEAD blocks from another branch" ok \
+  || report "a branch named origin beside origin/HEAD blocks from another branch" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 179. #233 — pin, green before the fix and after: a slashed spec branch keeps its slug byte for
+#      byte. `refs/heads/` is stripped once, from the front, so the rest of the name — slash and
+#      all — is the directory under `.specs/`, from both sides.
+r=$(make_repo slashed 1); park_spec "$r" 12-feat/sub 0
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-feat/sub — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+( cd "$r" && git checkout -q 12-feat/sub ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+case "$err" in *"every task in .specs/12-feat/sub/spec.md is ticked, but no reviewer receipt exists"*) c4=ok ;; *) c4=no ;; esac
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "a slashed spec branch keeps its slug from both sides" ok \
+  || report "a slashed spec branch keeps its slug from both sides" no "scan-exit=$c1 scan-names=$c2 own-exit=$c3 own-message=$c4 ($out)"
+
+# 180. #233 — pin, green before the fix and after: in a linked worktree HEAD is that worktree's own,
+#      so the branch it names is the one checked out there, not the main checkout's.
+r=$(make_repo linked 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git worktree add -q "$TMP/linked-wt" 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$TMP/linked-wt"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"every task in .specs/12-parked/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a linked worktree's gate reads that worktree's branch" ok \
+  || report "a linked worktree's gate reads that worktree's branch" no "exit=$c1 own-message=$c2 ($out)"
+
+# 78.Standing on a spec branch of your own does not buy silence about someone else's. Without
 #     this, `git checkout -b` onto a directory holding a task-less spec is a second one-command
 #     bypass: the current branch's own checks return early at "no tasks authored" and the
 #     repository-wide question is never reached.

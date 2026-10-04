@@ -80,7 +80,7 @@ fi
 #   1    a detached HEAD: the literal `HEAD`, which both checks below already handle (case 77)
 #   128  a ref store git cannot read — damage, and a gate that cannot name the branch it stands on
 #        cannot say what it checked (case 174)
-branch=$(git symbolic-ref -q --short HEAD 2>/dev/null); rc=$?
+branch=$(gate_head_branch); rc=$?
 case "$rc" in
   0) : ;;
   1) branch=HEAD ;;
@@ -256,17 +256,22 @@ check_current_branch() {
 # therefore find nothing and report it as cleanliness — the same silence, one layer deeper.
 scan_other_branches() {
   found=''
-  for ref in $(git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null); do
-    [ "$ref" = "$branch" ] && continue
+  # Full refnames, and the slug stripped by hand; gate_head_branch says why. `ref` is what git
+  # reads, exactly, since for-each-ref has just listed it; `slug` is what a person reads and what
+  # names the spec directory. No branch can be named `HEAD` (git refuses), so under a detached
+  # HEAD the skip below never fires.
+  for ref in $(git for-each-ref --format='%(refname)' refs/heads/ 2>/dev/null); do
+    slug=${ref#refs/heads/}
+    [ "$slug" = "$branch" ] && continue
     tip=$(git rev-parse --verify -q "$ref^{commit}" 2>/dev/null) || continue
     if [ -n "$base" ] && { git merge-base --is-ancestor "$tip" "$base" 2>/dev/null \
-         || gate_work_reached_base "$ref" "$tip" "$base"; }; then
+         || gate_work_reached_base "$slug" "$tip" "$base"; }; then
       continue                        # shipped — case 8's reasoning, one branch over
     fi
-    state=$(gate_spec_review_state ".specs/$ref" "$tip" "$ref")
+    state=$(gate_spec_review_state ".specs/$slug" "$tip" "$ref")
     [ -n "$state" ] || continue
     found="$found
-  $ref — $(gate_review_state_sentence "$state")"
+  $slug — $(gate_review_state_sentence "$state")"
   done
 
   [ -n "$found" ] || return 0

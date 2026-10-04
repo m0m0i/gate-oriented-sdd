@@ -123,6 +123,29 @@ gate_total_tasks_text() {
 gate_open_tasks()     { gate_open_tasks_text     "$(cat -- "$1" 2>/dev/null)"; }
 gate_total_tasks()    { gate_total_tasks_text    "$(cat -- "$1" 2>/dev/null)"; }
 
+# Which branch HEAD is on, by its own name: the slug that names its spec directory.
+#
+# Asked of the FULL ref and stripped by hand, never of a short form. Git shortens a ref only as
+# far as stays unambiguous, so a branch that shares its name with a tag, or a branch named
+# `origin` beside `refs/remotes/origin/HEAD`, comes back from `symbolic-ref --short`,
+# `rev-parse --abbrev-ref` and `%(refname:short)` as `heads/<name>` — and every caller used that
+# string as the slug, read `.specs/heads/<name>/`, found nothing, and passed. #233.
+#
+#   0    a branch, born or unborn; stdout is its name
+#   1    no branch: a detached HEAD, or HEAD pointed outside refs/heads/ by plumbing
+#        (`git symbolic-ref HEAD refs/tags/x`), which is detached in every sense a gate needs
+#   128  git's own status when it cannot read the ref store; the caller says what that means
+#
+# The statuses are #228's, so review-gate.sh's three arms read through here unchanged.
+gate_head_branch() {
+  _hb=$(git symbolic-ref -q HEAD 2>/dev/null); _hbrc=$?
+  [ "$_hbrc" -eq 0 ] || return "$_hbrc"
+  case "$_hb" in
+    refs/heads/*) printf '%s\n' "${_hb#refs/heads/}" ;;
+    *) return 1 ;;
+  esac
+}
+
 # Read a file from the working tree, or from a branch's own tree when <ref> is given.
 #
 # Absence returns 1 and unreadability returns 2, so the two stay distinguishable: the gate
