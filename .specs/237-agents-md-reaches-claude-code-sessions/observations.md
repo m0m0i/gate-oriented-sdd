@@ -133,4 +133,18 @@ The grep finds no file stating the #16 reason. For each file, a script took the 
 
 All 13 exit 0, with the same last lines as in T1. `test-gates.sh` reports 175 passed, 0 failed, 0 skipped. `check-contract-path.py` still reports 12 sources agreeing on `_shared/reviewer-contract.md`, so `AGENTS.md:63`, which was left alone, still names the contract.
 
-<!-- T3 section follows -->
+## T3 — the backlog cites the two follow-ups, at the T3 commit (parent `dd55196`)
+
+Filed 2026-10-04, after a three-lens adversarial check of each draft and a final pass:
+
+- **#239:** `init` does not say how `CLAUDE.md` points at `AGENTS.md`, and a prose pointer keeps `AGENTS.md` out of a Claude Code session.
+- **#240:** `check-version-bump.py` passes a change to `AGENTS.md` unbumped, though the release ships it.
+
+`docs/BACKLOG.md` row 9's Item cell gains **#239**, and row 11's gains **#240**. Each row's `Why here` gains one sentence saying where the issue came from and why it belongs there. #237 itself is already cited in row 18's `Why here` by #238 (Clarification 4's amendment). `Last refined` is unchanged, because this is a placement, not a refinement.
+
+```
+$ ./scripts/check-backlog-tracker.py
+check-backlog-tracker: 56 open issue(s) against 21 row(s), no drift; excluded by `## Open, not planned`: #36, #184, #185
+```
+
+Before this commit, with #239 and #240 filed and not yet cited, the same check reported that the list and the tracker disagree.

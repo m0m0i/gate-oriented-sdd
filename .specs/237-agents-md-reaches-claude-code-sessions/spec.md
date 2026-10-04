@@ -87,4 +87,4 @@ Asked and answered 2026-10-04, before Design.
 
 - [x] T1: record the baseline in `observations.md`: the AC1 probe before, the AC2 comparison before, the AC3 greps before, and the validators at exit 0.
 - [x] T2: make the three-file change. Record the probe and both comparisons after, and assert AC1–AC3 and AC4's validators.
-- [ ] T3: cite #239 and #240 in `docs/BACKLOG.md` (Clarification 4). Record `./scripts/check-backlog-tracker.py` reporting no drift.
+- [x] T3: cite #239 and #240 in `docs/BACKLOG.md` (Clarification 4). Record `./scripts/check-backlog-tracker.py` reporting no drift.
