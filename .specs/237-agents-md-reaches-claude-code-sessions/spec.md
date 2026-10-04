@@ -12,18 +12,18 @@
   - Beside them: `docs/BACKLOG.md` cites the two follow-ups (Clarification 4), and the version moves from 0.21.6 to 0.21.7 (Clarification 2).
 - **What must NOT change:** every other line of those three files.
   - `CLAUDE.md`'s existing sentence stays verbatim, because it states the cross-tool rule.
-  - `AGENTS.md:63` stays as it is. Its claims about where the reviewer contract lives and how many agents register belong to #235. It also carries the only `reviewer-contract.md` path in `AGENTS.md`, and `scripts/check-contract-path.py` fails a listed document that names none.
+  - `AGENTS.md:63` on `main` (`:67` after this change) stays as it is. Its claims about where the reviewer contract lives and how many agents register belong to #235. It also carries the only `reviewer-contract.md` path in `AGENTS.md`, and `scripts/check-contract-path.py` fails a listed document that names none.
   - Each of the two edited paragraphs keeps its current reason (#19) and its pointer to `docs/decisions/ADR-6`.
   - Nothing under `skills/`, `agents/`, `hooks/` or `assets/` changes.
 - Why now: finding 1 means every Claude Code session in this checkout runs without `AGENTS.md`, the unattended ones included. That leaves out the leakage rule, which `AGENTS.md` calls the guard that matters most, and the frontmatter prohibition. The other three findings are the same file disagreeing with the tree. Filed 2026-10-04 from a prompt audit, and taken now at the author's request. It is the smallest open item, and it lands ahead of #235, whose spec edits the neighbouring lines.
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN a Claude Code session starts in this repository, with hooks disabled, no built-in tools, no MCP servers (`--strict-mcp-config`), and **Project instructions** pinned to its default `claude-md-or-agents-md`, THE SYSTEM SHALL answer both probe questions in `observations.md` from `AGENTS.md`'s text. It answers in one turn, with no tool call. Before the change it answers `NOT-IN-CONTEXT` to both. The same holds under `claude-md`. The record holds the probe, the command and settings, the Claude Code version, and every output before and after.
+  - [x] **AC1:** WHEN a Claude Code session starts in this repository, with hooks disabled, no built-in tools, no MCP servers (`--strict-mcp-config`), and **Project instructions** pinned to its default `claude-md-or-agents-md`, THE SYSTEM SHALL answer both probe questions in `observations.md` from `AGENTS.md`'s text. It answers in one turn, with no tool call. Before the change it answers `NOT-IN-CONTEXT` to both. The same holds under `claude-md`. The record holds the probe, the command and settings, the Claude Code version, and every output before and after.
   - *Amended 2026-10-04, after the review:* AC1 first read "no tools". The behaviour-claims verifier that ran beside the reviewer showed that `--tools ""` disables only the built-in tools. Every MCP server stays loaded, about 75 tools in this environment, so a session could in principle have read `AGENTS.md` through one. The recorded runs made no tool call (the verifier re-ran one with `--output-format json`: one turn, no denials), so their results stand. The criterion now names the condition that makes "answers only from what loaded at start" true, and T1's and T2's probes are re-run under it.
   - [x] **AC2:** every command on the `- Validators:` line appears in `AGENTS.md`'s validator block, in the line's order. The two PR-only guards the block already names stay after them.
   - [x] **AC3:** neither `AGENTS.md` nor `.claude/agents/gate-sdd-reviewer.md` states the #16 reason. In each, the diff of that paragraph is the one sentence removed.
   - [ ] **AC4:** `git diff --name-only origin/main...HEAD` names only these files: the three above, this spec's directory, `docs/BACKLOG.md`, `.work_logs/2026-10-04.md`, `plugin.json` and `.claude-plugin/plugin.json`. Every validator on the `- Validators:` line exits 0 after the last write.
 - Out of scope:
-  - `AGENTS.md:63` (#235).
+  - `AGENTS.md:63` on `main`, `:67` after (#235).
   - `init`'s pointer instruction, and the fidelity and README claims that Claude Code reads a root `AGENTS.md` (#239).
   - `check-version-bump.py` not seeing a change to `AGENTS.md` (#240).
 
@@ -35,7 +35,7 @@ Asked and answered 2026-10-04, before Design.
    - **Answer: the import.**
    - Why the question exists: mid-turn, the author asked whether Claude Code now reads `AGENTS.md` natively. It does, from v2.1.277. Under the default **Project instructions** value, `claude-md-or-agents-md`, it reads `AGENTS.md` only when there is no `CLAUDE.md`, `.claude/CLAUDE.md` or `CLAUDE.local.md` in the working directory or above it. Sources: code.claude.com/docs/en/memory, § AGENTS.md, and the changelog for 2.1.277 and 2.1.281.
    - The docs name this repository's exact setup, "a `CLAUDE.md` that tells Claude in words to read `AGENTS.md`", as a workaround to replace with either fix.
-   - Why the import: it loads the file under every **Project instructions** value except `managed-only`, which loads no project instruction file in any form, and the docs say keeping it never loads the file twice. Native reading needs 2.1.277, or 2.1.281 on Bedrock, Vertex AI, Foundry, gateways and sessions with telemetry disabled. It also needs the built-in `agents-md` plugin enabled, and it may not happen in the first session after an upgrade.
+   - Why the import: it loads the file under every **Project instructions** value except `managed-only`, which leaves the root `CLAUDE.md` and every `AGENTS.md` out at launch, and the docs say keeping it never loads the file twice. Native reading needs 2.1.277, or 2.1.281 on Bedrock, Vertex AI, Foundry, gateways and sessions with telemetry disabled. It also needs the built-in `agents-md` plugin enabled, and it may not happen in the first session after upgrading from 2.1.276 or earlier.
    - Deleting `CLAUDE.md` would also clear one of 2.1.289's nine validator warnings. It would settle #235's third open question here, though, and that question is #235's. If #235 deletes `CLAUDE.md` later, native reading takes over.
 2. **Does this carry a version bump?**
    - **Answer: yes, a patch.**
@@ -77,7 +77,7 @@ Asked and answered 2026-10-04, before Design.
   - Nothing compares `AGENTS.md`'s block to the Validators line. AC2 is checked by a throwaway comparison, recorded with its output.
   - `scripts/check-contract-path.py` already guards the one preserved line whose loss would matter.
 - Risks:
-  - **Every session now pays for `AGENTS.md`'s 80 lines.** That is the intent. It is also why Clarification 3 removes the one sentence that prescribes nothing.
+  - **Every session now pays for `AGENTS.md`'s 84 lines.** That is the intent. It is also why Clarification 3 removes the one sentence that prescribes nothing.
   - **`rules/AGENTS.md` is documented to deliver the edited text to Antigravity installs.** Every edit deletes a retired reason or adds a validator line, and none changes an instruction a consumer would act on.
   - **The review gate cannot see these files.** All three, and `docs/BACKLOG.md`, sit outside `Source globs`. `:(glob)rules/**/*.md` does not see through the `rules/AGENTS.md` symlink, which is #240's other half. So a receipt cannot go stale on an edit to them. Any change to them after the review is re-reviewed by discipline, because the gate will not ask.
 - Rollback: `git revert`.

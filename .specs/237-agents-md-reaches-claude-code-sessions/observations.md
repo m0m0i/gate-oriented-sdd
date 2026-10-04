@@ -4,11 +4,18 @@ What was run, against what, and what it printed. Each section names the commit i
 
 ## The AC1 probe
 
-A headless Claude Code session in this repository's root, with every tool disabled and every hook disabled. With tools disabled, the session can answer only from what was loaded into its context at start. With hooks disabled, the SessionStart steering digest cannot supply an answer either. Neither question is answered by `CLAUDE.md` alone, by `~/.claude/CLAUDE.md`, or by the steering digest. `AGENTS.md:58` and `AGENTS.md:64` answer them.
+A headless Claude Code session in this repository's root. It runs with no built-in tools (`--tools ""`), no MCP servers (`--strict-mcp-config`), and no hooks.
+
+- `--tools ""` alone leaves every MCP server loaded, so the flag pair is what makes the session able to answer only from what loaded into its context at start. Under these flags a session asked to list its tools replies `NONE`.
+- With hooks disabled, the SessionStart steering digest cannot supply an answer either.
+- Neither question is answered by `CLAUDE.md` alone, by `~/.claude/CLAUDE.md`, or by the steering digest.
+- `AGENTS.md:58` and `:64` on `main` answer them; they are `:62` and `:68` after T2.
 
 ```
-claude -p --tools "" --model sonnet --settings <settings.json> "$(cat probe.txt)" < /dev/null
+claude -p --tools "" --strict-mcp-config --model sonnet --settings <settings.json> --output-format json "$(cat probe.txt)" < /dev/null
 ```
+
+The JSON gives the answer and `num_turns`. One turn means no tool was called. T1 and T2 below ran before AC1's amendment, without `--strict-mcp-config` or JSON output. The section after T3 re-runs both under the amended command.
 
 `<settings.json>` disables every hook and pins **Project instructions**, the built-in `agents-md` plugin's option. Claude Code reads that option from a `--settings` file, so the user's own value cannot leak into the result. Two values are probed, the default and `claude-md`:
 
@@ -92,8 +99,8 @@ Claude Code 2.1.288, run 2026-10-04.
 
 | `instructionFiles` | Q1 | Q2 |
 | :-- | :-- | :-- |
-| `claude-md-or-agents-md` (default) | answered from `AGENTS.md:58` | answered from `AGENTS.md:64` |
-| `claude-md` | answered from `AGENTS.md:58` | answered from `AGENTS.md:64` |
+| `claude-md-or-agents-md` (default) | answered from `AGENTS.md:62` | answered from `AGENTS.md:68` |
+| `claude-md` | answered from `AGENTS.md:62` | answered from `AGENTS.md:68` |
 
 Word for word, under the default:
 
@@ -131,7 +138,7 @@ The grep finds no file stating the #16 reason. For each file, a script took the 
 
 ### Validators, after
 
-All 13 exit 0, with the same last lines as in T1. `test-gates.sh` reports 175 passed, 0 failed, 0 skipped. `check-contract-path.py` still reports 12 sources agreeing on `_shared/reviewer-contract.md`, so `AGENTS.md:63`, which was left alone, still names the contract.
+All 13 exit 0, with the same last lines as in T1. `test-gates.sh` reports 175 passed, 0 failed, 0 skipped. `check-contract-path.py` still reports 12 sources agreeing on `_shared/reviewer-contract.md`, so `AGENTS.md:67` (`:63` on `main`), which was left alone, still names the contract.
 
 ## T3 — the backlog cites the two follow-ups, at the T3 commit (parent `dd55196`)
 
@@ -148,3 +155,30 @@ check-backlog-tracker: 56 open issue(s) against 21 row(s), no drift; excluded by
 ```
 
 Before this commit, with #239 and #240 filed and not yet cited, the same check reported that the list and the tracker disagree.
+
+**A statement this branch makes false on merge.** Row 18's `Why here` cites #237, added by #238, in the present tense. It says `CLAUDE.md` links `AGENTS.md` rather than importing it, and that the validator list and lock reason have drifted. All of that stops being true when this branch merges. The sentence ends "its merge closes it", and the row's convention is a later placement edit adding "shipped as #N", as #238 did for #229. This branch leaves it for that edit, because the pull request number does not exist until the PR does. The reviewer raised this as a LOW.
+
+## AC1 re-run under the amended criterion, at `fa75a34` (AC1's amendment; `CLAUDE.md` and `AGENTS.md` as at `dd55196`)
+
+Claude Code 2.1.288, run 2026-10-04, with the command above: `--strict-mcp-config` and `--output-format json`. "Before" ran in a detached worktree of `main` at `04e026c`, outside this repository's directory and removed afterwards. "After" ran in this branch's worktree.
+
+| | `instructionFiles` | `num_turns` | Q1 | Q2 |
+| :-- | :-- | :-- | :-- | :-- |
+| before | `claude-md-or-agents-md` (default) | 1 | `NOT-IN-CONTEXT` | `NOT-IN-CONTEXT` |
+| before | `claude-md` | 1 | `NOT-IN-CONTEXT` | `NOT-IN-CONTEXT` |
+| before | `claude-md-and-agents-md` (pin check) | 1 | answered from `AGENTS.md:58` | answered from `AGENTS.md:64` |
+| after | `claude-md-or-agents-md` (default) | 1 | answered from `AGENTS.md:62` | answered from `AGENTS.md:68` |
+| after | `claude-md` | 1 | answered from `AGENTS.md:62` | answered from `AGENTS.md:68` |
+
+Every run reported `is_error=False`, `subtype=success`, and no permission denials. The "after" answers, word for word:
+
+```
+default   Q1: If the guard (`check-leakage.sh`) fires, rewrite the file and do not scrub it in place, because scrubbing leaves the shape, and the shape is where the private structure lives.
+default   Q2: Bare `{{...}}` is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before substitution ever happens. Quoting the placeholders avoids that.
+claude-md Q1: Rewrite the file — do not scrub it in place. Scrubbing leaves the shape, and the shape is where the private structure lives (the harness was extracted clean-room from a private polyrepo).
+claude-md Q2: Bare `{{...}}` is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before substitution ever happens.
+```
+
+Asked under the same flags to list every tool it can call, the session replied `NONE`, in one turn.
+
+**AC1 holds as amended.** The T1 and T2 results above are unchanged by the stricter conditions. The verifier that found the gap reproduced the "after" rows at `c8df7cd`, and the "before" rows on a `git archive` of `04e026c`.
