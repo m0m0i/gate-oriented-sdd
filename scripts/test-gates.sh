@@ -1093,12 +1093,11 @@ case "$err" in *"9-feature"*) c3=ok ;; *) c3=no ;; esac
 case "$err" in *"not in your working tree"*) c4=ok ;; *) c4=no ;; esac
 # The fixture only means anything while the spec really is committed on the branch.
 [ "$committed" = yes ] && c5=ok || c5=no
-# NOT PINNED, and said rather than left silent, in the form the chmod-under-root notes above
-# use: the `$corrupt` clause the two unreadable states carry has no cheap fixture. Reaching
-# either from the branch's own tree needs `git cat-file -e` to succeed and `git show` to fail
-# on the same object, which is a damaged object store — not a file mode, so `chmod 000` does
-# not produce it, and neither does anything else a throwaway repository can do in one line.
-# It cannot change whether the gate blocks; it changes which remedy the block names.
+# Pinned since #191, by case 197: what the two unreadable states say when the read came from
+# the branch's own tree. This note used to say NOT PINNED, because reaching either state there
+# needed `git cat-file -e` to succeed and `git show` to fail on the same object, and nothing a
+# throwaway repository can do in one line produced that. The existence test no longer asks the
+# object, so a tree that names an object nobody wrote reaches both.
 #
 # AC5. Reported ONCE, and by a path that can speak in the second person. The alternative fix
 # — letting the scan stop skipping this ref by name — would report it under a headline saying
@@ -1164,13 +1163,17 @@ case "$err" in *"working tree"*) c5=no ;; *) c5=ok ;; esac
 #      recognise, and the first refactor to route both readers through one helper will want to
 #      give "no spec at all" a state name. On that day this case is the difference between a
 #      name that means silence and one that reaches the new arm.
+#
+#      #191 was that helper, and the case is red-capable now. The mutations above were of the
+#      line `gate_tree_names` replaced. Under "a path the tree does not name is a 2" — the
+#      reader ending `[ -n "$_tn" ] || return 2` — both halves go red, with case 196's.
 r=$(make_repo nospecbranch 1)
 ( cd "$r" && git checkout -q -b 12-nospec 9-feature && echo more >> src/main.txt \
   && git commit -qam "work with no spec of its own" ) >/dev/null 2>&1
 out=$(run_gate "$r")
 case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
 # The same branch with the directory present and empty — `archive` leaves this shape behind,
-# and `[ -f ]` and `git cat-file -e` must both decline on it.
+# and `[ -f ]` and the tree reader must both decline on it.
 ( cd "$r" && mkdir -p .specs/12-nospec ) >/dev/null 2>&1
 out=$(run_gate "$r")
 case "$out" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
@@ -1632,9 +1635,10 @@ case "$err" in *"re-copy"*|*"Re-copy"*) c3=ok ;; *) c3=no ;; esac
 
 # 95. A head commit this clone cannot see must FAIL, not pass as "no spec".
 #
-# `git cat-file -e "$sha:$spec"` fails for two unrelated reasons — the commit exists and has
-# no spec, and the commit is not here at all — and reading the second as the first passes
-# every pull request while printing a success sentence. The live trigger is the default
+# The checker's test was `git cat-file -e "$sha:$spec"`, which fails for two unrelated reasons
+# — the commit exists and has no spec, and the commit is not here at all — and reading the
+# second as the first passed every pull request while printing a success sentence. A third
+# reason, an object that is not here, is #191 and case 199. The live trigger is the default
 # `actions/checkout`: on a pull_request event with fetch-depth 1 only the merge commit is
 # fetched and head.sha is absent, so the whole layer would have been a no-op wherever the
 # init instruction's `fetch-depth: 0` was not followed. A force-push reproduces it with full
@@ -1730,6 +1734,44 @@ rd=$( cd "$r" && . hooks/gate-lib.sh && _gate_read HEAD .specs/9-feature/spec.md
 [ "$rd" = 2 ] && c4=ok || c4=no
 [ "$c1$c2$c3$c4" = "okokokok" ] && report "check-unreviewed-work names a gate-lib.sh that predates the tree reader" ok \
   || report "check-unreviewed-work names a gate-lib.sh that predates the tree reader" no "exit=$c1 names-fn=$c2 says-recopy=$c3 read-status=$c4 ($rd)"
+
+# 201. #191 — the class rather than the instance. `git cat-file -e <ref>:<path>` asks whether an
+#      object is here, and each of the three sites this spec changed used it to ask whether a
+#      tree names a path. Cases 192–200 pin those sites; this one goes red at the fourth, before
+#      it ships. Outside whole-line comments, the test may appear in the shipped shell only on
+#      gate_work_reached_base's two lines. There a failure leaves the shipped-work skip unfired,
+#      which is the safe direction, and it is #182's function, which #191 left alone.
+#
+#      The exemption is held to exactly those two lines, so it cannot outlive them: whoever
+#      moves them to the tree reader deletes it here in the same change. Whole-line comments are
+#      skipped for case 189's reason, and a trailing comment is not stripped, for that case's
+#      other reason. The matcher is exercised on known lines first, and awk's own status is read,
+#      so a broken pattern or an empty file list cannot report ok having checked nothing.
+object_test_reads() {  # <file>... — prints file:line: text for each `cat-file -e` outside a comment line
+  awk '!/^[[:space:]]*#/ && /cat-file[[:space:]]+-e/ { print FILENAME ":" FNR ": " $0 }' "$@"
+}
+object_test_kept='hooks/gate-lib\.sh:[0-9]+: .*git cat-file -e "\$_wbase:\$_w(live|arch)"'
+printf '%s\n' 'git cat-file -e "HEAD:$spec" 2>/dev/null || return 0' \
+  'if ! git cat-file -e "$sha:$spec" 2>/dev/null; then' \
+  'echo "see #16"; git cat-file  -e "$1:$2" || return 1  # trailing' > "$TMP/objneedle-hit.sh"
+printf '%s\n' '# git cat-file -e "HEAD:$spec" 2>/dev/null || return 0' '    # was `git cat-file -e`' \
+  't=$(git cat-file -t "$id")' '_tn=$(git ls-tree --full-tree "$1" -- "$2")' > "$TMP/objneedle-miss.sh"
+n_hit=$(object_test_reads "$TMP/objneedle-hit.sh" | wc -l | tr -d ' ')
+n_miss=$(object_test_reads "$TMP/objneedle-miss.sh" | wc -l | tr -d ' ')
+reads=$(object_test_reads "$ROOT"/hooks/*.sh "$ROOT"/assets/*.sh); rc=$?
+kept=$(printf '%s\n' "$reads" | grep -cE "$object_test_kept")
+extra=$(printf '%s\n' "$reads" | grep -vE "$object_test_kept")
+if [ "$n_hit$n_miss" != 30 ]; then
+  report "no shipped shell asks for an object when it means a tree" no "matcher self-test: $n_hit of 3 hits, $n_miss of 0 misses"
+elif [ "$rc" -ne 0 ]; then
+  report "no shipped shell asks for an object when it means a tree" no "awk exited $rc, so nothing was read"
+elif [ -n "$extra" ]; then
+  report "no shipped shell asks for an object when it means a tree" no "$(printf '%s' "$extra" | sed "s|$ROOT/||" | tr '\n' ';')"
+elif [ "$kept" -ne 2 ]; then
+  report "no shipped shell asks for an object when it means a tree" no "the exemption names gate_work_reached_base's two lines and matched $kept; if they moved to the tree reader, delete the exemption"
+else
+  report "no shipped shell asks for an object when it means a tree" ok
+fi
 
 # --- quality-gate.sh -------------------------------------------------------------
 #

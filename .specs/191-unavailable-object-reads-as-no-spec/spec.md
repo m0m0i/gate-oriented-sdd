@@ -53,7 +53,7 @@ Asked and answered 2026-10-04.
   - **Messages.** `$corrupt` goes. It was a correction appended to a file-mode remedy, written when only damage could reach it and no fixture could. An ordinary environment reaches it now, so the two unreadable arms each get their own sentence when the read came from the branch's tree: git could not get the object, a partial clone that cannot reach its remote or a damaged object store, reconnect and fetch or check the repository. The working-tree sentences stay character for character. `gate_review_state_sentence`'s two unreadable sentences, which only ref readers call, name the same cause.
   - **Narrower,** the triage's `rev-parse`, which is blind to a tree it cannot read (Q2). **Narrower still,** matching stderr, which is the issue's own risk. **Wider,** a new state name for "unavailable". Every consumer's `case` would need its arm, and `check_current_branch`'s has no default (#176), so a gate older than the library would pass on it. `unreadable` is already the word for "there, and could not be read".
 
-- **Affected files:** `hooks/gate-lib.sh`, `hooks/review-gate.sh`, `assets/check-unreviewed-work.sh`, `scripts/test-gates.sh`. Shipped, so `implement`'s version step bumps the patch.
+- **Affected files:** `hooks/gate-lib.sh`, `hooks/review-gate.sh`, `assets/check-unreviewed-work.sh`, `scripts/test-gates.sh`, and one row of `docs/DESIGN.md`'s seam table, which said the two unreadable states could not arise from a ref read. Shipped, so `implement`'s version step bumps the patch.
 
 - **Blast radius:**
   - **A full, healthy clone.** Every object is present, so "the tree names it" and "`cat-file -e` succeeds" are the same answer, and every existing case keeps its verdict.
@@ -70,4 +70,4 @@ Asked and answered 2026-10-04.
 - [x] T1: the library. Cases for AC1 (a removed blob, and the issue's offline blobless clone), AC4 and AC5's scan half, red against `dbf51df`; AC6's two blobless pins, green before and after. Then `gate_tree_names`, `_gate_read` and the two sentences → green.
 - [x] T2: the gate. Cases for AC2, AC5's current-branch half and AC8's gate half, red. Then the fallback, the two tree-read sentences and the skew guard → green.
 - [x] T3: the checker. Cases for AC3, AC5's checker half and AC8's checker half, red. Then `check-unreviewed-work.sh` → green.
-- [ ] T4: the needle case, and the comments this change made false (case 146's "not pinned" note, the fallback's own). Full suite green.
+- [x] T4: the needle case, and the comments this change made false (case 146's "not pinned" note, the fallback's own). Full suite green.
