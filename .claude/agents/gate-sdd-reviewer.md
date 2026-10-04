@@ -47,7 +47,7 @@ Nothing else. You do not edit, commit, or push.
 
 Load only what the diff calls for.
 
-**This reviewer's rulebook is deliberately unpinned — there is no `rules-lock.json` here.** `assets/check-locks.py --update` can refresh a lock but cannot create one (#19), so there is no honest way to pin this rulebook until #19 ships a bootstrap. The older reason — that a lock here would make the guard discover `.claude/agents/` instead of `agents/` and verify nothing — was #16, which is closed: the guard now discovers both directories together. `docs/decisions/ADR-6` records the deviation. Treat this paragraph as the reason rather than an oversight to tidy up.
+**This reviewer's rulebook is deliberately unpinned — there is no `rules-lock.json` here.** `assets/check-locks.py --update` can refresh a lock but cannot create one (#19), so there is no honest way to pin this rulebook until #19 ships a bootstrap. `docs/decisions/ADR-6` records the deviation. Treat this paragraph as the reason rather than an oversight to tidy up.
 
 ## Project notes
 

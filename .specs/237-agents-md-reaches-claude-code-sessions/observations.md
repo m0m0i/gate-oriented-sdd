@@ -1,0 +1,184 @@
+# Observations: 237-agents-md-reaches-claude-code-sessions
+
+What was run, against what, and what it printed. Each section names the commit it was observed at.
+
+## The AC1 probe
+
+A headless Claude Code session in this repository's root. It runs with no built-in tools (`--tools ""`), no MCP servers (`--strict-mcp-config`), and no hooks.
+
+- `--tools ""` alone leaves every MCP server loaded, so the flag pair is what makes the session able to answer only from what loaded into its context at start. Under these flags a session asked to list its tools replies `NONE`.
+- With hooks disabled, the SessionStart steering digest cannot supply an answer either.
+- Neither question is answered by `CLAUDE.md` alone, by `~/.claude/CLAUDE.md`, or by the steering digest.
+- `AGENTS.md:58` and `:64` on `main` answer them; they are `:62` and `:68` after T2.
+
+```
+claude -p --tools "" --strict-mcp-config --model sonnet --settings <settings.json> --output-format json "$(cat probe.txt)" < /dev/null
+```
+
+The JSON gives the answer and `num_turns`. One turn means no tool was called. T1 and T2 below ran before AC1's amendment, without `--strict-mcp-config` or JSON output. The section after T3 re-runs both under the amended command.
+
+`<settings.json>` disables every hook and pins **Project instructions**, the built-in `agents-md` plugin's option. Claude Code reads that option from a `--settings` file, so the user's own value cannot leak into the result. Two values are probed, the default and `claude-md`:
+
+```
+{"disableAllHooks":true,"pluginConfigs":{"agents-md@builtin":{"options":{"instructionFiles":"claude-md-or-agents-md"}}}}
+{"disableAllHooks":true,"pluginConfigs":{"agents-md@builtin":{"options":{"instructionFiles":"claude-md"}}}}
+```
+
+A third value, `claude-md-and-agents-md`, loads `AGENTS.md` beside any `CLAUDE.md`, prose pointer or not. It is probed once in T1, to show the pin takes effect, and is not part of AC1.
+
+`probe.txt`:
+
+```
+Answer only from the project instructions already loaded in your context. Do not guess, and do not infer from file names you have seen mentioned. Answer each question on its own line, prefixed Q1: and Q2:. If no loaded instruction answers a question, write exactly NOT-IN-CONTEXT for it.
+Q1: What do your loaded project instructions say to do when the leakage guard fires on a file?
+Q2: Why do your loaded project instructions say agents/_template/reviewer.md quotes its frontmatter placeholders?
+```
+
+## T1 — baseline, at `76669c1` (the spec commit; `CLAUDE.md` and `AGENTS.md` as on `main` at `04e026c`)
+
+Claude Code 2.1.288, run 2026-10-04.
+
+### AC1 probe, before
+
+| `instructionFiles` | Q1 | Q2 |
+| :-- | :-- | :-- |
+| `claude-md-or-agents-md` (default) | `NOT-IN-CONTEXT` | `NOT-IN-CONTEXT` |
+| `claude-md` | `NOT-IN-CONTEXT` | `NOT-IN-CONTEXT` |
+| `claude-md-and-agents-md` (the pin check, not part of AC1) | answered from `AGENTS.md:58` | answered from `AGENTS.md:64` |
+
+The third row answered, word for word:
+
+```
+Q1: Rewrite the file. Do not scrub it in place, because scrubbing leaves the shape, and the shape is where the private structure lives.
+Q2: Bare `{{...}}` is a flow mapping in YAML. An unquoted placeholder would parse as an object and fail validation before substitution ever happens.
+```
+
+So the pin takes effect, and the two `NOT-IN-CONTEXT` rows are about the instruction files rather than the probe. Under the default and under `claude-md`, a session in this repository starts without `AGENTS.md`.
+
+### AC2 comparison, before
+
+A throwaway script compares the commands on `.steering/tech.md`'s `- Validators:` line with the `./`-prefixed commands in `AGENTS.md`'s `bash` block. It is not committed.
+
+```
+validators on the line: 13
+block commands: 11
+missing from the block: ./assets/check-document-set.py ./scripts/check-contract-path.py ./scripts/check-readme-claims.py ./scripts/check-reviewer-allow-list.py
+order: DIFFERS (or commands missing)
+block commands not on the line (PR-only guards expected): ./scripts/check-version-bump.py ./scripts/check-backlog-tracker.py
+```
+
+### AC3 grep, before
+
+`grep -n "was #16, which is closed" AGENTS.md .claude/agents/gate-sdd-reviewer.md` finds two lines: `AGENTS.md:74` and `.claude/agents/gate-sdd-reviewer.md:50`.
+
+### Validators, before
+
+Every command on the `- Validators:` line exits 0:
+
+| Validator | Exit | Last line |
+| :-- | :-- | :-- |
+| `check-leakage.sh` | 0 | clean — 300 file(s) scanned |
+| `check-manifests.py` | 0 | both manifests agree |
+| `check-markdown-fences.py` | 0 | 10 fence(s), no hand-wrapped prose |
+| `check-receipt-schema.py` | 0 | 7 field(s) agree across 3 copies |
+| `check-skill-contracts.py` | 0 | 25 skill contract(s) present |
+| `check-templates.py` | 0 | 9 live spec(s), no task sequenced after the review |
+| `check-steering-anchors.sh` | 0 | 6 of 7 anchor(s) resolved, none unreadable |
+| `check-locks.py` | 0 | 6 pinned file(s) match their locks |
+| `check-document-set.py` | 0 | mode `full` at `docs/` |
+| `check-contract-path.py` | 0 | 12 source(s) agree on `_shared/reviewer-contract.md` |
+| `check-readme-claims.py` | 0 | plugin.json is at v0.21.6 |
+| `check-reviewer-allow-list.py` | 0 | 13 validator(s) covered |
+| `test-gates.sh` | 0 | 175 passed, 0 failed, 0 skipped |
+
+## T2 — after the three-file change, at the T2 commit (parent `8a05ed0`)
+
+Claude Code 2.1.288, run 2026-10-04.
+
+### AC1 probe, after
+
+| `instructionFiles` | Q1 | Q2 |
+| :-- | :-- | :-- |
+| `claude-md-or-agents-md` (default) | answered from `AGENTS.md:62` | answered from `AGENTS.md:68` |
+| `claude-md` | answered from `AGENTS.md:62` | answered from `AGENTS.md:68` |
+
+Word for word, under the default:
+
+```
+Q1: Rewrite the file. Do not scrub it in place, because scrubbing leaves the shape, and the shape is where the private structure lives.
+Q2: Bare `{{...}}` is a flow mapping in YAML. An unquoted placeholder would parse as an object and fail validation before substitution ever happens.
+```
+
+And under `claude-md`:
+
+```
+Q1: If the guard fires, rewrite the file — do not scrub it in place. Scrubbing leaves the shape, and the shape is where the private structure lives.
+Q2: Bare `{{...}}` is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before substitution ever happens.
+```
+
+Both rows went from `NOT-IN-CONTEXT` to `AGENTS.md`'s text. The only change between the two runs that a session loads at start is the `@AGENTS.md` line. **AC1 holds.**
+
+### AC2 comparison, after
+
+```
+validators on the line: 13
+block commands: 15
+missing from the block: none
+order: the block lists the line's commands in the line's order
+block commands not on the line (PR-only guards expected): ./scripts/check-version-bump.py ./scripts/check-backlog-tracker.py
+```
+
+The four comments come from each script's own docstring. **AC2 holds.**
+
+### AC3, after
+
+The grep finds no file stating the #16 reason. For each file, a script took the line from `HEAD` (`8a05ed0`), removed the one sentence, and found the result among the file's new lines: `AGENTS.md:74` True, `.claude/agents/gate-sdd-reviewer.md:50` True. Each paragraph is the old one minus that sentence, and its #19 reason and ADR-6 pointer stand. **AC3 holds.**
+
+`git diff --word-diff` attributes the `AGENTS.md` removal as "older reason … directories. The", taking the paragraph's second "The" rather than its first. That is the diff's alignment, not a change in wording.
+
+### Validators, after
+
+All 13 exit 0, with the same last lines as in T1. `test-gates.sh` reports 175 passed, 0 failed, 0 skipped. `check-contract-path.py` still reports 12 sources agreeing on `_shared/reviewer-contract.md`, so `AGENTS.md:67` (`:63` on `main`), which was left alone, still names the contract.
+
+## T3 — the backlog cites the two follow-ups, at the T3 commit (parent `dd55196`)
+
+Filed 2026-10-04, after a three-lens adversarial check of each draft and a final pass:
+
+- **#239:** `init` does not say how `CLAUDE.md` points at `AGENTS.md`, and a prose pointer keeps `AGENTS.md` out of a Claude Code session.
+- **#240:** `check-version-bump.py` passes a change to `AGENTS.md` unbumped, though the release ships it.
+
+`docs/BACKLOG.md` row 9's Item cell gains **#239**, and row 11's gains **#240**. Each row's `Why here` gains one sentence saying where the issue came from and why it belongs there. #237 itself is already cited in row 18's `Why here` by #238 (Clarification 4's amendment). `Last refined` is unchanged, because this is a placement, not a refinement.
+
+```
+$ ./scripts/check-backlog-tracker.py
+check-backlog-tracker: 56 open issue(s) against 21 row(s), no drift; excluded by `## Open, not planned`: #36, #184, #185
+```
+
+Before this commit, with #239 and #240 filed and not yet cited, the same check reported that the list and the tracker disagree.
+
+**A statement this branch makes false on merge.** Row 18's `Why here` cites #237, added by #238, in the present tense. It says `CLAUDE.md` links `AGENTS.md` rather than importing it, and that the validator list and lock reason have drifted. All of that stops being true when this branch merges. The sentence ends "its merge closes it", and the row's convention is a later placement edit adding "shipped as #N", as #238 did for #229. This branch leaves it for that edit, because the pull request number does not exist until the PR does. The reviewer raised this as a LOW.
+
+## AC1 re-run under the amended criterion, at `fa75a34` (AC1's amendment; `CLAUDE.md` and `AGENTS.md` as at `dd55196`)
+
+Claude Code 2.1.288, run 2026-10-04, with the command above: `--strict-mcp-config` and `--output-format json`. "Before" ran in a detached worktree of `main` at `04e026c`, outside this repository's directory and removed afterwards. "After" ran in this branch's worktree.
+
+| | `instructionFiles` | `num_turns` | Q1 | Q2 |
+| :-- | :-- | :-- | :-- | :-- |
+| before | `claude-md-or-agents-md` (default) | 1 | `NOT-IN-CONTEXT` | `NOT-IN-CONTEXT` |
+| before | `claude-md` | 1 | `NOT-IN-CONTEXT` | `NOT-IN-CONTEXT` |
+| before | `claude-md-and-agents-md` (pin check) | 1 | answered from `AGENTS.md:58` | answered from `AGENTS.md:64` |
+| after | `claude-md-or-agents-md` (default) | 1 | answered from `AGENTS.md:62` | answered from `AGENTS.md:68` |
+| after | `claude-md` | 1 | answered from `AGENTS.md:62` | answered from `AGENTS.md:68` |
+
+Every run reported `is_error=False`, `subtype=success`, and no permission denials. The "after" answers, word for word:
+
+```
+default   Q1: If the guard (`check-leakage.sh`) fires, rewrite the file and do not scrub it in place, because scrubbing leaves the shape, and the shape is where the private structure lives.
+default   Q2: Bare `{{...}}` is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before substitution ever happens. Quoting the placeholders avoids that.
+claude-md Q1: Rewrite the file — do not scrub it in place. Scrubbing leaves the shape, and the shape is where the private structure lives (the harness was extracted clean-room from a private polyrepo).
+claude-md Q2: Bare `{{...}}` is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before substitution ever happens.
+```
+
+Asked under the same flags to list every tool it can call, the session replied `NONE`, in one turn.
+
+**AC1 holds as amended.** The T1 and T2 results above are unchanged by the stricter conditions. The verifier that found the gap reproduced the "after" rows at `c8df7cd`, and the "before" rows on a `git archive` of `04e026c`.

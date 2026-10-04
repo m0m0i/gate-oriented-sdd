@@ -50,6 +50,10 @@ Run these before every commit. The `- Validators:` line in `.steering/tech.md` i
                                     # and no live spec sequences a task after the review
 ./assets/check-steering-anchors.sh  # steering's machine-read lines still parse
 ./assets/check-locks.py             # rulebooks match their locks (--update to re-pin)
+./assets/check-document-set.py      # the installed document set matches the declared mode
+./scripts/check-contract-path.py    # every statement of the contract's path agrees
+./scripts/check-readme-claims.py    # the README's Status claims match what they describe
+./scripts/check-reviewer-allow-list.py  # the reviewer's allow-list covers the Validators line
 ./scripts/test-gates.sh             # the gates still behave
 ./scripts/check-version-bump.py     # shipped changes carry a version bump (PR-only in CI)
 ./scripts/check-backlog-tracker.py  # the ordered list agrees with the tracker (PR-only in CI)
@@ -71,7 +75,7 @@ Run these before every commit. The `- Validators:` line in `.steering/tech.md` i
 Two things are deliberately unlike a normal install, and both would look like mistakes:
 
 - **The hooks are not copied.** `.claude/settings.json` points at the repository's own `hooks/*.sh`. Every other project copies them, because a gate must run with the project as its working directory — here the project *is* the source, so a copy would only create drift, and a drifted copy means this repo tests a stale version of its own enforcement.
-- **`.claude/agents/gate-sdd-reviewer/` has no `rules-lock.json`.** `assets/check-locks.py --update` can refresh a lock but cannot create one (#19). The older reason — a lock here would make the guard discover `.claude/agents/` instead of `agents/` and verify nothing — was #16, which is closed; the guard now discovers both directories. The rulebook stays unpinned until #19 ships a bootstrap, and `docs/decisions/ADR-6` records why.
+- **`.claude/agents/gate-sdd-reviewer/` has no `rules-lock.json`.** `assets/check-locks.py --update` can refresh a lock but cannot create one (#19). The rulebook stays unpinned until #19 ships a bootstrap, and `docs/decisions/ADR-6` records why.
 
 The project reviewer is `gate-sdd-reviewer` and is unrelated to the three reference reviewers in `agents/`, which are the product. Its anchor is **gates never fail open**.
 
