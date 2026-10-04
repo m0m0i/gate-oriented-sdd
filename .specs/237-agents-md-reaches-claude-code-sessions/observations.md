@@ -84,4 +84,53 @@ Every command on the `- Validators:` line exits 0:
 | `check-reviewer-allow-list.py` | 0 | 13 validator(s) covered |
 | `test-gates.sh` | 0 | 175 passed, 0 failed, 0 skipped |
 
-<!-- T2 section follows -->
+## T2 — after the three-file change, at the T2 commit (parent `8a05ed0`)
+
+Claude Code 2.1.288, run 2026-10-04.
+
+### AC1 probe, after
+
+| `instructionFiles` | Q1 | Q2 |
+| :-- | :-- | :-- |
+| `claude-md-or-agents-md` (default) | answered from `AGENTS.md:58` | answered from `AGENTS.md:64` |
+| `claude-md` | answered from `AGENTS.md:58` | answered from `AGENTS.md:64` |
+
+Word for word, under the default:
+
+```
+Q1: Rewrite the file. Do not scrub it in place, because scrubbing leaves the shape, and the shape is where the private structure lives.
+Q2: Bare `{{...}}` is a flow mapping in YAML. An unquoted placeholder would parse as an object and fail validation before substitution ever happens.
+```
+
+And under `claude-md`:
+
+```
+Q1: If the guard fires, rewrite the file — do not scrub it in place. Scrubbing leaves the shape, and the shape is where the private structure lives.
+Q2: Bare `{{...}}` is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before substitution ever happens.
+```
+
+Both rows went from `NOT-IN-CONTEXT` to `AGENTS.md`'s text. The only change between the two runs that a session loads at start is the `@AGENTS.md` line. **AC1 holds.**
+
+### AC2 comparison, after
+
+```
+validators on the line: 13
+block commands: 15
+missing from the block: none
+order: the block lists the line's commands in the line's order
+block commands not on the line (PR-only guards expected): ./scripts/check-version-bump.py ./scripts/check-backlog-tracker.py
+```
+
+The four comments come from each script's own docstring. **AC2 holds.**
+
+### AC3, after
+
+The grep finds no file stating the #16 reason. For each file, a script took the line from `HEAD` (`8a05ed0`), removed the one sentence, and found the result among the file's new lines: `AGENTS.md:74` True, `.claude/agents/gate-sdd-reviewer.md:50` True. Each paragraph is the old one minus that sentence, and its #19 reason and ADR-6 pointer stand. **AC3 holds.**
+
+`git diff --word-diff` attributes the `AGENTS.md` removal as "older reason … directories. The", taking the paragraph's second "The" rather than its first. That is the diff's alignment, not a change in wording.
+
+### Validators, after
+
+All 13 exit 0, with the same last lines as in T1. `test-gates.sh` reports 175 passed, 0 failed, 0 skipped. `check-contract-path.py` still reports 12 sources agreeing on `_shared/reviewer-contract.md`, so `AGENTS.md:63`, which was left alone, still names the contract.
+
+<!-- T3 section follows -->

@@ -17,9 +17,9 @@
   - Nothing under `skills/`, `agents/`, `hooks/` or `assets/` changes.
 - Why now: finding 1 means every Claude Code session in this checkout runs without `AGENTS.md`, the unattended ones included. That leaves out the leakage rule, which `AGENTS.md` calls the guard that matters most, and the frontmatter prohibition. The other three findings are the same file disagreeing with the tree. Filed 2026-10-04 from a prompt audit, and taken now at the author's request. It is the smallest open item, and it lands ahead of #235, whose spec edits the neighbouring lines.
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN a Claude Code session starts in this repository, with hooks disabled, no tools, and **Project instructions** pinned to its default `claude-md-or-agents-md`, THE SYSTEM SHALL answer both probe questions in `observations.md` from `AGENTS.md`'s text. Before the change it answers `NOT-IN-CONTEXT` to both. The same holds under `claude-md`. The record holds the probe, the command and settings, the Claude Code version, and every output before and after.
-  - [ ] **AC2:** every command on the `- Validators:` line appears in `AGENTS.md`'s validator block, in the line's order. The two PR-only guards the block already names stay after them.
-  - [ ] **AC3:** neither `AGENTS.md` nor `.claude/agents/gate-sdd-reviewer.md` states the #16 reason. In each, the diff of that paragraph is the one sentence removed.
+  - [x] **AC1:** WHEN a Claude Code session starts in this repository, with hooks disabled, no tools, and **Project instructions** pinned to its default `claude-md-or-agents-md`, THE SYSTEM SHALL answer both probe questions in `observations.md` from `AGENTS.md`'s text. Before the change it answers `NOT-IN-CONTEXT` to both. The same holds under `claude-md`. The record holds the probe, the command and settings, the Claude Code version, and every output before and after.
+  - [x] **AC2:** every command on the `- Validators:` line appears in `AGENTS.md`'s validator block, in the line's order. The two PR-only guards the block already names stay after them.
+  - [x] **AC3:** neither `AGENTS.md` nor `.claude/agents/gate-sdd-reviewer.md` states the #16 reason. In each, the diff of that paragraph is the one sentence removed.
   - [ ] **AC4:** `git diff --name-only origin/main...HEAD` names only these files: the three above, this spec's directory, `docs/BACKLOG.md`, `.work_logs/2026-10-04.md`, `plugin.json` and `.claude-plugin/plugin.json`. Every validator on the `- Validators:` line exits 0 after the last write.
 - Out of scope:
   - `AGENTS.md:63` (#235).
@@ -86,5 +86,5 @@ Asked and answered 2026-10-04, before Design.
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
 - [x] T1: record the baseline in `observations.md`: the AC1 probe before, the AC2 comparison before, the AC3 greps before, and the validators at exit 0.
-- [ ] T2: make the three-file change. Record the probe and both comparisons after, and assert AC1–AC3 and AC4's validators.
+- [x] T2: make the three-file change. Record the probe and both comparisons after, and assert AC1–AC3 and AC4's validators.
 - [ ] T3: cite #239 and #240 in `docs/BACKLOG.md` (Clarification 4). Record `./scripts/check-backlog-tracker.py` reporting no drift.
