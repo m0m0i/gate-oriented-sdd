@@ -16,8 +16,9 @@ DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 # No blocking channel here, so a skewed hooks/ cannot be made loud — but it must not be
 # silent either. Without this, a stale library omits Owns, Validators and Reviewer and prints
-# "not found" to stderr, which is #34's exact symptom reintroduced by #34's fix.
-command -v gate_steering_value >/dev/null 2>&1 || {
+# "not found" to stderr, which is #34's exact symptom reintroduced by #34's fix. The branch
+# line below reads through gate_head_branch, so a library predating that is the same skew. #233.
+command -v gate_steering_value >/dev/null 2>&1 && command -v gate_head_branch >/dev/null 2>&1 || {
   echo "## Repo facts"
   echo "- (steering digest degraded: hooks/gate-lib.sh predates the shared reader — re-copy the plugin's hooks/)"
   exit 0
@@ -38,7 +39,11 @@ echo "- Live specs are .specs/<slug>/spec.md; shipped ones are under .specs/_arc
 echo "- Archiving a shipped spec into .specs/_archive/ is a sweep run on request, not a step in that flow."
 echo "- A Stop hook enforces the quality gate and the freshness of the review receipt."
 
-branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')
+# By its own name, never git's short form, which lengthens to `heads/<name>` when a tag shares
+# it — and then this line denied a spec that exists. Status 1 is a detached HEAD, printed as the
+# literal `HEAD` as it always was; an unborn branch is named, where `rev-parse` used to print
+# `HEAD` for it too. #233.
+branch=$(gate_head_branch); [ $? -eq 1 ] && branch=HEAD
 spec=".specs/$branch/spec.md"
 if [ -n "$branch" ] && [ -f "$spec" ]; then
   status=$(sed -n 's/.*Status: *\([A-Za-z]*\).*/\1/p' "$spec" | head -1)

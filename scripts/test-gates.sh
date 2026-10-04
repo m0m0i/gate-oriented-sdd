@@ -387,6 +387,180 @@ case "$err" in *"has no commits yet"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a receipt on an unborn branch blocks, having no commit to describe" ok \
   || report "a receipt on an unborn branch blocks, having no commit to describe" no "exit=$c1 json=$c2 says-why=$c3 ($out)"
 
+# 176. #233 — a tag that shares a spec branch's name. Git shortens a name only as far as stays
+#      unambiguous, so the scan's short form for a tag-shadowed branch was `heads/12-parked`, and
+#      that string was used as the slug: `.specs/heads/12-parked/spec.md` exists nowhere, and the
+#      gate printed `{}`. One ordinary command, no damage. The branch is named by its own name.
+r=$(make_repo tagshadow 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git tag 12-parked 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c3=ok ;; *) c3=no ;; esac
+case "$err" in *"heads/12-parked"*) c4=no ;; *) c4=ok ;; esac
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "a branch a tag shadows blocks from another branch, by its own name" ok \
+  || report "a branch a tag shadows blocks from another branch, by its own name" no "exit=$c1 json=$c2 names-branch=$c3 no-heads-prefix=$c4 ($out)"
+
+# 177. #233 — the same tag, standing on the branch. `symbolic-ref --short` lengthened the name the
+#      same way, so the current-branch check looked for `.specs/heads/12-parked/` in both trees,
+#      found neither, and returned; the scan then skipped `heads/12-parked` by name. The block is
+#      the one an unshadowed branch gets in this state, worded the same way.
+r=$(make_repo tagshadowon 1); park_spec "$r" 12-parked 0
+( cd "$r" && git tag 12-parked 12-parked && git checkout -q 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"every task in .specs/12-parked/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "standing on a branch a tag shadows blocks as on any other" ok \
+  || report "standing on a branch a tag shadows blocks as on any other" no "exit=$c1 says-no-receipt=$c2 ($out)"
+
+# 178. #233 — a tag is not the only shadow. `refs/remotes/origin/HEAD` makes the bare name `origin`
+#      ambiguous, so a branch named `origin` shortened to `heads/origin` in the scan. #228's review
+#      measured this standing on the branch, where it blocks, and called it no fail-open; scanned
+#      from `main` it was one.
+r=$(make_repo originbranch 1); park_spec "$r" origin 0
+( cd "$r" && git checkout -q main && git update-ref refs/remotes/origin/main main \
+  && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  origin — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a branch named origin beside origin/HEAD blocks from another branch" ok \
+  || report "a branch named origin beside origin/HEAD blocks from another branch" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 179. #233 — pin, green before the fix and after: a slashed spec branch keeps its slug byte for
+#      byte. `refs/heads/` is stripped once, from the front, so the rest of the name — slash and
+#      all — is the directory under `.specs/`, from both sides.
+r=$(make_repo slashed 1); park_spec "$r" 12-feat/sub 0
+( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-feat/sub — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+( cd "$r" && git checkout -q 12-feat/sub ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+case "$err" in *"every task in .specs/12-feat/sub/spec.md is ticked, but no reviewer receipt exists"*) c4=ok ;; *) c4=no ;; esac
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "a slashed spec branch keeps its slug from both sides" ok \
+  || report "a slashed spec branch keeps its slug from both sides" no "scan-exit=$c1 scan-names=$c2 own-exit=$c3 own-message=$c4 ($out)"
+
+# 180. #233 — pin, green before the fix and after: in a linked worktree HEAD is that worktree's own,
+#      so the branch it names is the one checked out there, not the main checkout's.
+r=$(make_repo linked 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git worktree add -q "$TMP/linked-wt" 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$TMP/linked-wt"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"every task in .specs/12-parked/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a linked worktree's gate reads that worktree's branch" ok \
+  || report "a linked worktree's gate reads that worktree's branch" no "exit=$c1 own-message=$c2 ($out)"
+
+# 181. #233 — the base, asked by bare name, is a short name too, and git resolves a bare name to a
+#      tag before a branch. A tag `main` at an unreviewed tip made that tip the base, so the scan
+#      read the branch as shipped and skipped it. The base is asked for by full refname now.
+r=$(make_repo tagbase 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git tag main 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a tag named main cannot make an unreviewed branch read as shipped" ok \
+  || report "a tag named main cannot make an unreviewed branch read as shipped" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 182. #233 — the same with a remote, where the first candidate is `origin/HEAD`: a tag of that name
+#      shadows the remote-tracking symref.
+r=$(make_repo tagoriginhead 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git update-ref refs/remotes/origin/main main \
+  && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main && git tag origin/HEAD 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a tag named origin/HEAD cannot make an unreviewed branch read as shipped" ok \
+  || report "a tag named origin/HEAD cannot make an unreviewed branch read as shipped" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 183. #233 — pin, green before the fix and after, for the half of the fix a plain full refname
+#      does not give. `rev-parse` disambiguates a full refname too: with no `main` branch,
+#      `refs/heads/main` resolves a tag literally named `refs/heads/main` — measured. The base is
+#      therefore asked whether that exact ref exists first, so here it is empty and the scan names
+#      the branch under the no-base note, rather than reading the tag's tip as shipped.
+r=$(make_repo tagfullname 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git branch -m main trunk && git tag refs/heads/main 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"no resolvable default branch"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a tag named like a full branch ref is not read as the base" ok \
+  || report "a tag named like a full branch ref is not read as the base" no "exit=$c1 names-branch=$c2 no-base-note=$c3 ($out)"
+
+# 191. #233 — pin, green before the fix and after: gate_ref_commit follows the symbolic
+#      `refs/remotes/origin/HEAD`. In cases 178 and 182 it points at `origin/main`, the next
+#      candidate, so they pass whether or not it is followed. Here it points at `origin/trunk`,
+#      which has no `origin/main` or `origin/master` behind it, and local `main` has merged the
+#      unreviewed branch: if `show-ref --verify` stopped following the symref, the base would fall
+#      through to `main` and the branch would read as shipped. Review round 1's LOW.
+r=$(make_repo symrefbase 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git update-ref refs/remotes/origin/trunk main \
+  && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk && git merge -q 12-parked ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "the base follows origin/HEAD to a branch that is not the next candidate" ok \
+  || report "the base follows origin/HEAD to a branch that is not the next candidate" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 189. #233 — the class rather than the instance. A short ref name is ambiguous whenever another
+#      ref shares it, and every place this repository used one to name a branch hid that branch:
+#      the gate's two naming lines, its base, the by-hand checker and the digest. Cases 176–188
+#      pin those five sites; this one goes red at the sixth, before it ships. It reads every line
+#      of the shipped shell except whole-line comments, which is where prose cites the old
+#      commands as history. A trailing comment is NOT stripped: the first version cut from the
+#      first whitespace-`#` on the line, and `echo "see #16"; <a short-name read>` — an issue cite
+#      in a message, this repository's house style — lost the read with the comment. Review round
+#      1's HIGH. `rev-parse --short <sha>` abbreviates a commit, not a ref, and is not matched.
+#      The matcher is exercised on known lines first, and awk's own status is read, so a broken
+#      pattern or an empty file list cannot report ok having checked nothing.
+short_ref_re='refname:short|--abbrev-ref|symbolic-ref.*--short'
+short_ref_reads() {  # <file>... — prints file:line: text for each short-name read outside a comment line
+  awk -v re="$short_ref_re" '!/^[[:space:]]*#/ && $0 ~ re { print FILENAME ":" FNR ": " $0 }' "$@"
+}
+printf '%s\n' 'b=$(git rev-parse --abbrev-ref HEAD)' 'x=${y#z}; b=$(git symbolic-ref -q --short HEAD)' \
+  "for r in \$(git for-each-ref --format='%(refname:short)')" \
+  'echo "see #16"; b=$(git rev-parse --abbrev-ref HEAD)' 'b=$(git symbolic-ref -q HEAD)  # not --abbrev-ref' \
+  > "$TMP/needle-hit.sh"
+printf '%s\n' '# b=$(git rev-parse --abbrev-ref HEAD)' '    # b=$(git rev-parse --abbrev-ref HEAD)' \
+  's=$(git rev-parse --short "$sha")' > "$TMP/needle-miss.sh"
+n_hit=$(short_ref_reads "$TMP/needle-hit.sh" | wc -l | tr -d ' ')
+n_miss=$(short_ref_reads "$TMP/needle-miss.sh" | wc -l | tr -d ' ')
+reads=$(short_ref_reads "$ROOT"/hooks/*.sh "$ROOT"/assets/*.sh); rc=$?
+if [ "$n_hit$n_miss" != 50 ]; then
+  report "no shipped shell names a branch by git's short form" no "matcher self-test: $n_hit of 5 hits, $n_miss of 0 misses"
+elif [ "$rc" -ne 0 ]; then
+  report "no shipped shell names a branch by git's short form" no "awk exited $rc, so nothing was read"
+elif [ -n "$reads" ]; then
+  report "no shipped shell names a branch by git's short form" no "$(printf '%s' "$reads" | sed "s|$ROOT/||" | tr '\n' ';')"
+else
+  report "no shipped shell names a branch by git's short form" ok
+fi
+
+# 190. #233 — a gate-lib.sh that predates the two readers this spec added. Without a guard the
+#      gate still blocked, since a missing gate_head_branch exits 127 and reaches the naming
+#      line's `*)` arm — but that arm says the ref store is damaged and sends the person to repair
+#      a healthy repository, every turn. A missing gate_ref_commit was quieter: the base came back
+#      empty and the gate went on, naming every branch as unshipped. Either one is the library
+#      being older than the gate, and the remedy is quality-gate.sh's: re-copy hooks/. Review
+#      round 1's MEDIUM. The fixture is one the gate is silent on when healthy.
+for fn in gate_head_branch gate_ref_commit; do
+  r=$(make_repo "skew-$fn" 1)
+  python3 - "$r" "$fn" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh")
+src = p.read_text()
+i = src.index(sys.argv[2] + "() {")
+j = src.index("\n}\n", i) + 3
+p.write_text(src[:i] + src[j:])
+PYEOF
+  out=$(run_gate "$r"); err=$(cat "$TMP/err")
+  case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+  case "$out" in *"predates $fn"*"Re-copy the plugin's hooks/"*) c2=ok ;; *) c2=no ;; esac
+  case "$out" in *"ref store"*) c3=no ;; *) c3=ok ;; esac
+  [ "$c1$c2$c3" = "okokok" ] && report "a gate-lib without $fn blocks the review gate with the re-copy remedy" ok \
+    || report "a gate-lib without $fn blocks the review gate with the re-copy remedy" no "exit=$c1 names-fn-and-remedy=$c2 no-damage-claim=$c3 ($out)"
+done
+
 # 78. Standing on a spec branch of your own does not buy silence about someone else's. Without
 #     this, `git checkout -b` onto a directory holding a task-less spec is a second one-command
 #     bypass: the current branch's own checks return early at "no tasks authored" and the
@@ -1266,6 +1440,29 @@ case "$err" in *"cannot resolve"*) c2=ok ;; *) c2=no ;; esac
 case "$err" in *"fetch-depth"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "check-unreviewed-work fails on a head commit it cannot see" ok \
   || report "check-unreviewed-work fails on a head commit it cannot see" no "nonzero=$c1 says-why=$c2 names-remedy=$c3"
+
+# 184. #233 — run by hand with no arguments on a branch a tag shadows. The default name came from
+#      `rev-parse --abbrev-ref HEAD`, which lengthens to `heads/12-parked`, so the checker said
+#      the branch "carries no spec" and exited 0 over a finished, unreviewed one. CI passes both
+#      arguments from the event and never reached this; a person checking their own branch did.
+r=$(uw_repo uw-tagshadow 1); park_spec "$r" 12-parked 0
+( cd "$r" && git tag 12-parked 12-parked && git checkout -q 12-parked ) >/dev/null 2>&1
+out=$(run_uw "$r"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work by hand names a branch a tag shadows by its own name" ok \
+  || report "check-unreviewed-work by hand names a branch a tag shadows by its own name" no "exit=$c1 names-branch=$c2 ($out)"
+
+# 185. #233 — the branch name given alone, with a tag of the same name at another commit. The
+#      commit came from resolving the bare name, which takes the tag first, so the checker read
+#      `main`'s tree in the branch's place and said it carried no spec.
+r=$(uw_repo uw-tagelsewhere 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q main && git tag 12-parked main ) >/dev/null 2>&1
+out=$(run_uw "$r" 12-parked); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work reads a named branch's own tip, not a tag's" ok \
+  || report "check-unreviewed-work reads a named branch's own tip, not a tag's" no "exit=$c1 names-branch=$c2 ($out)"
 
 # --- quality-gate.sh -------------------------------------------------------------
 #
@@ -2402,6 +2599,53 @@ case "$sweep" in *"on request"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3$c4" = "okokokok" ] && report "the digest names the chain and keeps archive out of it" ok \
   || report "the digest names the chain and keeps archive out of it" no \
      "chain=$c1 no-archive=$c2 sweep-on-request=$c3 clean-stderr=$c4"
+
+# 186. #233 — the digest on a branch a tag shadows. It named the branch with `rev-parse
+#      --abbrev-ref HEAD`, which lengthens to `heads/12-parked`, and told the session that branch
+#      had no spec directory — at the start of the session about to implement that spec.
+r=$(make_repo dg-tagshadow 1); park_spec "$r" 12-parked 0
+cp "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+( cd "$r" && git tag 12-parked 12-parked && git checkout -q 12-parked ) >/dev/null 2>&1
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"The active branch 12-parked has spec .specs/12-parked/spec.md"*) c1=ok ;; *) c1=no ;; esac
+[ -s "$TMP/dgerr" ] && c2=no || c2=ok
+[ "$c1$c2" = "okok" ] && report "the digest names a branch a tag shadows, and finds its spec" ok \
+  || report "the digest names a branch a tag shadows, and finds its spec" no "names-and-finds=$c1 clean-stderr=$c2 ($(grep -F 'active branch' "$TMP/dgout"))"
+
+# 187. #233 — an unborn branch is named too, where `rev-parse` echoed its argument and the digest
+#      printed the literal `HEAD`. A detached HEAD still prints `HEAD`, unchanged: it has no
+#      branch to name, and this spec moves no line it does not have to.
+r=$(make_repo dg-unborn 1)
+cp "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+( cd "$r" && git checkout -q main && git checkout -q --orphan 13-unborn && mkdir -p .specs/13-unborn \
+  && printf '# Spec: unborn\n- Slug: 13-unborn   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [ ] T1: todo\n' \
+       > .specs/13-unborn/spec.md ) >/dev/null 2>&1
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"The active branch 13-unborn has spec .specs/13-unborn/spec.md"*) c1=ok ;; *) c1=no ;; esac
+( cd "$r" && rm -rf .specs/13-unborn && git checkout -q -f main && git checkout -q "$(git rev-parse HEAD)" ) >/dev/null 2>&1
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"The active branch HEAD has no spec directory under .specs/."*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "the digest names an unborn branch, and a detached HEAD as before" ok \
+  || report "the digest names an unborn branch, and a detached HEAD as before" no "unborn-named=$c1 detached-unchanged=$c2 ($(grep -F 'active branch' "$TMP/dgout"))"
+
+# 188. #233 — case 33's guard, for the reader this spec added. A gate-lib.sh that predates
+#      gate_head_branch degrades the digest visibly, as one that predates gate_steering_value does,
+#      rather than leaving the branch line to a function that is not there.
+r=$(make_repo dg-nohb 1)
+cp "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh")
+src = p.read_text()
+i = src.index("gate_head_branch() {")
+j = src.index("\n}\n", i) + 3
+p.write_text(src[:i] + src[j:])
+PYEOF
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"degraded"*) c1=ok ;; *) c1=no ;; esac
+[ -s "$TMP/dgerr" ] && c2=no || c2=ok
+[ "$c1$c2" = "okok" ] && report "a gate-lib without gate_head_branch degrades the digest visibly" ok \
+  || report "a gate-lib without gate_head_branch degrades the digest visibly" no "visible=$c1 clean-stderr=$c2"
 
 # --- guards: scripts/check-markdown-fences.py ---------------------------------------
 #

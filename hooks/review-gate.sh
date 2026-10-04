@@ -66,6 +66,14 @@ if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
   cd "$repo_root"
 fi
 
+# The two readers below came with #233, so a gate-lib.sh copied before them is a library older
+# than this gate. Unguarded, a missing gate_head_branch exits 127 and reaches the naming line's
+# damage arm, which sends the person to repair a healthy repository; a missing gate_ref_commit
+# empties the base without a word. quality-gate.sh guards its reader the same way. Case 190.
+for _gate_fn in gate_head_branch gate_ref_commit; do
+  command -v "$_gate_fn" >/dev/null 2>&1 || gate_block "Review gate: gate-lib.sh predates $_gate_fn, so this gate cannot name the branch HEAD is on or the branch work ships to. Re-copy the plugin's hooks/ into this project and run again rather than treating this turn as a pass."
+done
+
 # Which branch HEAD is on, asked of the symbolic ref rather than of a commit, because an unborn
 # branch — `git checkout --orphan`, or any fresh `git init` — has a name and no commit yet. This
 # line used to be `git rev-parse --abbrev-ref HEAD … || gate_pass`, from the first commit, when the
@@ -74,13 +82,16 @@ fi
 # always runs; this line sits in front of both and kept its pass, so an unborn branch turned the one
 # enforced rule off until its first commit. #228. Nothing in front of the scan may pass.
 #
-# `symbolic-ref -q` answers by exit status, three ways, where `rev-parse` gave two:
+# gate_head_branch asks `symbolic-ref -q HEAD`, which answers by exit status, three ways, where
+# `rev-parse` gave two:
 #
-#   0    a branch, born or unborn: its name, shortened the way `rev-parse --abbrev-ref` shortens it
+#   0    a branch, born or unborn: its own name, the full ref with `refs/heads/` stripped. Never
+#        git's short form, which is `heads/<name>` whenever a tag or a remote's HEAD shares the
+#        name, and which hid that branch from both checks below until #233 (cases 176–178)
 #   1    a detached HEAD: the literal `HEAD`, which both checks below already handle (case 77)
 #   128  a ref store git cannot read — damage, and a gate that cannot name the branch it stands on
 #        cannot say what it checked (case 174)
-branch=$(git symbolic-ref -q --short HEAD 2>/dev/null); rc=$?
+branch=$(gate_head_branch); rc=$?
 case "$rc" in
   0) : ;;
   1) branch=HEAD ;;
@@ -112,11 +123,15 @@ reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 # Both skip sites below ask two questions of this base, not one: was the COMMIT joined into its
 # history, and did the WORK reach it. The second exists because a squash merge answers no to
 # the first forever — #182, and gate_work_reached_base carries the reasoning.
-base=$(git rev-parse --verify -q origin/HEAD 2>/dev/null \
-     || git rev-parse --verify -q origin/main 2>/dev/null \
-     || git rev-parse --verify -q origin/master 2>/dev/null \
-     || git rev-parse --verify -q main 2>/dev/null \
-     || git rev-parse --verify -q master 2>/dev/null) || base=""
+#
+# Each candidate is a full refname, resolved exactly. These used to be bare names, and git
+# resolves a bare name to a tag before a branch or a remote, so `git tag main <unreviewed tip>`
+# made that tip the base and the scan skipped its branch as shipped. #233, cases 181–183.
+base=$(gate_ref_commit refs/remotes/origin/HEAD \
+     || gate_ref_commit refs/remotes/origin/main \
+     || gate_ref_commit refs/remotes/origin/master \
+     || gate_ref_commit refs/heads/main \
+     || gate_ref_commit refs/heads/master) || base=""
 
 # The branch you are standing on, with the messages written in the second person because you
 # are the person who can act on them. Every exit from here is a `return`, never a pass: the
@@ -256,17 +271,22 @@ check_current_branch() {
 # therefore find nothing and report it as cleanliness — the same silence, one layer deeper.
 scan_other_branches() {
   found=''
-  for ref in $(git for-each-ref --format='%(refname:short)' refs/heads/ 2>/dev/null); do
-    [ "$ref" = "$branch" ] && continue
+  # Full refnames, and the slug stripped by hand; gate_head_branch says why. `ref` is what git
+  # reads, exactly, since for-each-ref has just listed it; `slug` is what a person reads and what
+  # names the spec directory. No branch can be named `HEAD` (git refuses), so under a detached
+  # HEAD the skip below never fires.
+  for ref in $(git for-each-ref --format='%(refname)' refs/heads/ 2>/dev/null); do
+    slug=${ref#refs/heads/}
+    [ "$slug" = "$branch" ] && continue
     tip=$(git rev-parse --verify -q "$ref^{commit}" 2>/dev/null) || continue
     if [ -n "$base" ] && { git merge-base --is-ancestor "$tip" "$base" 2>/dev/null \
-         || gate_work_reached_base "$ref" "$tip" "$base"; }; then
+         || gate_work_reached_base "$slug" "$tip" "$base"; }; then
       continue                        # shipped — case 8's reasoning, one branch over
     fi
-    state=$(gate_spec_review_state ".specs/$ref" "$tip" "$ref")
+    state=$(gate_spec_review_state ".specs/$slug" "$tip" "$ref")
     [ -n "$state" ] || continue
     found="$found
-  $ref — $(gate_review_state_sentence "$state")"
+  $slug — $(gate_review_state_sentence "$state")"
   done
 
   [ -n "$found" ] || return 0
@@ -280,8 +300,8 @@ scan_other_branches() {
 (This repository has no resolvable default branch — origin/HEAD, origin/main, origin/master, main and master are all missing — so the gate cannot tell which of these branches have already shipped, and is naming them all.)'
 
   # "a branch you are not standing on" would be false under a detached HEAD, which is a path
-  # this deliberately blocks (case 77): `git rev-parse --abbrev-ref HEAD` yields the literal
-  # `HEAD`, so the branch you are detached at is reported like any other.
+  # this deliberately blocks (case 77): the naming line's arm 1 sets the literal `HEAD`, which no
+  # branch can be named, so the branch you are detached at is reported like any other.
   gate_block "Review gate: this repository holds finished work that nobody has reviewed, on a branch other than the one this turn is on:
 $found
 
