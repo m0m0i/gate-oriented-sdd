@@ -79,3 +79,8 @@ Asked and answered 2026-10-04.
 - **INFO, recorded, not changed:** a HEAD that plumbing points at `refs/tags/<x>` now reads as detached, so a finished spec in that tree goes from blocking to silent. This is out of scope on purpose (section 1).
 - **INFO, partly taken:** the checker's reason for having no skew guard overstated the CI argument. A guard placed only on the empty-argument paths would never run in CI. The comment and the Design now say what is true: both calls sit on paths CI never takes, and both fail closed. A guard with a re-copy message on those paths would be a better message, not a safer one, and is left out.
 - **INFO, a step and not a finding:** the version bump. `implement` makes it after the receipt.
+
+Round 2 at `23aafec`: **CLEAN**, 0 BLOCKER, 0 HIGH. It found no fail-open in the delta: the guard only blocks, and the needle is only stricter. That is the stop.
+
+- **MEDIUM, recorded, not changed (C-8):** AC7's exemption for the pins landed in `23aafec`, the same commit that adds case 191, which the exemption covers. Splitting it would orphan the receipt's sha. The record is this line. Round 1 asked for both the pin and the AC7 change, and 191 pins behaviour that already existed: it is green at `7ef35ab`.
+- **INFO:** the reviewer disclosed that in round 1 it ran `git show origin/main:scripts/test-gates.sh`, which is outside its allow-list, to confirm the case-78 header. It is read-only, and its finding was right. This is the same allow-list gap as #237's C-8 next step.
