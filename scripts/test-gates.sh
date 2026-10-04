@@ -487,6 +487,36 @@ case "$err" in *"no resolvable default branch"*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a tag named like a full branch ref is not read as the base" ok \
   || report "a tag named like a full branch ref is not read as the base" no "exit=$c1 names-branch=$c2 no-base-note=$c3 ($out)"
 
+# 189. #233 — the class rather than the instance. A short ref name is ambiguous whenever another
+#      ref shares it, and every place this repository used one to name a branch hid that branch:
+#      the gate's two naming lines, its base, the by-hand checker and the digest. Cases 176–188
+#      pin those five sites; this one goes red at the sixth, before it ships. It reads every
+#      non-comment line of the shipped shell that names a branch, so prose citing the old commands
+#      as history stays sayable. `rev-parse --short <sha>` abbreviates a commit, not a ref, and is
+#      not matched. The matcher is exercised on known lines first, and awk's own status is read,
+#      so a broken pattern or an empty file list cannot report ok having checked nothing.
+short_ref_re='refname:short|--abbrev-ref|symbolic-ref.*--short'
+short_ref_reads() {  # <file>... — prints file:line: text for each non-comment short-name read
+  awk -v re="$short_ref_re" '{ l = $0; if (l ~ /^[[:space:]]*#/) next; sub(/[[:space:]]#.*/, "", l)
+                               if (l ~ re) print FILENAME ":" FNR ": " l }' "$@"
+}
+printf '%s\n' 'b=$(git rev-parse --abbrev-ref HEAD)' 'x=${y#z}; b=$(git symbolic-ref -q --short HEAD)' \
+  "for r in \$(git for-each-ref --format='%(refname:short)')" > "$TMP/needle-hit.sh"
+printf '%s\n' '# b=$(git rev-parse --abbrev-ref HEAD)' 'b=$(git symbolic-ref -q HEAD)  # not --abbrev-ref' \
+  's=$(git rev-parse --short "$sha")' > "$TMP/needle-miss.sh"
+n_hit=$(short_ref_reads "$TMP/needle-hit.sh" | wc -l | tr -d ' ')
+n_miss=$(short_ref_reads "$TMP/needle-miss.sh" | wc -l | tr -d ' ')
+reads=$(short_ref_reads "$ROOT"/hooks/*.sh "$ROOT/assets/check-unreviewed-work.sh"); rc=$?
+if [ "$n_hit$n_miss" != 30 ]; then
+  report "no shipped shell names a branch by git's short form" no "matcher self-test: $n_hit of 3 hits, $n_miss of 0 misses"
+elif [ "$rc" -ne 0 ]; then
+  report "no shipped shell names a branch by git's short form" no "awk exited $rc, so nothing was read"
+elif [ -n "$reads" ]; then
+  report "no shipped shell names a branch by git's short form" no "$(printf '%s' "$reads" | sed "s|$ROOT/||" | tr '\n' ';')"
+else
+  report "no shipped shell names a branch by git's short form" ok
+fi
+
 # 78.Standing on a spec branch of your own does not buy silence about someone else's. Without
 #     this, `git checkout -b` onto a directory holding a task-less spec is a second one-command
 #     bypass: the current branch's own checks return early at "no tasks authored" and the

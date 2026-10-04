@@ -74,9 +74,12 @@ fi
 # always runs; this line sits in front of both and kept its pass, so an unborn branch turned the one
 # enforced rule off until its first commit. #228. Nothing in front of the scan may pass.
 #
-# `symbolic-ref -q` answers by exit status, three ways, where `rev-parse` gave two:
+# gate_head_branch asks `symbolic-ref -q HEAD`, which answers by exit status, three ways, where
+# `rev-parse` gave two:
 #
-#   0    a branch, born or unborn: its name, shortened the way `rev-parse --abbrev-ref` shortens it
+#   0    a branch, born or unborn: its own name, the full ref with `refs/heads/` stripped. Never
+#        git's short form, which is `heads/<name>` whenever a tag or a remote's HEAD shares the
+#        name, and which hid that branch from both checks below until #233 (cases 176–178)
 #   1    a detached HEAD: the literal `HEAD`, which both checks below already handle (case 77)
 #   128  a ref store git cannot read — damage, and a gate that cannot name the branch it stands on
 #        cannot say what it checked (case 174)
@@ -289,8 +292,8 @@ scan_other_branches() {
 (This repository has no resolvable default branch — origin/HEAD, origin/main, origin/master, main and master are all missing — so the gate cannot tell which of these branches have already shipped, and is naming them all.)'
 
   # "a branch you are not standing on" would be false under a detached HEAD, which is a path
-  # this deliberately blocks (case 77): `git rev-parse --abbrev-ref HEAD` yields the literal
-  # `HEAD`, so the branch you are detached at is reported like any other.
+  # this deliberately blocks (case 77): the naming line's arm 1 sets the literal `HEAD`, which no
+  # branch can be named, so the branch you are detached at is reported like any other.
   gate_block "Review gate: this repository holds finished work that nobody has reviewed, on a branch other than the one this turn is on:
 $found
 
