@@ -544,7 +544,12 @@ fi
 #      empty and the gate went on, naming every branch as unshipped. Either one is the library
 #      being older than the gate, and the remedy is quality-gate.sh's: re-copy hooks/. Review
 #      round 1's MEDIUM. The fixture is one the gate is silent on when healthy.
-for fn in gate_head_branch gate_ref_commit; do
+#
+#      #191 added a third reader, gate_tree_names, and AC8 holds it to the same guard. Without
+#      one this fixture is silent, since its spec is in the working tree and the reader is never
+#      called; where it is called, the missing function's 127 is not the 1 the fallback returns
+#      on, so the gate would go on to block with `command not found` on the stderr it hands over.
+for fn in gate_head_branch gate_ref_commit gate_tree_names; do
   r=$(make_repo "skew-$fn" 1)
   python3 - "$r" "$fn" <<'PYEOF'
 import pathlib, sys
@@ -1322,6 +1327,15 @@ fi
 #      The first has one local branch, which is the base, and blobs missing behind every other
 #      ref. The second fetched the branch's blobs at that checkout, so offline it is read like
 #      any full clone's branch and says what case 76 says.
+#
+#      RED-CAPABILITY: passes on first run, so established by mutation, and only for one half.
+#      Named mutation "a path the tree does not name is a 2": gate_tree_names ending
+#      `[ -n "$_tn" ] || return 2`. Run: the second half goes red, its missing receipt read as
+#      an unreadable one, and thirteen other cases with it. The first half stays green under
+#      that and under case 194's mutation, and that is said rather than dressed up, as case 148
+#      does: standing on the base, the shipped-work skip returns before any state is read, and
+#      the scan skips the base, so the silence is over-determined. What it constrains is a
+#      reader that asks for objects ahead of that skip.
 bc="$TMP/blobless-fresh"; bd="$TMP/blobless-fetched"
 if git clone -q --filter=blob:none "file://$r" "$bc" 2>/dev/null \
    && git clone -q --filter=blob:none "file://$r" "$bd" 2>/dev/null \
@@ -1341,6 +1355,59 @@ else
   note_skip "a blobless clone is silent when fresh and blocks as usual once the branch is fetched" \
             "git clone --filter=blob:none over file:// did not leave the spec's blob out here"
 fi
+
+# 197. #191 AC2 — the line the issue names. Standing on the branch with the spec out of the
+#      working tree, check_current_branch asked `git cat-file -e HEAD:<spec> || return 0`, and
+#      the scan skips this ref by name, so an object git could not get was silence on both
+#      paths. Case 146's state, with the blob gone as well.
+#
+#      The second half is AC4 on this path: the spec is readable and the receipt's object is
+#      not. That blocked before, through the library, but with a remedy for a file mode.
+#
+#      Both halves pin what case 146 said had no cheap fixture: the sentence the two unreadable
+#      states carry when the read came from the branch's own tree. It sends the person to the
+#      network or to the repository, and never to a permission.
+r=$(make_repo wtobjgone 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q 12-parked && rm .specs/12-parked/spec.md ) >/dev/null 2>&1
+id=$( cd "$r" && git rev-parse "HEAD:.specs/12-parked/spec.md" )
+drop_object "$r" "$id" && c0=ok || c0=no
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *".specs/12-parked/spec.md cannot be read from this branch's own tree"*"git fetch"*) c3=ok ;; *) c3=no ;; esac
+case "$err" in *"not in your working tree"*) c4=ok ;; *) c4=no ;; esac
+case "$err" in *"permission"*|*"other than the one this turn is on"*) c5=no ;; *) c5=ok ;; esac
+
+r=$(make_repo wtrcptobjgone 1); park_spec "$r" 12-parked 0 CLEAN
+( cd "$r" && git checkout -q 12-parked \
+  && rm .specs/12-parked/spec.md .specs/12-parked/.review-receipt ) >/dev/null 2>&1
+id=$( cd "$r" && git rev-parse "HEAD:.specs/12-parked/.review-receipt" )
+drop_object "$r" "$id" && c6=ok || c6=no
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c7=ok ;; *) c7=no ;; esac
+case "$err" in *".specs/12-parked/.review-receipt cannot be read from this branch's own tree"*"git fetch"*) c8=ok ;; *) c8=no ;; esac
+case "$err" in *"permission"*) c9=no ;; *) c9=ok ;; esac
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokokok" ] \
+  && report "a current branch's spec or receipt git cannot get blocks, with a remedy for an object" ok \
+  || report "a current branch's spec or receipt git cannot get blocks, with a remedy for an object" no \
+     "spec: dropped=$c0 exit=$c1 json=$c2 says-why=$c3 names-the-tree=$c4 no-file-mode=$c5; receipt: dropped=$c6 exit=$c7 says-why=$c8 no-file-mode=$c9 ($out)"
+
+# 198. #191 AC5, the current branch — a tree that could not be read is not a tree that does not
+#      name the spec. The reader returns 2 for it, and the fallback returns only on 1.
+#
+#      RED-CAPABLE under the named mutation "anything but named is nothing to gate": the
+#      fallback written `gate_tree_names HEAD "$spec" || return 0`, which is how the line it
+#      replaces was shaped. Run, not reasoned: it takes this case red and no other, case 197
+#      included, because a removed blob leaves the tree readable and the reader answers 0.
+r=$(make_repo wttreegone 1); park_spec "$r" 12-parked 0
+( cd "$r" && git checkout -q 12-parked && rm .specs/12-parked/spec.md ) >/dev/null 2>&1
+id=$( cd "$r" && git rev-parse "HEAD:.specs/12-parked" )
+drop_object "$r" "$id" && c0=ok || c0=no
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *".specs/12-parked/spec.md cannot be read from this branch's own tree"*) c2=ok ;; *) c2=no ;; esac
+[ "$c0$c1$c2" = "okokok" ] && report "a current branch whose spec directory's tree cannot be read blocks" ok \
+  || report "a current branch whose spec directory's tree cannot be read blocks" no "object-dropped=$c0 exit=$c1 says-why=$c2 ($out)"
 
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the

@@ -68,6 +68,6 @@ Asked and answered 2026-10-04.
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: the library. Cases for AC1 (a removed blob, and the issue's offline blobless clone), AC4 and AC5's scan half, red against `dbf51df`; AC6's two blobless pins, green before and after. Then `gate_tree_names`, `_gate_read` and the two sentences → green.
-- [ ] T2: the gate. Cases for AC2, AC5's current-branch half and AC8's gate half, red. Then the fallback, the two tree-read sentences and the skew guard → green.
+- [x] T2: the gate. Cases for AC2, AC5's current-branch half and AC8's gate half, red. Then the fallback, the two tree-read sentences and the skew guard → green.
 - [ ] T3: the checker. Cases for AC3, AC5's checker half and AC8's checker half, red. Then `check-unreviewed-work.sh` → green.
 - [ ] T4: the needle case, and the comments this change made false (case 146's "not pinned" note, the fallback's own). Full suite green.
