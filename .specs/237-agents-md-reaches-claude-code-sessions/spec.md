@@ -1,6 +1,6 @@
 # Spec: AGENTS.md reaches a Claude Code session, and two of its passages stop disagreeing with the tree
 
-- Slug: 237-agents-md-reaches-claude-code-sessions   Issue: 237   Type: chore   Status: approved
+- Slug: 237-agents-md-reaches-claude-code-sessions   Issue: 237   Type: chore   Status: done
 - Author: m0m0i   Date: 2026-10-04
 
 ## 1. Requirements (WHAT / WHY)
