@@ -182,13 +182,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Pinned, and only until #235 ships. 2.1.289 (2026-10-03) began reporting what was already
-      # true at runtime: the rulebooks and the reviewer contract under agents/ load as agents, and
-      # CLAUDE.md sits at the plugin root. --strict turns those nine warnings into a failure on
-      # every pull request. 2.1.288 passes the same tree. Unpinning before #235 lands would make
-      # this required check red for a reason no pull request can fix, so the pin moves only with it.
+      # Unpinned on purpose. This job is how the plugin learns what the current CLI says about
+      # it: 2.1.289 began reporting that everything under agents/ registered as an agent, which
+      # had been true all along and is #235. It was held at 2.1.288 from then until #235 shipped.
+      # A pin here is a required check that stops looking, so take one only with an issue that
+      # removes it.
       - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code@2.1.288
+        run: npm install -g @anthropic-ai/claude-code
       - name: Validate marketplace and plugin
         run: |
           claude plugin validate .claude-plugin/marketplace.json --strict

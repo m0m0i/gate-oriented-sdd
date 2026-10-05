@@ -1,5 +1,5 @@
 # Spec: the plugin registers its reviewers' rulebooks, contract and template as agents, and CLAUDE.md sits at the plugin root
-- Slug: 235-rulebooks-load-as-agents   Issue: 235   Type: bug   Status: approved
+- Slug: 235-rulebooks-load-as-agents   Issue: 235   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-10-05
 
 ## 1. Requirements (WHAT / WHY)
@@ -82,4 +82,4 @@ Asked and answered 2026-10-05.
 - [x] T1: cases for AC3 (an `agents/` directory, a root `CLAUDE.md`), red. Then the move in the table, `check-manifests.py`'s guard, and every guard, glob and fixture under Affected files that names a moved path → suite green (AC6).
 - [x] T2: cases for AC4 (a reviewer with no frontmatter, one whose `name` is not its filename, a rulebook with frontmatter, the contract with frontmatter), red. Then the check → green.
 - [x] T3: `skills/init/SKILL.md` and every document under Affected files, with ADR-7. Re-measure AC1, AC2, AC5 and `README.md:35`, and record them in `docs/verified.md` (AC7).
-- [ ] T4: unpin CI.
+- [x] T4: unpin CI.
