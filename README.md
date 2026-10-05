@@ -168,7 +168,8 @@ Every row was produced by running it. Method, versions, and open questions: [`do
 
 | Capability | Claude Code | Antigravity |
 | :-- | :-- | :-- |
-| Skills, reviewers, rulebooks | full | full — same path, same format |
+| Skills | full | full — same path, same format |
+| Reviewer and rulebook | full — `init` copies them into `.claude/agents/`, and the reviewer is invoked by name | full — the same files, copied into `.agents/agents/`, and registered from the file with `define_subagent` |
 | Rules discovery | root `AGENTS.md` (canonical context) | `rules/AGENTS.md` (auto-discovered and merged by plugin loader) |
 | Quality gate on turn end | full — `Stop`, exit 2 | full — `Stop`, `{"decision":"continue"}` |
 | Review-receipt gate | full | full |
@@ -182,7 +183,7 @@ The last row is a real gap, not a rounding error. Re-injecting steering after co
 
 **Pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, but `claude plugin eval` now rejects them at load, because a `case.yaml` must declare `graders`, so they are still unrun.
 
-Tested against: Claude Code 2.1.252 (2026-09-05) · Antigravity CLI 1.1.17 and IDE 2.3.1 (2026-08-21) · macOS.
+Tested against: Claude Code 2.1.289 and Antigravity CLI 1.2.16 (2026-10-06) · Antigravity IDE 2.3.1 (2026-08-21) · macOS.
 
 What *is* verified: the gates' and guards' behaviours, tested deterministically with no model in the loop ([`scripts/test-gates.sh`](./scripts/test-gates.sh) — the count is the suite's, not a number maintained here); Antigravity's `Stop` hook genuinely blocking, run rather than read from documentation ([`docs/verified.md`](./docs/verified.md)); both plugin manifests, the rulebook hashes, and the leakage guard, all in CI; every one of the thirteen skills executed at least once — the inception chain and `init` against this repository or a scratch clone of a real project, `spec`, `clarify`, `implement` and `worklog` on every spec since #17, and `archive` as repeated sweeps of this repository's own shipped specs — with what the inception and `init` runs found recorded in [`docs/verified.md`](./docs/verified.md) and filed as issues; and a review receipt on every spec since #17, under `.specs/`, from a spawned reviewer on all but three, which were reviewed inline and whose receipts say so.
 
