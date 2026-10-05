@@ -66,12 +66,15 @@ if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
   cd "$repo_root"
 fi
 
-# The two readers below came with #233, so a gate-lib.sh copied before them is a library older
-# than this gate. Unguarded, a missing gate_head_branch exits 127 and reaches the naming line's
-# damage arm, which sends the person to repair a healthy repository; a missing gate_ref_commit
-# empties the base without a word. quality-gate.sh guards its reader the same way. Case 190.
-for _gate_fn in gate_head_branch gate_ref_commit; do
-  command -v "$_gate_fn" >/dev/null 2>&1 || gate_block "Review gate: gate-lib.sh predates $_gate_fn, so this gate cannot name the branch HEAD is on or the branch work ships to. Re-copy the plugin's hooks/ into this project and run again rather than treating this turn as a pass."
+# The first two readers below came with #233 and the third with #191, so a gate-lib.sh copied
+# before them is a library older than this gate. Unguarded, a missing gate_head_branch exits 127
+# and reaches the naming line's damage arm, which sends the person to repair a healthy
+# repository; a missing gate_ref_commit empties the base without a word; and a missing
+# gate_tree_names is not called at all while the spec is in the working tree, so the gate goes
+# on over a library whose scan still reads an object git cannot get as no spec.
+# quality-gate.sh guards its reader the same way. Case 190.
+for _gate_fn in gate_head_branch gate_ref_commit gate_tree_names; do
+  command -v "$_gate_fn" >/dev/null 2>&1 || gate_block "Review gate: gate-lib.sh predates $_gate_fn, which this gate reads branches through, so it cannot say which branches hold finished work. Re-copy the plugin's hooks/ into this project and run again rather than treating this turn as a pass."
 done
 
 # Which branch HEAD is on, asked of the symbolic ref rather than of a commit, because an unborn
@@ -160,15 +163,30 @@ check_current_branch() {
   # the working tree does not have it.
   tree=''                             # empty — gate_spec_review_state reads the working tree
   note=''
-  corrupt=''
+  cause=''
+  # Empty on an unborn branch, which has no commit. `git rev-parse HEAD` there prints its argument
+  # before failing, so the `|| echo ''` this line used to carry appended to the literal `HEAD`
+  # rather than replacing it, and that word would have reached every reader below as a tip. #228.
+  head=$(git rev-parse --verify -q HEAD 2>/dev/null) || head=''
   if [ ! -f "$spec" ]; then
+    # An unborn branch with no spec in its working tree has nothing to gate — a fresh `git init`,
+    # or `git checkout --orphan` — because no commit means no tree to name anything. It is asked
+    # here, ahead of the reader, because the reader cannot tell the two apart: `ls-tree` exits 128
+    # for an unborn HEAD and for a tree it failed to read, and answering the first as the second
+    # would block every install before its first commit. Cases 171 and 172.
+    [ -n "$head" ] || return 0
+    # Only a tree that was READ and does not name the spec ends the question. This line used to
+    # be `git cat-file -e "HEAD:$spec" || return 0`, which also returned for a tree that names
+    # the spec when git cannot get the object behind the name — a partial clone that cannot
+    # reach its remote, or a damaged object store — and for a tree that could not be read at
+    # all. Both go on from here as a spec in this branch's tree, and the state reader below says
+    # that it could not be read. #191, cases 197 and 198.
+    #
     # Under a detached HEAD `branch` is the literal `HEAD`, so this asks for
-    # `HEAD:.specs/HEAD/spec.md`, gets nothing, and returns — case 77 is unchanged and the scan
-    # goes on reporting the real branches. An unborn branch with no spec in its working tree
-    # returns here too — a fresh `git init`, or `git checkout --orphan` — since `HEAD:` names no
-    # tree yet. That sentence was written before either reached this line: until #228 the line in
-    # front of the scan passed first. Cases 171 and 172.
-    git cat-file -e "HEAD:$spec" 2>/dev/null || return 0   # in neither tree — nothing to gate
+    # `.specs/HEAD/spec.md` in HEAD's tree, is told it is not there, and returns — case 77 is
+    # unchanged and the scan goes on reporting the real branches.
+    gate_tree_names HEAD "$spec"
+    [ "$?" -eq 1 ] && return 0        # read, and in neither tree — nothing to gate
     tree=HEAD
     # Appended to every block below. The remedy names a file the author cannot see, so the
     # message has to say why it is not there and which tree the answer came from; without it the
@@ -176,12 +194,14 @@ check_current_branch() {
     # off. Empty on every path that existed before this change, and appended with no separator,
     # so those messages are unchanged character for character.
     note=" ($spec is not in your working tree, so the gate read it from this branch's own tree at HEAD. A sparse checkout, a partial worktree, or a deletion nobody committed produces that. The receipt is read from there too, so one written into the working tree alone does not clear this until it is committed.)"
-    # The two unreadable states are the exception, and they need the opposite advice. A blob a
-    # tree names is always readable, so neither can arise from a ref read in the ordinary way —
-    # reaching one here means `git cat-file -e` succeeded and `git show` failed, which is a
-    # damaged object store rather than a file mode. The frozen messages above tell you to fix a
-    # permission, and on this path that is advice about a file which is not the subject.
-    corrupt=" The permission remedy above is for the working-tree read; a read that fails from the branch's own tree is object-store damage, so check the repository rather than the file mode."
+    # The two unreadable states are the exception: on this path they get a sentence of their
+    # own, ending in this. Read from a tree, "cannot be read" is never a file mode. It is an
+    # object git could not get, and the working-tree sentences tell you to fix a permission,
+    # which is advice about a file that is not the subject. This used to be a correction
+    # appended after that advice, written when only damage could reach it and no fixture did.
+    # A blobless clone with no network reaches it now (#191), and someone in that state has
+    # nothing to repair, so the first remedy named is the one for them.
+    cause=" Git cannot get an object that tree needs: a partial clone that cannot reach its remote, or a damaged object store. Reconnect and run git fetch, or check the repository with git fsck, and re-run rather than treating this as a pass."
   fi
 
   # No issue, no spec. The slug is <issue-number>-<kebab-title>, so a spec directory
@@ -205,10 +225,6 @@ check_current_branch() {
   fi
 
   receipt=".specs/$branch/.review-receipt"
-  # Empty on an unborn branch, which has no commit. `git rev-parse HEAD` there prints its argument
-  # before failing, so the `|| echo ''` this line used to carry appended to the literal `HEAD`
-  # rather than replacing it, and that word would have reached every reader below as a tip. #228.
-  head=$(git rev-parse --verify -q HEAD 2>/dev/null) || head=''
 
   # Two arms, because there are two ways work reaches the base and only one of them leaves a
   # parent link. Ancestry is kept and asked first: it is exact when it fires, costs one call,
@@ -250,11 +266,13 @@ check_current_branch() {
       # and the difference is invisible downstream: both task counters come back 0 for a file
       # they cannot open, and a zero total is read as "nothing authored, stay silent". Fail
       # closed — an unreadable spec is a broken working tree, not an empty one.
-      gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass.$note$corrupt" ;;
+      [ -z "$tree" ] || gate_block "Review gate: $spec cannot be read from this branch's own tree at HEAD, so the gate cannot tell whether this branch has been reviewed.$cause$note"
+      gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass." ;;
     no-receipt)
       gate_block "Review gate: every task in $spec is ticked, but no reviewer receipt exists. Run $reviewer on the branch diff, then write its Receipt block to $receipt. If $reviewer is already running, wait for it and write the receipt from its result — do not start a second one.$note" ;;
     receipt-unreadable)
-      gate_block "Review gate: $receipt exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass.$note$corrupt" ;;
+      [ -z "$tree" ] || gate_block "Review gate: $receipt cannot be read from this branch's own tree at HEAD, so the gate cannot tell whether this branch has been reviewed.$cause$note"
+      gate_block "Review gate: $receipt exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass." ;;
     verdict=*)
       gate_block "Review gate: the recorded review verdict is '${state#verdict=}', not CLEAN. Address every BLOCKER and HIGH finding, re-run $reviewer, and update $receipt.$note" ;;
     unresolved-sha=*)
