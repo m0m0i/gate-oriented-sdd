@@ -39,7 +39,7 @@ CANONICAL = "_shared/reviewer-contract.md"
 #: own instruction is a tool-using agent whose working directory is the PROJECT ROOT, not the
 #: directory its own file sits in. `_shared/reviewer-contract.md` resolves from neither root —
 #: found by a reviewer following that line literally, failing, and guessing `agents/_shared/`,
-#: which is the plugin's copy rather than the install's. Identical here only by luck. The bare
+#: then the plugin's copy (`reviewers/_shared/` since #235) rather than the install's. Identical here only by luck. The bare
 #: relative form is the right way to SAY where the file lives and is useless for opening it.
 #:
 #: The Antigravity entry is the directory `init` writes — `.agents/agents/`, beside the reviewer,
@@ -57,7 +57,7 @@ ALLOWED = (CANONICAL,) + CONCRETE
 #: naming it is #82's original defect. So it is a form a DOCUMENT may name and a reviewer may not,
 #: and it is listed rather than tolerated — the old rule, "ends in the canonical suffix", let it
 #: through by accident and let `.agents/_shared/` through by the same accident (#217).
-PLUGIN_COPY = "agents/" + CANONICAL
+PLUGIN_COPY = "reviewers/" + CANONICAL
 DOCUMENTED = ALLOWED + (PLUGIN_COPY,)
 
 #: Files that state it, in two groups, because the rule genuinely differs between them.
@@ -65,8 +65,8 @@ DOCUMENTED = ALLOWED + (PLUGIN_COPY,)
 #: later guard destroys its value as evidence (#102).
 #:
 #: EXACT — an instruction a reviewer executes. It must be the relative form and nothing else.
-#: `endswith` is NOT enough here and that is the whole bug: `agents/_shared/reviewer-contract.md`
-#: ends with the canonical suffix and is exactly what was broken, because `agents/` is the
+#: `endswith` is NOT enough here and that is the whole bug: `reviewers/_shared/reviewer-contract.md`
+#: ends with the canonical suffix and is exactly what was broken, because `reviewers/` is the
 #: plugin's directory and does not exist in an install. So is `../_shared/…`. Only equality
 #: separates a path that resolves from one that merely looks similar.
 #: SHIPPED — templates copied into either harness, so each must name BOTH concrete
@@ -75,10 +75,10 @@ DOCUMENTED = ALLOWED + (PLUGIN_COPY,)
 #: other rule while handing every Antigravity consumer a reviewer that cannot open its
 #: contract. That is #82's own shape, narrowed to one harness.
 SHIPPED = (
-    "agents/ts-reviewer.md",
-    "agents/python-reviewer.md",
-    "agents/dart-flutter-reviewer.md",
-    "agents/_template/reviewer.md",
+    "reviewers/ts-reviewer.md",
+    "reviewers/python-reviewer.md",
+    "reviewers/dart-flutter-reviewer.md",
+    "reviewers/_template/reviewer.md",
 )
 
 #: INSTALLED — this repository's own reviewer. It lives in one harness, so it names that one
@@ -130,7 +130,7 @@ MIN_SHIPPED, MIN_INSTALLED, MIN_DOCUMENTS, MIN_PLACING = 4, 1, 7, 1
 #: an exemption in a one-line diff that reads as tidying. The distinguishing property was stated
 #: only in the comments beside them, which is the shape this branch spent three rounds proving is
 #: not enough.
-SHIPPED_PREFIX = "agents/"
+SHIPPED_PREFIX = "reviewers/"
 INSTALLED_PREFIXES = (".claude/agents/", ".agents/agents/")
 
 #: Constraint this imposes, stated because it is real and otherwise invisible: a document must

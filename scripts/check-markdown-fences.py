@@ -10,7 +10,7 @@ wrapping #61 removed. That is #64.
 
 The fences this does NOT read are the point of the carve-out that remains: the receipt block
 in `skills/implement/SKILL.md` and the `[SEVERITY] <file>:<line>` format in
-`agents/_shared/reviewer-contract.md` are untagged, and a line break in them is meaningful.
+`reviewers/_shared/reviewer-contract.md` are untagged, and a line break in them is meaningful.
 Keying on the language tag is what separates those from prose mechanically, rather than by
 asking "does this look like code".
 

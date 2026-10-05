@@ -12,7 +12,7 @@ It lives in assets/ because it is one of the few files a project needs a COPY of
 than a reference to: `init` copies it in so the project can re-pin its own rulebook. That
 also puts it on a shipped path, so a fix to it cannot go out unreachable.
 
-The reviewer directory differs between the harness repo (`agents/`) and a project using it
+The reviewer directory differs between the harness repo (`reviewers/`) and a project using it
 (`.claude/agents/`), so it is discovered rather than hardcoded — otherwise every install
 has to hand-edit the copy, which is exactly the kind of divergence that never gets
 re-applied on the next re-vendor. Every candidate is scanned rather than the first that
@@ -33,10 +33,10 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
-#: Every place a repository may keep reviewers. `agents/` is the harness repo's own; the
+#: Every place a repository may keep reviewers. `reviewers/` is the harness repo's own; the
 #: other two are where `init` puts a project's. They are not alternatives — a repository
 #: that dogfoods the harness has both at once.
-CANDIDATE_DIRS = (".claude/agents", ".agents/agents", "agents")
+CANDIDATE_DIRS = (".claude/agents", ".agents/agents", "reviewers")
 
 
 def _reviewer_dirs(root: pathlib.Path) -> list[pathlib.Path]:
@@ -44,7 +44,7 @@ def _reviewer_dirs(root: pathlib.Path) -> list[pathlib.Path]:
 
     This used to return a single directory — whichever held a lock first — which quietly
     assumed the candidates could never coexist. They must: installing this harness into its
-    own repository creates `.claude/agents/` beside the shipped `agents/`, and the old rule
+    own repository creates `.claude/agents/` beside the shipped `reviewers/`, and the old rule
     then took all six shipped rulebooks out of scope while still exiting 0.
     """
     return [d for c in CANDIDATE_DIRS if (d := root / c).is_dir()]

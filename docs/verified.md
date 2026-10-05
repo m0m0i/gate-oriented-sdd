@@ -265,6 +265,28 @@ Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy
 
 **What is not, stated rather than implied:** a consumer selecting rules outside `E,F,I,UP,B,SIM,RUF`, or running a `ruff` newer than the pin, can still find something this job does not; the job narrows the window rather than closing it. `scripts/` is not linted, for the reasons on #81's spec; `hooks/` is not either, for the reasons in `.steering/tech.md`'s `lint` section — its deliberate word-splits are suppressed and pinned (#207), and the rest waits on the guard sweep. And `init` still does not run the validators it adopts before declaring the gate armed — step 4.1 says it, nothing checks it, and that is #54.
 
+## What a plugin's `agents/` directory registers, and what the plugin registers without one
+
+**Run on 2026-10-05 (#235), Claude Code 2.1.289 (npm's latest that day) and Antigravity CLI 1.2.16**, on this repository. "Before" is `322e6cf`, with the reviewers under `agents/` and `CLAUDE.md` at the root. "After" is #235's branch at `6fcb968` plus its documents, with the reviewers under `reviewers/` and `.claude/CLAUDE.md`. Registration was read from the `agents` list of a headless session's `init` message (`claude -p --plugin-dir <tree> --output-format stream-json --verbose`), with the installed copy of the plugin disabled and hooks off, because `claude plugin details` reported three agents for a tree whose session registered twelve.
+
+| Question | Before | After |
+| :-- | :-- | :-- |
+| What does a Claude Code session register from the plugin? | **twelve agents:** the three reviewers, six rulebooks, `_shared:reviewer-contract`, `_template:rules:starter` and `_template:{{REVIEWER_NAME}}` | **none**, and all thirteen skills |
+| Does `claude plugin validate . --strict` pass? | **no.** Nine warnings: eight "No frontmatter block found" on the files above that have none, and one for `CLAUDE.md` at the plugin root. This is #235's own run at `022372b`, which also has 2.1.288 passing the same tree; it was not repeated here without the `agents` key | **yes**, with no warning |
+| Does the manifest's `agents` key fix it? | measured with the three reviewers listed, on `322e6cf` for registration and `dbf51df` for the validator: registration falls to **three**, and the validator still raises all nine warnings | not used |
+| What does `agy plugin validate .` report? | `agents : 8 processed`, ok | `agents : skipped (not found)`, `skills : 13 processed`, ok |
+| What does `claude plugin details` report as always-on? | ~1,325 tokens, thirteen skills and three agents | ~1,028 tokens, thirteen skills and no agents |
+| Is `AGENTS.md` in a session's context at start, under `claude-md-or-agents-md`? | yes, through the root `CLAUDE.md`'s import (#237) | **yes**, through `.claude/CLAUDE.md` importing `@../AGENTS.md`: two facts only `AGENTS.md` states, answered in one turn with no tool available |
+| Do a project's own rulebooks and contract register as agents? | **no.** This repository has `.claude/agents/gate-sdd-reviewer/rules/*.md` and `.claude/agents/_shared/reviewer-contract.md`, none with frontmatter, and a session here lists `gate-sdd-reviewer` alone | unchanged |
+
+**The acceptance criteria this table does not carry.** AC3 and AC4 are two cases in `scripts/test-gates.sh`, each red before its guard existed. AC6 is `check-locks.py` reporting the same six pinned files, now `in .claude/agents, reviewers`, with the suite green. The second half of AC2, CI installing the CLI unpinned, was not exercised: the pull request's own `validate` run is the first.
+
+**Where the figures in the READMEs come from.** `claude plugin details` on the "before" tree lists the three reviewers at ~100, ~90 and ~90 tokens always-on, which is the difference between ~1,325 and ~1,028 and the "about 100" a project's one installed reviewer adds. Their on-invoke costs, ~700, ~660 and ~720, sum to the "about 2,100". The ~5,900 for the rulebooks and the contract is older than this run and was not re-measured.
+
+**What earlier records get wrong now.** `README.md` said ~1,300 tokens always-on for "thirteen skills and three reviewers", and that the rulebooks "are not registered components at all": the first figure is now ~1,000 and the second sentence was false until this branch. `docs/fidelity.md` said Antigravity "does not auto-discover arbitrary agent files on disk", which its plugin loader contradicts. The reviewer's C-7 named `agents/*/rules/*.md` and called the risk "phantom subagents"; in the plugin it was nine real registrations. All three are corrected on this branch.
+
+**What this run does not support:** that a rulebook *with* frontmatter registers as an agent in a project's `.claude/agents/`. The guard and five documents say so, from Claude Code's behaviour in a plugin's `agents/` and from a project's frontmatter-less files not registering; the positive case in a project was not run. Nor what the Antigravity runtime does with the files its loader processes. `agy plugin validate` is a validator, and no Antigravity session was started. Which eight of the twelve files it counted was not established either. Whether a plugin-registered reviewer, invoked before `init`, fails on its missing contract or guesses a path was read from the reviewer's text and not run. And `.claude/CLAUDE.md` with a relative import was measured in this repository only, which is evidence for #239 and not an answer to it.
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.

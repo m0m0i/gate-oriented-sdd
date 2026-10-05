@@ -11,7 +11,7 @@ Three layers, chosen by how much each can be talked out of (`AGENTS.md`): determ
 | :-- | :-- | :-- | :-- |
 | Gates — `gate-lib.sh`, `quality-gate.sh`, `review-gate.sh`, `steering-digest.sh` | deterministic | `hooks/` | CAP-1, CAP-2, CAP-7 |
 | Guards — the validators on the `- Validators:` line, and the two CI-only ones, `check-version-bump.py` and `check-unreviewed-work.sh` | deterministic, at turn end and in CI | `scripts/`, `assets/` | CAP-5, CAP-7, and the gates' own correctness |
-| Reviewer — agent file, rulebook, lock, shared contract | judgment | `agents/<name>.md`, `agents/<name>/`, `agents/_shared/` | CAP-3 |
+| Reviewer — agent file, rulebook, lock, shared contract | judgment | `reviewers/<name>.md`, `reviewers/<name>/`, `reviewers/_shared/` | CAP-3 |
 | Skills — one copy read by both harnesses | process | `skills/` | CAP-4, CAP-6 |
 | Steering — three files, seven machine-read lines | bridge | `.steering/` in a project | every capability; it is what the layers agree through |
 | Manifests and hook wiring — two of each | packaging | `.claude-plugin/plugin.json`, `plugin.json`, `hooks/templates/claude-code.settings.json`, `hooks/templates/antigravity.hooks.json` | CAP-5 |
@@ -33,7 +33,7 @@ What crosses, who produces it, who consumes it, and what happens when they disag
 | Slug | `<issue-number>-<kebab-title>` | tracker → branch, `.specs/<slug>/`, PR | a spec directory without an issue number blocks the turn | `review-gate.sh` |
 | Issue type | `feature`, `bug`, `chore` | issue template or label → `spec` chooses the section-1 shape | a wrong type produces a spec that tests the wrong thing | none — `clarify` and the reviewer |
 | Spec | Requirements, Design, TDD-ordered Tasks | `spec` → `implement` executes, the reviewer reviews against | a task split red from green cannot be committed under the quality gate (#10); no task is sequenced after the review, so an unticked box always means the review gate should stay silent (#113) | `check-templates.py` |
-| Dual target | two manifests, two hook files, one body of skills and agents | this repository → Claude Code and Antigravity | a name or version disagreement installs two identities; a gate that speaks one channel is advisory on the other (G-3) | `check-manifests.py`; `test-gates.sh` asserts both channels |
+| Dual target | two manifests, two hook files, one body of skills and reviewers | this repository → Claude Code and Antigravity | a name or version disagreement installs two identities; a gate that speaks one channel is advisory on the other (G-3) | `check-manifests.py`; `test-gates.sh` asserts both channels |
 | Load-bearing sentences | a sentence in a skill that a hook or another skill depends on | skill author → the consumer the contract names | the consumer breaks silently while the sentence reads as editable prose | `check-skill-contracts.py` (#54 for the skills it does not cover) |
 | Version | `version` in both manifests | a shipped-path change → `claude plugin update` | an unbumped fix reaches nobody and reports success (#3) | `check-version-bump.py`, CI on pull requests |
 | Inception hand-offs | `NORTH_STAR.md` → `PRD.md` → `EPICS.md` → `BACKLOG.md` → issues; `contract` → rulebook; `design-doc` → `structure.md` | each skill → the next, and the harness | citations are checked forward only, and `PRD.md` and `EPICS.md` have no mechanical consumer (#22) | none — recorded in `docs/verified.md` |

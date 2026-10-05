@@ -94,10 +94,10 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
 │   └── marketplace.json           ← this repo is also its own marketplace
 ├── plugin.json                    ← Antigravity manifest (different path, no collision)
 ├── skills/<name>/SKILL.md         ← read by BOTH harnesses, one copy
-├── agents/
+├── reviewers/                     ← copied into the project by init; registered by neither harness
 │   ├── _shared/reviewer-contract.md
 │   ├── _template/                 ← what init clones for an unrecognised stack
-│   └── <lang>-reviewer.md + rules/
+│   └── <lang>-reviewer.md + <lang>-reviewer/rules/
 ├── hooks/
 │   ├── gate-lib.sh                ← emits both harnesses' blocking signals
 │   ├── quality-gate.sh            ← runs the validators named in .steering/tech.md
@@ -116,8 +116,8 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
 
 The repository root contains both the runtime plugin payload and this harness's internal development tooling (`.specs/`, `.steering/`, `.work_logs/`, `scripts/`, `evals/`, `docs/`).
 
-- **Direct `git clone` or local path install** (`agy plugin install ./gate-oriented-sdd`): Clones or unpacks the whole repository. The agent runtime safely ignores unrecognized directories via progressive disclosure (only loading `plugin.json`, `skills/`, `agents/`, `hooks/`, `rules/`), but extraneous files remain visible in workspace search or status.
-- **CI Release distribution artifact** (`gate-sdd.zip`): Built on tag release via `.github/workflows/release.yml` and `scripts/package-release.py`. Contains strictly the runtime payload (`plugin.json`, `.claude-plugin/`, `skills/`, `agents/`, `hooks/`, `rules/`, `assets/`, `AGENTS.md`, `README.md`, `README.ja.md`, `LICENSE`), excluding all internal development tooling. Consumers wanting a completely isolated plugin directory can download and unpack `gate-sdd.zip`.
+- **Direct `git clone` or local path install** (`agy plugin install ./gate-oriented-sdd`): Clones or unpacks the whole repository. The agent runtime safely ignores unrecognized directories via progressive disclosure (only loading `plugin.json`, `skills/`, `agents/`, `hooks/`, `rules/`; this plugin has no `agents/`, on purpose — #235), but extraneous files remain visible in workspace search or status.
+- **CI Release distribution artifact** (`gate-sdd.zip`): Built on tag release via `.github/workflows/release.yml` and `scripts/package-release.py`. Contains strictly the runtime payload (`plugin.json`, `.claude-plugin/`, `skills/`, `reviewers/`, `hooks/`, `rules/`, `assets/`, `AGENTS.md`, `README.md`, `README.ja.md`, `LICENSE`), excluding all internal development tooling. Consumers wanting a completely isolated plugin directory can download and unpack `gate-sdd.zip`.
 
 #### Rejected alternatives (Issue #140)
 
