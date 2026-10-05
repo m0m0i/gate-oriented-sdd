@@ -5943,6 +5943,7 @@ manifest_repo() {
   cp "$ROOT/hooks/templates/antigravity.hooks.json" "$r/hooks/templates/"
   printf '# AGENTS\n' > "$r/AGENTS.md"
   ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
+  cp -R "$ROOT/reviewers" "$r/reviewers"
   echo "$r"
 }
 run_manifest() { ( cd "$1" && python3 scripts/check-manifests.py >/dev/null 2>"$TMP/mferr"; printf '%s' "$?" ) }
@@ -6006,6 +6007,57 @@ out=$(run_manifest "$r"); [ "$out" = "0" ] && a6=ok || a6=no
 [ "$a1$a2$a3$a4$a5$a6" = "okokokokokok" ] && report "check-manifests fails on an agents/ directory or a CLAUDE.md at the plugin root" ok \
   || report "check-manifests fails on an agents/ directory or a CLAUDE.md at the plugin root" no \
      "agents-exit=$a1 agents-err=$a2 empty-agents-exit=$a3 claude-md-exit=$a4 claude-md-err=$a5 dot-claude=$a6"
+
+# #235. While the reviewers were plugin agents, `claude plugin validate` read their frontmatter.
+# They are not agents now, so nothing upstream does, and a reviewer copied into a project with
+# no `name` does not register there. The other direction was only ever a judgment rule (C-7): a
+# rulebook or the contract that gains frontmatter registers as an agent in the project's
+# directory, which is the defect #235 removed from the plugin.
+
+r=$(manifest_repo mf-rv-nofm)
+printf '# ts-reviewer\n\nNo frontmatter.\n' > "$r/reviewers/ts-reviewer.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && f1=ok || f1=no
+case "$err" in *"reviewers/ts-reviewer.md"*"no frontmatter"*) f2=ok ;; *) f2=no ;; esac
+
+r=$(manifest_repo mf-rv-name)
+sed 's/^name: python-reviewer$/name: py-reviewer/' "$ROOT/reviewers/python-reviewer.md" > "$r/reviewers/python-reviewer.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && f3=ok || f3=no
+case "$err" in *"reviewers/python-reviewer.md"*"py-reviewer"*) f4=ok ;; *) f4=no ;; esac
+
+r=$(manifest_repo mf-rv-nodesc)
+grep -v '^description:' "$ROOT/reviewers/dart-flutter-reviewer.md" > "$r/reviewers/dart-flutter-reviewer.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && f5=ok || f5=no
+case "$err" in *"reviewers/dart-flutter-reviewer.md"*"description"*) f6=ok ;; *) f6=no ;; esac
+
+r=$(manifest_repo mf-rv-rulebook-fm)
+{ printf -- '---\nname: types-and-style\ndescription: a rulebook\n---\n'; cat "$ROOT/reviewers/ts-reviewer/rules/types-and-style.md"; } > "$r/reviewers/ts-reviewer/rules/types-and-style.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && f7=ok || f7=no
+case "$err" in *"reviewers/ts-reviewer/rules/types-and-style.md"*"carries frontmatter"*) f8=ok ;; *) f8=no ;; esac
+
+r=$(manifest_repo mf-rv-contract-fm)
+{ printf -- '---\nname: reviewer-contract\n---\n'; cat "$ROOT/reviewers/_shared/reviewer-contract.md"; } > "$r/reviewers/_shared/reviewer-contract.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && f9=ok || f9=no
+case "$err" in *"reviewers/_shared/reviewer-contract.md"*"carries frontmatter"*) f10=ok ;; *) f10=no ;; esac
+
+# A check that found no reviewer to read has verified nothing, and must not say it passed.
+r=$(manifest_repo mf-rv-none)
+rm -rf "$r/reviewers"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && f11=ok || f11=no
+case "$err" in *"no reviewer"*) f12=ok ;; *) f12=no ;; esac
+
+# The template's name is a placeholder until `init` substitutes it, and must not be compared.
+r=$(manifest_repo mf-rv-control)
+out=$(run_manifest "$r"); [ "$out" = "0" ] && f13=ok || f13=no
+
+[ "$f1$f2$f3$f4$f5$f6$f7$f8$f9$f10$f11$f12$f13" = "okokokokokokokokokokokokok" ] && report "check-manifests holds a reviewer to its frontmatter and a rulebook to having none" ok \
+  || report "check-manifests holds a reviewer to its frontmatter and a rulebook to having none" no \
+     "nofm=$f1/$f2 name=$f3/$f4 nodesc=$f5/$f6 rulebook-fm=$f7/$f8 contract-fm=$f9/$f10 none=$f11/$f12 control=$f13"
 
 # #144. check-manifests.py pairs Claude Code SessionStart with Antigravity PreInvocation
 # for steering digest injection. Omitting PreInvocation, or writing it in tool-style nested

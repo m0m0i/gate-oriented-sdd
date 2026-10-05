@@ -75,6 +75,62 @@ for stray, why in (
         shown = stray + "/" if stray == "agents" else stray
         errors.append(f"{shown} exists at the plugin root: {why}")
 
+# While the reviewers were plugin agents, `claude plugin validate` read their frontmatter. They
+# are not agents now, so this does: a reviewer `init` copies into a project registers there
+# under its `name`, and one without it does not register at all. Everything else under
+# reviewers/ is the opposite case. A rulebook, the contract or the starter that gains
+# frontmatter registers as an agent in the project's directory, which is what #235 removed
+# from the plugin, and until now only a judgment rule (C-7) said so.
+#
+# Read as lines rather than as YAML: there is no dependency file anywhere in this repository,
+# and the two keys asked about are scalars on one line in every reviewer.
+def frontmatter(text: str):
+    """The frontmatter block's `key: value` lines, or None when the text has no block."""
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        return None
+    fields = {}
+    for line in lines[1:end]:
+        key, sep, value = line.partition(":")
+        if sep and key.strip() and not key[0].isspace():
+            fields[key.strip()] = value.strip().strip("\"'")
+    return fields
+
+
+REVIEWERS = PLUGIN / "reviewers"
+TEMPLATE = REVIEWERS / "_template" / "reviewer.md"
+reviewer_files = sorted(REVIEWERS.glob("*.md"))
+if not reviewer_files:
+    errors.append("no reviewer found under reviewers/, so no frontmatter was checked")
+for path in sorted(REVIEWERS.rglob("*.md")):
+    rel = path.relative_to(ROOT)
+    try:
+        text = path.read_text()
+    except (OSError, UnicodeDecodeError) as e:
+        errors.append(f"cannot read {rel}: {e}")
+        continue
+    fields = frontmatter(text)
+    if path not in reviewer_files and path != TEMPLATE:
+        if text.lstrip().startswith("---"):
+            errors.append(
+                f"{rel} carries frontmatter: it is reference material, and with frontmatter it "
+                "registers as an agent in the project it is copied into"
+            )
+        continue
+    if fields is None:
+        errors.append(f"{rel} has no frontmatter block, so it does not register as a reviewer once installed")
+        continue
+    # The template's name is `{{REVIEWER_NAME}}` until `init` substitutes it.
+    if path != TEMPLATE and fields.get("name") != path.stem:
+        errors.append(f"{rel}: frontmatter name {fields.get('name')!r} is not its filename {path.stem!r}")
+    for key in ("name", "description"):
+        if not fields.get(key):
+            errors.append(f"{rel}: frontmatter has no {key}")
+
 if market and cc:
     entries = [p for p in market.get("plugins", []) if p.get("name") == cc.get("name")]
     if not entries:
