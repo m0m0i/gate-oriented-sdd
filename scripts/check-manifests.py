@@ -59,6 +59,22 @@ for field in ("name", "description", "version", "author", "license"):
     if cc and field not in cc:
         errors.append(f"Claude Code manifest is missing {field!r}")
 
+# Claude Code registers every Markdown file under a plugin's agents/, at any depth, and
+# Antigravity's loader processes the directory too. This plugin ships no agents: a reviewer is
+# something `init` copies into a project, from reviewers/, and it names a contract and rules
+# that exist only there. So the directory existing at all is the defect, empty included, since
+# the next file to land in it registers. A CLAUDE.md at the root is the same confusion one
+# level up: the validator reads the plugin root as plugin content, and this repository's own
+# is .claude/CLAUDE.md. `claude plugin validate --strict` reports both, in CI and too slowly
+# for a turn end; this is the copy that runs on one. #235.
+for stray, why in (
+    ("agents", "both harnesses scan it, and this plugin ships no agents; reviewers live in reviewers/"),
+    ("CLAUDE.md", "the validator reads it as plugin content; this repository's own is .claude/CLAUDE.md"),
+):
+    if (PLUGIN / stray).exists() or (PLUGIN / stray).is_symlink():
+        shown = stray + "/" if stray == "agents" else stray
+        errors.append(f"{shown} exists at the plugin root: {why}")
+
 if market and cc:
     entries = [p for p in market.get("plugins", []) if p.get("name") == cc.get("name")]
     if not entries:

@@ -3,7 +3,7 @@
 
 The reviewer emits the Receipt block; `implement` copies it verbatim into
 `.specs/<slug>/.review-receipt`; `review-gate.sh` reads that file. The schema therefore
-exists in three documents at once — `agents/_shared/reviewer-contract.md` defines it,
+exists in three documents at once — `reviewers/_shared/reviewer-contract.md` defines it,
 `skills/implement/SKILL.md` reproduces it, and `.claude/agents/_shared/` mirrors the first for
 this repo's own reviewer — and nothing has ever checked that they agree.
 
@@ -25,7 +25,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 #: Where the schema is written down. Both must agree, and neither is more authoritative —
 #: a disagreement is a bug wherever it came from.
 SOURCES = (
-    "agents/_shared/reviewer-contract.md",
+    "reviewers/_shared/reviewer-contract.md",
     "skills/implement/SKILL.md",
     # This repo runs the harness on itself, so its own reviewer reads a COPY of the contract
     # and that copy is what actually governs a review here. It was missed on the first pass:
@@ -125,7 +125,7 @@ for rel in SOURCES:
 #: of "zero BLOCKER and zero HIGH" passed every validator, which would let this repo's own
 #: reviewer emit CLEAN with HIGH findings outstanding and the gate would clear the turn.
 MIRRORS = (
-    ("agents/_shared/reviewer-contract.md", ".claude/agents/_shared/reviewer-contract.md"),
+    ("reviewers/_shared/reviewer-contract.md", ".claude/agents/_shared/reviewer-contract.md"),
 )
 
 for _src, _dst in MIRRORS:
@@ -199,10 +199,10 @@ if absent:
 #: what actually reviews this repository — the copy missed on this guard's first pass, which
 #: is the whole reason that omission is called out in SOURCES above.
 REVIEWERS = (
-    "agents/ts-reviewer.md",
-    "agents/python-reviewer.md",
-    "agents/dart-flutter-reviewer.md",
-    "agents/_template/reviewer.md",
+    "reviewers/ts-reviewer.md",
+    "reviewers/python-reviewer.md",
+    "reviewers/dart-flutter-reviewer.md",
+    "reviewers/_template/reviewer.md",
     ".claude/agents/gate-sdd-reviewer.md",
 )
 

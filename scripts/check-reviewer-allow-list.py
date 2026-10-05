@@ -26,10 +26,10 @@ STEERING = pathlib.Path(".steering/tech.md")
 DOGFOOD = pathlib.Path(".claude/agents/gate-sdd-reviewer.md")
 
 REVIEWERS = (
-    "agents/ts-reviewer.md",
-    "agents/python-reviewer.md",
-    "agents/dart-flutter-reviewer.md",
-    "agents/_template/reviewer.md",
+    "reviewers/ts-reviewer.md",
+    "reviewers/python-reviewer.md",
+    "reviewers/dart-flutter-reviewer.md",
+    "reviewers/_template/reviewer.md",
     ".claude/agents/gate-sdd-reviewer.md",
 )
 MIN_REVIEWERS = 5

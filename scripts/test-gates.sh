@@ -2066,12 +2066,12 @@ write_lock() {
 EOF
 }
 
-# $1 = repo name. A repo holding one SHIPPED reviewer under agents/, correctly pinned.
+# $1 = repo name. A repo holding one SHIPPED reviewer under reviewers/, correctly pinned.
 lock_repo() {
-  r="$TMP/$1"; mkdir -p "$r/assets" "$r/agents/shipped/rules"
+  r="$TMP/$1"; mkdir -p "$r/assets" "$r/reviewers/shipped/rules"
   cp "$ROOT/assets/check-locks.py" "$r/assets/"
-  printf '# rules\n- **S-1** a shipped rule.\n' > "$r/agents/shipped/rules/s.md"
-  write_lock "$r/agents/shipped" rules/s.md
+  printf '# rules\n- **S-1** a shipped rule.\n' > "$r/reviewers/shipped/rules/s.md"
+  write_lock "$r/reviewers/shipped" rules/s.md
   echo "$r"
 }
 
@@ -2087,13 +2087,13 @@ run_locks() { ( cd "$1" && python3 assets/check-locks.py 2>"$TMP/lerr"; echo "ex
 # 15. A project-local reviewer must not stop the shipped rulebooks being verified.
 #
 # _reviewers_dir returned the FIRST candidate holding a lock and stopped, so creating
-# .claude/agents/<r>/rules-lock.json took agents/ out of scope entirely — silently. The
+# .claude/agents/<r>/rules-lock.json took reviewers/ out of scope entirely — silently. The
 # second half of this case is the one that matters: a clean exit proves nothing unless a
 # real drift in the directory that was dropped still fails.
 r=$(lock_repo lk-union); add_project_reviewer "$r" proj
 out=$(run_locks "$r")
 case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
-printf '\n- **FAKE-1** an unpinned rule nobody agreed to.\n' >> "$r/agents/shipped/rules/s.md"
+printf '\n- **FAKE-1** an unpinned rule nobody agreed to.\n' >> "$r/reviewers/shipped/rules/s.md"
 out2=$(run_locks "$r")
 case "$out2" in *"exit=1"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "a project reviewer does not hide the shipped rulebooks" ok \
@@ -2105,7 +2105,7 @@ case "$out2" in *"exit=1"*) c2=ok ;; *) c2=no ;; esac
 # `checked` stayed 0 and 0 was reported through the success path — identical output to a
 # run that verified everything and found no drift.
 r=$(lock_repo lk-empty)
-printf '{"version":1,"vendored":{},"derived":{}}\n' > "$r/agents/shipped/rules-lock.json"
+printf '{"version":1,"vendored":{},"derived":{}}\n' > "$r/reviewers/shipped/rules-lock.json"
 out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
 case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
 case "$err" in *"verified no files"*) c2=ok ;; *) c2=no ;; esac
@@ -2117,7 +2117,7 @@ case "$err" in *"verified no files"*) c2=ok ;; *) c2=no ;; esac
 # Legitimate: a project may install the guard before its first reviewer exists. Failing here
 # would hand it a red build it could only fix by deleting the guard, which is how a guard
 # gets deleted. The requirement is that its message cannot be mistaken for having checked.
-r=$(lock_repo lk-none); rm -f "$r/agents/shipped/rules-lock.json"
+r=$(lock_repo lk-none); rm -f "$r/reviewers/shipped/rules-lock.json"
 out=$(run_locks "$r")
 case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
 case "$out" in *"no rulebooks are pinned"*) c2=ok ;; *) c2=no ;; esac
@@ -2133,7 +2133,7 @@ case "$out" in *"match their locks"*) c3=no ;; *) c3=ok ;; esac
 # whatever is on disk", which is the guard agreeing with anything it is shown.
 r=$(lock_repo lk-update); add_project_reviewer "$r" proj
 before=$(_sha "$r/.claude/agents/proj/rules-lock.json")
-printf '\n- **S-2** a deliberate new rule.\n' >> "$r/agents/shipped/rules/s.md"
+printf '\n- **S-2** a deliberate new rule.\n' >> "$r/reviewers/shipped/rules/s.md"
 ( cd "$r" && python3 assets/check-locks.py --update >/dev/null 2>&1 )
 after=$(_sha "$r/.claude/agents/proj/rules-lock.json")
 out=$(run_locks "$r")
@@ -2152,13 +2152,13 @@ case "$out" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac # the edited one was re-pin
 # Skipped when the chmod does not actually deny access (running as root, or a filesystem
 # without POSIX permissions). A case that cannot fail is worse than no case.
 r=$(lock_repo lk-unreadable); add_project_reviewer "$r" proj
-chmod 000 "$r/agents/shipped" 2>/dev/null
-if cat "$r/agents/shipped/rules-lock.json" >/dev/null 2>&1; then
-  chmod 755 "$r/agents/shipped" 2>/dev/null
+chmod 000 "$r/reviewers/shipped" 2>/dev/null
+if cat "$r/reviewers/shipped/rules-lock.json" >/dev/null 2>&1; then
+  chmod 755 "$r/reviewers/shipped" 2>/dev/null
   note_skip "locks/unreadable-reviewer-dir" "permissions not enforced here (running as root?)"
 else
   out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
-  chmod 755 "$r/agents/shipped" 2>/dev/null
+  chmod 755 "$r/reviewers/shipped" 2>/dev/null
   case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
   case "$err" in *"cannot be read"*) c2=ok ;; *) c2=no ;; esac
   [ "$c1$c2" = "okok" ] && report "unreadable reviewer directory fails rather than being skipped" ok \
@@ -2540,10 +2540,10 @@ case "$(cat "$TMP/dgout")" in *"degraded"*) c1=ok ;; *) c1=no ;; esac
 # A tree the guard resolves against instead of this repository: ROOT comes from __file__,
 # so a copy of the script under $TMP compares the copies sitting next to it.
 receipt_repo() {
-  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/agents/_shared" "$r/skills/implement"
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/reviewers/_shared" "$r/skills/implement"
   cp "$ROOT/scripts/check-receipt-schema.py" "$r/scripts/"
   chmod +x "$r/scripts/check-receipt-schema.py"   # the PYTHONOPTIMIZE case runs the shebang
-  cp "$ROOT/agents/_shared/reviewer-contract.md" "$r/agents/_shared/"
+  cp "$ROOT/reviewers/_shared/reviewer-contract.md" "$r/reviewers/_shared/"
   cp "$ROOT/skills/implement/SKILL.md" "$r/skills/implement/"
   # The mirror starts PRESENT. It has to: it is a SOURCE, and the SOURCES loop hard-exits on a
   # missing file, so a fixture built without it fails before reaching the branch under test —
@@ -2555,11 +2555,11 @@ receipt_repo() {
   # requires has to have a command on every reviewer's allow-list that can produce it. They
   # are copied for EVERY receipt fixture, not only the cases below, so that case 34's control
   # keeps exercising the whole guard rather than an early exit on a missing reviewer.
-  mkdir -p "$r/agents/_template" "$r/.claude/agents"
+  mkdir -p "$r/reviewers/_template" "$r/.claude/agents"
   for rv in ts-reviewer python-reviewer dart-flutter-reviewer; do
-    cp "$ROOT/agents/$rv.md" "$r/agents/"
+    cp "$ROOT/reviewers/$rv.md" "$r/reviewers/"
   done
-  cp "$ROOT/agents/_template/reviewer.md" "$r/agents/_template/"
+  cp "$ROOT/reviewers/_template/reviewer.md" "$r/reviewers/_template/"
   cp "$ROOT/.claude/agents/gate-sdd-reviewer.md" "$r/.claude/agents/"
   echo "$r"
 }
@@ -3223,7 +3223,7 @@ case "$ctl" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
 # was never tested.
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
-p = pathlib.Path(sys.argv[1], "agents", "python-reviewer.md")
+p = pathlib.Path(sys.argv[1], "reviewers", "python-reviewer.md")
 src = p.read_text()
 kept = [ln for ln in src.splitlines(keepends=True) if "date -u" not in ln]
 if len(kept) == len(src.splitlines(keepends=True)):
@@ -3244,7 +3244,7 @@ else
   # is unactionable across five of them, and the phrase unique to this branch is required
   # because two sibling branches of the same guard also exit 1 naming a path.
   case "$cerr" in *Traceback*) c3=no ;; *) c3=ok ;; esac
-  case "$cerr" in *"agents/python-reviewer.md"*) c4=ok ;; *) c4=no ;; esac
+  case "$cerr" in *"reviewers/python-reviewer.md"*) c4=ok ;; *) c4=no ;; esac
   case "$cerr" in *"names no clock"*) c5=ok ;; *) c5=no ;; esac
   [ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
     && report "a reviewer that cannot produce a required receipt field fails" ok \
@@ -3261,7 +3261,7 @@ r=$(receipt_repo receipt-clock-unrequired)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
 paths = [
-    ("agents", "_shared", "reviewer-contract.md"),
+    ("reviewers", "_shared", "reviewer-contract.md"),
     (".claude", "agents", "_shared", "reviewer-contract.md"),
     ("skills", "implement", "SKILL.md"),
 ]
@@ -3273,8 +3273,8 @@ for parts in paths:
         sys.exit(3)
     p.write_text("".join(kept))
 # and the clock goes too, so the tree is consistent: nothing requires it, nothing offers it.
-for rv in ("agents/ts-reviewer.md", "agents/python-reviewer.md", "agents/dart-flutter-reviewer.md",
-           "agents/_template/reviewer.md", ".claude/agents/gate-sdd-reviewer.md"):
+for rv in ("reviewers/ts-reviewer.md", "reviewers/python-reviewer.md", "reviewers/dart-flutter-reviewer.md",
+           "reviewers/_template/reviewer.md", ".claude/agents/gate-sdd-reviewer.md"):
     p = pathlib.Path(sys.argv[1], rv)
     p.write_text("".join(ln for ln in p.read_text().splitlines(keepends=True) if "date -u" not in ln))
 PYEOF
@@ -3302,7 +3302,7 @@ fi
 r=$(receipt_repo receipt-clock-stripped)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
-p = pathlib.Path(sys.argv[1], "agents", "dart-flutter-reviewer.md")
+p = pathlib.Path(sys.argv[1], "reviewers", "dart-flutter-reviewer.md")
 src = p.read_text()
 kept = [ln for ln in src.splitlines(keepends=True) if "date -u" not in ln]
 if len(kept) == len(src.splitlines(keepends=True)):
@@ -3321,7 +3321,7 @@ else
     [ "$1" = "1" ] || { echo no; return; }
     serr=$(cat "$2" 2>/dev/null)
     case "$serr" in *Traceback*) echo no; return ;; esac
-    case "$serr" in *"agents/dart-flutter-reviewer.md"*) : ;; *) echo no; return ;; esac
+    case "$serr" in *"reviewers/dart-flutter-reviewer.md"*) : ;; *) echo no; return ;; esac
     case "$serr" in *"names no clock"*) echo ok ;; *) echo no ;; esac
   }
   out=$( cd "$r" && python3 -O scripts/check-receipt-schema.py >/dev/null 2>"$TMP/serr"; printf '%s' "$?" )
@@ -3356,10 +3356,10 @@ clock_branch_fails() { # clock_branch_fails <exit> <stderr-file> <needle> -> ok|
 # Not a skip: scripts/ never ships, so this only ever runs where all five exist. A named
 # reviewer that is not there is a rename nobody finished.
 r=$(receipt_repo receipt-reviewer-gone)
-rm -f "$r/agents/ts-reviewer.md"
+rm -f "$r/reviewers/ts-reviewer.md"
 out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/gerr"; printf '%s' "$?" )
 c1=$(clock_branch_fails "$out" "$TMP/gerr" "is listed in REVIEWERS but is missing")
-c2=$(clock_branch_fails "$out" "$TMP/gerr" "agents/ts-reviewer.md")
+c2=$(clock_branch_fails "$out" "$TMP/gerr" "reviewers/ts-reviewer.md")
 [ "$c1$c2" = "okok" ] && report "a reviewer listed but missing from disk fails" ok \
   || report "a reviewer listed but missing from disk fails" no "reason=$c1 names-file=$c2"
 
@@ -3370,7 +3370,7 @@ c2=$(clock_branch_fails "$out" "$TMP/gerr" "agents/ts-reviewer.md")
 r=$(receipt_repo receipt-policy-renamed)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
-p = pathlib.Path(sys.argv[1], "agents", "python-reviewer.md")
+p = pathlib.Path(sys.argv[1], "reviewers", "python-reviewer.md")
 src = p.read_text()
 if "## Bash policy\n" not in src:
     sys.exit(3)
@@ -3382,7 +3382,7 @@ if [ $? -ne 0 ]; then
 else
   out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/herr"; printf '%s' "$?" )
   c1=$(clock_branch_fails "$out" "$TMP/herr" "has no '## Bash policy' section")
-  c2=$(clock_branch_fails "$out" "$TMP/herr" "agents/python-reviewer.md")
+  c2=$(clock_branch_fails "$out" "$TMP/herr" "reviewers/python-reviewer.md")
   [ "$c1$c2" = "okok" ] && report "a reviewer whose Bash policy heading was renamed fails" ok \
     || report "a reviewer whose Bash policy heading was renamed fails" no "reason=$c1 names-file=$c2"
 fi
@@ -3394,7 +3394,7 @@ fi
 r=$(receipt_repo receipt-field-unmapped)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
-for parts in (("agents", "_shared", "reviewer-contract.md"),
+for parts in (("reviewers", "_shared", "reviewer-contract.md"),
               (".claude", "agents", "_shared", "reviewer-contract.md"),
               ("skills", "implement", "SKILL.md")):
     p = pathlib.Path(sys.argv[1], *parts)
@@ -3461,7 +3461,7 @@ fi
 r=$(receipt_repo receipt-sha-producer-gone)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
-p = pathlib.Path(sys.argv[1], "agents", "ts-reviewer.md")
+p = pathlib.Path(sys.argv[1], "reviewers", "ts-reviewer.md")
 src = p.read_text()
 # The precondition is the replacement TARGET, not a substring of it. Checking only
 # "git rev-parse HEAD" would still pass if the bullet were reordered, leaving the replace a
@@ -3477,7 +3477,7 @@ if [ $? -ne 0 ]; then
     "fixture could not be built: the git rev-parse bullet this case removes was not found"
 else
   out=$( cd "$r" && python3 scripts/check-receipt-schema.py >/dev/null 2>"$TMP/perr"; printf '%s' "$?" )
-  c1=$(clock_branch_fails "$out" "$TMP/perr" "agents/ts-reviewer.md")
+  c1=$(clock_branch_fails "$out" "$TMP/perr" "reviewers/ts-reviewer.md")
   c2=$(clock_branch_fails "$out" "$TMP/perr" "reviewed_sha")
   [ "$c1$c2" = "okok" ] && report "a producer deleted from an allow-list fails" ok \
     || report "a producer deleted from an allow-list fails" no "names-file=$c1 names-field=$c2"
@@ -4635,17 +4635,17 @@ case "$err" in *"GEMINI.md for Antigravity"*) c7=ok ;; *) c7=no ;; esac
 # reads its own instruction as a tool-using agent whose working directory is the project root,
 # not the directory its own file sits in. Judging from the agents directory is what let the
 # first cut of this branch pass a reviewer naming `_shared/reviewer-contract.md` alone — a path
-# that resolves from neither root, and whose obvious guess (`agents/_shared/`) lands on the
+# that resolves from neither root, and whose obvious guess (`reviewers/_shared/`) lands on the
 # plugin's copy rather than the install's.
 
 # $1 = repo name, $2 = the agents directory. Echoes the PROJECT ROOT.
 install_reviewers() {
   r="$TMP/$1"; a="$r/$2"
   mkdir -p "$a/_shared"
-  cp "$ROOT/agents/_shared/reviewer-contract.md" "$a/_shared/"
-  cp "$ROOT/agents/ts-reviewer.md" "$ROOT/agents/python-reviewer.md" \
-     "$ROOT/agents/dart-flutter-reviewer.md" "$a/"
-  cp "$ROOT/agents/_template/reviewer.md" "$a/tpl-reviewer.md"
+  cp "$ROOT/reviewers/_shared/reviewer-contract.md" "$a/_shared/"
+  cp "$ROOT/reviewers/ts-reviewer.md" "$ROOT/reviewers/python-reviewer.md" \
+     "$ROOT/reviewers/dart-flutter-reviewer.md" "$a/"
+  cp "$ROOT/reviewers/_template/reviewer.md" "$a/tpl-reviewer.md"
   echo "$r"
 }
 
@@ -4686,19 +4686,19 @@ out2=$(unresolved "$r" ".agents/agents")
 [ -z "$out2" ] && c2=ok || c2=no
 
 r=$(install_reviewers rv-broken ".claude/agents")
-printf 'x\n\nRead `agents/_shared/reviewer-contract.md` first.\n' > "$r/.claude/agents/bad-reviewer.md"
+printf 'x\n\nRead `reviewers/_shared/reviewer-contract.md` first.\n' > "$r/.claude/agents/bad-reviewer.md"
 out3=$(unresolved "$r" ".claude/agents")
 case "$out3" in *bad-reviewer*) c3=ok ;; *) c3=no ;; esac
 case "$out3" in *ts-reviewer*|*tpl-reviewer*) c4=no ;; *) c4=ok ;; esac   # and ONLY that one
 
-grep -q 'say so and stop' "$ROOT/agents/_shared/reviewer-contract.md" && c5=ok || c5=no
+grep -q 'say so and stop' "$ROOT/reviewers/_shared/reviewer-contract.md" && c5=ok || c5=no
 
 # The contract must be named in the FIRST instruction, not buried in a footnote. The rewrite of
 # this case dropped the `Read \`…\`` anchor the old regex had, so position went unguarded — the
 # third thing neither condition covered, and it moved in the wrong direction.
 c6=ok
-for f in "$ROOT"/agents/ts-reviewer.md "$ROOT"/agents/python-reviewer.md \
-         "$ROOT"/agents/dart-flutter-reviewer.md "$ROOT"/agents/_template/reviewer.md; do
+for f in "$ROOT"/reviewers/ts-reviewer.md "$ROOT"/reviewers/python-reviewer.md \
+         "$ROOT"/reviewers/dart-flutter-reviewer.md "$ROOT"/reviewers/_template/reviewer.md; do
   grep -q '^\*\*Read the reviewer contract first\*\*.*_shared/reviewer-contract\.md' "$f" || c6=no
 done
 
@@ -4727,19 +4727,19 @@ done
 # $1 = name. A repo holding every file the guard compares, all in agreement.
 cpath_repo() {
   r="$TMP/$1"
-  mkdir -p "$r/scripts" "$r/agents/_shared" "$r/agents/_template" "$r/skills/init" "$r/docs" "$r/.claude/agents" "$r/rules"
+  mkdir -p "$r/scripts" "$r/reviewers/_shared" "$r/reviewers/_template" "$r/skills/init" "$r/docs" "$r/.claude/agents" "$r/rules"
   cp "$ROOT/scripts/check-contract-path.py" "$r/scripts/"
   chmod +x "$r/scripts/check-contract-path.py"
   rv='x\n\nRead `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/agents/_shared/reviewer-contract.md` under Antigravity.\n'
-  for f in ts python dart-flutter; do printf "$rv" > "$r/agents/$f-reviewer.md"; done
-  printf "$rv" > "$r/agents/_template/reviewer.md"
-  printf 'x\n' > "$r/agents/_shared/reviewer-contract.md"
+  for f in ts python dart-flutter; do printf "$rv" > "$r/reviewers/$f-reviewer.md"; done
+  printf "$rv" > "$r/reviewers/_template/reviewer.md"
+  printf 'x\n' > "$r/reviewers/_shared/reviewer-contract.md"
   printf 'Read `.claude/agents/_shared/reviewer-contract.md` first.\n' > "$r/.claude/agents/gate-sdd-reviewer.md"
   # The file that WRITES the placement names both destinations, as the shipped reviewers must:
   # since #217 the guard holds it to that, so the closed set below is anchored to something.
   printf 'copy `_shared/reviewer-contract.md` to `.claude/agents/_shared/reviewer-contract.md` or `.agents/agents/_shared/reviewer-contract.md`\n' > "$r/skills/init/SKILL.md"
   printf '  |-- _shared/reviewer-contract.md\n' > "$r/docs/layout.md"
-  printf '"agents/_shared/reviewer-contract.md",\n' > "$r/scripts/check-receipt-schema.py"
+  printf '"reviewers/_shared/reviewer-contract.md",\n' > "$r/scripts/check-receipt-schema.py"
   printf '`.claude/agents/_shared/reviewer-contract.md`\n' > "$r/docs/CONTRACT.md"
   printf '`_shared/reviewer-contract.md`\n' > "$r/AGENTS.md"
   ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
@@ -4758,13 +4758,13 @@ r=$(cpath_repo cp-control)
 out=$(run_cpath "$r"); [ "$out" = "0" ] && c0=ok || c0=no
 
 r=$(cpath_repo cp-reviewer)
-printf 'Read `agents/_shared/reviewer-contract.md` first.\n' > "$r/agents/ts-reviewer.md"
+printf 'Read `reviewers/_shared/reviewer-contract.md` first.\n' > "$r/reviewers/ts-reviewer.md"
 out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 [ "$out" = "1" ] && c1=ok || c1=no
 case "$err" in *ts-reviewer.md*) c2=ok ;; *) c2=no ;; esac
 
 r=$(cpath_repo cp-template)
-printf 'Read `../_shared/reviewer-contract.md` first.\n' > "$r/agents/_template/reviewer.md"
+printf 'Read `../_shared/reviewer-contract.md` first.\n' > "$r/reviewers/_template/reviewer.md"
 out=$(run_cpath "$r"); [ "$out" = "1" ] && c3=ok || c3=no
 
 # The real defect's shape: a document drawing the flat sibling instead of the _shared/ form.
@@ -4782,7 +4782,7 @@ out=$(run_cpath "$r"); [ "$out" = "1" ] && c6=ok || c6=no
 # it failed its own review: a reviewer's working directory is the PROJECT ROOT, so that path
 # resolves to nothing.
 r=$(cpath_repo cp-relative-only)
-printf 'Read `_shared/reviewer-contract.md` first.\n' > "$r/agents/ts-reviewer.md"
+printf 'Read `_shared/reviewer-contract.md` first.\n' > "$r/reviewers/ts-reviewer.md"
 out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 [ "$out" = "1" ] && c7=ok || c7=no
 case "$err" in *"does not name"*) c8=ok ;; *) c8=no ;; esac
@@ -4792,7 +4792,7 @@ case "$err" in *"does not name"*) c8=ok ;; *) c8=no ;; esac
 # green — a guard half that cannot fail. Here the reviewer names a valid concrete form AND a
 # junk one, so the concrete check is satisfied and only ALLOWED can object.
 r=$(cpath_repo cp-extra-form)
-printf 'Read `.claude/agents/_shared/reviewer-contract.md`, or `vendor/reviewer-contract.md`.\n' > "$r/agents/ts-reviewer.md"
+printf 'Read `.claude/agents/_shared/reviewer-contract.md`, or `vendor/reviewer-contract.md`.\n' > "$r/reviewers/ts-reviewer.md"
 out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 [ "$out" = "1" ] && c9=ok || c9=no
 case "$err" in *vendor*) c10=ok ;; *) c10=no ;; esac
@@ -4802,7 +4802,7 @@ case "$err" in *vendor*) c10=ok ;; *) c10=no ;; esac
 # Antigravity consumer a reviewer that cannot open its contract. That is #82's own shape
 # narrowed to one harness, and two-harness correctness is why the issue's fix was overruled.
 r=$(cpath_repo cp-one-harness)
-printf 'Read `_shared/reviewer-contract.md`, at `.claude/agents/_shared/reviewer-contract.md`.\n' > "$r/agents/ts-reviewer.md"
+printf 'Read `_shared/reviewer-contract.md`, at `.claude/agents/_shared/reviewer-contract.md`.\n' > "$r/reviewers/ts-reviewer.md"
 out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 [ "$out" = "1" ] && c11=ok || c11=no
 # The specific sentence, not the bare path: the failure epilogue enumerates CONCRETE on EVERY
@@ -4926,7 +4926,7 @@ python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
 src = p.read_text()
-out = src.replace('"agents/python-reviewer.md",', '"agents/ts-reviewer.md",')
+out = src.replace('"reviewers/python-reviewer.md",', '"reviewers/ts-reviewer.md",')
 if out == src:
     raise SystemExit("fixture no-op: python-reviewer entry not found")
 p.write_text(out)
@@ -4943,7 +4943,7 @@ import pathlib, sys
 p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
 src = p.read_text()
 out = src.replace('INSTALLED = (".claude/agents/gate-sdd-reviewer.md",)',
-                  'INSTALLED = (".claude/agents/gate-sdd-reviewer.md", "agents/ts-reviewer.md")')
+                  'INSTALLED = (".claude/agents/gate-sdd-reviewer.md", "reviewers/ts-reviewer.md")')
 if out == src:
     raise SystemExit("fixture no-op: INSTALLED tuple not found")
 p.write_text(out)
@@ -4960,7 +4960,7 @@ python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
 src = p.read_text()
-out = src.replace('"agents/ts-reviewer.md",', '"docs/layout.md",')
+out = src.replace('"reviewers/ts-reviewer.md",', '"docs/layout.md",')
 if out == src:
     raise SystemExit("fixture no-op: ts-reviewer entry not found")
 p.write_text(out)
@@ -4970,14 +4970,14 @@ out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 case "$err" in *"does not live under"*) c11=ok ;; *) c11=no ;; esac
 
 # And a reviewer demoted into DOCUMENTS, where the plugin's own copy is an accepted form — the
-# rule under which `agents/_shared/reviewer-contract.md`, the original defect, passes.
+# rule under which `reviewers/_shared/reviewer-contract.md`, the original defect, passes.
 r=$(cpath_repo cp-reviewer-in-documents)
 if python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "scripts", "check-contract-path.py")
 src = p.read_text()
 needle = '    "docs/CONTRACT.md",'
-out = src.replace(needle, needle + '\n    "agents/ts-reviewer.md",')
+out = src.replace(needle, needle + '\n    "reviewers/ts-reviewer.md",')
 if out == src:
     raise SystemExit("fixture no-op: docs/CONTRACT.md entry not found")
 p.write_text(out)
@@ -5004,7 +5004,7 @@ case "$err" in *"sits in DOCUMENTS"*) c13b=ok ;; *) c13b=no ;; esac
 #
 # The shipped reviewer line, verbatim from `main`: a reviewer naming the directory no install has.
 r=$(cpath_repo cp-217-shipped-line)
-printf 'Read `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/_shared/reviewer-contract.md` under Antigravity.\n' > "$r/agents/ts-reviewer.md"
+printf 'Read `_shared/reviewer-contract.md`, beside this file: `.claude/agents/_shared/reviewer-contract.md` under Claude Code, `.agents/_shared/reviewer-contract.md` under Antigravity.\n' > "$r/reviewers/ts-reviewer.md"
 out=$(run_cpath "$r"); err=$(cat "$TMP/cperr")
 [ "$out" = "1" ] && c1=ok || c1=no
 case "$err" in *'ts-reviewer.md: says `.agents/_shared/reviewer-contract.md`'*) c2=ok ;; *) c2=no ;; esac
@@ -5973,6 +5973,40 @@ case "$err" in *"missing: AGENTS.md"*|*"missing: rules/AGENTS.md"*) c6=ok ;; *) 
   || report "check-manifests verifies rules/AGENTS.md matches AGENTS.md and fails closed" no \
      "control=$c0 missing-rules-exit=$c1 missing-rules-err=$c2 drift-exit=$c3 drift-err=$c4 missing-root-exit=$c5 missing-root-err=$c6"
 
+# #235. Claude Code registers every Markdown file under a plugin's agents/, at any depth, and
+# Antigravity's loader processes the directory too. The reviewers, their rulebooks, the contract
+# and the template lived there, so nine files that are not agents registered as agents beside
+# three that only work once `init` has copied them into a project. They are in reviewers/ now,
+# which neither harness scans. The validator also reads a CLAUDE.md at the plugin root as
+# plugin content; this repository's is under .claude/. Either coming back must fail a turn
+# here, because `claude plugin validate` is too slow to sit on the Validators line.
+
+r=$(manifest_repo mf-agents-dir)
+mkdir -p "$r/agents/ts-reviewer/rules"; printf '# Rulebook\n' > "$r/agents/ts-reviewer/rules/types-and-style.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && a1=ok || a1=no
+case "$err" in *"agents/ exists at the plugin root"*) a2=ok ;; *) a2=no ;; esac
+
+# An empty agents/ is still the directory both harnesses scan: the next file lands registered.
+r=$(manifest_repo mf-agents-empty)
+mkdir -p "$r/agents"
+out=$(run_manifest "$r"); [ "$out" = "1" ] && a3=ok || a3=no
+
+r=$(manifest_repo mf-root-claude-md)
+printf '@AGENTS.md\n' > "$r/CLAUDE.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && a4=ok || a4=no
+case "$err" in *"CLAUDE.md exists at the plugin root"*) a5=ok ;; *) a5=no ;; esac
+
+# The same file where this repository keeps it is not at the root, and must not be asked about.
+r=$(manifest_repo mf-dot-claude-md)
+mkdir -p "$r/.claude"; printf '@../AGENTS.md\n' > "$r/.claude/CLAUDE.md"
+out=$(run_manifest "$r"); [ "$out" = "0" ] && a6=ok || a6=no
+
+[ "$a1$a2$a3$a4$a5$a6" = "okokokokokok" ] && report "check-manifests fails on an agents/ directory or a CLAUDE.md at the plugin root" ok \
+  || report "check-manifests fails on an agents/ directory or a CLAUDE.md at the plugin root" no \
+     "agents-exit=$a1 agents-err=$a2 empty-agents-exit=$a3 claude-md-exit=$a4 claude-md-err=$a5 dot-claude=$a6"
+
 # #144. check-manifests.py pairs Claude Code SessionStart with Antigravity PreInvocation
 # for steering digest injection. Omitting PreInvocation, or writing it in tool-style nested
 # form, must fail closed.
@@ -6288,7 +6322,7 @@ try:
             '.claude-plugin/plugin.json',
             '.claude-plugin/marketplace.json',
             'skills/spec/SKILL.md',
-            'agents/_shared/reviewer-contract.md',
+            'reviewers/_shared/reviewer-contract.md',
             'hooks/gate-lib.sh',
             'hooks/templates/antigravity.hooks.json',
             'rules/AGENTS.md',
@@ -6351,7 +6385,7 @@ case "$err" in *"missing required runtime component"*|*"missing: "*) c_pkg4=ok ;
 
 allowlist_repo() {
   r="$TMP/$1"
-  mkdir -p "$r/scripts" "$r/.steering" "$r/.claude/agents" "$r/agents"
+  mkdir -p "$r/scripts" "$r/.steering" "$r/.claude/agents" "$r/reviewers"
   cp "$ROOT/scripts/check-reviewer-allow-list.py" "$r/scripts/" 2>/dev/null || true
   [ -f "$r/scripts/check-reviewer-allow-list.py" ] && chmod +x "$r/scripts/check-reviewer-allow-list.py"
   printf -- '- Validators: ./scripts/check-leakage.sh, ./scripts/check-manifests.py, ./scripts/test-gates.sh\n' > "$r/.steering/tech.md"
@@ -6371,7 +6405,7 @@ Evidence gathering only:
 
 Nothing else. You do not edit, commit, or push.
 EOF
-  cat > "$r/agents/ts-reviewer.md" << 'EOF'
+  cat > "$r/reviewers/ts-reviewer.md" << 'EOF'
 ## Bash policy
 
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
@@ -6379,7 +6413,7 @@ EOF
 - the validators named in `.steering/tech.md` — typically a type check, a lint, and a test run
 - the package manager's list command, to check an installed version before claiming an API is wrong
 EOF
-  cat > "$r/agents/python-reviewer.md" << 'EOF'
+  cat > "$r/reviewers/python-reviewer.md" << 'EOF'
 ## Bash policy
 
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
@@ -6387,7 +6421,7 @@ EOF
 - the validators named in `.steering/tech.md` — typically a formatter check, a linter, a type checker, a security scanner, and the test suite
 - the environment's package listing, to check an installed version before claiming an API is wrong
 EOF
-  cat > "$r/agents/dart-flutter-reviewer.md" << 'EOF'
+  cat > "$r/reviewers/dart-flutter-reviewer.md" << 'EOF'
 ## Bash policy
 
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
@@ -6395,7 +6429,7 @@ EOF
 - the validators named in `.steering/tech.md` — typically a format check, the analyzer, and the test suite
 - the SDK version command, to check an API against the pinned SDK before claiming it is wrong
 EOF
-  cat > "$r/agents/_template_reviewer.md" << 'EOF'
+  cat > "$r/reviewers/_template_reviewer.md" << 'EOF'
 ## Bash policy
 
 Evidence gathering only:
@@ -6405,8 +6439,8 @@ Evidence gathering only:
 - these validators, and no others:
 - the package manager's list command, to check an installed version before claiming an API is wrong
 EOF
-  mkdir -p "$r/agents/_template"
-  mv "$r/agents/_template_reviewer.md" "$r/agents/_template/reviewer.md"
+  mkdir -p "$r/reviewers/_template"
+  mv "$r/reviewers/_template_reviewer.md" "$r/reviewers/_template/reviewer.md"
   echo "$r"
 }
 
@@ -6431,7 +6465,7 @@ case "$err" in *"gate-sdd-reviewer.md"*) c_al3=ok ;; *) c_al3=no ;; esac
 
 # Category rule: dropped category fails and names category and file
 r=$(allowlist_repo al-drop-cat)
-cat > "$r/agents/ts-reviewer.md" << 'EOF'
+cat > "$r/reviewers/ts-reviewer.md" << 'EOF'
 ## Bash policy
 
 - `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else

@@ -5,7 +5,7 @@ Bundles strictly the runtime payload into a standalone zip archive (dist/gate-sd
   - plugin.json
   - .claude-plugin/ (plugin.json, marketplace.json)
   - skills/
-  - agents/
+  - reviewers/
   - hooks/
   - rules/ (rules/AGENTS.md)
   - assets/
@@ -34,7 +34,7 @@ REQUIRED_COMPONENTS = [
     ".claude-plugin/plugin.json",
     ".claude-plugin/marketplace.json",
     "skills",
-    "agents",
+    "reviewers",
     "hooks",
     "rules/AGENTS.md",
     "assets",
@@ -112,7 +112,7 @@ def package_release(source_dir: pathlib.Path, output_zip: pathlib.Path) -> None:
         "plugin.json",
         ".claude-plugin",
         "skills",
-        "agents",
+        "reviewers",
         "hooks",
         "rules",
         "assets",

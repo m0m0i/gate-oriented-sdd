@@ -79,7 +79,7 @@ Asked and answered 2026-10-05.
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: cases for AC3 (an `agents/` directory, a root `CLAUDE.md`), red. Then the move in the table, `check-manifests.py`'s guard, and every guard, glob and fixture under Affected files that names a moved path → suite green (AC6).
+- [x] T1: cases for AC3 (an `agents/` directory, a root `CLAUDE.md`), red. Then the move in the table, `check-manifests.py`'s guard, and every guard, glob and fixture under Affected files that names a moved path → suite green (AC6).
 - [ ] T2: cases for AC4 (a reviewer with no frontmatter, one whose `name` is not its filename, a rulebook with frontmatter, the contract with frontmatter), red. Then the check → green.
 - [ ] T3: `skills/init/SKILL.md` and every document under Affected files, with ADR-7. Re-measure AC1, AC2, AC5 and `README.md:35`, and record them in `docs/verified.md` (AC7).
 - [ ] T4: unpin CI.
