@@ -5,7 +5,7 @@
 ## 1. Requirements (WHAT / WHY)
 
 - Reproduction: the issue's, measured again on 2026-10-05 at `322e6cf` with Claude Code 2.1.289, which is also npm's latest.
-  - `claude plugin validate . --strict` fails with the issue's nine warnings.
+  - `claude plugin validate . --strict` fails with the issue's nine warnings. Run here at `dbf51df` with the manifest's `agents` key set (Clarifications, Q1); the issue's run at `022372b` is the one without it.
   - `agy plugin validate .` (Antigravity CLI 1.2.16) reports `agents : 8 processed` for a plugin with three reviewers.
   - A headless session with `--plugin-dir .` (the installed copy disabled, hooks off) reports twelve `gate-sdd:` entries in the `agents` list of its `init` message: the three reviewers, the six rulebooks, `_shared:reviewer-contract`, `_template:rules:starter` and `_template:{{REVIEWER_NAME}}`.
 
@@ -81,5 +81,5 @@ Asked and answered 2026-10-05.
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: cases for AC3 (an `agents/` directory, a root `CLAUDE.md`), red. Then the move in the table, `check-manifests.py`'s guard, and every guard, glob and fixture under Affected files that names a moved path → suite green (AC6).
 - [x] T2: cases for AC4 (a reviewer with no frontmatter, one whose `name` is not its filename, a rulebook with frontmatter, the contract with frontmatter), red. Then the check → green.
-- [ ] T3: `skills/init/SKILL.md` and every document under Affected files, with ADR-7. Re-measure AC1, AC2, AC5 and `README.md:35`, and record them in `docs/verified.md` (AC7).
+- [x] T3: `skills/init/SKILL.md` and every document under Affected files, with ADR-7. Re-measure AC1, AC2, AC5 and `README.md:35`, and record them in `docs/verified.md` (AC7).
 - [ ] T4: unpin CI.

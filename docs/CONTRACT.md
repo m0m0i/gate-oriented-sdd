@@ -1,6 +1,6 @@
 # Development contract
 
-- Applies to: everything this repository ships — `skills/`, `agents/`, `hooks/`, `assets/`, the two manifests — and the guards under `scripts/` that CI runs against them. `.steering/`, `.specs/`, `.work_logs/` and `.claude/` are the dogfood instance and hold to the same rules.
+- Applies to: everything this repository ships — `skills/`, `reviewers/`, `hooks/`, `assets/`, the two manifests — and the guards under `scripts/` that CI runs against them. `.steering/`, `.specs/`, `.work_logs/` and `.claude/` are the dogfood instance and hold to the same rules.
 - Quality anchor: **gates never fail open**, the `- Owns:` line in `.steering/product.md`. A defect that lets a gate exit 0 when it should have blocked is at least HIGH; one that makes a gate silently stop checking is a BLOCKER.
 
 This document was compiled **from** the reviewer's rulebook at `.claude/agents/gate-sdd-reviewer/rules/`, not the reverse: the rulebook was hand-authored one rule per incident, and this contract indexes it and states the tiers around it. Where `CONTRIBUTING.md` already states a rule, this document links to it rather than restating it.
@@ -74,7 +74,7 @@ The rulebook is the source for every Judgment row and holds each rule's rational
 | C-4 | A skill terminates in something the harness reads | Judgment | HIGH | rulebook |
 | C-5 | Instructions never describe a file the project was not given | Judgment | HIGH | rulebook |
 | C-6 | A shipped-path change carries a version bump | Judgment | HIGH | rulebook, ahead of M-11 |
-| C-7 | No frontmatter on `agents/*/rules/*.md` | Judgment | BLOCKER | rulebook |
+| C-7 | No frontmatter on a rulebook or the contract — `reviewers/*/rules/*.md`, `.claude/agents/*/rules/*.md` | Judgment | BLOCKER | rulebook |
 | C-8 | A spec amendment lands in its own commit ahead of the artifact it judges | Judgment | MEDIUM | rulebook, added by this contract |
 | C-9 | A verification record names what it set out to observe and could not | Judgment | MEDIUM | rulebook, added by this contract |
 | N-1 | Markdown outside fences is not hand-wrapped | Narrative | — | nothing — #61's detector cannot reach zero, so the reviewer reads for it |

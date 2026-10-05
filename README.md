@@ -30,9 +30,9 @@ The bottom row is the only one that is a guarantee, and it takes two places to b
 
 ### Two things worth stealing even if you don't use this
 
-**The rulebook lives inside the agent's directory.** A reviewer's rules sit in `agents/<reviewer>/rules/`, not in `AGENTS.md` (or `CLAUDE.md` / `GEMINI.md`) and not in session context. A normal session never loads them; only the reviewer does, and only the files the diff calls for.
+**The rulebook lives inside the reviewer's directory.** A reviewer's rules sit in `<reviewer>/rules/` beside the reviewer — `reviewers/<reviewer>/rules/` in this plugin, `.claude/agents/<reviewer>/rules/` or `.agents/agents/<reviewer>/rules/` once `init` has installed it — not in `AGENTS.md` (or `CLAUDE.md` / `GEMINI.md`) and not in session context. A normal session never loads them; only the reviewer does, and only the files the diff calls for.
 
-That is measurable rather than asserted. `claude plugin details gate-sdd` reports **~1,300 tokens always-on** for the entire harness — thirteen skills and three reviewers. The rulebooks and the reviewer contract are another **~5,900 tokens**, and they contribute **zero** to that always-on figure, because they are not registered components at all.
+That is measurable rather than asserted. `claude plugin details gate-sdd` reports **~1,000 tokens always-on** for the entire harness — thirteen skills, and no agents. The three reviewers are about 2,100 tokens more, and the rulebooks and the reviewer contract another **~5,900 tokens**. They contribute **zero** to that always-on figure, because the plugin registers none of them: they are files `init` copies into a project. There, the one reviewer the project installed adds its description, about 100 tokens, and its rulebook is read only when it reviews.
 
 The seven inception skills account for ~580 of that always-on total while firing perhaps once per project — a real cost against the same principle this section argues. It is small enough to accept today; if the inception set grows, it should split into a second plugin rather than quietly inflate every session. Reference material you pay for on every turn is reference material you will eventually delete.
 
@@ -129,7 +129,7 @@ The middle of that chain is not this plugin's invention — it is **GitHub's**. 
 | `worklog` | append-only session record | decisions with their reasons |
 | `archive` | shipped specs out of `.specs/`, swept on request | `.specs/` means live work |
 
-Plus three read-only reviewers — TypeScript, Python, Dart/Flutter — and a template for a stack none of them fit. Every reviewer's Bash policy allow-list is strictly bounded to read-only evidence gathering — diff/log, clock, installed version checks and the project's turn-end validators, plus any source a reviewer file names with its reason, such as the hash for its lock check — and a dedicated guard prevents silent drift between `.steering/tech.md`'s `- Validators:` line and the reviewer's allow-list.
+Plus three read-only reviewers — TypeScript, Python, Dart/Flutter — and a template for a stack none of them fit. They are reference implementations: `init` copies the closest one into the project, and the plugin registers none of them as an agent. Every reviewer's Bash policy allow-list is strictly bounded to read-only evidence gathering — diff/log, clock, installed version checks and the project's turn-end validators, plus any source a reviewer file names with its reason, such as the hash for its lock check — and a dedicated guard prevents silent drift between `.steering/tech.md`'s `- Validators:` line and the reviewer's allow-list.
 
 ## Layout
 

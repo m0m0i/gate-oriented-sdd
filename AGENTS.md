@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Cross-tool context for agents working on **this** repo. `CLAUDE.md` points here so there is one canonical file.
+Cross-tool context for agents working on **this** repo. `.claude/CLAUDE.md` imports it so there is one canonical file.
 
 ## What this repo is
 
@@ -22,13 +22,13 @@ A refactor that loads the rulebook into normal sessions, or turns an enforced ga
 | Manifest | `.claude-plugin/plugin.json` | `plugin.json` |
 | Hooks | `hooks/templates/claude-code.settings.json`, rendered into the project by `init` | `hooks/templates/antigravity.hooks.json`, rendered the same way (plugin-name envelope, `enabled` flag) |
 | Skills | `skills/<name>/SKILL.md` | same path, same format |
-| Subagents | `agents/<name>.md` | `agents/` |
+| Reviewers | `reviewers/<name>.md`, copied by `init` into `.claude/agents/` | the same file, copied into `.agents/agents/` |
 | Rules | `AGENTS.md` | `rules/AGENTS.md` (symlinked, auto-discovered by plugin loader) |
 | Distribution | `.claude-plugin/marketplace.json`, git-native | `agy plugin install <local path>` |
 
 Keeping the plugin at the root rather than nesting it under `plugins/<name>/` means the clone directory *is* the installable unit: `agy plugin install ./gate-oriented-sdd` takes the repository itself, and the Claude Code marketplace entry points at `"./"`. One directory, two install paths, nothing duplicated between them.
 
-Skills, agents, and rules are **one copy read by both** (rules symlinked at `rules/AGENTS.md`). There is no sync step and no templating engine, so drift between the two targets is not possible — only the two hook files and the two manifests differ, and `scripts/check-manifests.py` verifies they agree.
+Skills, reviewers, and rules are **one copy read by both** (rules symlinked at `rules/AGENTS.md`). There is no sync step and no templating engine, so drift between the two targets is not possible — only the two hook files and the two manifests differ, and `scripts/check-manifests.py` verifies they agree.
 
 ## Known fidelity gap
 
@@ -64,20 +64,21 @@ Run these before every commit. The `- Validators:` line in `.steering/tech.md` i
 - Validate with `claude plugin validate . --strict`.
 - Develop against a live install with `claude --plugin-dir .`, then `/reload-plugins` to pick up edits without restarting.
 - Plugin skills are namespaced: `gate-sdd:spec`, not `/spec`.
-- `claude plugin tag` warns that `agents/*/rules/*.md` have no frontmatter. **Expected — do not add any.** Those are reference material, not agents; giving them frontmatter risks registering them as subagents, which is the phantom-component bug that `_shared/reviewer-contract.md` was moved out of `agents/` to avoid. `claude plugin details` confirms only three agents are registered.
-- `agents/_template/reviewer.md` quotes its frontmatter placeholders on purpose: bare `{{...}}` is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before substitution ever happens.
+- **The plugin ships no agents, and has no `agents/` directory.** Claude Code registers every Markdown file under a plugin's `agents/`, at any depth, and Antigravity's loader processes it too, so the rulebooks, `_shared/reviewer-contract.md` and the template all registered as agents while they lived there (#235, ADR-7). The reviewers are in `reviewers/`, which neither harness scans: a reviewer is something `init` copies into a project, and it names a contract and rules that exist only there. `scripts/check-manifests.py` fails if `agents/` or a root `CLAUDE.md` comes back.
+- `reviewers/*/rules/*.md` and `reviewers/_shared/reviewer-contract.md` carry no frontmatter. **Do not add any.** In a project's `.claude/agents/`, a file with frontmatter registers as an agent. `scripts/check-manifests.py` checks this, and checks that each reviewer's frontmatter `name` is its filename.
+- `reviewers/_template/reviewer.md` quotes its frontmatter placeholders on purpose: bare `{{...}}` is a flow mapping in YAML, so an unquoted placeholder parses as an object and fails validation before substitution ever happens.
 - `evals/` is under development — authored, unverified, because `claude plugin eval` is early access. Do not wire it into CI as a passing gate until it runs green.
 
 ## This repo runs its own harness
 
-`.steering/`, `.specs/`, `.work_logs/`, and `.claude/` are this repository dogfooding the plugin it ships. None of it is shipped — consumers get `skills/`, `agents/`, `hooks/`, and `assets/`.
+`.steering/`, `.specs/`, `.work_logs/`, and `.claude/` are this repository dogfooding the plugin it ships. None of it is shipped — consumers get `skills/`, `reviewers/`, `hooks/`, and `assets/`.
 
 Two things are deliberately unlike a normal install, and both would look like mistakes:
 
 - **The hooks are not copied.** `.claude/settings.json` points at the repository's own `hooks/*.sh`. Every other project copies them, because a gate must run with the project as its working directory — here the project *is* the source, so a copy would only create drift, and a drifted copy means this repo tests a stale version of its own enforcement.
 - **`.claude/agents/gate-sdd-reviewer/` has no `rules-lock.json`.** `assets/check-locks.py --update` can refresh a lock but cannot create one (#19). The rulebook stays unpinned until #19 ships a bootstrap, and `docs/decisions/ADR-6` records why.
 
-The project reviewer is `gate-sdd-reviewer` and is unrelated to the three reference reviewers in `agents/`, which are the product. Its anchor is **gates never fail open**.
+The project reviewer is `gate-sdd-reviewer` and is unrelated to the three reference reviewers in `reviewers/`, which are the product. Its anchor is **gates never fail open**.
 
 ## Status
 

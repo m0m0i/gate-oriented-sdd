@@ -66,7 +66,7 @@
 
 - **Being a document generator.** A skill whose only output is prose a human might read does not belong here. That need is met by any writing tool; what this product adds is the mechanical terminus, and a skill without one is a skill that should be deleted.
 - **Configurable directory names.** `.specs/`, `.steering/`, `.work_logs/` are literal in every skill body. Met instead by: not needing it — literal paths are what let one copy of a skill serve every project without templating.
-- **A language abstraction for reviewers.** Three concrete reviewers people copy, not one abstraction people configure. Met instead by `agents/_template/` for an unrecognised stack.
+- **A language abstraction for reviewers.** Three concrete reviewers people copy, not one abstraction people configure. Met instead by `reviewers/_template/` for an unrecognised stack.
 - **Replacing human review.** The judgment layer is a first pass with a citable rulebook, not an approver. Met instead by the pull request, which is still where a person reads the diff.
 - **Being a supported product.** Pre-release, with a tested-against version matrix.
 

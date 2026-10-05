@@ -11,7 +11,7 @@ Three layers, chosen by how much each can be talked out of (`AGENTS.md`): determ
 | :-- | :-- | :-- | :-- |
 | Gates — `gate-lib.sh`, `quality-gate.sh`, `review-gate.sh`, `steering-digest.sh` | deterministic | `hooks/` | CAP-1, CAP-2, CAP-7 |
 | Guards — the validators on the `- Validators:` line, and the two CI-only ones, `check-version-bump.py` and `check-unreviewed-work.sh` | deterministic, at turn end and in CI | `scripts/`, `assets/` | CAP-5, CAP-7, and the gates' own correctness |
-| Reviewer — agent file, rulebook, lock, shared contract | judgment | `agents/<name>.md`, `agents/<name>/`, `agents/_shared/` | CAP-3 |
+| Reviewer — agent file, rulebook, lock, shared contract | judgment | `reviewers/<name>.md`, `reviewers/<name>/`, `reviewers/_shared/` | CAP-3 |
 | Skills — one copy read by both harnesses | process | `skills/` | CAP-4, CAP-6 |
 | Steering — three files, seven machine-read lines | bridge | `.steering/` in a project | every capability; it is what the layers agree through |
 | Manifests and hook wiring — two of each | packaging | `.claude-plugin/plugin.json`, `plugin.json`, `hooks/templates/claude-code.settings.json`, `hooks/templates/antigravity.hooks.json` | CAP-5 |

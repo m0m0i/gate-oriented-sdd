@@ -13,6 +13,7 @@ Rules live in `agents/<name>/rules/*.md`, loaded on demand by the reviewer and b
 - A reviewer with no lock cannot get one from `--update` (#19), so a new reviewer starts unpinned, and this repository's own reviewer still is (ADR-6).
 - The rule files must carry no frontmatter or they register as phantom agents (C-7), which every tool that validates plugins warns about.
 - Revisit if either harness gains rule loading of its own, or if on-demand loading proves unreliable in practice.
+- 2026-10-05: the plugin's own copy moved from `agents/<name>/` to `reviewers/<name>/` (ADR-7). The decision above is unchanged, and so is the installed path.
 
 ## Alternatives considered
 - **Rules in `CLAUDE.md` / `AGENTS.md`** — read every session, unpinned, and the reason this repository exists is that they were skipped.

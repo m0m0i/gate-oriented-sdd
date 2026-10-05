@@ -24,7 +24,7 @@ The gates are the reason this repo exists. A change to `hooks/` must:
 
 **Bump `version` in both manifests, or the release does not exist.** A consumer running `claude plugin update` against an unchanged version is told "already at the latest version" and silently keeps the old content — the update appears to succeed and nothing changes.
 
-This used to be a habit. It is now a check: `scripts/check-version-bump.py` fails a pull request that touches `skills/`, `agents/`, `hooks/`, `assets/`, or a manifest without moving the version, and `scripts/check-manifests.py` still fails when the two manifests disagree about what that version is. Six commits shipped before the guard existed and none of them reached anyone, including a fix to `agents/_template/reviewer.md` that every non-TS/Python/Dart project needed.
+This used to be a habit. It is now a check: `scripts/check-version-bump.py` fails a pull request that touches `skills/`, `reviewers/`, `hooks/`, `assets/`, `rules/`, or a manifest without moving the version, and `scripts/check-manifests.py` still fails when the two manifests disagree about what that version is. Six commits shipped before the guard existed and none of them reached anyone, including a fix to the reviewer template (`reviewers/_template/reviewer.md` now) that every non-TS/Python/Dart project needed.
 
 **A `#non-breaking` change still needs a bump.** Semver describes compatibility; the updater cares about reachability. An unreachable fix is not a fix, and the marker is about the first thing while the problem is the second.
 
