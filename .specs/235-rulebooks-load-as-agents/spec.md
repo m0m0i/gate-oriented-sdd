@@ -83,3 +83,16 @@ Asked and answered 2026-10-05.
 - [x] T2: cases for AC4 (a reviewer with no frontmatter, one whose `name` is not its filename, a rulebook with frontmatter, the contract with frontmatter), red. Then the check → green.
 - [x] T3: `skills/init/SKILL.md` and every document under Affected files, with ADR-7. Re-measure AC1, AC2, AC5 and `README.md:35`, and record them in `docs/verified.md` (AC7).
 - [x] T4: unpin CI.
+
+## 4. Review findings, and what this branch did with each
+
+`gate-sdd-reviewer` as a subagent, round 1 at `d25e290`: **CLEAN**, 0 BLOCKER, 0 HIGH, three MEDIUM, four LOW, five INFO. It ran every validator, the suite and strict validation on 2.1.289, and found no guard that passes having read nothing. That is the stop. Findings in documents are fixed, because no document is on `- Source globs:` and the receipt stays current. Findings in source are recorded.
+
+- **MEDIUM, fixed (C-9):** `docs/verified.md`'s section gave no outcome for AC3, AC4, AC6 or the unpinned half of AC2, and no list of the statements this branch made false. It has both now, and says where the READMEs' 2,100 and 100 come from (the reviewer's LOW on `README.md:35`).
+- **MEDIUM, fixed (C-1):** `.steering/structure.md` and this repository's reviewer file said both harnesses "register" what is under `agents/`. Antigravity's loader was only seen to process it. Both say so now.
+- **MEDIUM, recorded, not changed (G-4):** `check-manifests.py`'s `cannot read` arm in the reviewer loop has no case. It fails closed. A case is source, and would orphan the receipt.
+- **LOW, recorded, not changed:** `assets/check-locks.py` replaces `agents` in `CANDIDATE_DIRS` where it could have added `reviewers`. A project that keeps pinned rulebooks in a top-level `agents/` of its own would stop being scanned after re-vendoring. `init` never writes that directory. The pull request says so.
+- **LOW, fixed:** `docs/CONTRACT.md`'s C-7 and M-2 rows name what `check-manifests.py` now checks. `docs/DESIGN.md:36` says "skills and reviewers".
+- **INFO, recorded:** `skills/implement/SKILL.md:33` still says Antigravity does not discover a project's agent files. Not measured here in either direction, and outside the diff. The unpinned `validate` job can redden `main` on an upstream release, which the comment in `ci.yml` argues for. ADR-1 to ADR-6 keep `agents/…` in their bodies, as append-only records.
+- **INFO, answered:** the reviewer's allow-list has no tree search, so it could not check AC7 across the tree. `git grep` for a plugin path under `agents/` outside the records AC7 names finds only the guard, its case, and the sentences that say the directory is gone on purpose.
+- **INFO, a step and not a finding:** the version bump. `implement` makes it after the receipt.

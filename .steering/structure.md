@@ -18,7 +18,7 @@ The seams between these — what crosses each, who produces and consumes it, and
 
 **Tests live in `scripts/test-gates.sh`**, not beside the code. There is no test framework: the gates are shell, so their tests are shell, and each case builds a throwaway git repository in a temp directory. A new gate behaviour needs a new case there — that is the project's whole notion of test coverage. The count is the suite's — run it rather than trusting a number here, which is what #115 settled for the same claim in both READMEs.
 
-There is no `agents/` directory, on purpose: both harnesses scan a plugin's `agents/` and register what they find, and this plugin ships no agents (#235, ADR-7). `reviewers/*/rules/*.md` and the contract deliberately carry **no frontmatter**. They are reference material the reviewer loads on demand, and with frontmatter they register as agents in the project they are copied into. `scripts/check-manifests.py` holds both.
+There is no `agents/` directory, on purpose: Claude Code registers every Markdown file under a plugin's `agents/` and Antigravity's loader processes the directory, and this plugin ships no agents (#235, ADR-7). `reviewers/*/rules/*.md` and the contract deliberately carry **no frontmatter**. They are reference material the reviewer loads on demand, and with frontmatter they register as agents in the project they are copied into. `scripts/check-manifests.py` holds both.
 
 ## Where the harness's own instance lives
 

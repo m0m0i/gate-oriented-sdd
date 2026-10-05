@@ -54,6 +54,6 @@ Load only what the diff calls for.
 - This project owns **gates never fail open**. That anchor decides severities: a defect that undermines it is at least HIGH, and one that breaks it outright is a BLOCKER. Say which anchor you applied when it decides a call.
 - A gate that exits 0 on a path where it could not do its job is the single worst defect available here. It is indistinguishable from correct behaviour, which is how it survives.
 - `reviewers/*/rules/*.md` carry no frontmatter **on purpose**. Never flag that.
-- The plugin has no `agents/` directory **on purpose** (#235): both harnesses register what they find there, and a reviewer is something `init` copies. Flag one that comes back, never its absence.
+- The plugin has no `agents/` directory **on purpose** (#235): Claude Code registers what it finds there and Antigravity's loader processes it, and a reviewer is something `init` copies. Flag one that comes back, never its absence.
 - `reviewers/_template/reviewer.md` quotes its `{{...}}` frontmatter placeholders **on purpose** — unquoted, they parse as a YAML flow mapping and fail validation. Never flag that.
 - `evals/` is authored but unverified. Never treat it as passing evidence.

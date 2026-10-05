@@ -44,7 +44,7 @@ The rulebook is the source for every Judgment row and holds each rule's rational
 | id | Rule | Tier | Severity | Enforced by |
 | :-- | :-- | :-- | :-- | :-- |
 | M-1 | No private context in the tree | Mechanical | — | `check-leakage.sh` |
-| M-2 | Both manifests agree and the hook shapes are right | Mechanical | — | `check-manifests.py`, also after every Write/Edit via `PostToolUse` |
+| M-2 | Both manifests agree, the hook shapes are right, the plugin root holds no `agents/` or `CLAUDE.md`, and each shipped reviewer's frontmatter names it | Mechanical | — | `check-manifests.py`, also after every Write/Edit via `PostToolUse` |
 | M-3 | A ` ```markdown ` fence does not hand-wrap what it quotes | Mechanical | — | `check-markdown-fences.py` |
 | M-4 | The receipt schema agrees across its copies | Mechanical | — | `check-receipt-schema.py` |
 | M-5 | Skills keep their load-bearing sentences | Mechanical | — | `check-skill-contracts.py` |
@@ -74,7 +74,7 @@ The rulebook is the source for every Judgment row and holds each rule's rational
 | C-4 | A skill terminates in something the harness reads | Judgment | HIGH | rulebook |
 | C-5 | Instructions never describe a file the project was not given | Judgment | HIGH | rulebook |
 | C-6 | A shipped-path change carries a version bump | Judgment | HIGH | rulebook, ahead of M-11 |
-| C-7 | No frontmatter on a rulebook or the contract — `reviewers/*/rules/*.md`, `.claude/agents/*/rules/*.md` | Judgment | BLOCKER | rulebook |
+| C-7 | No frontmatter on a rulebook or the contract — `reviewers/*/rules/*.md`, `.claude/agents/*/rules/*.md` | Judgment | BLOCKER | rulebook; `check-manifests.py` for the shipped ones (#235) |
 | C-8 | A spec amendment lands in its own commit ahead of the artifact it judges | Judgment | MEDIUM | rulebook, added by this contract |
 | C-9 | A verification record names what it set out to observe and could not | Judgment | MEDIUM | rulebook, added by this contract |
 | N-1 | Markdown outside fences is not hand-wrapped | Narrative | — | nothing — #61's detector cannot reach zero, so the reviewer reads for it |
