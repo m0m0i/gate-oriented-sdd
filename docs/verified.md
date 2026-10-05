@@ -10,10 +10,12 @@ The version table below carries a date beside each row. Claude Code's row was re
 
 | Component | Version |
 | :-- | :-- |
-| Claude Code | 2.1.252 — the 2026-09-05 sections below; the 2026-08-21 rows were run at 2.1.238 |
-| Antigravity CLI (`agy`) | 1.1.17 — verified 2026-08-21 |
-| Antigravity IDE | 2.3.1 — verified 2026-08-21 |
+| Claude Code | 2.1.289 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, and the 2026-10-05 section below. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
+| Antigravity CLI (`agy`) | 1.2.16 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0. The 2026-08-21 rows were run at 1.1.17 |
+| Antigravity IDE | 2.3.1 — verified 2026-08-21, and not re-run since |
 | Platform | macOS (darwin, arm64) |
+
+**The 2026-10-06 run has no section of its own.** It is the maintainer's report, not a recorded session: on Claude Code 2.1.289 and Antigravity CLI 1.2.16, with gate-sdd 0.22.0, the plugin installed and loaded, `init` ran on a project, both gates blocked a turn, the project's reviewer ran and produced a receipt, and the plugin is in use in active development. Which of those were exercised on which of the two tools was not recorded, so no item under **Still to verify** is ticked on its strength.
 
 ## Claude Code subagent invocation
 

@@ -175,7 +175,8 @@ agy plugin install ./gate-oriented-sdd
 
 | 機能                            | Claude Code            | Antigravity                               |
 | :------------------------------ | :--------------------- | :---------------------------------------- |
-| skill、reviewer、ルールブック   | 完全                   | 完全（同じパス、同じ形式）                |
+| skill | 完全 | 完全（同じパス、同じ形式） |
+| reviewer とルールブック | 完全。`init` が `.claude/agents/` にコピーし、reviewer は名前で呼び出します | 完全。同じファイルを `.agents/agents/` にコピーし、そのファイルから `define_subagent` で登録します |
 | ルール検出                      | ルートの `AGENTS.md`（正のコンテキストとして読み込み） | `rules/AGENTS.md`（プラグインローダーが自動検出してマージ） |
 | ターン終了時の品質ゲート        | 完全（`Stop`, exit 2） | 完全（`Stop`, `{"decision":"continue"}`） |
 | review receipt のゲート         | 完全                   | 完全                                      |
@@ -189,7 +190,7 @@ agy plugin install ./gate-oriented-sdd
 
 **pre-release です。** 検証済みバージョンの一覧を添えた reference implementation であって、サポート付きのプロダクトではありません。[eval スイート](./evals/) は開発中です。4つのケースは書いてありますが、`claude plugin eval` は読み込み時にそれらを拒否する（`case.yaml` に `graders` が必要）ため、まだ一度も実行できていません。
 
-検証環境: Claude Code 2.1.252（2026-09-05）· Antigravity CLI 1.1.17 / IDE 2.3.1（2026-08-21）· macOS
+検証環境: Claude Code 2.1.289 / Antigravity CLI 1.2.16（2026-10-06）· Antigravity IDE 2.3.1（2026-08-21）· macOS
 
 **検証できていること。** まず、ゲートとガードの挙動です。モデルを介さず、決定的にテストしています（[`scripts/test-gates.sh`](./scripts/test-gates.sh)。何通りあるかはスイートが持つ数字であって、ここで維持している数字ではありません）。Antigravity の `Stop` フックが実際にブロックすることも、ドキュメントを読んで済ませたのではなく、動かして確かめました（[`docs/verified.md`](./docs/verified.md)）。2つのプラグインマニフェスト、ルールブックのハッシュ、機密混入チェックは、CI で毎回実行しています。skill は13個すべてが、少なくとも一度は実際に動いています。inception の一連の skill と `init` はこのリポジトリ自身か、実在するプロジェクトの使い捨てクローンに対して実行し、`spec`・`clarify`・`implement`・`worklog` は #17 以降のすべての spec で使い、`archive` はこのリポジトリ自身の出荷済み spec に対して何度もスイープしています。inception と `init` の実行で見つかったことは [`docs/verified.md`](./docs/verified.md) に記録し、Issue として起票してあります。そして #17 以降のすべての spec には、`.specs/` の下に review receipt があります。3件を除いてサブエージェントとして起動した reviewer によるレビューで、その3件は inline でレビューしたことが receipt 自体に記録されています。
 
