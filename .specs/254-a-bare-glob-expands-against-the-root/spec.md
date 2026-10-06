@@ -73,3 +73,12 @@ Case 204's needle, run over `hooks/` as shipped at `ab518af`, reports exactly `q
 - [x] T1: a case for AC1 and AC2 in one, after case 164: a `qg_repo` fixture with a root `a.txt` unchanged and `sub/b.txt` modified, red at `ab518af`; then a docs-only change on the same fixture, silent before and after. Then the two lines and the rewritten comment in `hooks/quality-gate.sh` → green.
 - [x] T2: the AC3 pin (a validator of `ls sub/*.txt`, which fails only if `set -f` leaks; green before and after, red under the mutation that drops `set +f`) and the AC6 needle with its self-test → green.
 - [x] T3: AC7's two prose sites, and #254's citation in `docs/BACKLOG.md` row 7. Full suite and every validator green.
+
+## 4. Review findings, and what this branch did with each
+
+`gate-sdd-reviewer` as a subagent, round 1 at `6fbb449`: **CLEAN**, 0 BLOCKER, 0 HIGH, 0 MEDIUM, 1 LOW, 2 INFO. It ran every validator, confirmed AC1 to AC7 by case and line, checked case 204's matcher by hand on both self-test files, and found nothing in the diff that lowers the anchor. That is the stop.
+
+- **LOW, recorded, not changed:** the comment at the fixed site in `hooks/quality-gate.sh` says case 203 recognises the `set -f` region, and the needle is case 204; 203 is the AC3 pin. `.steering/tech.md` cites 204 correctly. A one-word fix, but `hooks/` is reviewable source, so it would re-stale a CLEAN receipt for a comment. It goes with the next change to that file.
+- **INFO, a step and not a finding:** the version bump. `check-version-bump.py main` failed at review time, as it does on every branch at that point; `implement` makes the bump after the receipt, and this one is 0.22.1.
+- **INFO, recorded:** the Design's AC6 paragraph gained its unclosed-region sentence in T2's commit, with case 204. C-8 checked and not triggered, since no acceptance criterion moved; the mutation record says why the sentence arrived when it did.
+- **Disclosed by the reviewer:** `claude plugin validate . --strict` did not return within the review. The diff touches no manifest and no component path, and CI's validation job is the record.
