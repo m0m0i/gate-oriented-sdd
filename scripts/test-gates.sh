@@ -1908,6 +1908,30 @@ case "$err" in *RAN*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a line of several globs reaches the quality gate one pathspec per glob" ok \
   || report "a line of several globs reaches the quality gate one pathspec per glob" no "docs-silent=$c1 blocks=$c2 ran=$c3"
 
+# 202. #254 — the split one line above the one case 164 pins. `set -- $(...)` is unquoted so that
+#      each glob reaches git as its own pathspec, and unquoted means pathname expansion too: the
+#      shell matched `*.txt` against the repository root before `git status` saw it. The fixtures
+#      above cannot see that, because every file they change is AT the root, so the expansion
+#      happens to name it. Here the root match is unchanged and the change is one directory
+#      down, which is the flat-layout shape `init` writes for a small project: the shell hands
+#      git `a.txt`, git finds it clean, and the gate passed having run no validator. The library's
+#      three copies of this split sit inside `set -f`; this one never got the two lines. The
+#      docs-only half is the pin for AC2: the skip still saves its cost when nothing matched.
+#
+#      RED-CAPABLE under "drop the `set -f`". Measured in the spec's mutation record.
+r="$TMP/qg-subdir"; mkdir -p "$r/hooks" "$r/.steering" "$r/sub"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+printf -- '- Validators: sh -c "echo RAN >&2; exit 1"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+  && echo one > a.txt && echo two > sub/b.txt && echo doc > NOTES.md && git add -A && git commit -qm init ) >/dev/null 2>&1
+echo more >> "$r/NOTES.md"; out=$(run_qg "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+echo more >> "$r/sub/b.txt"; out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *RAN*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a bare glob with an unchanged root match still sees a change below the root" ok \
+  || report "a bare glob with an unchanged root match still sees a change below the root" no "docs-silent=$c1 blocks=$c2 ran=$c3"
+
 # --- both gates: the library they block through ----------------------------------------
 #
 # Every case above runs these gates with a whole gate-lib.sh. The three states below are the

@@ -56,10 +56,18 @@ Asked and answered 2026-10-06.
   - **The four fixtures beside the fixed line.** `qg-clean`, `qg-docs`, `qg-src`, `qg-quoted` and case 164 all use a bare `*.txt` or `:(glob)` patterns against a flat tree; with expansion off, a bare `*.txt` reaches git literally and git matches the same root file. AC4 holds them.
   - **The library.** Untouched. Its three sites already carry the region.
   - **A consumer.** The skip now blocks on a change below the root, which is the turn it was always meant to block. A consumer whose line is `:(glob)…` sees no change.
+### Mutation record
+
+Measured 2026-10-06 in T1, bash 3.2.57 as `sh`, git 2.54.0. Unmutated, the suite is 206 passed / 0 failed / 0 skipped. Each row is the shipped `hooks/quality-gate.sh` with one mutation applied; the suite at `ab518af` with case 202 present is the first row's shape (205 / 1 / 0, `docs-silent=ok blocks=no ran=no`).
+
+| Mutation | Cases red | Suite |
+| :-- | :-- | :-- |
+| the `set -f` line deleted | 202 | 205 / 1 / 0 |
+
 - **Why this cannot recur:** the needle (AC6). The next copy of the split that forgets the two lines goes red before it ships, and the comment at the fixed site names the case that would catch it.
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: a case for AC1 and AC2 in one, after case 164: a `qg_repo` fixture with a root `a.txt` unchanged and `sub/b.txt` modified, red at `ab518af`; then a docs-only change on the same fixture, silent before and after. Then the two lines and the rewritten comment in `hooks/quality-gate.sh` → green.
+- [x] T1: a case for AC1 and AC2 in one, after case 164: a `qg_repo` fixture with a root `a.txt` unchanged and `sub/b.txt` modified, red at `ab518af`; then a docs-only change on the same fixture, silent before and after. Then the two lines and the rewritten comment in `hooks/quality-gate.sh` → green.
 - [ ] T2: the AC3 pin (a validator of `ls sub/*.txt`, which fails only if `set -f` leaks; green before and after, red under the mutation that drops `set +f`) and the AC6 needle with its self-test → green.
 - [ ] T3: AC7's two prose sites, and #254's citation in `docs/BACKLOG.md` row 7. Full suite and every validator green.
