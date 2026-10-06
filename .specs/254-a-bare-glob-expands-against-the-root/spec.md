@@ -72,4 +72,4 @@ Case 204's needle, run over `hooks/` as shipped at `ab518af`, reports exactly `q
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: a case for AC1 and AC2 in one, after case 164: a `qg_repo` fixture with a root `a.txt` unchanged and `sub/b.txt` modified, red at `ab518af`; then a docs-only change on the same fixture, silent before and after. Then the two lines and the rewritten comment in `hooks/quality-gate.sh` → green.
 - [x] T2: the AC3 pin (a validator of `ls sub/*.txt`, which fails only if `set -f` leaks; green before and after, red under the mutation that drops `set +f`) and the AC6 needle with its self-test → green.
-- [ ] T3: AC7's two prose sites, and #254's citation in `docs/BACKLOG.md` row 7. Full suite and every validator green.
+- [x] T3: AC7's two prose sites, and #254's citation in `docs/BACKLOG.md` row 7. Full suite and every validator green.

@@ -44,7 +44,7 @@ The distinction between a step and a task is load-bearing rather than pedantic. 
 
 Also on #14: this line duplicates by hand the definition `scripts/check-version-bump.py` holds in its `SHIPPED` tuple, and nothing detects them disagreeing.
 
-`:(glob)` is load-bearing. The value is interpolated unquoted, so a bare `*.py` would be expanded by the shell against the repository root before git ever saw it. `:(glob)` matches no file on disk, so the shell leaves the word alone. This is #1, and it failed silently for three releases.
+`:(glob)` is the recommended form, and since #254 it is a recommendation rather than a guard. The value is interpolated unquoted so that each glob reaches git as its own pathspec, and unquoted used to mean the shell expanded a bare `*.py` against the repository root before git ever saw it: #1, which failed silently for three releases, and #254, where the quality gate's copy of the split had never been given the `set -f` the library's three sites carry. Both gates now disable pathname expansion across the split, and `scripts/test-gates.sh` case 204 reads the shipped shell for a split outside that region, so a bare glob reaches git as written. `:(glob)` still earns its place for what it says to git: in a plain pathspec `*` matches `/` as well, so `*.py` already reaches every depth, and `:(glob)**/*.py` says so where a reader can see it.
 
 ## Why `check-backlog-tracker.py` is not on the Validators line either
 
