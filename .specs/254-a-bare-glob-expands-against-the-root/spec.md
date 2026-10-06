@@ -1,5 +1,5 @@
 # Spec: quality-gate.sh's skip check expands a bare `- Source globs:` word against the repo root and passes having run nothing
-- Slug: 254-a-bare-glob-expands-against-the-root   Issue: 254   Type: bug   Status: approved
+- Slug: 254-a-bare-glob-expands-against-the-root   Issue: 254   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-10-06
 
 ## 1. Requirements (WHAT / WHY)
