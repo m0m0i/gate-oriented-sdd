@@ -32,7 +32,7 @@
   - [x] **AC9:** `docs/verified.md` records M1, M2a, M2b and M2c with versions and exact observations, including what M2c did not exercise, and its **Still to verify** list says what is left of V3's other branch.
   - [x] **AC10:** `skills/init/SKILL.md` says what `--scope project` writes as M1 found it.
   - [x] **AC11:** `docs/BACKLOG.md` row 1's `Why here` cites #262 to #265, filed from two consumer migrations while this branch was in review, and `## Open, not planned` holds #260 and #261 by the maintainer's decision of 2026-10-07 to put cloud sessions out of scope; `./scripts/check-backlog-tracker.py` exits 0 on the branch.
-  - [ ] **AC12:** every claim in `README.ja.md`'s new and changed text is the English claim, with the house spacing; the PR says the Japanese is a draft for the maintainer's read.
+  - [x] **AC12:** every claim in `README.ja.md`'s new and changed text is the English claim, with the house spacing; the PR says the Japanese is a draft for the maintainer's read.
   - [x] **AC13:** every validator on `.steering/tech.md`'s `- Validators:` line exits 0, and `./scripts/check-version-bump.py` passes with the patch bump AC10 makes due.
 
 - Out of scope:
