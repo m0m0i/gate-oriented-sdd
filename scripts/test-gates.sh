@@ -2037,6 +2037,96 @@ if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-lib-out" "$TMP/bs-cp-out" \
      "discovered=$bs_regions/$c1 identical=$c2 channels=$c3 (lib exit=$bs_libexit, copy exit=$bs_cpexit)"
 
 
+# --- hooks/plugin-gate.sh: the gates as the plugin runs them (#256) ---------------------
+#
+# On Claude Code the gates ship from the plugin: .claude-plugin/hooks.json runs
+# `sh "${CLAUDE_PLUGIN_ROOT}/hooks/plugin-gate.sh" <gate>` on Stop and SessionStart, and the
+# wrapper decides whether the gate runs at all. Three answers, and the cases below pin each:
+# silent when the project has no .steering/ (a user-scope install in a project that does not
+# use the harness); stand down when the project's own settings run a copy of the same gate
+# under the same event (V2: the harness runs both otherwise); otherwise exec the gate beside
+# the wrapper, with the project as cwd. A gate missing from the plugin blocks: a broken install
+# is loud, not silent. The fixture's validator proves the cwd — `test -f src.txt` passes only
+# from the project root — and proves the gate ran, by exiting 1 so the gate blocks.
+pg_repo() { # pg_repo <name> — prints the fixture root; plugin/ and project/ beneath it
+  _p="$TMP/$1"; mkdir -p "$_p/plugin/hooks" "$_p/project/.steering" "$_p/project/.claude"
+  for f in gate-lib.sh quality-gate.sh review-gate.sh steering-digest.sh plugin-gate.sh; do
+    [ -f "$ROOT/hooks/$f" ] && cp "$ROOT/hooks/$f" "$_p/plugin/hooks/"
+  done
+  printf -- '- Validators: sh -c "test -f src.txt && echo RAN >&2; exit 1"\n- Source globs: *.txt\n- Reviewer: test-reviewer\n' > "$_p/project/.steering/tech.md"
+  ( cd "$_p/project" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && echo one > src.txt && git add -A && git commit -qm init && echo more >> src.txt ) >/dev/null 2>&1
+  echo "$_p"
+}
+run_pg() { # run_pg <fixture root> <gate> — runs the wrapper as hooks.json does, from the project
+  ( cd "$1/project" && CLAUDE_PLUGIN_ROOT="$1/plugin" sh "$1/plugin/hooks/plugin-gate.sh" "$2" >"$TMP/pgout" 2>"$TMP/pgerr"; echo "exit=$?" )
+}
+
+# 205. #256 AC1, AC7 — the plain case. A project with .steering/ and no settings entry: the
+#      wrapper execs the quality gate, which runs the validator from the project root, finds it
+#      failing, and blocks on both channels. RAN on stderr is the cwd proof.
+p=$(pg_repo pg-plain); out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$(cat "$TMP/pgout")" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$(cat "$TMP/pgerr")" in *RAN*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "plugin-gate runs the quality gate from the plugin with the project as cwd, and it blocks" ok \
+  || report "plugin-gate runs the quality gate from the plugin with the project as cwd, and it blocks" no "exit=$c1 json=$c2 ran=$c3 ($out; $(head -c 200 "$TMP/pgerr"))"
+
+# 206. #256 AC2 — no .steering/, no sound. All three gates, because the digest would otherwise
+#      print "## Repo facts" into every session of every project on the machine.
+p=$(pg_repo pg-nosteer); rm -rf "$p/project/.steering"; all=ok
+for g in quality-gate.sh review-gate.sh steering-digest.sh; do
+  out=$(run_pg "$p" "$g")
+  case "$out" in *"exit=0"*) ;; *) all="no($g:$out)" ;; esac
+  [ -s "$TMP/pgout" ] && all="no($g: stdout $(head -c 80 "$TMP/pgout"))"
+  [ -s "$TMP/pgerr" ] && all="no($g: stderr $(head -c 80 "$TMP/pgerr"))"
+done
+[ "$all" = ok ] && report "plugin-gate is silent in a project without .steering/" ok \
+  || report "plugin-gate is silent in a project without .steering/" no "$all"
+
+# 207. #256 AC3 — stand-down, and what is NOT evidence. Four settings shapes, one fixture each:
+#      (a) .claude/settings.json runs quality-gate.sh under "Stop" — stand down, silent;
+#      (b) .claude/settings.local.json does — the same;
+#      (c) the copied file is on disk and no settings name it — the plugin's gate runs, because
+#          a file alone is not evidence it runs (backlog row 1, under `- Owns:`);
+#      (d) the settings name quality-gate.sh under "PostToolUse" only — runs, the event is wrong.
+#      (e) the settings name review-gate.sh under "Stop" — the quality gate still runs: the
+#          stand-down is per gate, not per event.
+sd='{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh"}]}]}}'
+p=$(pg_repo pg-sd-a); printf '%s\n' "$sd" > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=0"*) a=ok ;; *) a="no($out)" ;; esac; [ -s "$TMP/pgerr" ] && a="no(stderr)"
+p=$(pg_repo pg-sd-b); printf '%s\n' "$sd" > "$p/project/.claude/settings.local.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=0"*) b=ok ;; *) b="no($out)" ;; esac; [ -s "$TMP/pgerr" ] && b="no(stderr)"
+p=$(pg_repo pg-sd-c); mkdir -p "$p/project/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/.claude/hooks/"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) c=ok ;; *) c="no($out)" ;; esac
+p=$(pg_repo pg-sd-d); printf '%s\n' '{"hooks":{"PostToolUse":[{"matcher":"Write","hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) d=ok ;; *) d="no($out)" ;; esac
+p=$(pg_repo pg-sd-e); printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/review-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) e=ok ;; *) e="no($out)" ;; esac
+[ "$a$b$c$d$e" = "okokokokok" ] && report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" ok \
+  || report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" no "settings=$a local=$b file-alone=$c other-event=$d other-gate=$e"
+
+# 208. #256 AC3 — the digest's event is SessionStart, not Stop. Named under SessionStart it
+#      stands down; named under Stop, where no digest runs, it prints the digest.
+p=$(pg_repo pg-dg-a); printf '%s\n' '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"sh .claude/hooks/steering-digest.sh"}]}]}}' > "$p/project/.claude/settings.json"
+out=$(run_pg "$p" steering-digest.sh); case "$out" in *"exit=0"*) a=ok ;; *) a="no($out)" ;; esac; [ -s "$TMP/pgout" ] && a="no(printed)"
+p=$(pg_repo pg-dg-b); printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/steering-digest.sh"}]}]}}' > "$p/project/.claude/settings.json"
+out=$(run_pg "$p" steering-digest.sh); case "$(cat "$TMP/pgout")" in *"Repo facts"*) b=ok ;; *) b="no($out: $(head -c 80 "$TMP/pgout"))" ;; esac
+[ "$a$b" = "okok" ] && report "plugin-gate pairs the digest with SessionStart" ok \
+  || report "plugin-gate pairs the digest with SessionStart" no "session-start=$a stop=$b"
+
+# 209. #256 — a broken install is loud. A gate the wrapper cannot find beside itself, and a name
+#      the wrapper does not run, both block with a remedy rather than exiting 0 or 127.
+p=$(pg_repo pg-missing); rm -f "$p/plugin/hooks/review-gate.sh"; out=$(run_pg "$p" review-gate.sh)
+case "$out" in *"exit=2"*) a=ok ;; *) a="no($out)" ;; esac
+case "$(cat "$TMP/pgout")" in *'"decision":"continue"'*) a2=ok ;; *) a2=no ;; esac
+case "$(cat "$TMP/pgerr")" in *"install"*) a3=ok ;; *) a3=no ;; esac
+p=$(pg_repo pg-badname); out=$(run_pg "$p" ../../etc/passwd)
+case "$out" in *"exit=2"*) b=ok ;; *) b="no($out)" ;; esac
+out=$(run_pg "$p" ""); case "$out" in *"exit=2"*) b2=ok ;; *) b2="no($out)" ;; esac
+[ "$a$a2$a3$b$b2" = "okokokokok" ] && report "plugin-gate blocks on a gate it cannot find or does not run" ok \
+  || report "plugin-gate blocks on a gate it cannot find or does not run" no "missing=$a json=$a2 remedy=$a3 path=$b empty=$b2"
+
 # --- guards: assets/check-locks.py -------------------------------------------------
 #
 # The lock guard answers "has a rulebook drifted from what was agreed". It can also answer

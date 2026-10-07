@@ -59,9 +59,18 @@ Asked and answered 2026-10-07.
   - **Timeouts.** The wrapper adds a process; the template's 180, 30 and 15 seconds carry over unchanged.
   - **Validation.** `claude plugin validate --strict` takes minutes here; CI's job is the record, as for #235.
 
+### Mutation record
+
+Measured in T1 on 2026-10-07, bash 3.2.57 as `sh`. Unmutated, the suite is 210 passed / 0 failed / 0 skipped; with cases 205–209 present and no `hooks/plugin-gate.sh`, 205 / 5 / 0, every case exiting 127.
+
+| Mutation of `hooks/plugin-gate.sh` | Cases red | Suite |
+| :-- | :-- | :-- |
+| stand down on the gate's filename alone, the event check dropped | 207 (other-event half), 208 (Stop half) | 208 / 2 / 0 |
+| the `.steering/` guard removed | 206 | 209 / 1 / 0 |
+
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: cases for the wrapper — no `.steering/` is silent (AC2); settings naming the gate under its event stand it down, the file alone or the gate under another event does not (AC3); the gate it runs sees the project as cwd and blocks through both channels (AC1, AC7); a gate missing from the plugin blocks with a remedy — all red because `hooks/plugin-gate.sh` does not exist. Then the wrapper → green.
+- [x] T1: cases for the wrapper — no `.steering/` is silent (AC2); settings naming the gate under its event stand it down, the file alone or the gate under another event does not (AC3); the gate it runs sees the project as cwd and blocks through both channels (AC1, AC7); a gate missing from the plugin blocks with a remedy — all red because `hooks/plugin-gate.sh` does not exist. Then the wrapper → green.
 - [ ] T2: cases for `scripts/check-manifests.py` — a stray `hooks/hooks.json` and a root `hooks.json` fail; a manifest `"hooks"` field naming nothing readable fails; a command naming a missing script fails; event parity across the plugin file and both templates — red against the current guard. Then `.claude-plugin/hooks.json`, the manifest's `"hooks"` field, the guard, `SHIPPED`, the packager and `- Source globs:` → green, with `./scripts/check-manifests.py` and `./scripts/check-version-bump.py` exercised.
 - [ ] T3: cases for library discovery in both `assets/` checks — `GATE_SDD_HOOKS` wins, a project with no copy and `CLAUDE_PLUGIN_ROOT` finds the plugin's, neither set and no copy fails naming all five places, this repository's `hooks/` still wins over a set `CLAUDE_PLUGIN_ROOT` — red. Then the two checks → green.
 - [ ] T4: the Claude Code template, `init`'s install and migration steps and its CI instruction, with a `check-skill-contracts.py` pin on the sentence that stops the copy — the pin red first. Then `claude-code.settings.json` and `skills/init/SKILL.md` → green.
