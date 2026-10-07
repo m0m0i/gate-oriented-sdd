@@ -86,4 +86,4 @@ T2, 2026-10-07, bash 3.2.57 as `sh`. With the fixture building its declaration f
 - [x] T3: `docs/verified.md`'s section, version row and **Still to verify** line (AC9).
 - [x] T4: the rest of `## Install` in both READMEs, the fidelity row and line 106, with `## Status` byte-identical to the merge-base (AC2–AC7, AC12).
 - [x] T5: `docs/layout.md` (AC8).
-- [ ] T6: the `--scope project` sentence in `skills/init/SKILL.md`; every validator on the `- Validators:` line green (AC10, AC13).
+- [x] T6: the `--scope project` sentence in `skills/init/SKILL.md`; every validator on the `- Validators:` line green (AC10, AC13).
