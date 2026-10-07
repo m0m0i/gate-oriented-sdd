@@ -39,7 +39,18 @@ fi
 # FAILS when it cannot — a guard that skips because it could not locate its own dependency is
 # the bug this script exists to prevent — and the failure names every place it looked.
 lib=""
-[ -n "${GATE_SDD_HOOKS:-}" ] && [ -f "$GATE_SDD_HOOKS/gate-lib.sh" ] && lib="$GATE_SDD_HOOKS/gate-lib.sh"
+if [ -n "${GATE_SDD_HOOKS:-}" ]; then
+  # Set and wrong is not the same as unset: a workflow whose checkout path and this variable
+  # disagree must not fall through to whatever copy is beside this script while saying it
+  # reads the plugin. It fails here, naming the path.
+  if [ -f "$GATE_SDD_HOOKS/gate-lib.sh" ]; then
+    lib="$GATE_SDD_HOOKS/gate-lib.sh"
+  else
+    echo "check-unreviewed-work: GATE_SDD_HOOKS is set to '$GATE_SDD_HOOKS' and there is no gate-lib.sh there." >&2
+    echo "  Point it at a checkout of the plugin's hooks/ directory, or unset it to search the project." >&2
+    exit 1
+  fi
+fi
 if [ -z "$lib" ]; then
   for d in hooks .claude/hooks .agents/hooks; do
     [ -f "$d/gate-lib.sh" ] && { lib="$d/gate-lib.sh"; break; }

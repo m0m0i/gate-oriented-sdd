@@ -21,6 +21,7 @@ A reviewer is adapted per project and pinned there; the project owns its text, a
 - A gate fix reaches a Claude Code project at its next session after the plugin updates, with no pull request in the project.
 - A project that has not been migrated keeps its copies and the plugin stands down, so it is no worse off than before and no better until `init` runs.
 - A Claude Code project has no `gate-lib.sh`; its CI and any by-hand run of the two checks need `GATE_SDD_HOOKS`, and the checks say so.
+- A clone where the plugin is not installed or not enabled runs no `Stop` gate at all, and nothing in the project says so: a contributor who declines the `enabledPlugins` prompt, a machine where the marketplace clone fails, or a headless session without the plugin has a settings file with no `Stop` entry and no plugin behind it. Before this decision the copied gates ran in every trusted clone. The backstop is CI: `check-unreviewed-work.sh` for the review half, and the project's own validators for the quality half; `init` already asks for both.
 - The stand-down reads text, not JSON by event. A settings file naming a gate under its event without running it silences both; it is contrived, and the alternative was parsing JSON in POSIX `sh`.
 - Antigravity projects still drift. `docs/fidelity.md` says so; this is the second real gap after compaction re-injection.
 - This repository keeps running its hooks from source (ADR-6). Its `.claude/settings.json` is the stand-down evidence, so the installed plugin's gates are silent here.

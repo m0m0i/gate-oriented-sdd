@@ -208,17 +208,39 @@ if len(errors) == n_before and not isinstance(p_doc, dict):
         f"({type(p_doc).__name__}), so its hooks cannot be read"
     )
     p_doc = None
+def scripts_in(entries) -> set[str]:
+    """Every `*.sh` name in a `command` string anywhere under these hook entries. Walks both
+    shapes — Claude Code's nested {hooks: [{command}]} and Antigravity's flat {command} — so one
+    reader serves the plugin file and the template."""
+    found: set[str] = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            cmd = node.get("command")
+            if isinstance(cmd, str):
+                found.update(re.findall(r"[A-Za-z0-9_.-]+\.sh", cmd))
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(entries)
+    return found
+
+
+p_gates: dict[str, set[str]] = {}
 if isinstance(p_doc, dict):
     for event, entries in (p_doc.get("hooks") or {}).items():
-        for e in entries if isinstance(entries, list) else []:
-            for h in (e.get("hooks") if isinstance(e, dict) else None) or []:
-                cmd = h.get("command", "") if isinstance(h, dict) else ""
-                for name in re.findall(r"[A-Za-z0-9_.-]+\.sh", cmd):
-                    if not (PLUGIN / "hooks" / name).is_file():
-                        errors.append(
-                            f"{plugin_hooks.relative_to(ROOT)} {event}: command names hooks/{name}, "
-                            "which the plugin does not ship"
-                        )
+        names = scripts_in(entries)
+        for name in sorted(names):
+            if not (PLUGIN / "hooks" / name).is_file():
+                errors.append(
+                    f"{plugin_hooks.relative_to(ROOT)} {event}: command names hooks/{name}, "
+                    "which the plugin does not ship"
+                )
+        # The wrapper is how the gates are run, not a gate; what it is handed is what counts.
+        p_gates[event] = names - {"plugin-gate.sh"}
 
 if isinstance(a, dict) and isinstance(b, dict):
     a_events = set((a.get("hooks") or {}).keys())
@@ -250,6 +272,19 @@ if isinstance(a, dict) and isinstance(b, dict):
         )
     if "SessionStart" not in a_events:
         errors.append("Claude Code hooks (plugin file plus template) are missing SessionStart for steering digest")
+    # Per gate, for the events both sides declare. The plugin file is now the only place the
+    # Claude Code gates are declared, so a Stop that kept one gate and lost the other would
+    # ship the lost one to no Claude Code project while the event sets still matched. The
+    # digest pairs by event only, because its two scripts have different names by design.
+    for event in sorted(set(p_gates) & b_events):
+        theirs = scripts_in(envelope.get(event))
+        missing = theirs - p_gates[event]
+        if missing:
+            errors.append(
+                f"{plugin_hooks.relative_to(ROOT)} {event} runs {sorted(p_gates[event])}, and the "
+                f"Antigravity template runs {sorted(theirs)}: {', '.join(sorted(missing))} missing "
+                "on Claude Code"
+            )
     if "PreInvocation" not in b_events:
         errors.append("Antigravity hooks template is missing PreInvocation for steering digest")
 

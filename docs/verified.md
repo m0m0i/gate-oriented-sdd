@@ -305,7 +305,7 @@ Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy
 
 ### What this run does not support
 
-Whether auto-update actually delivers a new plugin version to a project between sessions: the run installed and loaded, and never waited for an update. Whether a gate run from the plugin behaves identically to the copy in every respect: `scripts/test-gates.sh` runs the wrapper against the real gates in fixtures, and the maintainer's next real session on a migrated project is the first live run. V3's unrun branch, above.
+Whether auto-update actually delivers a new plugin version to a project between sessions: the run installed and loaded, and never waited for an update. What a clone sees when the `enabledPlugins` prompt is declined, or the marketplace clone fails: that path was not run, and ADR-8 records it as a consequence rather than a measurement. Whether a gate run from the plugin behaves identically to the copy in every respect: `scripts/test-gates.sh` runs the wrapper against the real gates in fixtures, and the maintainer's next real session on a migrated project is the first live run. V3's unrun branch, above.
 
 ## Still to verify
 

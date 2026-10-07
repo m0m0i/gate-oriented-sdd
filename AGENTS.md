@@ -75,7 +75,7 @@ Run these before every commit. The `- Validators:` line in `.steering/tech.md` i
 
 Two things are deliberately unlike a normal install, and both would look like mistakes:
 
-- **The hooks are not copied.** `.claude/settings.json` points at the repository's own `hooks/*.sh`. Every other project copies them, because a gate must run with the project as its working directory — here the project *is* the source, so a copy would only create drift, and a drifted copy means this repo tests a stale version of its own enforcement.
+- **The hooks are not copied, and not run from the installed plugin either.** `.claude/settings.json` points at the repository's own `hooks/*.sh`. Every Antigravity project copies them, because a gate must run with the project as its working directory, and every Claude Code project runs them from the plugin, whose gates stand down here on exactly those settings entries (#256) — here the project *is* the source, so a copy would only create drift, and a drifted copy means this repo tests a stale version of its own enforcement.
 - **`.claude/agents/gate-sdd-reviewer/` has no `rules-lock.json`.** `assets/check-locks.py --update` can refresh a lock but cannot create one (#19). The rulebook stays unpinned until #19 ships a bootstrap, and `docs/decisions/ADR-6` records why.
 
 The project reviewer is `gate-sdd-reviewer` and is unrelated to the three reference reviewers in `reviewers/`, which are the product. Its anchor is **gates never fail open**.

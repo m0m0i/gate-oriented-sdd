@@ -21,11 +21,18 @@
 #      shape is the gates' own bootstrap guard: JSON on stdout for Antigravity, the sentence on
 #      stderr for Claude Code, exit 2.
 #
-# A POSIX hook cannot parse JSON by event, so the evidence in (2) is text: the file names the
-# script and declares the event. A settings file that names review-gate.sh under "Stop" without
-# running it is the one shape that silences both, and it is contrived. Antigravity never runs
-# this file; its gates are copied by `init`, because a plugin hook there runs with the plugin
-# directory as cwd (hooks/templates/README.md).
+# A POSIX hook cannot parse JSON by event, so the evidence in (2) is text, and the text is
+# held to two shapes rather than two words: the gate's filename on a `"command"` line, and the
+# event as a KEY (`"Stop":`). The first draft asked only whether the file mentioned each
+# anywhere, and Claude Code itself produces the counter-example: approving a by-hand run of
+# the gate with "don't ask again" writes `"permissions": {"allow": ["Bash(sh
+# .claude/hooks/quality-gate.sh:*)"]}` into settings.local.json, and a Stop hook for a
+# notification is the documented example — together they read as the gate running under
+# Stop, and the plugin's gate stood down for nothing (review round 1). What remains is a
+# settings file with a `"command"` naming the gate and a `"Stop":` key that does not run it,
+# which is contrived. Antigravity never runs this file; its gates are copied by `init`,
+# because a plugin hook there runs with the plugin directory as cwd
+# (hooks/templates/README.md).
 set -u
 
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -45,6 +52,8 @@ case "$gate" in
   *) _plugin_gate_block "Plugin gate: '$gate' is not a gate this wrapper runs (quality-gate.sh, review-gate.sh or steering-digest.sh). The plugin's .claude-plugin/hooks.json names the wrong thing, so re-install the plugin rather than treating this turn as a pass." ;;
 esac
 
+gate_re=$(printf '%s' "$gate" | sed 's/\./\\./g')   # the name as a pattern: its dots literal
+
 # Anchor to the repository root, as the gates do, so .steering/ and .claude/ resolve from
 # wherever the hook was invoked.
 if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
@@ -57,7 +66,12 @@ fi
 # (2) The project runs its own copy of this gate under this event: stand down.
 for f in .claude/settings.json .claude/settings.local.json; do
   [ -f "$f" ] || continue
-  if grep -qF -- "$gate" "$f" 2>/dev/null && grep -qF -- "\"$event\"" "$f" 2>/dev/null; then
+  # Line layout is not assumed: a minified settings file is one line, and a line-wise test
+  # read its permissions entry as its Stop command. The gate's name must sit INSIDE a
+  # "command" string value — from the opening quote to the name with no unescaped quote
+  # between — and the event must be a key.
+  if grep -qE -- "\"command\" *: *\"([^\"\\\\]|\\\\.)*$gate_re" "$f" 2>/dev/null \
+     && grep -qE -- "\"$event\" *:" "$f" 2>/dev/null; then
     exit 0
   fi
 done
