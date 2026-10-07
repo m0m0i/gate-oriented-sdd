@@ -239,6 +239,15 @@ if isinstance(p_doc, dict):
                     f"{plugin_hooks.relative_to(ROOT)} {event}: command names hooks/{name}, "
                     "which the plugin does not ship"
                 )
+        # Every command goes through the wrapper. A gate run directly from here loses the
+        # .steering/ guard and the stand-down, and every project on the machine gets the
+        # gate's bootstrap block at Stop. Review round 2.
+        for e in entries if isinstance(entries, list) else []:
+            if "plugin-gate.sh" not in scripts_in(e):
+                errors.append(
+                    f"{plugin_hooks.relative_to(ROOT)} {event}: an entry runs "
+                    f"{sorted(scripts_in(e) - {'plugin-gate.sh'})} without hooks/plugin-gate.sh"
+                )
         # The wrapper is how the gates are run, not a gate; what it is handed is what counts.
         p_gates[event] = names - {"plugin-gate.sh"}
 
@@ -278,13 +287,13 @@ if isinstance(a, dict) and isinstance(b, dict):
     # digest pairs by event only, because its two scripts have different names by design.
     for event in sorted(set(p_gates) & b_events):
         theirs = scripts_in(envelope.get(event))
-        missing = theirs - p_gates[event]
-        if missing:
-            errors.append(
-                f"{plugin_hooks.relative_to(ROOT)} {event} runs {sorted(p_gates[event])}, and the "
-                f"Antigravity template runs {sorted(theirs)}: {', '.join(sorted(missing))} missing "
-                "on Claude Code"
-            )
+        for missing, where in ((theirs - p_gates[event], "Claude Code"), (p_gates[event] - theirs, "Antigravity")):
+            if missing:
+                errors.append(
+                    f"{plugin_hooks.relative_to(ROOT)} {event} runs {sorted(p_gates[event])}, and the "
+                    f"Antigravity template runs {sorted(theirs)}: {', '.join(sorted(missing))} missing "
+                    f"on {where}"
+                )
     if "PreInvocation" not in b_events:
         errors.append("Antigravity hooks template is missing PreInvocation for steering digest")
 

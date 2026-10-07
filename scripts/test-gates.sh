@@ -2093,9 +2093,10 @@ done
 #      (e) the settings name review-gate.sh under "Stop" — the quality gate still runs: the
 #          stand-down is per gate, not per event.
 sd='{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh"}]}]}}'
-p=$(pg_repo pg-sd-a); printf '%s\n' "$sd" > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+with_copy() { mkdir -p "$1/project/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$1/project/.claude/hooks/"; }
+p=$(pg_repo pg-sd-a); with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
 case "$out" in *"exit=0"*) a=ok ;; *) a="no($out)" ;; esac; [ -s "$TMP/pgerr" ] && a="no(stderr)"
-p=$(pg_repo pg-sd-b); printf '%s\n' "$sd" > "$p/project/.claude/settings.local.json"; out=$(run_pg "$p" quality-gate.sh)
+p=$(pg_repo pg-sd-b); with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.local.json"; out=$(run_pg "$p" quality-gate.sh)
 case "$out" in *"exit=0"*) b=ok ;; *) b="no($out)" ;; esac; [ -s "$TMP/pgerr" ] && b="no(stderr)"
 p=$(pg_repo pg-sd-c); mkdir -p "$p/project/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/.claude/hooks/"; out=$(run_pg "$p" quality-gate.sh)
 case "$out" in *"exit=2"*) c=ok ;; *) c="no($out)" ;; esac
@@ -2110,12 +2111,22 @@ case "$out" in *"exit=2"*) e=ok ;; *) e="no($out)" ;; esac
 #          by nothing read that as the gate running under Stop. Review round 1's HIGH.
 p=$(pg_repo pg-sd-f); printf '%s\n' '{"permissions":{"allow":["Bash(sh .claude/hooks/quality-gate.sh:*)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"osascript -e \"display notification\""}]}]}}' > "$p/project/.claude/settings.local.json"; out=$(run_pg "$p" quality-gate.sh)
 case "$out" in *"exit=2"*) f=ok ;; *) f="no($out)" ;; esac
-[ "$a$b$c$d$e$f" = "okokokokokok" ] && report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" ok \
-  || report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" no "settings=$a local=$b file-alone=$c other-event=$d other-gate=$e permission-plus-other-stop=$f"
+#      (g) the entry every pre-0.23.0 project carries, with its copy gone: `[ -f
+#          .claude/hooks/quality-gate.sh ] || exit 0; sh .claude/hooks/quality-gate.sh` exits
+#          0 by its own guard, so an interrupted migration — scripts deleted, entries not yet —
+#          had the project's entry silent and the plugin's wrapper standing down on it. Nothing
+#          ran. The entry is evidence only together with the file it names. Review round 2.
+#          Fixtures (a) and (b) therefore carry the copy on disk, as a migrated-in-place
+#          project does; (g) is (a) without it.
+p=$(pg_repo pg-sd-g); printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"[ -f .claude/hooks/quality-gate.sh ] || exit 0; sh .claude/hooks/quality-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) g=ok ;; *) g="no($out)" ;; esac
+[ "$a$b$c$d$e$f$g" = "okokokokokokok" ] && report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" ok \
+  || report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" no "settings=$a local=$b file-alone=$c other-event=$d other-gate=$e permission-plus-other-stop=$f entry-without-file=$g"
 
 # 208. #256 AC3 — the digest's event is SessionStart, not Stop. Named under SessionStart it
 #      stands down; named under Stop, where no digest runs, it prints the digest.
-p=$(pg_repo pg-dg-a); printf '%s\n' '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"sh .claude/hooks/steering-digest.sh"}]}]}}' > "$p/project/.claude/settings.json"
+p=$(pg_repo pg-dg-a); mkdir -p "$p/project/.claude/hooks"; cp "$ROOT/hooks/steering-digest.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/.claude/hooks/"
+printf '%s\n' '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"sh .claude/hooks/steering-digest.sh"}]}]}}' > "$p/project/.claude/settings.json"
 out=$(run_pg "$p" steering-digest.sh); case "$out" in *"exit=0"*) a=ok ;; *) a="no($out)" ;; esac; [ -s "$TMP/pgout" ] && a="no(printed)"
 p=$(pg_repo pg-dg-b); printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/steering-digest.sh"}]}]}}' > "$p/project/.claude/settings.json"
 out=$(run_pg "$p" steering-digest.sh); case "$(cat "$TMP/pgout")" in *"Repo facts"*) b=ok ;; *) b="no($out: $(head -c 80 "$TMP/pgout"))" ;; esac
@@ -6419,8 +6430,35 @@ json.dump(d, open(p, "w"), indent=2)
 PYX
 out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && c=ok || c=no
 case "$err" in *"review-gate.sh"*) c2=ok ;; *) c2=no ;; esac
-[ "$a$a2$b$b2$c$c2" = "okokokokokok" ] && report "check-manifests pairs the plugin's hook events, and the gates under them, with Antigravity's template" ok \
-  || report "check-manifests pairs the plugin's hook events, and the gates under them, with Antigravity's template" no "no-stop=$a differ=$a2 no-start=$b named=$b2 one-gate=$c names-gate=$c2"
+#      Both directions: the Antigravity template is the only place ITS gates are declared, so
+#      a review-gate.sh lost from its Stop must fail the same way. Review round 2.
+r=$(manifest_repo mf-agy-one-gate)
+python3 - "$r/hooks/templates/antigravity.hooks.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+env = next(v for k, v in d.items() if isinstance(v, dict) and "Stop" in v)
+env["Stop"] = [e for e in env["Stop"] if "review-gate.sh" not in json.dumps(e)]
+json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && d=ok || d=no
+case "$err" in *"review-gate.sh"*) d2=ok ;; *) d2=no ;; esac
+#      And every command in the plugin file goes through the wrapper: a gate run directly loses
+#      the .steering/ guard and the stand-down, and every project on the machine gets the
+#      gate's bootstrap block at Stop. Review round 2.
+r=$(manifest_repo mf-no-wrapper)
+python3 - "$r/.claude-plugin/hooks.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+for e in d["hooks"]["Stop"]:
+    for h in e["hooks"]:
+        if "review-gate.sh" in h["command"]:
+            h["command"] = 'sh "${CLAUDE_PLUGIN_ROOT}/hooks/review-gate.sh"'
+json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && e=ok || e=no
+case "$err" in *"plugin-gate.sh"*) e2=ok ;; *) e2=no ;; esac
+[ "$a$a2$b$b2$c$c2$d$d2$e$e2" = "okokokokokokokokokok" ] && report "check-manifests pairs the plugin's hook events, and the gates under them, with Antigravity's template" ok \
+  || report "check-manifests pairs the plugin's hook events, and the gates under them, with Antigravity's template" no "no-stop=$a differ=$a2 no-start=$b named=$b2 one-gate=$c names-gate=$c2 agy-one-gate=$d agy-names=$d2 no-wrapper=$e names-wrapper=$e2"
 
 # --- guards: scripts/check-leakage.sh ---------------------------------------
 #

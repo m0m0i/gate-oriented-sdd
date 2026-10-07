@@ -81,8 +81,7 @@ so the guard sweep's class rather than a lint fix. The five deliberate word-spli
 above, and the quality gate's `set --` — are no longer among them: each is suppressed at its line
 with its reason, and each names the `test-gates.sh` case that goes red if the quote is added —
 the five whose report reads "a line of several globs reaches … one pathspec per glob" — so the
-file can be linted without being "fixed". `hooks/*.sh` joins the step when the
-ten are decided, which is #207's follow-up; the `SC2164`s go with the sweep. #81, #207.
+file can be linted without being "fixed". `hooks/*.sh` joins the step when those are decided, which is #207's follow-up; the `SC2164`s go with the sweep. #81, #207.
 
 ## Commit and branch convention
 

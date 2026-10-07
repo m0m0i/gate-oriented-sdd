@@ -12,9 +12,14 @@
 #      every project on the machine, so the gate must be silent there — exit 0, no output.
 #   2. A project that still runs its own copy of the same gate, from its .claude/settings.json,
 #      would run the gate twice: Claude Code runs the plugin's hook AND the project's for the
-#      same event (V2). So this stands down — but only on EVIDENCE that the copy runs: the
-#      settings name the gate's file under the gate's event. The copied file alone is not
-#      evidence; a project with the file and no entry runs this gate. Neither running is the
+#      same event (V2). So this stands down — but only on EVIDENCE that the copy runs, and
+#      that takes both halves: the settings name the gate's file under the gate's event, AND
+#      the file the entry names is on disk. The copied file alone is not evidence; a project
+#      with the file and no entry runs this gate. The entry alone is not evidence either: the
+#      entry every pre-0.23.0 project carries is `[ -f .claude/hooks/quality-gate.sh ] || exit
+#      0; sh .claude/hooks/quality-gate.sh`, which exits 0 by itself once the copy is gone, so
+#      an interrupted migration (scripts deleted, entries not yet) had the project's entry
+#      silent and this wrapper standing down on it (review round 2). Neither running is the
 #      fail-open under `- Owns: gates never fail open`; both running costs a second validator
 #      pass. The two mistakes are not symmetric, so the test is biased toward running.
 #   3. A gate missing from the plugin is a broken install, and a broken install is loud. The
@@ -29,9 +34,9 @@
 # .claude/hooks/quality-gate.sh:*)"]}` into settings.local.json, and a Stop hook for a
 # notification is the documented example — together they read as the gate running under
 # Stop, and the plugin's gate stood down for nothing (review round 1). What remains is a
-# settings file with a `"command"` naming the gate and a `"Stop":` key that does not run it,
-# which is contrived. Antigravity never runs this file; its gates are copied by `init`,
-# because a plugin hook there runs with the plugin directory as cwd
+# settings file with a `"command"` naming an existing copy of the gate and a `"Stop":` key
+# that does not run it, which nothing writes. Antigravity never runs this file; its gates
+# are copied by `init`, because a plugin hook there runs with the plugin directory as cwd
 # (hooks/templates/README.md).
 set -u
 
@@ -70,9 +75,15 @@ for f in .claude/settings.json .claude/settings.local.json; do
   # read its permissions entry as its Stop command. The gate's name must sit INSIDE a
   # "command" string value — from the opening quote to the name with no unescaped quote
   # between — and the event must be a key.
-  if grep -qE -- "\"command\" *: *\"([^\"\\\\]|\\\\.)*$gate_re" "$f" 2>/dev/null \
-     && grep -qE -- "\"$event\" *:" "$f" 2>/dev/null; then
-    exit 0
+  if grep -qE -- "\"command\"[[:space:]]*:[[:space:]]*\"([^\"\\\\]|\\\\.)*$gate_re" "$f" 2>/dev/null \
+     && grep -qE -- "\"$event\"[[:space:]]*:" "$f" 2>/dev/null; then
+    # The entry is evidence only with the file it names on disk. Every path-shaped word
+    # ending in the gate's name is tried; one that exists is the copy that runs. A path
+    # reached through a variable (`"$CLAUDE_PROJECT_DIR/.claude/hooks/…"`) does not resolve
+    # here and so does not stand this gate down, which is the noisy direction, on purpose.
+    for _path in $(grep -oE -- "[^\"' ]*$gate_re" "$f" 2>/dev/null); do
+      [ -f "$_path" ] && exit 0
+    done
   fi
 done
 
