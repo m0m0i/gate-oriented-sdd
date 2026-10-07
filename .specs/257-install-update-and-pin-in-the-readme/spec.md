@@ -1,5 +1,5 @@
 # Spec: the README says how to install, update and pin, now that the gates ship from the plugin
-- Slug: 257-install-update-and-pin-in-the-readme   Issue: 257   Type: chore   Status: approved
+- Slug: 257-install-update-and-pin-in-the-readme   Issue: 257   Type: chore   Status: done
 - Author: m0m0i   Date: 2026-10-07
 
 ## 1. Requirements (WHAT / WHY)
@@ -21,17 +21,17 @@
   - **Antigravity** (verified, run 2026-10-07): `agy plugin help` at 1.2.16 lists no update command. The playbook's uninstall-and-install path was checked with `agy plugin validate` only.
 
 - Acceptance criteria:
-  - [ ] **AC1:** `## Install` in each README carries the Claude Code declaration, its two keys exactly as `hooks/templates/claude-code.settings.json` writes them, says `init` writes it, says it puts the harness in front of everyone who opens the repository, and says `claude plugin install … --scope project` writes only the `enabledPlugins` half; `./scripts/check-readme-claims.py` fails when the README's declaration and the template's disagree.
-  - [ ] **AC2:** the same section says why `"autoUpdate": true` is required and gives the precedence, the timing, the per-release cadence, the environment overrides and `claude plugin update gate-sdd@gate-oriented-sdd`, each marked.
-  - [ ] **AC3:** a drift table whose every row is marked, holding #245's six situations (the pin row split by M2c into its two machines) and the two the evidence adds: a clone where the plugin does not load, and a cloud session, which cites #260.
-  - [ ] **AC4:** pinning guidance per Q2: unpinned is the recommendation, a project pin is not offered, and the section says why from V3 and M2c and that not every release is tagged.
-  - [ ] **AC5:** an updating part: the update commands on each harness; how to tell a project installed before 0.23.0 and that `init` migrates it; how an Antigravity project gets a gate fix; and what a plugin update does not reach on either harness — the copied `check-*` scripts, the reviewer contract, the reviewer and its rulebook, and CI's plugin checkout.
-  - [ ] **AC6:** the README's fidelity table has a gate-delivery row that agrees with `docs/fidelity.md`'s.
-  - [ ] **AC7:** `README.md:106` and its Japanese counterpart say what `init` installs on each harness without claiming it installs the gates on Claude Code.
-  - [ ] **AC8:** `docs/layout.md`'s project tree shows what `init` writes on each harness at 0.23.0 — `.claude/` with no `hooks/`, `.claude/settings.json` as the declaration plus the fast check, `.agents/hooks/` with the five scripts `init` copies, the project's copied `check-*` scripts, and the CI steps — and its harness tree shows `.claude-plugin/hooks.json` and `hooks/plugin-gate.sh`.
-  - [ ] **AC9:** `docs/verified.md` records M1, M2a, M2b and M2c with versions and exact observations, including what M2c did not exercise, and its **Still to verify** list says what is left of V3's other branch.
-  - [ ] **AC10:** `skills/init/SKILL.md` says what `--scope project` writes as M1 found it.
-  - [ ] **AC11:** `docs/BACKLOG.md` row 1's `Why here` cites #260, and #261, the same finding filed later the same morning; `./scripts/check-backlog-tracker.py` exits 0 on the branch.
+  - [x] **AC1:** `## Install` in each README carries the Claude Code declaration, its two keys exactly as `hooks/templates/claude-code.settings.json` writes them, says `init` writes it, says it puts the harness in front of everyone who opens the repository, and says `claude plugin install … --scope project` writes only the `enabledPlugins` half; `./scripts/check-readme-claims.py` fails when the README's declaration and the template's disagree.
+  - [x] **AC2:** the same section says why `"autoUpdate": true` is required and gives the precedence, the timing, the per-release cadence, the environment overrides and `claude plugin update gate-sdd@gate-oriented-sdd`, each marked.
+  - [x] **AC3:** a drift table whose every row is marked, holding #245's six situations (the pin row split by M2c into its two machines) and the two the evidence adds: a clone where the plugin does not load, and a cloud session, which cites #260.
+  - [x] **AC4:** pinning guidance per Q2: unpinned is the recommendation, a project pin is not offered, and the section says why from V3 and M2c and that not every release is tagged.
+  - [x] **AC5:** an updating part: the update commands on each harness; how to tell a project installed before 0.23.0 and that `init` migrates it; how an Antigravity project gets a gate fix; and what a plugin update does not reach on either harness — the copied `check-*` scripts, the reviewer contract, the reviewer and its rulebook, and CI's plugin checkout.
+  - [x] **AC6:** the README's fidelity table has a gate-delivery row that agrees with `docs/fidelity.md`'s.
+  - [x] **AC7:** `README.md:106` and its Japanese counterpart say what `init` installs on each harness without claiming it installs the gates on Claude Code.
+  - [x] **AC8:** `docs/layout.md`'s project tree shows what `init` writes on each harness at 0.23.0 — `.claude/` with no `hooks/`, `.claude/settings.json` as the declaration plus the fast check, `.agents/hooks/` with the five scripts `init` copies, the project's copied `check-*` scripts, and the CI steps — and its harness tree shows `.claude-plugin/hooks.json` and `hooks/plugin-gate.sh`.
+  - [x] **AC9:** `docs/verified.md` records M1, M2a, M2b and M2c with versions and exact observations, including what M2c did not exercise, and its **Still to verify** list says what is left of V3's other branch.
+  - [x] **AC10:** `skills/init/SKILL.md` says what `--scope project` writes as M1 found it.
+  - [x] **AC11:** `docs/BACKLOG.md` row 1's `Why here` cites #260, and #261, the same finding filed later the same morning; `./scripts/check-backlog-tracker.py` exits 0 on the branch.
   - [ ] **AC12:** every claim in `README.ja.md`'s new and changed text is the English claim, with the house spacing; the PR says the Japanese is a draft for the maintainer's read.
   - [ ] **AC13:** every validator on `.steering/tech.md`'s `- Validators:` line exits 0, and `./scripts/check-version-bump.py` passes with the patch bump AC10 makes due.
 
