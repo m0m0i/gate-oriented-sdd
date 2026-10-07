@@ -163,7 +163,7 @@ claude plugin install gate-sdd@gate-oriented-sdd
 }
 ```
 
-これで、リポジトリを開く全員の環境にハーネスが入ります。ゲートはプラグインから動くので、ゲートの修正はプラグインの更新でプロジェクトに届き、プロジェクト側で pull request を出す必要はありません。`claude plugin install gate-sdd@gate-oriented-sdd --scope project` はこの宣言の代わりになりません。このコマンドが書き込むのは `enabledPlugins` の部分だけだからです（検証済み。[`docs/verified.md`](./docs/verified.md) の M1）。
+これで、リポジトリを開く全員の環境にハーネスが入ります。例外は下のずれの表にあります。ゲートはプラグインから動くので（検証済み。[`docs/verified.md`](./docs/verified.md) の V1）、ゲートの修正はプラグインの更新でプロジェクトに届き、プロジェクト側で pull request を出す必要はありません。その更新がいつ届くか、そもそも届くかは、**ゲートを最新に保つ**で扱います。`claude plugin install gate-sdd@gate-oriented-sdd --scope project` はこの宣言の代わりになりません。このコマンドが書き込むのは `enabledPlugins` の部分だけだからです（検証済み。[`docs/verified.md`](./docs/verified.md) の M1）。
 
 **Google Antigravity**
 
@@ -189,19 +189,19 @@ agy plugin install ./gate-oriented-sdd
 
 以下の記述には、3つの印のどれかを付けています。**検証済み**は、その記述の根拠になった [`docs/verified.md`](./docs/verified.md) の実行記録か、[`scripts/test-gates.sh`](./scripts/test-gates.sh) のケースを示します。**ドキュメント記載**は出典の Claude Code ドキュメントを示し、ここでは実行していないことを意味します。**未実施**は、そのどちらもないことを意味します。
 
-**`"autoUpdate": true` が必要な理由。** サードパーティのマーケットプレイスは、既定では自動更新されません。これがないと、プロジェクトは各マシンがインストールしたときのバージョンに留まり、ゲートの修正が届かなくなります。0.23.0 で解消したコピーのずれが、気づきにくい形で戻ってくるということです。これがあれば、対話セッションで最初のメッセージを送ったあと、最大10分のランダムな待ち時間をおいてマーケットプレイスが更新され、ディスク上のプラグインも更新されます。実行中のセッションは読み込んだバージョンのまま動き、新しいバージョンは次の起動時か `/reload-plugins` で読み込まれます。プラグインのマニフェストがバージョンを固定しているので、更新はコミットごとではなくリリースごとに届きます。優先されるのは、まず設定ファイルにあるマーケットプレイスのエントリの `autoUpdate` です。同じ名前のエントリが複数のファイルにあれば、優先度が最も高いファイルのエントリがまるごと使われるので、プロジェクトの中ではプロジェクト自身の宣言で決まります。その次が `/plugin` → **Marketplaces** のトグルで、どちらもなければ既定値のオフです。`DISABLE_UPDATES=1`、`DISABLE_AUTOUPDATER=1`、`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` のどれかを設定すると、`FORCE_AUTOUPDATE_PLUGINS=1` も設定しない限り自動更新は止まります。ドキュメント記載（[プラグインの読み込み](https://code.claude.com/docs/en/plugins/loading#when-auto-update-runs)、[設定](https://code.claude.com/docs/en/settings-reference#extraknownmarketplaces)）。ここでは、更新が届くまで待つ実行はしていません。
+**`"autoUpdate": true` が必要な理由。** サードパーティのマーケットプレイスは、既定では自動更新されません。これがないと、プロジェクトは各マシンがインストールしたときのバージョンに留まり、ゲートの修正が届かなくなります。0.23.0 で解消したコピーのずれが、気づきにくい形で戻ってくるということです。これがあれば、対話セッションで最初のメッセージを送ったあと、最大10分のランダムな待ち時間をおいてマーケットプレイスが更新され、ディスク上のプラグインも更新されます。実行中のセッションは読み込んだバージョンのまま動き、新しいバージョンは次の起動時か `/reload-plugins` で読み込まれます。プラグインのマニフェストがバージョンを固定しているので、更新はコミットごとではなくリリースごとに届きます。優先されるのは、まず設定ファイルにあるマーケットプレイスのエントリの `autoUpdate` です。同じ名前のエントリが複数のファイルにあれば、優先度が最も高いファイルのエントリがまるごと使われるので、プロジェクトの中ではプロジェクト自身の宣言で決まります。その次が `/plugin` → **Marketplaces** のトグルで、どちらもなければ既定値のオフです。`DISABLE_UPDATES=1`、`DISABLE_AUTOUPDATER=1`、`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` のどれかを設定すると、`FORCE_AUTOUPDATE_PLUGINS=1` も設定しない限り自動更新は止まります。ドキュメント記載（[プラグインの読み込み](https://code.claude.com/docs/en/plugins/loading#when-auto-update-runs)、[設定](https://code.claude.com/docs/en/settings-reference#extraknownmarketplaces)）。これまでの観測は1回だけです（#265）。ユーザー設定に `"autoUpdate": true` がある状態で、0.23.0 のリリースから数時間後に始めたセッションが 0.22.0 を読み込み、マーケットプレイスの clone もリリース前から更新されていませんでした。どちらも手で更新し、原因は測っていません。
 
 **ずれの種類ごとに起きること。**
 
 | 状況 | 起きること | 根拠 |
 | :-- | :-- | :-- |
-| チームメンバーが初めてリポジトリを開き、フォルダを信頼する | 宣言されたマーケットプレイスが clone され、マーケットプレイスのエントリが相対パスなので、プラグインも取得されます。`/plugin` に `Plugin "gate-sdd" is enabled in project settings but isn't installed here` と表示されたら、`claude plugin install gate-sdd@gate-oriented-sdd --scope project` を一度実行すれば直ります。 | ドキュメント記載（[プラグインの読み込み](https://code.claude.com/docs/en/plugins/loading#enabled-in-project-settings-but-not-installed)）。未実施 |
+| チームメンバーが初めてリポジトリを開き、フォルダを信頼する | 宣言されたマーケットプレイスが clone され、マーケットプレイスのエントリが相対パスなので、プラグインも取得されます。`/plugin` に `Plugin "gate-sdd" is enabled in project settings but isn't installed here` と表示されたら、`claude plugin install gate-sdd@gate-oriented-sdd --scope project` を一度実行すれば直ります。 | ドキュメント記載（[プラグインの読み込み](https://code.claude.com/docs/en/plugins/loading#enabled-in-project-settings-but-not-installed)）。未実施。ただし M2b では、マーケットプレイスが登録される前に `Skipped auto-recording … enabled only by repo-authored settings` がログに出ている |
 | ユーザースコープとプロジェクトスコープの両方で、ピン留めせずにプラグインを有効にしている | プラグイン ID は1つ、キャッシュのパスも1つで、読み込まれるのは1回です。 | 検証済み（V4） |
 | ユーザースコープは `marketplace add` で宣言され（`autoUpdate` は書かれない）、プロジェクトは `autoUpdate` 付きで宣言している | プロジェクトの中ではプロジェクトのエントリがまるごと使われるので、そこでは自動更新が有効です。更新されるインストールは1つで、そのマシンのどのプロジェクトもそれを読み込みます。 | ドキュメント記載（[設定](https://code.claude.com/docs/en/settings-reference#extraknownmarketplaces)）。検証済み（M1、V4） |
 | マーケットプレイスをすでに知っているマシンで、プロジェクトが `"ref"` でピン留めする | ピン留めは無視され、共有の clone も動きません。 | 検証済み（V3） |
-| マーケットプレイスをまだ知らないマシンで、プロジェクトが `"ref"` でピン留めする | ピン留めが効いて、そのマシンの登録になります。そのマシンのすべてのプロジェクトがそのタグに固定され、あとから同じ名前でピン留めなしの宣言をしても置き換わりません。 | 検証済み（M2c、`--settings` 経由）。プロジェクト自身のファイルに対する信頼ダイアログは未実施 |
+| マーケットプレイスをまだ知らないマシンで、プロジェクトが `"ref"` でピン留めする | ピン留めが効いて、そのマシンの登録になります。そのマシンのすべてのプロジェクトがそのタグに固定され、あとから同じ名前でピン留めなしの宣言をしても置き換わりません。 | 検証済み（M2c で、`--settings` 経由の宣言がマシン全体に効くこと。V3 で、既知の名前に対するあとからの宣言が無視されること）。置き換わらないことはドキュメント記載（[設定](https://code.claude.com/docs/en/settings-reference#extraknownmarketplaces)）。プロジェクト自身のファイルに対する信頼ダイアログは未実施 |
 | 同じリポジトリを、別のマーケットプレイス名でも宣言する | プラグイン ID が2つになります。ハーネスはフックの重複を取り除かず（V2）、プラグイン側のゲートが止まるかどうかはプロジェクトの設定だけを見て決まるので、両方のプラグインのゲートが動くことになります。同じ名前のプラグインが2つとも読み込まれるかは、ドキュメントに書かれていません。この宣言はしないでください。 | 未実施 |
-| 0.23.0 より前のコピーが `.claude/hooks/` に残り、それを実行する `Stop` エントリもある | プラグイン側のゲートは動かず、古いコピーが動き続けます。`init` で移行するまでこの状態が続きます。エントリのないコピーだけでは、プラグイン側のゲートは止まりません。 | 検証済み（`test-gates.sh` のケース 207、208）。実セッションでは未実施 |
+| 0.23.0 より前のコピーが `.claude/hooks/` に残り、それを実行する `Stop` エントリもある | `init` が書いた形のエントリ（`sh .claude/hooks/<gate>`）なら、プラグイン側のゲートは動かず、古いコピーが動き続けます。`init` で移行するまでこの状態が続きます。コピーを `$CLAUDE_PROJECT_DIR` 経由で指すエントリでは、プラグイン側のゲートは止まらず、両方が動きます（#262）。エントリのないコピーだけでも、プラグイン側のゲートは止まりません。 | `init` の形は検証済み（`test-gates.sh` の 「plugin-gate stands down on a settings entry for the same gate and event, and on nothing less」）。変数の形は #262 で再現。実セッションでは未実施 |
 | フォルダが信頼されていない clone、または `.claude/settings.local.json` でプラグインがオフになっている clone | ターン終了時にゲートは動かず、それを知らせるものもありません。CI のバリデータと `check-unreviewed-work.sh` は、pull request 上で引き続き動きます。 | ドキュメント記載（[設定](https://code.claude.com/docs/en/settings-reference#extraknownmarketplaces)）。信頼されていないフォルダの宣言が無視されることは M2b で確認 |
 | クラウドセッション（claude.ai/code、`claude --cloud`、routine） | クラウドセッションはリポジトリ自身の設定にあるフックを実行しますが、リポジトリが有効にするプラグインはインストールしません。そのため、移行済みのプロジェクトではそこでゲートが動きません（#260）。 | ドキュメント記載（[クラウド環境](https://code.claude.com/docs/en/cloud-environments#what-carries-over-from-your-setup)）。未実施 |
 | Antigravity | 変更はありません。`init` がゲートを `.agents/hooks/` にコピーし、修正はコピーを更新することで届きます。 | 検証済み（コピーがブロックすること。`docs/verified.md` の Antigravity hooks）。`init` の再実行による更新は未実施 |
@@ -217,7 +217,7 @@ agy plugin install ./gate-oriented-sdd
   ls .claude/hooks/ 2>/dev/null; grep -nE '"(Stop|SessionStart)"' .claude/settings.json
   ```
 
-  `init` をもう一度実行してください。`gate-lib.sh`、`quality-gate.sh`、`review-gate.sh`、`steering-digest.sh` と、それらの `Stop`・`SessionStart` エントリを削除し、`PostToolUse` の高速チェックは残して、宣言を書き込みます。そのプロジェクトで、ゲートの修正のために必要な pull request はこれが最後です。実在のプロジェクトではまだ実行していません。**クラウドセッションで作業するプロジェクトでは、そこでゲートが動くのはコピーが残っている間だけです（#260）。** 移行する前に、この Issue を読んでください。
+  `init` をもう一度実行してください。`gate-lib.sh`、`quality-gate.sh`、`review-gate.sh`、`steering-digest.sh` と、それらの `Stop`・`SessionStart` エントリを削除し、`PostToolUse` の高速チェックは残して、宣言を書き込みます。そのプロジェクトで、ゲートの修正のために必要な pull request はこれが最後になります。ただし、いまの `init` が書いている移行手順だけでは足りません（#263）。コピーしてある `check-steering-anchors.sh` と `check-unreviewed-work.sh` を、プラグイン経由でライブラリを見つける 0.23.0 のものに入れ替え、それらを実行する CI のジョブすべてにプラグインの checkout と `GATE_SDD_HOOKS` を加え、`.claude/hooks/` を読んでいるものがほかにないか、プロジェクトの中を探してください。1つ目を忘れると、ソースを変えるターンのたびに品質ゲートがブロックします。移行済みのプロジェクトでアンカーチェックを手で実行するときは、`GATE_SDD_HOOKS` にプラグインの `hooks/` を設定します（#264）。ここでは実在のプロジェクトで実行していません。下流の2つのプロジェクトでの移行は #263 に記録されています。移行済みのプロジェクトは、クラウドセッションではゲートが動きません（#260）。この欠落は、いまは対象外としています。
 - **Antigravity** には更新コマンドがありません。1.2.16 の `agy plugin` には見当たりません（検証済み。`docs/verified.md` の #257 の節）。新しい clone かリリースアーカイブを使ってアンインストールとインストールをやり直し（ここでは未実施）、そのあとコピーを更新します。更新は `init` の再実行でも、手作業でも構いません。5つは一緒にコピーしてください。各ゲートは、自分より古い `gate-lib.sh` に対してはブロックするからです。
 
   ```bash
@@ -249,7 +249,7 @@ agy plugin install ./gate-oriented-sdd
 | ルール検出                      | ルートの `AGENTS.md`（正のコンテキストとして読み込み） | `rules/AGENTS.md`（プラグインローダーが自動検出してマージ） |
 | ターン終了時の品質ゲート        | 完全（`Stop`, exit 2） | 完全（`Stop`, `{"decision":"continue"}`） |
 | review receipt のゲート         | 完全                   | 完全                                      |
-| ゲートの配布 | プラグインから（`.claude-plugin/hooks.json` がゲートを実行し、修正はプラグインの更新で届く） | `init` が `.agents/hooks/` にコピー（修正は `init` の再実行で届く） |
+| ゲートの配布 | プラグインから（`.claude-plugin/hooks.json` がゲートを実行する。V1、V2）。修正はプラグインの更新で届く。移行済みの実セッションと、更新が届くことは未実施（#265） | `init` が `.agents/hooks/` にコピー。修正はコピーの更新で届き、`init` の再実行による更新は未実施 |
 | 編集ごとの高速フィードバック    | 完全（`PostToolUse`）  | 完全（`PostToolUse`、観測のみ）           |
 | steering digest の注入          | 完全（`SessionStart`） | 完全（`PreInvocation`、ターン1のステップ注入） |
 | compaction 後の steering 再注入 | 完全（`SessionStart`） | **なし**（該当するイベントが存在しない）  |

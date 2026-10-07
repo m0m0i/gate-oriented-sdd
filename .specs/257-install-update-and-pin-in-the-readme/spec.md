@@ -31,7 +31,7 @@
   - [x] **AC8:** `docs/layout.md`'s project tree shows what `init` writes on each harness at 0.23.0 — `.claude/` with no `hooks/`, `.claude/settings.json` as the declaration plus the fast check, `.agents/hooks/` with the five scripts `init` copies, the project's copied `check-*` scripts, and the CI steps — and its harness tree shows `.claude-plugin/hooks.json` and `hooks/plugin-gate.sh`.
   - [x] **AC9:** `docs/verified.md` records M1, M2a, M2b and M2c with versions and exact observations, including what M2c did not exercise, and its **Still to verify** list says what is left of V3's other branch.
   - [x] **AC10:** `skills/init/SKILL.md` says what `--scope project` writes as M1 found it.
-  - [x] **AC11:** `docs/BACKLOG.md` row 1's `Why here` cites #260, and #261, the same finding filed later the same morning; `./scripts/check-backlog-tracker.py` exits 0 on the branch.
+  - [x] **AC11:** `docs/BACKLOG.md` row 1's `Why here` cites #262 to #265, filed from two consumer migrations while this branch was in review, and `## Open, not planned` holds #260 and #261 by the maintainer's decision of 2026-10-07 to put cloud sessions out of scope; `./scripts/check-backlog-tracker.py` exits 0 on the branch.
   - [ ] **AC12:** every claim in `README.ja.md`'s new and changed text is the English claim, with the house spacing; the PR says the Japanese is a draft for the maintainer's read.
   - [ ] **AC13:** every validator on `.steering/tech.md`'s `- Validators:` line exits 0, and `./scripts/check-version-bump.py` passes with the patch bump AC10 makes due.
 
@@ -79,6 +79,12 @@ T2, 2026-10-07, bash 3.2.57 as `sh`. With the fixture building its declaration f
 | :-- | :-- | :-- |
 | the value comparison disabled (`if False and got != want[key]`) | autoupdate, id, template-moved | 220 / 1 / 0 |
 
+Review round 1's guard fixes, 2026-10-07, suite 221 unmutated before and after. Three halves added to case 217: two declaration blocks, a second one indented under a list item, and `"autoUpdate": 1`. Against the round-1 guard the indented pair and the `1`-for-`true` pair were red (`two-indented-exit=no … one-for-true-msg=no`, 220 / 1 / 0); the column-0 pair passed, because the branch existed and had no case, so it is pinned by mutation.
+
+| Mutation of `scripts/check-readme-claims.py` | Halves red | Suite |
+| :-- | :-- | :-- |
+| the exactly-one branch disabled (`if False and len(blocks) > 1`) | two, two-indented | 220 / 1 / 0 |
+
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: `./scripts/check-backlog-tracker.py` is red on #260. Then row 1's `Why here` cites it → green (AC11).
@@ -87,3 +93,20 @@ T2, 2026-10-07, bash 3.2.57 as `sh`. With the fixture building its declaration f
 - [x] T4: the rest of `## Install` in both READMEs, the fidelity row and line 106, with `## Status` byte-identical to the merge-base (AC2–AC7, AC12).
 - [x] T5: `docs/layout.md` (AC8).
 - [x] T6: the `--scope project` sentence in `skills/init/SKILL.md`; every validator on the `- Validators:` line green (AC10, AC13).
+
+## 4. Review findings, and what this branch did with each
+
+`gate-sdd-reviewer` as a subagent, round 1 at `5191a12`: **BLOCKED**, 0 BLOCKER, 3 HIGH, 7 MEDIUM, 2 LOW, 4 INFO. Every validator on the line exited 0; `check-version-bump.py` was red for the bump that lands after the receipt, and `check-backlog-tracker.py` for #262 to #265, filed at 07:40Z while the review ran. `claude plugin validate . --strict` passed. Every finding below the HIGHs was taken too, because a second round was owed either way and most of them were the same edits #262 to #265 called for.
+
+- **HIGH, fixed: the `Gate delivery` row sat under "Every row was produced by running it" and claimed what no run produced.** Both cells now carry their marks in both languages: on Claude Code the mechanism is V1 and V2, and a live migrated session and an update arriving are not run (#265); on Antigravity a refresh by re-running `init` is not run.
+- **HIGH, fixed: "exactly one declaration block" had no case.** Case 217's two-blocks half, pinned by mutation; the mutation record has it.
+- **HIGH, fixed: AC11 was ticked and the tracker check was red** for #262 to #265, filed after T1. Row 1 cites them; #260 and #261 moved under `## Open, not planned` by the maintainer's decision on cloud sessions.
+- **MEDIUM, fixed: `JSON_FENCE` saw only column-0 fences**, so a second declaration indented under a list item was neither counted nor compared. Any indentation and `~~~` now count; `jsonc` is stated as a limit. Case 217's indented half, red first.
+- **MEDIUM, fixed: the M2c row's Evidence called the whole row verified**; "not replaced" is documented, and V3 is the mirror-direction run. The cell says which part is which.
+- **MEDIUM, fixed: the legacy-copies row stated the stand-down without its entry form** (#262). It now holds for the form `init` wrote, names the variable form that runs both, and cites the case by its report name, since the suite prints no case numbers.
+- **MEDIUM, fixed: the migration bullet left out what a migration also needs** (#263): the copied checks refreshed, CI's plugin checkout and `GATE_SDD_HOOKS`, and a search for other readers of `.claude/hooks/`; with #264's by-hand note, and "not yet run" replaced by #263's two downstream runs. The cloud-session sentence lost its bold advice to read #260 first, by the maintainer's decision that cloud sessions are out of scope.
+- **MEDIUM, fixed: two behavioural sentences under the declaration carried no mark.** The first points at the drift table's exceptions, the second is V1 and points at the auto-update part, and that part now cites #265 with the configuration it ran under.
+- **MEDIUM, recorded, not changed: AC11's amendment landed in the commit whose edit it judges** (`f59ab14`). A process note; the tracker check is independent of the spec's text.
+- **LOW, fixed: the comparison used Python equality**, where `True == 1`. It compares JSON now; case 217's `1`-for-`true` half, red first.
+- **LOW, fixed: the teammate row's Evidence** cites M2b's `Skipped auto-recording … enabled only by repo-authored settings`.
+- **INFO, recorded:** the 0.23.1 bump lands after the receipt; no README claim contradicts #264; the Antigravity reviewer row above the new one is also unverified under the same preamble, and is pre-existing; the reviewer could not fetch the documentation or read issue bodies, and used `cat`, `ls`, `tail` and `head` outside its allow-list for read-only reads.
