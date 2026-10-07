@@ -5384,6 +5384,20 @@ RMEOF
 
 ゲートとガードの挙動。1件を除いてサブエージェントとして起動した reviewer によるレビューです。
 RMEOF
+  # #257. Both READMEs quote the Claude Code declaration init renders. The block is built from
+  # the template rather than written out here, so the fixture follows the file the guard compares
+  # against and case 217 tests the comparison, not a second copy of the template.
+  mkdir -p "$r/hooks/templates"
+  cp "$ROOT/hooks/templates/claude-code.settings.json" "$r/hooks/templates/"
+  python3 - "$r" <<'PYEOF'
+import json, pathlib, sys
+r = pathlib.Path(sys.argv[1])
+t = json.loads((r / "hooks/templates/claude-code.settings.json").read_text())
+block = json.dumps({k: t[k] for k in ("extraKnownMarketplaces", "enabledPlugins")}, indent=2)
+for name in ("README.md", "README.ja.md"):
+    p = r / name
+    p.write_text(p.read_text() + "\n## Install\n\n```json\n" + block + "\n```\n")
+PYEOF
   echo "$r"
 }
 run_readme() { ( cd "$1" && python3 scripts/check-readme-claims.py >/dev/null 2>"$TMP/rmerr"; printf '%s' "$?" ) }
@@ -5953,6 +5967,115 @@ case "$err" in *"states the receipt count twice and they disagree"*) c15=ok ;; *
 [ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15" = "okokokokokokokokokokokokokokok" ] && report "a behaviour count in any phrasing fails, ordinary numbers do not, and an absent reviewed_by is unknown" ok \
   || report "a behaviour count in any phrasing fails, ordinary numbers do not, and an absent reviewed_by is unknown" no \
      "count-before-exit=$c1 quotes-it=$c2 count-ja-exit=$c3 quotes-ja=$c4 noise-stays-green=$c5 unknown-exit=$c6 says-silence=$c7 ja-particle-exit=$c8 quotes-particle=$c9 ja-eval-noise-green=$c10 ja-unrelated-green=$c11 ja-silent-exit=$c12 ja-silent-msg=$c13 ja-echo-exit=$c14 ja-echo-msg=$c15"
+
+
+# 217. #257 — the README quotes the Claude Code declaration init renders, and the guard ties the
+# quote to hooks/templates/claude-code.settings.json. The badge's argument from #133, one claim
+# over: the README restates a file, and nothing else notices the file moving. The template moving
+# while the README stays is the drift that matters most, so it has its own half; a README that
+# stops quoting it is the quiet half, as for every claim this guard reads.
+#
+# Each edit is a `replace` with a no-op check, because an edit that matched nothing leaves the
+# control's README and a red verdict that proves only that the fixture did not change.
+decl_edit() { # $1 repo, $2 file under it, $3 old text, $4 new text
+  python3 - "$1/$2" "$3" "$4" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]); src = p.read_text()
+out = src.replace(sys.argv[2], sys.argv[3])
+if out == src: raise SystemExit(f"fixture no-op: {sys.argv[2]!r} not found in {p}")
+p.write_text(out)
+PYEOF
+}
+r=$(readme_repo rm-decl-control)
+out=$(run_readme "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+r=$(readme_repo rm-decl-none-ja)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "README.ja.md"); src = p.read_text()
+cut = src.find("\n## Install\n")
+if cut < 0: raise SystemExit("fixture no-op: no Install section to remove")
+p.write_text(src[:cut] + "\n")
+PYEOF
+[ "$?" = 0 ] && cf1=ok || cf1=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf1" = ok ]; } && c1=ok || c1=no
+case "$err" in *"README.ja.md: carries no"*"extraKnownMarketplaces"*) c2=ok ;; *) c2=no ;; esac
+
+r=$(readme_repo rm-decl-autoupdate)
+decl_edit "$r" README.md '"autoUpdate": true' '"autoUpdate": false' && cf2=ok || cf2=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf2" = ok ]; } && c3=ok || c3=no
+case "$err" in *"README.md: the declaration's \`extraKnownMarketplaces\`"*) c4=ok ;; *) c4=no ;; esac
+
+r=$(readme_repo rm-decl-id)
+decl_edit "$r" README.md '"gate-sdd@gate-oriented-sdd"' '"gate-sdd@a-second-name"' && cf3=ok || cf3=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf3" = ok ]; } && c5=ok || c5=no
+case "$err" in *"README.md: the declaration's \`enabledPlugins\`"*) c6=ok ;; *) c6=no ;; esac
+
+# The template moves and both READMEs stay: each is named, against the template.
+r=$(readme_repo rm-decl-template)
+decl_edit "$r" hooks/templates/claude-code.settings.json '"autoUpdate": true' '"autoUpdate": false' && cf4=ok || cf4=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf4" = ok ]; } && c7=ok || c7=no
+case "$err" in *"README.md: the declaration's"*"README.ja.md: the declaration's"*) c8=ok ;; *) c8=no ;; esac
+
+r=$(readme_repo rm-decl-notemplate); rm "$r/hooks/templates/claude-code.settings.json"
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *"has no source"*) c10=ok ;; *) c10=no ;; esac
+
+# The block shows the declaration and nothing else: a `hooks` key beside it would be a quote of
+# something init renders differently per project.
+r=$(readme_repo rm-decl-extra)
+decl_edit "$r" README.md '  "enabledPlugins"' '  "hooks": {},
+  "enabledPlugins"' && cf5=ok || cf5=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf5" = ok ]; } && c11=ok || c11=no
+case "$err" in *"README.md: the declaration block also sets \`hooks\`"*) c12=ok ;; *) c12=no ;; esac
+
+# Exactly one. A second declaration that disagrees is the fail-open shape: compared on the first
+# alone, the guard would certify "the" declaration over a file that also tells a reader to
+# commit something else. Review round 1 found the branch had no case.
+decl_second() { # $1 repo, $2 indent for the appended block
+  python3 - "$1" "$2" <<'PYEOF'
+import json, pathlib, sys
+r, pad = pathlib.Path(sys.argv[1]), sys.argv[2]
+t = json.loads((r / "hooks/templates/claude-code.settings.json").read_text())
+d = {k: t[k] for k in ("extraKnownMarketplaces", "enabledPlugins")}
+d["extraKnownMarketplaces"]["gate-oriented-sdd"]["autoUpdate"] = False
+body = "\n".join(pad + l for l in json.dumps(d, indent=2).split("\n"))
+p = r / "README.md"
+p.write_text(p.read_text() + "\n- a list item\n\n" + pad + "```json\n" + body + "\n" + pad + "```\n")
+PYEOF
+}
+r=$(readme_repo rm-decl-two)
+decl_second "$r" "" && cf6=ok || cf6=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf6" = ok ]; } && c13=ok || c13=no
+case "$err" in *"README.md: carries 2 declaration blocks"*) c14=ok ;; *) c14=no ;; esac
+
+# …and the second one indented under a list item, which is how this README writes the fences
+# in its Updating bullets. A column-0 fence pattern does not see it, so it would be neither
+# counted nor compared. Round 1's MEDIUM on JSON_FENCE.
+r=$(readme_repo rm-decl-two-indented)
+decl_second "$r" "  " && cf7=ok || cf7=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf7" = ok ]; } && c15=ok || c15=no
+case "$err" in *"README.md: carries 2 declaration blocks"*) c16=ok ;; *) c16=no ;; esac
+
+# Python equality says True == 1, and JSON does not: `"autoUpdate": 1` is not what init writes.
+r=$(readme_repo rm-decl-one-for-true)
+decl_edit "$r" README.md '"autoUpdate": true' '"autoUpdate": 1' && cf8=ok || cf8=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf8" = ok ]; } && c17=ok || c17=no
+case "$err" in *"README.md: the declaration's \`extraKnownMarketplaces\`"*) c18=ok ;; *) c18=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17$c18" = "okokokokokokokokokokokokokokokokokokok" ] \
+  && report "the README's Claude Code declaration agrees with the template init renders, and each way it stops agreeing is named" ok \
+  || report "the README's Claude Code declaration agrees with the template init renders, and each way it stops agreeing is named" no \
+     "control=$c0 none-ja-exit=$c1 none-ja-msg=$c2 autoupdate-exit=$c3 autoupdate-msg=$c4 id-exit=$c5 id-msg=$c6 template-moved-exit=$c7 template-moved-msg=$c8 no-template-exit=$c9 no-template-msg=$c10 extra-key-exit=$c11 extra-key-msg=$c12 two-exit=$c13 two-msg=$c14 two-indented-exit=$c15 two-indented-msg=$c16 one-for-true-exit=$c17 one-for-true-msg=$c18"
 
 
 # --- Antigravity hook command execution ------------------------------------------

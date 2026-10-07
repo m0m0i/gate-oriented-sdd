@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-09-26 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
+Last **updated**: 2026-10-07 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
 
 The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The two Antigravity rows carry the date they were verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
@@ -10,8 +10,8 @@ The version table below carries a date beside each row. Claude Code's row was re
 
 | Component | Version |
 | :-- | :-- |
-| Claude Code | 2.1.290 — the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
-| Antigravity CLI (`agy`) | 1.2.16 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, and the #256 section's V5. The 2026-08-21 rows were run at 1.1.17 |
+| Claude Code | 2.1.292 — the #257 section of 2026-10-07. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
+| Antigravity CLI (`agy`) | 1.2.16 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
 | Antigravity IDE | 2.3.1 — verified 2026-08-21, and not re-run since |
 | Platform | macOS (darwin, arm64) |
 
@@ -307,12 +307,31 @@ Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy
 
 Whether auto-update actually delivers a new plugin version to a project between sessions: the run installed and loaded, and never waited for an update. What a clone sees when the `enabledPlugins` prompt is declined, or the marketplace clone fails: that path was not run, and ADR-8 records it as a consequence rather than a measurement. Whether a gate run from the plugin behaves identically to the copy in every respect: `scripts/test-gates.sh` runs the wrapper against the real gates in fixtures, and the maintainer's next real session on a migrated project is the first live run. V3's unrun branch, above.
 
+## What the install commands write, and V3's other branch (#257)
+
+**Run on 2026-10-07, Claude Code 2.1.292**, for #257's README, which would otherwise have marked both as unverified. Every run used a plugins root of its own under a scratch directory (`CLAUDE_CODE_PLUGIN_CACHE_DIR`), and M1 to M2b an isolated `CLAUDE_CONFIG_DIR` as well, so no run read or wrote the maintainer's user-scope plugin state: their `known_marketplaces.json` and `installed_plugins.json` were last updated before the runs and unchanged after them.
+
+**M1 — what the two install commands write. `marketplace add` declares without `autoUpdate`; `install --scope project` writes `enabledPlugins` and nothing else.** In a fresh config and an empty git project, `claude plugin marketplace add m0m0i/gate-oriented-sdd` printed `Successfully added marketplace: gate-oriented-sdd (declared in user settings)` and wrote `extraKnownMarketplaces.gate-oriented-sdd` with the GitHub source and no `autoUpdate` into user settings, and the same into `known_marketplaces.json`. `claude plugin install gate-sdd@gate-oriented-sdd --scope project` then printed `Successfully installed plugin: gate-sdd@gate-oriented-sdd (scope: project)`, wrote `{"enabledPlugins": {"gate-sdd@gate-oriented-sdd": true}}` as the project's whole `.claude/settings.json`, left user settings as they were, and cached 0.23.0. So the command does not stand in for the declaration `init` writes: it carries neither the marketplace nor `autoUpdate`.
+
+**M2a — the settings form of a pin.** In a second fresh config, `claude plugin marketplace add 'm0m0i/gate-oriented-sdd#gate-sdd--v0.22.0'` wrote `"ref": "gate-sdd--v0.22.0"` inside the `source` object, in user settings and in `known_marketplaces.json`. The clone's HEAD was `336c663`, the commit tagged `gate-sdd--v0.22.0`, and `install` cached 0.22.0. That is the form a pin takes in any settings file.
+
+**M2b — a project's declaration in an untrusted folder. Ignored, without a message.** A third fresh config, and a project whose `.claude/settings.json` declared the marketplace pinned to `gate-sdd--v0.22.0` with `"autoUpdate": true` and enabled the plugin. `claude plugin marketplace list` there did not list it, and `install --scope project` failed with `Plugin "gate-sdd" not found in marketplace "gate-oriented-sdd"`. With the folder's trust seeded in that config, a headless session ended at `Not logged in` before it reconciled anything; its debug log had reached `[reconcile] 1 marketplace(s): gate-oriented-sdd(install)`, and had logged `Skipped auto-recording gate-sdd@gate-oriented-sdd — enabled only by repo-authored settings`.
+
+**M2c — V3's other branch: a pinned declaration on a machine that does not know the marketplace. Honoured, for the whole machine.** The maintainer's login, a fresh plugins root, `--setting-sources project,local` so that user settings were not read, and the same pinned declaration with `"autoUpdate": true` passed as `--settings`, in two headless sessions held open thirty seconds each. The first session's debug log: `[reconcile] 1 marketplace(s): gate-oriented-sdd(install)`, `git clone: url=git@github.com:m0m0i/gate-oriented-sdd.git ref=gate-sdd--v0.22.0`, `Added marketplace source: gate-oriented-sdd`, `Synced autoUpdate=true from settings for marketplace: gate-oriented-sdd`. `known_marketplaces.json`, which is one file per user, then recorded the source with its `ref` and `"autoUpdate": true`, and the clone's HEAD was `336c663`. The second session recorded the install at 0.22.0 (`Added gate-sdd@gate-oriented-sdd with scope user`); its cache directory was not yet populated when that session ended. With V3, the pin's effect depends on which declaration a machine met first: ignored where the name was known, and where it was not, recorded as that machine's registration, which the documentation says is not replaced by a later declaration of the same name ("Claude Code registers each marketplace it doesn't already know", `settings-reference`).
+
+**`agy plugin` has no update command, at Antigravity CLI 1.2.16.** `agy plugin help` lists `list`, `import`, `install`, `uninstall`, `enable`, `disable`, `validate`, `link` and `help`. An Antigravity install is therefore refreshed by uninstalling and installing again, which no run here has done.
+
+### What this run does not support
+
+The trust dialog. M2c's declaration came from `--settings`, which needs no trust, and M2b's trusted session could not log in, so no run saw a trusted project's own `.claude/settings.json` reconcile a pinned marketplace. The documentation says a trusted project's entries are honoured and an untrusted one's ignored, and M2b observed the second half. Also not supported: a populated cache for M2c's install, which a third session or `/plugin` would have completed, and anything about auto-update actually delivering a version, which nothing here waited for.
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
 - [ ] Whether plugin-shipped `hooks.json` fires identically to the global one.
 - [ ] A Claude Code project migrated by `init` at 0.23.0, in a real session: the plugin's gates blocking, the project's CI finding the library through `GATE_SDD_HOOKS`, and a plugin update arriving between sessions (#256).
-- [ ] V3's other branch: a project-scope `#ref` pin on a machine whose user scope does not know the marketplace (#256).
+- [ ] V3's other branch through a trusted project file. #257's M2c honoured the pin from `--settings`; the trust dialog in front of a project's own declaration was not run (#256, #257).
+- [ ] A Claude Code cloud session on a project `init` migrated at 0.23.0, which the documentation says runs no gate (#260).
 - [x] `PreInvocation` step injection as the `SessionStart` substitute, including a once-per-session guard (#144).
 - [ ] Whether `agy plugin install` targets `~/.gemini/config/plugins/` (where the IDE's plugins live) or `~/.gemini/antigravity-cli/plugins/` (what the CLI docs describe).
 - [ ] Antigravity subagent invocation contract, for the reviewer (semantics documented in `skills/implement/SKILL.md` and `docs/fidelity.md`; runtime invocation behavior pending verification).
