@@ -84,6 +84,6 @@ T2, 2026-10-07, bash 3.2.57 as `sh`. With the fixture building its declaration f
 - [x] T1: `./scripts/check-backlog-tracker.py` is red on #260. Then row 1's `Why here` cites it → green (AC11).
 - [x] T2: cases in `scripts/test-gates.sh` for the declaration claim — the control, no block, a changed `autoUpdate`, a changed plugin id — red against the current guard. Then the guard, the fixture's template and blocks, and the declaration with its two sentences in both READMEs → green, with `./scripts/check-readme-claims.py` on the real READMEs (AC1).
 - [x] T3: `docs/verified.md`'s section, version row and **Still to verify** line (AC9).
-- [ ] T4: the rest of `## Install` in both READMEs, the fidelity row and line 106, with `## Status` byte-identical to the merge-base (AC2–AC7, AC12).
+- [x] T4: the rest of `## Install` in both READMEs, the fidelity row and line 106, with `## Status` byte-identical to the merge-base (AC2–AC7, AC12).
 - [ ] T5: `docs/layout.md` (AC8).
 - [ ] T6: the `--scope project` sentence in `skills/init/SKILL.md`; every validator on the `- Validators:` line green (AC10, AC13).

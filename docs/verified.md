@@ -11,7 +11,7 @@ The version table below carries a date beside each row. Claude Code's row was re
 | Component | Version |
 | :-- | :-- |
 | Claude Code | 2.1.292 — the #257 section of 2026-10-07. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
-| Antigravity CLI (`agy`) | 1.2.16 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, and the #256 section's V5. The 2026-08-21 rows were run at 1.1.17 |
+| Antigravity CLI (`agy`) | 1.2.16 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
 | Antigravity IDE | 2.3.1 — verified 2026-08-21, and not re-run since |
 | Platform | macOS (darwin, arm64) |
 
@@ -318,6 +318,8 @@ Whether auto-update actually delivers a new plugin version to a project between 
 **M2b — a project's declaration in an untrusted folder. Ignored, without a message.** A third fresh config, and a project whose `.claude/settings.json` declared the marketplace pinned to `gate-sdd--v0.22.0` with `"autoUpdate": true` and enabled the plugin. `claude plugin marketplace list` there did not list it, and `install --scope project` failed with `Plugin "gate-sdd" not found in marketplace "gate-oriented-sdd"`. With the folder's trust seeded in that config, a headless session ended at `Not logged in` before it reconciled anything; its debug log had reached `[reconcile] 1 marketplace(s): gate-oriented-sdd(install)`, and had logged `Skipped auto-recording gate-sdd@gate-oriented-sdd — enabled only by repo-authored settings`.
 
 **M2c — V3's other branch: a pinned declaration on a machine that does not know the marketplace. Honoured, for the whole machine.** The maintainer's login, a fresh plugins root, `--setting-sources project,local` so that user settings were not read, and the same pinned declaration with `"autoUpdate": true` passed as `--settings`, in two headless sessions held open thirty seconds each. The first session's debug log: `[reconcile] 1 marketplace(s): gate-oriented-sdd(install)`, `git clone: url=git@github.com:m0m0i/gate-oriented-sdd.git ref=gate-sdd--v0.22.0`, `Added marketplace source: gate-oriented-sdd`, `Synced autoUpdate=true from settings for marketplace: gate-oriented-sdd`. `known_marketplaces.json`, which is one file per user, then recorded the source with its `ref` and `"autoUpdate": true`, and the clone's HEAD was `336c663`. The second session recorded the install at 0.22.0 (`Added gate-sdd@gate-oriented-sdd with scope user`); its cache directory was not yet populated when that session ended. With V3, the pin's effect depends on which declaration a machine met first: ignored where the name was known, and where it was not, recorded as that machine's registration, which the documentation says is not replaced by a later declaration of the same name ("Claude Code registers each marketplace it doesn't already know", `settings-reference`).
+
+**`agy plugin` has no update command, at Antigravity CLI 1.2.16.** `agy plugin help` lists `list`, `import`, `install`, `uninstall`, `enable`, `disable`, `validate`, `link` and `help`. An Antigravity install is therefore refreshed by uninstalling and installing again, which no run here has done.
 
 ### What this run does not support
 

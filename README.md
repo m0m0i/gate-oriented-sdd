@@ -103,7 +103,7 @@ Opt-in, and worth adding when the project justifies it — three skills, each fo
 | `epics` | nothing consumes it mechanically **yet** — the gap is #166, not a decision |
 | `contract` | run before there are commits and review findings to compile, it produces a *worse* rulebook rather than an absent one |
 
-**Every skill is always available.** `init` detects the active harness (Claude Code, Google Antigravity, or both) and installs `.steering/`, `.specs/`, `.work_logs/`, the issue templates, the appropriate rule pointers (`CLAUDE.md` / `GEMINI.md`), the reviewer, and the hooks — never the skills themselves, which ship with the plugin. The choice above governs which documents get created and which skills are in the flow, never whether one can be run.
+**Every skill is always available.** `init` detects the active harness (Claude Code, Google Antigravity, or both) and installs `.steering/`, `.specs/`, `.work_logs/`, the issue templates, the appropriate rule pointers (`CLAUDE.md` / `GEMINI.md`), the reviewer, and the hooks — never the skills themselves, which ship with the plugin, and on Claude Code not the gates either: the plugin ships them, and `init` writes only the settings that enable it, beside the per-language fast check. The choice above governs which documents get created and which skills are in the flow, never whether one can be run.
 
 **The choice is recorded, not inferred.** `init` writes `- Mode: bootstrap`, `- Mode: minimum` or `- Mode: full` into `.steering/tech.md`, and a checker on the `- Validators:` line verifies the filesystem against it whenever the quality gate runs — and in CI, which is where it actually bites, because the gate runs that line only when source changed and a document is never source. Declared rather than worked out later from which files happen to exist, because that derivation cannot tell a deliberate omission from an abandoned install — and telling those two apart is the only reason the line exists. **A fresh install is `bootstrap`** — the harness is in place and the inception documents are not written yet, which is neither of the other two and used to be recorded as one of them, so every first install armed its own gate red (#127). It expires at the first spec, because that is where a document starts being cited: a state that never ended would be a switch-off with a note attached. **And the choice survives that window.** `init` also records `- Target: minimum` or `- Target: full` — what the operator signed up for, as distinct from what is true yet — and the checker names that target's documents, with the skill that writes each, both in the advisory line and in the block at the first spec. The target changes no verdict: what is required still comes from `- Mode:` alone, so a mistyped target can misdescribe what you owe and can never let a document go unchecked.
 
@@ -158,7 +158,7 @@ Then run `init` in a project. On Claude Code it writes this declaration into the
 }
 ```
 
-That puts the harness in front of everyone who opens the repository. The gates run from the plugin, so a gate fix reaches the project by plugin update, with no pull request in it. `claude plugin install gate-sdd@gate-oriented-sdd --scope project` is not a substitute, because it writes only the `enabledPlugins` half.
+That puts the harness in front of everyone who opens the repository. The gates run from the plugin, so a gate fix reaches the project by plugin update, with no pull request in it. `claude plugin install gate-sdd@gate-oriented-sdd --scope project` is not a substitute, because it writes only the `enabledPlugins` half (verified, M1 in [`docs/verified.md`](./docs/verified.md)).
 
 **Google Antigravity** — install either from a standalone release archive or a clone:
 
@@ -176,7 +176,60 @@ git clone https://github.com/m0m0i/gate-oriented-sdd
 agy plugin install ./gate-oriented-sdd
 ```
 
-Then run `init` inside a project. It reads the repo before it asks you anything, runs each validator before adopting it, and verifies the gate is silent before declaring success.
+Then run `init` inside a project, as on Claude Code. On either harness it reads the repo before it asks you anything, runs each validator before adopting it, and verifies the gate is silent before declaring success.
+
+### Keeping the gates current
+
+Each claim below carries one of three marks. **Verified** names the run in [`docs/verified.md`](./docs/verified.md) or the case in [`scripts/test-gates.sh`](./scripts/test-gates.sh) that produced it. **Documented** names the Claude Code documentation it comes from, and means nothing here ran it. **Not run** means neither.
+
+**Why `"autoUpdate": true` is required.** A third-party marketplace does not auto-update by default. Without it a project stays on whatever version each machine installed, and gate fixes stop arriving: the copy drift 0.23.0 removed, back in a quieter form. With it, an interactive session refreshes the marketplace after its first message, following a random delay of up to ten minutes, and updates the plugin on disk. The running session keeps what it loaded, and the new version loads at the next launch or on `/reload-plugins`. The plugin's manifest pins its version, so an update arrives per release, not per commit. The first of these that is set decides: `autoUpdate` on the marketplace's entry in a settings file, where the highest-precedence file's entry is used whole, so inside the project its own declaration decides; then the toggle under `/plugin` → **Marketplaces**; then the default, off. `DISABLE_UPDATES=1`, `DISABLE_AUTOUPDATER=1` and `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` turn the pass off unless `FORCE_AUTOUPDATE_PLUGINS=1` is also set. Documented ([plugin loading](https://code.claude.com/docs/en/plugins/loading#when-auto-update-runs), [settings](https://code.claude.com/docs/en/settings-reference#extraknownmarketplaces)); no run here has waited for an update.
+
+**What each kind of drift does.**
+
+| Situation | What happens | Evidence |
+| :-- | :-- | :-- |
+| A teammate opens the repository for the first time and trusts the folder | The declared marketplace is cloned, and the plugin fetched because its marketplace entry is a relative path. If `/plugin` shows `Plugin "gate-sdd" is enabled in project settings but isn't installed here`, `claude plugin install gate-sdd@gate-oriented-sdd --scope project` once fixes it. | documented ([plugin loading](https://code.claude.com/docs/en/plugins/loading#enabled-in-project-settings-but-not-installed)); not run |
+| The plugin enabled at user scope and at project scope, unpinned | One plugin id at one cache path, loaded once. | verified, V4 |
+| The user scope declared by `marketplace add`, which writes no `autoUpdate`, and the project declaring it with `autoUpdate` | Inside the project the project's entry is used whole, so auto-update is on there, and the one install it updates is the one every project on the machine loads. | documented ([settings](https://code.claude.com/docs/en/settings-reference#extraknownmarketplaces)); verified, M1 and V4 |
+| The project pins a `"ref"` on a machine that already knows the marketplace | The pin is ignored, and the shared clone does not move. | verified, V3 |
+| The project pins a `"ref"` on a machine that does not know the marketplace yet | The pin is honoured and becomes the machine's registration, so every project on that machine is held at the tag, and a later unpinned declaration of the same name does not replace it. | verified, M2c, from `--settings`; the trust dialog in front of a project's own file not run |
+| The same repository declared under a second marketplace name | A second plugin id. The harness does not deduplicate hooks (V2), and the stand-down reads only the project's settings, so both plugins' gates would run; whether two plugins of one name both load is undocumented. Do not. | not run |
+| The project still holds pre-0.23.0 copies in `.claude/hooks/`, with the `Stop` entries that run them | The plugin's gates stand down and the copies run, stale, until `init` migrates the project. Copies with no entry do not stand them down. | verified, `test-gates.sh` cases 207 and 208; no live session yet |
+| A clone whose folder is not trusted, or where the plugin is turned off in `.claude/settings.local.json` | No gate runs on turn end, and nothing says so. CI's validators and `check-unreviewed-work.sh` still run on the pull request. | documented ([settings](https://code.claude.com/docs/en/settings-reference#extraknownmarketplaces)); M2b saw an untrusted folder's declaration ignored |
+| A cloud session — claude.ai/code, `claude --cloud`, a routine | A cloud session runs the repository's own settings hooks and installs none of the plugins it enables, so a migrated project runs no gate there (#260). | documented ([cloud environments](https://code.claude.com/docs/en/cloud-environments#what-carries-over-from-your-setup)); not run |
+| Antigravity | Unchanged: `init` copies the gates into `.agents/hooks/`, and a fix arrives by refreshing the copies. | verified, the copies blocking (`docs/verified.md`, Antigravity hooks); a refresh by re-running `init` not run |
+
+**Pinning.** Do not pin a project. `init` writes the declaration unpinned, and that is the recommendation as well as the default. A `"ref"` in the project's declaration does not hold the project: it holds a machine, and only a machine that met it first (the two pin rows above). One commit then holds some teammates and not others, and holds every other project on the machines it does hold. Not every release is tagged either, so a pin can name only a release with a `gate-sdd--v<version>` tag.
+
+**Updating.**
+
+- **Claude Code, before the next auto-update.** `claude plugin marketplace update gate-oriented-sdd`, then `claude plugin update gate-sdd@gate-oriented-sdd`, then a new session or `/reload-plugins`. Documented ([install](https://code.claude.com/docs/en/plugins/install#update-plugins-now)).
+- **A Claude Code project installed before 0.23.0** still has the copies. This prints them, and nothing once the project is migrated:
+
+  ```bash
+  ls .claude/hooks/ 2>/dev/null; grep -nE '"(Stop|SessionStart)"' .claude/settings.json
+  ```
+
+  Run `init` again. It removes `gate-lib.sh`, `quality-gate.sh`, `review-gate.sh` and `steering-digest.sh` and their `Stop` and `SessionStart` entries, keeps the `PostToolUse` fast check, and writes the declaration, so it is the last pull request a gate fix needs in that project. Not yet run on a real project. **A project worked in cloud sessions keeps its gates there only while it keeps the copies (#260)**, so read that issue before migrating one.
+- **Antigravity** has no update command: `agy plugin` at 1.2.16 lists none (verified, #257's section of `docs/verified.md`). Uninstall and install again from a fresh clone or release archive, which has not been run here, then refresh the copies by running `init` again or by hand. Copy the five together, because each gate blocks against a `gate-lib.sh` older than itself:
+
+  ```bash
+  P=/path/to/gate-oriented-sdd   # the clone or extracted archive you installed from
+  for f in gate-lib.sh quality-gate.sh review-gate.sh steering-digest.sh steering-digest-antigravity.sh; do
+    cp "$P/hooks/$f" .agents/hooks/
+  done
+  ```
+
+- **What a plugin update does not reach, on either harness:** the copies `init` made in the project's scripts directory of `check-steering-anchors.sh`, `check-document-set.py`, `check-unreviewed-work.sh` and `check-locks.py`, the reviewer contract at `_shared/reviewer-contract.md`, and the reviewer and its rulebook. Compare the first two kinds with the plugin and copy what differs, or run `init` again, whose upgrade path is not yet verified. Never overwrite the reviewer: it was adapted to the project, so take what applies by hand and re-pin with `check-locks.py --update`. CI's checkout of the plugin moves only as far as the `ref` its workflow names.
+
+  ```bash
+  # P: as above on Antigravity; on Claude Code, the installPath of gate-sdd@gate-oriented-sdd
+  # in ~/.claude/plugins/installed_plugins.json. Antigravity's contract is under .agents/agents/.
+  for f in check-steering-anchors.sh check-document-set.py check-unreviewed-work.sh check-locks.py; do
+    [ -f "scripts/$f" ] && diff -q "$P/assets/$f" "scripts/$f"
+  done
+  diff -q "$P/reviewers/_shared/reviewer-contract.md" .claude/agents/_shared/reviewer-contract.md
+  ```
 
 ## Fidelity between the two harnesses
 
@@ -189,6 +242,7 @@ Every row was produced by running it. Method, versions, and open questions: [`do
 | Rules discovery | root `AGENTS.md` (canonical context) | `rules/AGENTS.md` (auto-discovered and merged by plugin loader) |
 | Quality gate on turn end | full — `Stop`, exit 2 | full — `Stop`, `{"decision":"continue"}` |
 | Review-receipt gate | full | full |
+| Gate delivery | from the plugin — `.claude-plugin/hooks.json` runs the gates, and a fix arrives by plugin update | copied into `.agents/hooks/` by `init`, and a fix arrives by running `init` again |
 | Per-edit fast feedback | full — `PostToolUse` | full — `PostToolUse`, observe-only |
 | Steering digest | full — `SessionStart` | full — `PreInvocation` (turn 1 step injection) |
 | Context re-injection after compaction | full — `SessionStart` | **none** — no session compaction hook |
