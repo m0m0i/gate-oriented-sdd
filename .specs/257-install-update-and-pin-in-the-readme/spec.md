@@ -1,5 +1,5 @@
 # Spec: the README says how to install, update and pin, now that the gates ship from the plugin
-- Slug: 257-install-update-and-pin-in-the-readme   Issue: 257   Type: chore   Status: draft
+- Slug: 257-install-update-and-pin-in-the-readme   Issue: 257   Type: chore   Status: approved
 - Author: m0m0i   Date: 2026-10-07
 
 ## 1. Requirements (WHAT / WHY)
