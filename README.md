@@ -144,6 +144,22 @@ claude plugin marketplace add m0m0i/gate-oriented-sdd
 claude plugin install gate-sdd@gate-oriented-sdd
 ```
 
+Then run `init` in a project. On Claude Code it writes this declaration into the project's committed `.claude/settings.json`, beside the per-language fast check:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "gate-oriented-sdd": {
+      "source": { "source": "github", "repo": "m0m0i/gate-oriented-sdd" },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": { "gate-sdd@gate-oriented-sdd": true }
+}
+```
+
+That puts the harness in front of everyone who opens the repository. The gates run from the plugin, so a gate fix reaches the project by plugin update, with no pull request in it. `claude plugin install gate-sdd@gate-oriented-sdd --scope project` is not a substitute, because it writes only the `enabledPlugins` half.
+
 **Google Antigravity** — install either from a standalone release archive or a clone:
 
 *Option 1: Standalone release archive (recommended — excludes repo-internal tooling):*

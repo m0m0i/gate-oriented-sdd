@@ -6,6 +6,10 @@ this guard exists for: the behaviour count was removed from `## Status` and left
 above, in both languages, while the guard certified its absence over the whole file. A scope drawn
 from where a defect was reported is not a scope drawn around where that defect lives.
 
+**One claim lives outside `## Status`** and is read for the same reason: since #257 both READMEs
+quote, under `## Install`, the Claude Code declaration `init` renders, and the quote must equal
+the template it comes from. `TEMPLATE` below says why.
+
 #115: three claims in `## Status` were false at once. They drifted by different mechanisms, and
 only one of those mechanisms was a reviewer missing a count.
 
@@ -71,6 +75,19 @@ BADGE_QUERY = "$.version"
 #: reading its own source — a gate firing on an edit that broke nothing (LV-2). Selecting by
 #: label fails CLOSED: rename it and no version badge is found, which is the absence branch.
 BADGE_LABEL = "gate-sdd"
+
+#: The Claude Code declaration `init` renders into a project's `.claude/settings.json`, which both
+#: READMEs quote under `## Install` so a consumer sees what they commit (#257). The badge's
+#: argument from #133, one claim over: the README restates a file, and nothing else notices the
+#: file moving — `"autoUpdate": true` dropped from the template would leave the README telling a
+#: consumer to commit something `init` no longer writes, in the one section about why it matters.
+TEMPLATE = pathlib.Path("hooks/templates/claude-code.settings.json")
+#: What the quote holds, and all it holds. The template's `hooks` carries a per-project
+#: placeholder, so a README showing it would be quoting something no project receives verbatim.
+DECLARATION_KEYS = ("extraKnownMarketplaces", "enabledPlugins")
+#: A fenced `json` block. The declaration is the one whose object has `extraKnownMarketplaces`;
+#: the README may carry other JSON, and only that one is the claim.
+JSON_FENCE = re.compile(r"^```json[ \t]*\n(.*?)^```[ \t]*$", re.M | re.S)
 
 #: How the receipts were obtained. English says "all but three"; Japanese says "3件を除いて".
 #: Both are matched as a written-out or numeric count, because #115's defect was a word.
@@ -175,6 +192,74 @@ def as_int(token):
     return WORDS.get(token.lower())
 
 
+def declaration_source():
+    """(the template's declaration, problems). None when the template cannot supply one.
+
+    A missing or unreadable template is not "nothing to compare": the README would then be
+    quoting a file this guard cannot see, and agreeing with nothing is how #115's claims drifted.
+    """
+    try:
+        data = json.loads(TEMPLATE.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None, [f"{TEMPLATE}: does not exist, so the README's Claude Code declaration has no source"]
+    except (OSError, ValueError) as exc:
+        return None, [f"{TEMPLATE}: cannot be read as JSON ({exc}), so the README's Claude Code declaration has no source"]
+    missing = [k for k in DECLARATION_KEYS if not isinstance(data, dict) or k not in data]
+    if missing:
+        return None, [
+            f"{TEMPLATE}: sets no {', '.join(f'`{k}`' for k in missing)}, so the README's Claude "
+            f"Code declaration has no source"
+        ]
+    return {k: data[k] for k in DECLARATION_KEYS}, []
+
+
+def declaration_problems(name, text, want):
+    """What is wrong with the declaration `name` quotes, against the template's `want`."""
+    found, problems = [], []
+    for body in JSON_FENCE.findall(text):
+        if "extraKnownMarketplaces" not in body:
+            continue
+        try:
+            found.append(json.loads(body))
+        except ValueError as exc:
+            problems.append(
+                f"{name}: a ```json block naming `extraKnownMarketplaces` is not valid JSON "
+                f"({exc}), so the declaration cannot be compared with {TEMPLATE}"
+            )
+    blocks = [b for b in found if isinstance(b, dict) and "extraKnownMarketplaces" in b]
+    if not blocks:
+        if not problems:
+            problems.append(
+                f"{name}: carries no ```json block holding `extraKnownMarketplaces`, so it does "
+                f"not show the Claude Code declaration `init` writes from {TEMPLATE} — or shows "
+                f"it in a form this guard cannot read."
+            )
+        return problems
+    if len(blocks) > 1:
+        return problems + [
+            f"{name}: carries {len(blocks)} declaration blocks. One is the claim, and a second "
+            f"can disagree with it."
+        ]
+    block = blocks[0]
+    extra = sorted(set(block) - set(DECLARATION_KEYS))
+    if extra:
+        problems.append(
+            f"{name}: the declaration block also sets {', '.join(f'`{k}`' for k in extra)}. It "
+            f"quotes what `init` writes for every project, which is "
+            f"{' and '.join(f'`{k}`' for k in DECLARATION_KEYS)} only."
+        )
+    for key in DECLARATION_KEYS:
+        got = block.get(key)
+        if got != want[key]:
+            problems.append(
+                f"{name}: the declaration's `{key}` is `{json.dumps(got, sort_keys=True)}`, but "
+                f"{TEMPLATE} writes `{json.dumps(want[key], sort_keys=True)}`. The README quotes "
+                f"what `init` renders, and a quote that has drifted tells a consumer to commit "
+                f"something `init` does not write."
+            )
+    return problems
+
+
 def main():
     problems = []
 
@@ -196,6 +281,9 @@ def main():
         # Not "nothing to check". Zero receipts means the source vanished, and comparing a claim
         # against an empty set would agree with anything.
         problems.append("no review receipts found, so the receipts claim cannot be verified")
+
+    want, source_problems = declaration_source()
+    problems += source_problems
 
     for name in READMES:
         path = pathlib.Path(name)
@@ -298,6 +386,9 @@ def main():
                     f"guard would pass a README that had quietly stopped making the claim."
                 )
 
+        if want is not None:
+            problems += declaration_problems(name, text, want)
+
         for b in BEHAVIOUR_COUNT.finditer(text):
             problems.append(
                 f"{name}: counts gates/guards — `{b.group(0).strip()}`. That number was removed on "
@@ -338,7 +429,7 @@ def main():
     print(
         f"check-readme-claims: {len(READMES)} README(s) carry a version badge "
         f"({MANIFEST} is at v{version}), {inline} of {total} receipts inline, "
-        f"no behaviour count asserted"
+        f"no behaviour count asserted, the Claude Code declaration quoted as {TEMPLATE} writes it"
     )
 
 

@@ -149,6 +149,22 @@ claude plugin marketplace add m0m0i/gate-oriented-sdd
 claude plugin install gate-sdd@gate-oriented-sdd
 ```
 
+そのあと、プロジェクトの中で `init` を実行します。Claude Code では、`init` が次の宣言を、言語ごとの高速チェックと並べてプロジェクトの `.claude/settings.json` に書き込みます。このファイルはコミットされます。
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "gate-oriented-sdd": {
+      "source": { "source": "github", "repo": "m0m0i/gate-oriented-sdd" },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": { "gate-sdd@gate-oriented-sdd": true }
+}
+```
+
+これで、リポジトリを開く全員の環境にハーネスが入ります。ゲートはプラグインから動くので、ゲートの修正はプラグインの更新でプロジェクトに届き、プロジェクト側で pull request を出す必要はありません。`claude plugin install gate-sdd@gate-oriented-sdd --scope project` はこの宣言の代わりになりません。このコマンドが書き込むのは `enabledPlugins` の部分だけだからです。
+
 **Google Antigravity**
 
 スタンドアロンのリリースアーカイブ、または clone からインストールします。

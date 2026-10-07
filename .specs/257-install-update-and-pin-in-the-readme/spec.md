@@ -71,10 +71,18 @@ Asked and answered 2026-10-07; every answer was the recommended one.
 - **Coverage gap:** nothing tests that the README's declaration matches the template. Design 2 closes it, red first. The rest of the preserved behaviour is checked as it already is: `## Status` byte-identical by `git diff`, and `check-readme-claims.py`, `check-contract-path.py` and `check-leakage.sh` by their own runs.
 - **Rollback:** revert the merge. The guard's new claim goes with the README text it checks, and #260 stays filed.
 
+### Mutation record
+
+T2, 2026-10-07, bash 3.2.57 as `sh`. With the fixture building its declaration from the template and case 217 added, against the guard as it was: 220 passed / 1 failed, case 217 red on every half but the control (`control=ok none-ja-exit=no … extra-key-msg=no`). After the guard: 221 / 0 / 0.
+
+| Mutation of `scripts/check-readme-claims.py` | Halves red | Suite |
+| :-- | :-- | :-- |
+| the value comparison disabled (`if False and got != want[key]`) | autoupdate, id, template-moved | 220 / 1 / 0 |
+
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: `./scripts/check-backlog-tracker.py` is red on #260. Then row 1's `Why here` cites it → green (AC11).
-- [ ] T2: cases in `scripts/test-gates.sh` for the declaration claim — the control, no block, a changed `autoUpdate`, a changed plugin id — red against the current guard. Then the guard, the fixture's template and blocks, and the declaration with its two sentences in both READMEs → green, with `./scripts/check-readme-claims.py` on the real READMEs (AC1).
+- [x] T2: cases in `scripts/test-gates.sh` for the declaration claim — the control, no block, a changed `autoUpdate`, a changed plugin id — red against the current guard. Then the guard, the fixture's template and blocks, and the declaration with its two sentences in both READMEs → green, with `./scripts/check-readme-claims.py` on the real READMEs (AC1).
 - [ ] T3: `docs/verified.md`'s section, version row and **Still to verify** line (AC9).
 - [ ] T4: the rest of `## Install` in both READMEs, the fidelity row and line 106, with `## Status` byte-identical to the merge-base (AC2–AC7, AC12).
 - [ ] T5: `docs/layout.md` (AC8).
