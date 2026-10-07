@@ -31,7 +31,7 @@
   - [ ] **AC8:** `docs/layout.md`'s project tree shows what `init` writes on each harness at 0.23.0 — `.claude/` with no `hooks/`, `.claude/settings.json` as the declaration plus the fast check, `.agents/hooks/` with the five scripts `init` copies, the project's copied `check-*` scripts, and the CI steps — and its harness tree shows `.claude-plugin/hooks.json` and `hooks/plugin-gate.sh`.
   - [ ] **AC9:** `docs/verified.md` records M1, M2a, M2b and M2c with versions and exact observations, including what M2c did not exercise, and its **Still to verify** list says what is left of V3's other branch.
   - [ ] **AC10:** `skills/init/SKILL.md` says what `--scope project` writes as M1 found it.
-  - [ ] **AC11:** `docs/BACKLOG.md` row 1's `Why here` cites #260; `./scripts/check-backlog-tracker.py` exits 0 on the branch.
+  - [ ] **AC11:** `docs/BACKLOG.md` row 1's `Why here` cites #260, and #261, the same finding filed later the same morning; `./scripts/check-backlog-tracker.py` exits 0 on the branch.
   - [ ] **AC12:** every claim in `README.ja.md`'s new and changed text is the English claim, with the house spacing; the PR says the Japanese is a draft for the maintainer's read.
   - [ ] **AC13:** every validator on `.steering/tech.md`'s `- Validators:` line exits 0, and `./scripts/check-version-bump.py` passes with the patch bump AC10 makes due.
 
@@ -73,7 +73,7 @@ Asked and answered 2026-10-07; every answer was the recommended one.
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: `./scripts/check-backlog-tracker.py` is red on #260. Then row 1's `Why here` cites it → green (AC11).
+- [x] T1: `./scripts/check-backlog-tracker.py` is red on #260. Then row 1's `Why here` cites it → green (AC11).
 - [ ] T2: cases in `scripts/test-gates.sh` for the declaration claim — the control, no block, a changed `autoUpdate`, a changed plugin id — red against the current guard. Then the guard, the fixture's template and blocks, and the declaration with its two sentences in both READMEs → green, with `./scripts/check-readme-claims.py` on the real READMEs (AC1).
 - [ ] T3: `docs/verified.md`'s section, version row and **Still to verify** line (AC9).
 - [ ] T4: the rest of `## Install` in both READMEs, the fidelity row and line 106, with `## Status` byte-identical to the merge-base (AC2–AC7, AC12).
