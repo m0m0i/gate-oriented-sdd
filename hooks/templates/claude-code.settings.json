@@ -1,30 +1,17 @@
 {
+  "extraKnownMarketplaces": {
+    "gate-oriented-sdd": {
+      "source": { "source": "github", "repo": "m0m0i/gate-oriented-sdd" },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": { "gate-sdd@gate-oriented-sdd": true },
   "hooks": {
     "PostToolUse": [
       {
         "matcher": "Write|Edit",
         "hooks": [
           { "type": "command", "command": "{{FAST_CHECK}}", "timeout": 60 }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          { "type": "command", "command": "[ -f {{HOOKS_DIR}}/quality-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/quality-gate.sh", "timeout": 180 }
-        ]
-      },
-      {
-        "hooks": [
-          { "type": "command", "command": "[ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh", "timeout": 30 }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "matcher": "startup|resume|clear|compact",
-        "hooks": [
-          { "type": "command", "command": "[ -f {{HOOKS_DIR}}/steering-digest.sh ] || exit 0; sh {{HOOKS_DIR}}/steering-digest.sh", "timeout": 15 }
         ]
       }
     ]

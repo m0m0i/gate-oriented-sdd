@@ -6,6 +6,7 @@
     "name": "Hiroyuki"
   },
   "license": "Apache-2.0",
+  "hooks": "./.claude-plugin/hooks.json",
   "keywords": [
     "spec-driven-development",
     "sdd",

@@ -6031,6 +6031,11 @@ manifest_repo() {
   cp "$ROOT/.claude-plugin/marketplace.json" "$r/.claude-plugin/"
   cp "$ROOT/hooks/templates/claude-code.settings.json" "$r/hooks/templates/"
   cp "$ROOT/hooks/templates/antigravity.hooks.json" "$r/hooks/templates/"
+  # #256: the plugin's own Claude Code hooks file, and the scripts its commands name. Copied
+  # when present so the fixture stands on the tree as shipped; the cases below remove or
+  # rewrite what they test.
+  [ -f "$ROOT/.claude-plugin/hooks.json" ] && cp "$ROOT/.claude-plugin/hooks.json" "$r/.claude-plugin/"
+  for f in "$ROOT"/hooks/*.sh; do cp "$f" "$r/hooks/"; done
   printf '# AGENTS\n' > "$r/AGENTS.md"
   ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
   cp -R "$ROOT/reviewers" "$r/reviewers"
@@ -6242,6 +6247,89 @@ case "$(cat "$TMP/mferr")" in *Traceback*) c10=no ;; *"not an object"*) c10=ok ;
   && report "an absent or unreadable hook template fails rather than agreeing" ok \
   || report "an absent or unreadable hook template fails rather than agreeing" no \
      "agy-exit=$c0 not-claimed=$c1 agy-named=$c2 cc-exit=$c3 cc-named=$c4 unread-exit=$c5 unread-diag=$c6 null-exit=$c7 null-not-claimed=$c8 list-exit=$c9 list-diag=$c10"
+
+# 210–214. #256 AC8 — the Claude Code gates ship from .claude-plugin/hooks.json, and the guard
+#      holds that file the way it holds the two templates. The control is a pin: the tree as
+#      shipped passes before and after. The rest were green under the old guard, which knew
+#      nothing about the file, and are what "AC8" means by covered.
+r=$(manifest_repo mf-hooks-control)
+out=$(run_manifest "$r"); [ "$out" = "0" ] && report "check-manifests accepts the plugin's hooks file as shipped" ok \
+  || report "check-manifests accepts the plugin's hooks file as shipped" no "exit=$out: $(cat "$TMP/mferr" | tr '\n' ';' | head -c 300)"
+
+# 211. A hooks.json where Antigravity reads one. hooks/hooks.json is Claude Code's default
+#      location, merged with the declared path and inside the directory Antigravity loads; a
+#      root hooks.json is Antigravity's own plugin location. Either carries Claude Code's nested
+#      Stop shape into a file Antigravity parses, which invalidates its whole hooks file.
+r=$(manifest_repo mf-stray-hooks); cp "$r/.claude-plugin/hooks.json" "$r/hooks/hooks.json" 2>/dev/null || printf '{}' > "$r/hooks/hooks.json"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && a=ok || a=no
+case "$err" in *"hooks/hooks.json"*) a2=ok ;; *) a2=no ;; esac
+r=$(manifest_repo mf-root-hooks); printf '{}' > "$r/hooks.json"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && b=ok || b=no
+case "$err" in *"hooks.json exists at the plugin root"*) b2=ok ;; *) b2=no ;; esac
+[ "$a$a2$b$b2" = "okokokok" ] && report "check-manifests fails on a hooks.json where Antigravity would read it" ok \
+  || report "check-manifests fails on a hooks.json where Antigravity would read it" no "hooks/=$a named=$a2 root=$b named=$b2"
+
+# 212. The file and the field. Absent file: the plugin ships no gates on Claude Code, which is
+#      the install-level fail-open. Field absent while the file exists: unregistered, same
+#      result. Field naming a missing file, or a file that is not a JSON object: the same.
+r=$(manifest_repo mf-no-hooks-file); rm -f "$r/.claude-plugin/hooks.json"
+out=$(run_manifest "$r"); [ "$out" = "1" ] && a=ok || a=no
+r=$(manifest_repo mf-no-hooks-field)
+python3 - "$r/.claude-plugin/plugin.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d.pop("hooks", None); json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && b=ok || b=no
+case "$err" in *'"hooks"'*) b2=ok ;; *) b2=no ;; esac
+r=$(manifest_repo mf-hooks-field-missing-file)
+python3 - "$r/.claude-plugin/plugin.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["hooks"] = "./.claude-plugin/nowhere.json"; json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); [ "$out" = "1" ] && c=ok || c=no
+r=$(manifest_repo mf-hooks-not-object); printf '[]' > "$r/.claude-plugin/hooks.json"
+out=$(run_manifest "$r"); [ "$out" = "1" ] && d=ok || d=no
+[ "$a$b$b2$c$d" = "okokokokok" ] && report "check-manifests requires the hooks file, and the manifest field that names it" ok \
+  || report "check-manifests requires the hooks file, and the manifest field that names it" no "no-file=$a no-field=$b named=$b2 field-dangling=$c not-object=$d"
+
+# 213. A command that names a script the plugin does not ship. The file is read by Claude
+#      Code and run by nobody until a turn ends, so a typo here is a gate that exits 127.
+r=$(manifest_repo mf-hooks-missing-script)
+python3 - "$r/.claude-plugin/hooks.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+for entries in d["hooks"].values():
+    for e in entries:
+        for h in e["hooks"]:
+            h["command"] = h["command"].replace("quality-gate.sh", "nothing.sh")
+json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && a=ok || a=no
+case "$err" in *"nothing.sh"*) a2=ok ;; *) a2=no ;; esac
+[ "$a$a2" = "okok" ] && report "check-manifests fails a hooks command naming a script the plugin does not ship" ok \
+  || report "check-manifests fails a hooks command naming a script the plugin does not ship" no "exit=$a named=$a2"
+
+# 214. Event parity, with the plugin file in the union. The Claude Code side is now the plugin
+#      file plus the project template; together they must still pair with Antigravity's
+#      template as the two templates paired before. Drop Stop from the plugin file and the
+#      Claude Code side enforces less than Antigravity's; drop SessionStart and the digest
+#      has no event.
+r=$(manifest_repo mf-hooks-no-stop)
+python3 - "$r/.claude-plugin/hooks.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["hooks"].pop("Stop"); json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && a=ok || a=no
+case "$err" in *"hook events differ"*) a2=ok ;; *) a2=no ;; esac
+r=$(manifest_repo mf-hooks-no-start)
+python3 - "$r/.claude-plugin/hooks.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["hooks"].pop("SessionStart"); json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && b=ok || b=no
+case "$err" in *"SessionStart"*) b2=ok ;; *) b2=no ;; esac
+[ "$a$a2$b$b2" = "okokokok" ] && report "check-manifests pairs the plugin's hook events with Antigravity's template" ok \
+  || report "check-manifests pairs the plugin's hook events with Antigravity's template" no "no-stop=$a differ=$a2 no-start=$b named=$b2"
 
 # --- guards: scripts/check-leakage.sh ---------------------------------------
 #

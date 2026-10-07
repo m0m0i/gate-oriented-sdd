@@ -32,6 +32,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 REQUIRED_COMPONENTS = [
     "plugin.json",
     ".claude-plugin/plugin.json",
+    ".claude-plugin/hooks.json",
     ".claude-plugin/marketplace.json",
     "skills",
     "reviewers",
