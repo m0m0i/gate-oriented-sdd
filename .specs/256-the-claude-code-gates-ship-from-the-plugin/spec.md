@@ -1,5 +1,5 @@
 # Spec: the Claude Code gates ship from the plugin
-- Slug: 256-the-claude-code-gates-ship-from-the-plugin   Issue: 256   Type: feature   Status: approved
+- Slug: 256-the-claude-code-gates-ship-from-the-plugin   Issue: 256   Type: feature   Status: done
 - Author: m0m0i   Date: 2026-10-07
 
 ## 1. Requirements (WHAT / WHY)
