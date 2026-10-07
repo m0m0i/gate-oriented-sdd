@@ -86,8 +86,14 @@ TEMPLATE = pathlib.Path("hooks/templates/claude-code.settings.json")
 #: placeholder, so a README showing it would be quoting something no project receives verbatim.
 DECLARATION_KEYS = ("extraKnownMarketplaces", "enabledPlugins")
 #: A fenced `json` block. The declaration is the one whose object has `extraKnownMarketplaces`;
-#: the README may carry other JSON, and only that one is the claim.
-JSON_FENCE = re.compile(r"^```json[ \t]*\n(.*?)^```[ \t]*$", re.M | re.S)
+#: the README may carry other JSON, and only that one is the claim. Indented fences count, because
+#: a fence inside a list item is indented and this README writes its Updating fences that way: a
+#: column-0 pattern left a second, disagreeing declaration there neither counted nor compared
+#: (#257, review round 1). Any indentation, since a fence in a nested list item sits deeper than
+#: three spaces; the cost is that an indented code block quoting a fence reads as one, which is a
+#: false red, the safe direction. `~~~` fences count too. A stated limit, as for BADGE: an info
+#: string other than `json` — `jsonc`, `json5` — is not read.
+JSON_FENCE = re.compile(r"^[ \t]*(```|~~~)json[ \t]*\n(.*?)^[ \t]*\1[ \t]*$", re.M | re.S)
 
 #: How the receipts were obtained. English says "all but three"; Japanese says "3件を除いて".
 #: Both are matched as a written-out or numeric count, because #115's defect was a word.
@@ -216,7 +222,7 @@ def declaration_source():
 def declaration_problems(name, text, want):
     """What is wrong with the declaration `name` quotes, against the template's `want`."""
     found, problems = [], []
-    for body in JSON_FENCE.findall(text):
+    for _, body in JSON_FENCE.findall(text):
         if "extraKnownMarketplaces" not in body:
             continue
         try:
@@ -250,7 +256,9 @@ def declaration_problems(name, text, want):
         )
     for key in DECLARATION_KEYS:
         got = block.get(key)
-        if got != want[key]:
+        # As JSON, not as Python values: `True == 1` in Python, and `"autoUpdate": 1` is not
+        # what `init` writes (review round 1).
+        if json.dumps(got, sort_keys=True) != json.dumps(want[key], sort_keys=True):
             problems.append(
                 f"{name}: the declaration's `{key}` is `{json.dumps(got, sort_keys=True)}`, but "
                 f"{TEMPLATE} writes `{json.dumps(want[key], sort_keys=True)}`. The README quotes "

@@ -6035,10 +6035,47 @@ out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
 { [ "$out" = "1" ] && [ "$cf5" = ok ]; } && c11=ok || c11=no
 case "$err" in *"README.md: the declaration block also sets \`hooks\`"*) c12=ok ;; *) c12=no ;; esac
 
-[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12" = "okokokokokokokokokokokokok" ] \
+# Exactly one. A second declaration that disagrees is the fail-open shape: compared on the first
+# alone, the guard would certify "the" declaration over a file that also tells a reader to
+# commit something else. Review round 1 found the branch had no case.
+decl_second() { # $1 repo, $2 indent for the appended block
+  python3 - "$1" "$2" <<'PYEOF'
+import json, pathlib, sys
+r, pad = pathlib.Path(sys.argv[1]), sys.argv[2]
+t = json.loads((r / "hooks/templates/claude-code.settings.json").read_text())
+d = {k: t[k] for k in ("extraKnownMarketplaces", "enabledPlugins")}
+d["extraKnownMarketplaces"]["gate-oriented-sdd"]["autoUpdate"] = False
+body = "\n".join(pad + l for l in json.dumps(d, indent=2).split("\n"))
+p = r / "README.md"
+p.write_text(p.read_text() + "\n- a list item\n\n" + pad + "```json\n" + body + "\n" + pad + "```\n")
+PYEOF
+}
+r=$(readme_repo rm-decl-two)
+decl_second "$r" "" && cf6=ok || cf6=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf6" = ok ]; } && c13=ok || c13=no
+case "$err" in *"README.md: carries 2 declaration blocks"*) c14=ok ;; *) c14=no ;; esac
+
+# …and the second one indented under a list item, which is how this README writes the fences
+# in its Updating bullets. A column-0 fence pattern does not see it, so it would be neither
+# counted nor compared. Round 1's MEDIUM on JSON_FENCE.
+r=$(readme_repo rm-decl-two-indented)
+decl_second "$r" "  " && cf7=ok || cf7=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf7" = ok ]; } && c15=ok || c15=no
+case "$err" in *"README.md: carries 2 declaration blocks"*) c16=ok ;; *) c16=no ;; esac
+
+# Python equality says True == 1, and JSON does not: `"autoUpdate": 1` is not what init writes.
+r=$(readme_repo rm-decl-one-for-true)
+decl_edit "$r" README.md '"autoUpdate": true' '"autoUpdate": 1' && cf8=ok || cf8=no
+out=$(run_readme "$r"); err=$(cat "$TMP/rmerr")
+{ [ "$out" = "1" ] && [ "$cf8" = ok ]; } && c17=ok || c17=no
+case "$err" in *"README.md: the declaration's \`extraKnownMarketplaces\`"*) c18=ok ;; *) c18=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17$c18" = "okokokokokokokokokokokokokokokokokokok" ] \
   && report "the README's Claude Code declaration agrees with the template init renders, and each way it stops agreeing is named" ok \
   || report "the README's Claude Code declaration agrees with the template init renders, and each way it stops agreeing is named" no \
-     "control=$c0 none-ja-exit=$c1 none-ja-msg=$c2 autoupdate-exit=$c3 autoupdate-msg=$c4 id-exit=$c5 id-msg=$c6 template-moved-exit=$c7 template-moved-msg=$c8 no-template-exit=$c9 no-template-msg=$c10 extra-key-exit=$c11 extra-key-msg=$c12"
+     "control=$c0 none-ja-exit=$c1 none-ja-msg=$c2 autoupdate-exit=$c3 autoupdate-msg=$c4 id-exit=$c5 id-msg=$c6 template-moved-exit=$c7 template-moved-msg=$c8 no-template-exit=$c9 no-template-msg=$c10 extra-key-exit=$c11 extra-key-msg=$c12 two-exit=$c13 two-msg=$c14 two-indented-exit=$c15 two-indented-msg=$c16 one-for-true-exit=$c17 one-for-true-msg=$c18"
 
 
 # --- Antigravity hook command execution ------------------------------------------
