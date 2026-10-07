@@ -70,6 +70,13 @@ for field in ("name", "description", "version", "author", "license"):
 for stray, why in (
     ("agents", "both harnesses scan it, and this plugin ships no agents; reviewers live in reviewers/"),
     ("CLAUDE.md", "the validator reads it as plugin content; this repository's own is .claude/CLAUDE.md"),
+    # The Claude Code gates ship from .claude-plugin/hooks.json, a path Antigravity's loader
+    # does not read (V5, docs/verified.md). Claude Code's default hooks/hooks.json is merged
+    # with the declared path and sits inside the directory Antigravity loads; a root hooks.json
+    # is Antigravity's own plugin location. Either would carry Claude Code's nested Stop shape
+    # into a file Antigravity parses, and one wrong shape invalidates its whole file. #256.
+    ("hooks.json", "Antigravity reads a root hooks.json; the Claude Code hooks file is .claude-plugin/hooks.json"),
+    ("hooks/hooks.json", "Claude Code merges it with the declared path, and Antigravity loads hooks/; the Claude Code hooks file is .claude-plugin/hooks.json"),
 ):
     if (PLUGIN / stray).exists() or (PLUGIN / stray).is_symlink():
         shown = stray + "/" if stray == "agents" else stray
@@ -171,8 +178,83 @@ if len(errors) == n_before:
                 f"({type(doc).__name__}), so the two templates cannot be compared"
             )
 
+# The plugin's own Claude Code hooks file (#256). Since 0.23.0 the gates reach a Claude Code
+# project from here rather than from a copy `init` made, so this file absent, unregistered or
+# naming a script the plugin does not ship is the install-level fail-open: every project on
+# the machine runs no gate, and nothing says so. Three things are held: the manifest's "hooks"
+# field names it (Claude Code loads a declared path, and hooks/hooks.json is refused above);
+# it is a JSON object; and every command in it names a script that exists under hooks/.
+# Its events then join the template's below, because the Claude Code side of the parity
+# check is now two files: what the plugin runs plus what the project renders.
+plugin_hooks = PLUGIN / ".claude-plugin" / "hooks.json"
+p_doc = None
+if cc:
+    declared = cc.get("hooks")
+    if not isinstance(declared, str):
+        errors.append(
+            'Claude Code manifest has no "hooks" field naming .claude-plugin/hooks.json, so the '
+            "plugin's gates are not registered on Claude Code"
+        )
+    elif (PLUGIN / declared).resolve() != plugin_hooks.resolve():
+        errors.append(
+            f'Claude Code manifest "hooks" names {declared!r}; the plugin\'s hooks file is '
+            f"{plugin_hooks.relative_to(ROOT)}"
+        )
+n_before = len(errors)
+p_doc = load(plugin_hooks)
+if len(errors) == n_before and not isinstance(p_doc, dict):
+    errors.append(
+        f"{plugin_hooks.relative_to(ROOT)} is valid JSON but not an object "
+        f"({type(p_doc).__name__}), so its hooks cannot be read"
+    )
+    p_doc = None
+def scripts_in(entries) -> set[str]:
+    """Every `*.sh` name in a `command` string anywhere under these hook entries. Walks both
+    shapes — Claude Code's nested {hooks: [{command}]} and Antigravity's flat {command} — so one
+    reader serves the plugin file and the template."""
+    found: set[str] = set()
+
+    def walk(node):
+        if isinstance(node, dict):
+            cmd = node.get("command")
+            if isinstance(cmd, str):
+                found.update(re.findall(r"[A-Za-z0-9_.-]+\.sh", cmd))
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(entries)
+    return found
+
+
+p_gates: dict[str, set[str]] = {}
+if isinstance(p_doc, dict):
+    for event, entries in (p_doc.get("hooks") or {}).items():
+        names = scripts_in(entries)
+        for name in sorted(names):
+            if not (PLUGIN / "hooks" / name).is_file():
+                errors.append(
+                    f"{plugin_hooks.relative_to(ROOT)} {event}: command names hooks/{name}, "
+                    "which the plugin does not ship"
+                )
+        # Every command goes through the wrapper. A gate run directly from here loses the
+        # .steering/ guard and the stand-down, and every project on the machine gets the
+        # gate's bootstrap block at Stop. Review round 2.
+        for e in entries if isinstance(entries, list) else []:
+            if "plugin-gate.sh" not in scripts_in(e):
+                errors.append(
+                    f"{plugin_hooks.relative_to(ROOT)} {event}: an entry runs "
+                    f"{sorted(scripts_in(e) - {'plugin-gate.sh'})} without hooks/plugin-gate.sh"
+                )
+        # The wrapper is how the gates are run, not a gate; what it is handed is what counts.
+        p_gates[event] = names - {"plugin-gate.sh"}
+
 if isinstance(a, dict) and isinstance(b, dict):
     a_events = set((a.get("hooks") or {}).keys())
+    if isinstance(p_doc, dict):
+        a_events |= set((p_doc.get("hooks") or {}).keys())
     envelope = b.get(cc.get("name") if cc else "", {})
     b_events = {k for k in envelope if k != "enabled"}
 
@@ -193,11 +275,25 @@ if isinstance(a, dict) and isinstance(b, dict):
     # Claude Code uses SessionStart for steering digest injection; Antigravity uses PreInvocation (turn 1).
     if (a_events - {"SessionStart"}) != (b_events - {"PreInvocation"}):
         errors.append(
-            f"hook events differ: Claude Code {sorted(a_events)} vs Antigravity {sorted(b_events)} "
+            f"hook events differ: Claude Code {sorted(a_events)} (plugin hooks file plus template) "
+            f"vs Antigravity {sorted(b_events)} "
             "(SessionStart on Claude Code pairs with PreInvocation on Antigravity for steering digest)"
         )
     if "SessionStart" not in a_events:
-        errors.append("Claude Code hooks template is missing SessionStart for steering digest")
+        errors.append("Claude Code hooks (plugin file plus template) are missing SessionStart for steering digest")
+    # Per gate, for the events both sides declare. The plugin file is now the only place the
+    # Claude Code gates are declared, so a Stop that kept one gate and lost the other would
+    # ship the lost one to no Claude Code project while the event sets still matched. The
+    # digest pairs by event only, because its two scripts have different names by design.
+    for event in sorted(set(p_gates) & b_events):
+        theirs = scripts_in(envelope.get(event))
+        for missing, where in ((theirs - p_gates[event], "Claude Code"), (p_gates[event] - theirs, "Antigravity")):
+            if missing:
+                errors.append(
+                    f"{plugin_hooks.relative_to(ROOT)} {event} runs {sorted(p_gates[event])}, and the "
+                    f"Antigravity template runs {sorted(theirs)}: {', '.join(sorted(missing))} missing "
+                    f"on {where}"
+                )
     if "PreInvocation" not in b_events:
         errors.append("Antigravity hooks template is missing PreInvocation for steering digest")
 

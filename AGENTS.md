@@ -20,7 +20,7 @@ A refactor that loads the rulebook into normal sessions, or turns an enforced ga
 | Artifact | Claude Code | Antigravity |
 | :-- | :-- | :-- |
 | Manifest | `.claude-plugin/plugin.json` | `plugin.json` |
-| Hooks | `hooks/templates/claude-code.settings.json`, rendered into the project by `init` | `hooks/templates/antigravity.hooks.json`, rendered the same way (plugin-name envelope, `enabled` flag) |
+| Hooks | the gates ship from `.claude-plugin/hooks.json`, which runs `hooks/plugin-gate.sh`; `hooks/templates/claude-code.settings.json`, rendered into the project by `init`, carries the marketplace declaration and the fast check only (#256, ADR-8) | `hooks/templates/antigravity.hooks.json`, rendered the same way (plugin-name envelope, `enabled` flag), with the gates copied beside it |
 | Skills | `skills/<name>/SKILL.md` | same path, same format |
 | Reviewers | `reviewers/<name>.md`, copied by `init` into `.claude/agents/` | the same file, copied into `.agents/agents/` |
 | Rules | `AGENTS.md` | `rules/AGENTS.md` (symlinked, auto-discovered by plugin loader) |
@@ -28,7 +28,7 @@ A refactor that loads the rulebook into normal sessions, or turns an enforced ga
 
 Keeping the plugin at the root rather than nesting it under `plugins/<name>/` means the clone directory *is* the installable unit: `agy plugin install ./gate-oriented-sdd` takes the repository itself, and the Claude Code marketplace entry points at `"./"`. One directory, two install paths, nothing duplicated between them.
 
-Skills, reviewers, and rules are **one copy read by both** (rules symlinked at `rules/AGENTS.md`). There is no sync step and no templating engine, so drift between the two targets is not possible — only the two hook files and the two manifests differ, and `scripts/check-manifests.py` verifies they agree.
+Skills, reviewers, and rules are **one copy read by both** (rules symlinked at `rules/AGENTS.md`). There is no sync step and no templating engine, so drift between the two targets is not possible — only the hook files and the two manifests differ, and `scripts/check-manifests.py` verifies they agree. The plugin's own `.claude-plugin/hooks.json` is the one hook file neither harness's template renders: it is what Claude Code runs, at a path Antigravity's loader does not read, and the guard refuses a `hooks/hooks.json` or a root `hooks.json` for that reason.
 
 ## Known fidelity gap
 
@@ -75,7 +75,7 @@ Run these before every commit. The `- Validators:` line in `.steering/tech.md` i
 
 Two things are deliberately unlike a normal install, and both would look like mistakes:
 
-- **The hooks are not copied.** `.claude/settings.json` points at the repository's own `hooks/*.sh`. Every other project copies them, because a gate must run with the project as its working directory — here the project *is* the source, so a copy would only create drift, and a drifted copy means this repo tests a stale version of its own enforcement.
+- **The hooks are not copied, and not run from the installed plugin either.** `.claude/settings.json` points at the repository's own `hooks/*.sh`. Every Antigravity project copies them, because a gate must run with the project as its working directory, and every Claude Code project runs them from the plugin, whose gates stand down here on exactly those settings entries (#256) — here the project *is* the source, so a copy would only create drift, and a drifted copy means this repo tests a stale version of its own enforcement.
 - **`.claude/agents/gate-sdd-reviewer/` has no `rules-lock.json`.** `assets/check-locks.py --update` can refresh a lock but cannot create one (#19). The rulebook stays unpinned until #19 ships a bootstrap, and `docs/decisions/ADR-6` records why.
 
 The project reviewer is `gate-sdd-reviewer` and is unrelated to the three reference reviewers in `reviewers/`, which are the product. Its anchor is **gates never fail open**.

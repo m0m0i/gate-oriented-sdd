@@ -10,6 +10,7 @@ What each harness actually supports, and what this harness does about the differ
 | Marketplace / git install | yes | no — local path only | verified from docs |
 | Quality gate blocks a turn | `Stop`, exit 2 | `Stop`, `{"decision":"continue"}` | **verified — both block** |
 | Review-receipt gate | `Stop` | `Stop` | verified via the same mechanism |
+| Gate delivery | from the plugin: `.claude-plugin/hooks.json` runs `hooks/plugin-gate.sh`, and a fix arrives by plugin update | copied into `.agents/hooks/` by `init`, and a fix arrives by running `init` again | **verified on Claude Code** (V1, V2 in `verified.md`); the Antigravity copy is the cwd constraint below |
 | Per-edit feedback | `PostToolUse`, exit 2 to stderr | `PostToolUse`, observe-only | verified — both fire |
 | Deny a tool call outright | `PreToolUse` | `PreToolUse`, `decision: deny` | not exercised by this harness |
 | Rules discovery | root `AGENTS.md` (read as canonical context) | `rules/AGENTS.md` (auto-discovered and merged by plugin loader) | verified — symlinked, kept in sync by `check-manifests.py` |
@@ -28,7 +29,7 @@ On Claude Code, `SessionStart` re-fires on session resume and context compaction
 
 **Hook schema.** Antigravity's schema is mixed: tool events take the nested `{matcher, hooks: [...]}` form, non-tool events take a flat `{type, command, timeout}`. Getting it wrong invalidates the entire file with an error that reads like a missing field. `scripts/check-manifests.py` enforces the shapes so the mistake cannot ship.
 
-**Working directory.** A gate must run with the project as cwd. Claude Code plugin hooks already do; on Antigravity, a plugin-shipped hook gets the plugin directory instead. `init` therefore installs project-local hooks for both, which is also what the gate needs anyway, since validators differ per project.
+**Working directory.** A gate must run with the project as cwd. A Claude Code plugin hook does, with `CLAUDE_PLUGIN_ROOT` naming the plugin (verified, V1), so since 0.23.0 the Claude Code gates ship from the plugin's `.claude-plugin/hooks.json` and `init` copies nothing there; `hooks/plugin-gate.sh` keeps them silent in a project without `.steering/` and stands them down where a project still runs its own copy (#256, ADR-8). On Antigravity a plugin-shipped hook gets the plugin directory instead, so `init` still installs project-local copies there, and a fix reaches an Antigravity project only by running `init` again. The per-project difference was never in the copy: validators come from `.steering/tech.md`.
 
 **Steering digest.** Claude Code delivers the steering digest on `SessionStart`. Antigravity delivers it via `PreInvocation` turn 1 step injection (`hooks/steering-digest-antigravity.sh`), emitting `{"injectSteps": [{"ephemeralMessage": "..."}]}` on turn 1 and `{}` thereafter. `scripts/check-manifests.py` verifies both hook templates declare their respective steering hook.
 

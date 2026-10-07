@@ -10,8 +10,8 @@ The version table below carries a date beside each row. Claude Code's row was re
 
 | Component | Version |
 | :-- | :-- |
-| Claude Code | 2.1.289 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, and the 2026-10-05 section below. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
-| Antigravity CLI (`agy`) | 1.2.16 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0. The 2026-08-21 rows were run at 1.1.17 |
+| Claude Code | 2.1.290 — the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
+| Antigravity CLI (`agy`) | 1.2.16 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, and the #256 section's V5. The 2026-08-21 rows were run at 1.1.17 |
 | Antigravity IDE | 2.3.1 — verified 2026-08-21, and not re-run since |
 | Platform | macOS (darwin, arm64) |
 
@@ -289,10 +289,30 @@ Run 2026-09-12 (#126), gate-sdd 0.7.0 (`skills/` identical to the installed copy
 
 **What this run does not support:** that a rulebook *with* frontmatter registers as an agent in a project's `.claude/agents/`. The guard and five documents say so, from Claude Code's behaviour in a plugin's `agents/` and from a project's frontmatter-less files not registering; the positive case in a project was not run. Nor what the Antigravity runtime does with the files its loader processes. `agy plugin validate` is a validator, and no Antigravity session was started. Which eight of the twelve files it counted was not established either. Whether a plugin-registered reviewer, invoked before `init`, fails on its missing contract or guesses a path was read from the reviewer's text and not run. And `.claude/CLAUDE.md` with a relative import was measured in this repository only, which is evidence for #239 and not an answer to it.
 
+## The Claude Code gates from the plugin — V1 to V5 (#256)
+
+**Run on 2026-10-06 and 2026-10-07, Claude Code 2.1.290 and Antigravity CLI 1.2.16**, before #256's spec was written, because its design rests on these and #245 listed them as undocumented. V1, V2 and V5 ran in scratch directories and touched no user-scope state. V3 and V4 ran against the maintainer's own user-scope install, with permission, and the state was restored afterward: the one project-scope entry the run created was uninstalled, and the marketplace clone was confirmed at the commit it started on.
+
+**V1 — a plugin-shipped `Stop` or `SessionStart` hook runs with the project as cwd. Holds.** A scratch plugin with `"hooks": "./.claude-plugin/hooks.json"` in its manifest, whose `Stop` and `SessionStart` commands appended `pwd` and `$CLAUDE_PLUGIN_ROOT` to files, was loaded with `--plugin-dir` into a headless session (`claude -p --tools "" --strict-mcp-config --max-turns 1`) in a scratch git project. Both hooks fired once; both wrote the project directory as cwd and the plugin directory as `CLAUDE_PLUGIN_ROOT`. The manifest field with a path under `.claude-plugin/` was loaded, which is what the plugin now relies on.
+
+**V2 — the same event defined by the plugin and by the project's `.claude/settings.json`. Both run.** The same session had a project-level `Stop` hook as well. It fired once, beside the plugin's. So the harness does not deduplicate, and `hooks/plugin-gate.sh`'s stand-down is what keeps a gate from running twice.
+
+**V3 — a project-scope `#ref` pin under a marketplace name the user scope already knows. Ignored, and it cannot move the shared clone.** The user scope held `gate-oriented-sdd` unpinned with `"autoUpdate": true` and `gate-sdd@gate-oriented-sdd` installed at 0.22.0. A scratch project declared the same marketplace name with `#gate-sdd--v0.21.5` and enabled the plugin. A session there loaded the cached 0.22.0 (`Attempting to load skills from plugin gate-sdd default skillsPath: …/cache/gate-oriented-sdd/gate-sdd/0.22.0/skills`); the marketplace clone stayed at `ab518af`; no cache directory for 0.21.5 appeared; `known_marketplaces.json` did not change; `installed_plugins.json` gained a project-scope entry at the existing 0.22.0 path. `claude plugin install gate-sdd@gate-oriented-sdd --scope project` inside that project answered `already installed (scope: project)` and moved nothing. **Not run:** a machine where only the project declares the marketplace, pinned. That is the branch where a pin could act, and the README (#257) says so rather than guessing.
+
+**V4 — two versions cached for one plugin id. Could not be produced.** Every scope entry for `gate-sdd@gate-oriented-sdd` pointed at the one cached 0.22.0, and the session loaded that path. The pin that would have produced a second version was ignored (V3), so which of two versions loads inside a project is unanswered here.
+
+**V5 — Antigravity and `.claude-plugin/hooks.json`. Not seen, at the validator level.** A scratch copy of this repository's shipped tree, before: `agy plugin validate .` reports `hooks : skipped (not found)`. After adding `.claude-plugin/hooks.json` and the manifest's `"hooks"` field: the same line. With a root `hooks.json` as a control: `hooks : 1 processed`. The runtime loader's log line (`hooks_manager.go: loaded N named hooks …`) was not read, so this is the validator's view and not the loader's; `scripts/check-manifests.py` refuses a root `hooks.json` and a `hooks/hooks.json` either way.
+
+### What this run does not support
+
+Whether auto-update actually delivers a new plugin version to a project between sessions: the run installed and loaded, and never waited for an update. What a clone sees when the `enabledPlugins` prompt is declined, or the marketplace clone fails: that path was not run, and ADR-8 records it as a consequence rather than a measurement. Whether a gate run from the plugin behaves identically to the copy in every respect: `scripts/test-gates.sh` runs the wrapper against the real gates in fixtures, and the maintainer's next real session on a migrated project is the first live run. V3's unrun branch, above.
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
 - [ ] Whether plugin-shipped `hooks.json` fires identically to the global one.
+- [ ] A Claude Code project migrated by `init` at 0.23.0, in a real session: the plugin's gates blocking, the project's CI finding the library through `GATE_SDD_HOOKS`, and a plugin update arriving between sessions (#256).
+- [ ] V3's other branch: a project-scope `#ref` pin on a machine whose user scope does not know the marketplace (#256).
 - [x] `PreInvocation` step injection as the `SessionStart` substitute, including a once-per-session guard (#144).
 - [ ] Whether `agy plugin install` targets `~/.gemini/config/plugins/` (where the IDE's plugins live) or `~/.gemini/antigravity-cli/plugins/` (what the CLI docs describe).
 - [ ] Antigravity subagent invocation contract, for the reviewer (semantics documented in `skills/implement/SKILL.md` and `docs/fidelity.md`; runtime invocation behavior pending verification).

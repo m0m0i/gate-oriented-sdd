@@ -30,15 +30,40 @@ ANCHORS="
 .steering/tech.md|Target
 "
 
-# gate-lib.sh is `hooks/` in the harness repo and `.claude/hooks/` in a project. Finding it is
-# the problem that produced #16, so this FAILS when it cannot — a guard that skips because it
-# could not locate its own dependency is the bug this script exists to prevent.
+# gate-lib.sh is `hooks/` in the harness repo, `.agents/hooks/` in an Antigravity project, and
+# `.claude/hooks/` in a Claude Code project installed before 0.23.0. Since #256 a Claude Code
+# project has no copy: its gates run from the plugin, and this check finds the library the same
+# two ways. GATE_SDD_HOOKS is the explicit answer, for CI (where `init` has the workflow check
+# the plugin out) and for a run by hand, and it is read first. $CLAUDE_PLUGIN_ROOT/hooks is
+# what the plugin's own gate puts in every validator's environment at turn end, and it is read
+# LAST, after the three directories: this repository's turn-end validators carry the installed
+# plugin's root in their environment too, and a dogfood run must read hooks/ from source rather
+# than from an installed copy. Finding the library is the problem that produced #16, so this
+# FAILS when it cannot — a guard that skips because it could not locate its own dependency is
+# the bug this script exists to prevent — and the failure names every place it looked.
 lib=""
-for d in hooks .claude/hooks .agents/hooks; do
-  [ -f "$d/gate-lib.sh" ] && { lib="$d/gate-lib.sh"; break; }
-done
+if [ -n "${GATE_SDD_HOOKS:-}" ]; then
+  # Set and wrong is not the same as unset: a workflow whose checkout path and this variable
+  # disagree must not fall through to whatever copy is beside this script while saying it
+  # reads the plugin. It fails here, naming the path.
+  if [ -f "$GATE_SDD_HOOKS/gate-lib.sh" ]; then
+    lib="$GATE_SDD_HOOKS/gate-lib.sh"
+  else
+    echo "check-steering-anchors: GATE_SDD_HOOKS is set to '$GATE_SDD_HOOKS' and there is no gate-lib.sh there." >&2
+    echo "  Point it at a checkout of the plugin's hooks/ directory, or unset it to search the project." >&2
+    exit 1
+  fi
+fi
 if [ -z "$lib" ]; then
-  echo "check-steering-anchors: cannot find gate-lib.sh in hooks/, .claude/hooks/ or .agents/hooks/." >&2
+  for d in hooks .claude/hooks .agents/hooks; do
+    [ -f "$d/gate-lib.sh" ] && { lib="$d/gate-lib.sh"; break; }
+  done
+fi
+[ -z "$lib" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/hooks/gate-lib.sh" ] && lib="$CLAUDE_PLUGIN_ROOT/hooks/gate-lib.sh"
+if [ -z "$lib" ]; then
+  echo "check-steering-anchors: cannot find gate-lib.sh in \$GATE_SDD_HOOKS, hooks/, .claude/hooks/, .agents/hooks/ or \$CLAUDE_PLUGIN_ROOT/hooks/." >&2
+  echo "  A Claude Code project installed at 0.23.0 or later has no copy: set GATE_SDD_HOOKS to a checkout" >&2
+  echo "  of the plugin's hooks/ directory, which is what its CI does." >&2
   echo "  Without it this check cannot ask the question the gates ask, and a guard that cannot" >&2
   echo "  do its job must not report success. See #16." >&2
   exit 1

@@ -6,7 +6,7 @@ Machine-read lines. Each must stay on ONE physical line — the gates read them 
 
 - Validators: ./scripts/check-leakage.sh, ./scripts/check-manifests.py, ./scripts/check-markdown-fences.py, ./scripts/check-receipt-schema.py, ./scripts/check-skill-contracts.py, ./scripts/check-templates.py, ./assets/check-steering-anchors.sh, ./assets/check-locks.py, ./assets/check-document-set.py, ./scripts/check-contract-path.py, ./scripts/check-readme-claims.py, ./scripts/check-reviewer-allow-list.py, ./scripts/test-gates.sh
 - Reviewer: gate-sdd-reviewer
-- Source globs: :(glob)rules/**/*.md :(glob)skills/**/*.md :(glob)reviewers/**/*.md :(glob)hooks/**/*.sh :(glob)assets/**/*.py :(glob)assets/**/*.sh :(glob)assets/**/*.md :(glob)scripts/**/*.py :(glob)scripts/**/*.sh
+- Source globs: :(glob)rules/**/*.md :(glob)skills/**/*.md :(glob)reviewers/**/*.md :(glob)hooks/**/*.sh :(glob)assets/**/*.py :(glob)assets/**/*.sh :(glob)assets/**/*.md :(glob)scripts/**/*.py :(glob)scripts/**/*.sh :(glob).claude-plugin/hooks.json
 - Docs: docs/
 - Mode: full
 
@@ -71,16 +71,17 @@ So it runs in CI, on pull requests and on pushes to `main`, as its own job rathe
 the job's and move by hand. By hand it is the job's three commands with the same pins — on #81 they
 were run through `uvx`, which installs nothing into the repository. The subject is narrow on
 purpose, for two different reasons. `scripts/` is never copied anywhere, so nothing a consumer
-runs is in it. `hooks/` is copied — `init` puts all five hooks into every project — and is not
-yet linted because its four entry hooks still carry ten findings under the same pin: `SC1007` ×4,
+runs is in it. `hooks/` reaches consumers — `init` copies all five hooks into every Antigravity project, and a
+Claude Code project runs them from the plugin since #256 — and is not yet linted because its
+entry hooks still carry the findings counted before #256 under the same pin (`plugin-gate.sh`
+added a fifth `CDPATH= cd` and a fourth bare `cd "$repo_root"` since): `SC1007` ×4,
 the `CDPATH= cd` idiom; `SC1091` ×3, the sourced library not followed; and `SC2164` ×3, a
 `cd "$repo_root"` with nothing after it, which is a gate carrying on in the wrong directory and
 so the guard sweep's class rather than a lint fix. The five deliberate word-splits — `$_globs`
 above, and the quality gate's `set --` — are no longer among them: each is suppressed at its line
 with its reason, and each names the `test-gates.sh` case that goes red if the quote is added —
 the five whose report reads "a line of several globs reaches … one pathspec per glob" — so the
-file can be linted without being "fixed". `hooks/*.sh` joins the step when the
-ten are decided, which is #207's follow-up; the `SC2164`s go with the sweep. #81, #207.
+file can be linted without being "fixed". `hooks/*.sh` joins the step when those are decided, which is #207's follow-up; the `SC2164`s go with the sweep. #81, #207.
 
 ## Commit and branch convention
 
@@ -88,7 +89,7 @@ Conventional commits — `feat:`, `fix:`, `docs:`, `chore:` — subject in the i
 
 ## Gates
 
-Both hooks run from the repository's own `hooks/` directory rather than from a copy under `.claude/`. This repo is the source of those scripts, and a second copy would drift — which would mean the repo tests a stale version of its own enforcement. It is the one project where pointing at the source is correct; every other install copies.
+Both hooks run from the repository's own `hooks/` directory rather than from a copy under `.claude/`. This repo is the source of those scripts, and a second copy would drift — which would mean the repo tests a stale version of its own enforcement. It is the one project where pointing at the source is correct; every Antigravity install copies, and a Claude Code install runs them from the installed plugin, whose gates stand down here because this file's `Stop` and `SessionStart` entries run the source (#256).
 
 ## Where the contract lives
 

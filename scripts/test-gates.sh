@@ -2120,6 +2120,114 @@ if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-lib-out" "$TMP/bs-cp-out" \
      "discovered=$bs_regions/$c1 identical=$c2 channels=$c3 (lib exit=$bs_libexit, copy exit=$bs_cpexit)"
 
 
+# --- hooks/plugin-gate.sh: the gates as the plugin runs them (#256) ---------------------
+#
+# On Claude Code the gates ship from the plugin: .claude-plugin/hooks.json runs
+# `sh "${CLAUDE_PLUGIN_ROOT}/hooks/plugin-gate.sh" <gate>` on Stop and SessionStart, and the
+# wrapper decides whether the gate runs at all. Three answers, and the cases below pin each:
+# silent when the project has no .steering/ (a user-scope install in a project that does not
+# use the harness); stand down when the project's own settings run a copy of the same gate
+# under the same event (V2: the harness runs both otherwise); otherwise exec the gate beside
+# the wrapper, with the project as cwd. A gate missing from the plugin blocks: a broken install
+# is loud, not silent. The fixture's validator proves the cwd — `test -f src.txt` passes only
+# from the project root — and proves the gate ran, by exiting 1 so the gate blocks.
+pg_repo() { # pg_repo <name> — prints the fixture root; plugin/ and project/ beneath it
+  _p="$TMP/$1"; mkdir -p "$_p/plugin/hooks" "$_p/project/.steering" "$_p/project/.claude"
+  for f in gate-lib.sh quality-gate.sh review-gate.sh steering-digest.sh plugin-gate.sh; do
+    [ -f "$ROOT/hooks/$f" ] && cp "$ROOT/hooks/$f" "$_p/plugin/hooks/"
+  done
+  printf -- '- Validators: sh -c "test -f src.txt && echo RAN >&2; exit 1"\n- Source globs: *.txt\n- Reviewer: test-reviewer\n' > "$_p/project/.steering/tech.md"
+  ( cd "$_p/project" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && echo one > src.txt && git add -A && git commit -qm init && echo more >> src.txt ) >/dev/null 2>&1
+  echo "$_p"
+}
+run_pg() { # run_pg <fixture root> <gate> — runs the wrapper as hooks.json does, from the project
+  ( cd "$1/project" && CLAUDE_PLUGIN_ROOT="$1/plugin" sh "$1/plugin/hooks/plugin-gate.sh" "$2" >"$TMP/pgout" 2>"$TMP/pgerr"; echo "exit=$?" )
+}
+
+# 205. #256 AC1, AC7 — the plain case. A project with .steering/ and no settings entry: the
+#      wrapper execs the quality gate, which runs the validator from the project root, finds it
+#      failing, and blocks on both channels. RAN on stderr is the cwd proof.
+p=$(pg_repo pg-plain); out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$(cat "$TMP/pgout")" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$(cat "$TMP/pgerr")" in *RAN*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "plugin-gate runs the quality gate from the plugin with the project as cwd, and it blocks" ok \
+  || report "plugin-gate runs the quality gate from the plugin with the project as cwd, and it blocks" no "exit=$c1 json=$c2 ran=$c3 ($out; $(head -c 200 "$TMP/pgerr"))"
+
+# 206. #256 AC2 — no .steering/, no sound. All three gates, because the digest would otherwise
+#      print "## Repo facts" into every session of every project on the machine.
+p=$(pg_repo pg-nosteer); rm -rf "$p/project/.steering"; all=ok
+for g in quality-gate.sh review-gate.sh steering-digest.sh; do
+  out=$(run_pg "$p" "$g")
+  case "$out" in *"exit=0"*) ;; *) all="no($g:$out)" ;; esac
+  [ -s "$TMP/pgout" ] && all="no($g: stdout $(head -c 80 "$TMP/pgout"))"
+  [ -s "$TMP/pgerr" ] && all="no($g: stderr $(head -c 80 "$TMP/pgerr"))"
+done
+[ "$all" = ok ] && report "plugin-gate is silent in a project without .steering/" ok \
+  || report "plugin-gate is silent in a project without .steering/" no "$all"
+
+# 207. #256 AC3 — stand-down, and what is NOT evidence. Four settings shapes, one fixture each:
+#      (a) .claude/settings.json runs quality-gate.sh under "Stop" — stand down, silent;
+#      (b) .claude/settings.local.json does — the same;
+#      (c) the copied file is on disk and no settings name it — the plugin's gate runs, because
+#          a file alone is not evidence it runs (backlog row 1, under `- Owns:`);
+#      (d) the settings name quality-gate.sh under "PostToolUse" only — runs, the event is wrong.
+#      (e) the settings name review-gate.sh under "Stop" — the quality gate still runs: the
+#          stand-down is per gate, not per event.
+sd='{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh"}]}]}}'
+with_copy() { mkdir -p "$1/project/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$1/project/.claude/hooks/"; }
+p=$(pg_repo pg-sd-a); with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=0"*) a=ok ;; *) a="no($out)" ;; esac; [ -s "$TMP/pgerr" ] && a="no(stderr)"
+p=$(pg_repo pg-sd-b); with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.local.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=0"*) b=ok ;; *) b="no($out)" ;; esac; [ -s "$TMP/pgerr" ] && b="no(stderr)"
+p=$(pg_repo pg-sd-c); mkdir -p "$p/project/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/.claude/hooks/"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) c=ok ;; *) c="no($out)" ;; esac
+p=$(pg_repo pg-sd-d); printf '%s\n' '{"hooks":{"PostToolUse":[{"matcher":"Write","hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) d=ok ;; *) d="no($out)" ;; esac
+p=$(pg_repo pg-sd-e); printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/review-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) e=ok ;; *) e="no($out)" ;; esac
+#      (f) the gate's name NOT on a command line, and "Stop" belonging to another hook. Claude
+#          Code writes `"permissions": {"allow": ["Bash(sh .claude/hooks/quality-gate.sh:*)"]}`
+#          into settings.local.json when a by-hand run is approved with "don't ask again", and a
+#          Stop entry for a notification is the documented example. Two whole-file greps joined
+#          by nothing read that as the gate running under Stop. Review round 1's HIGH.
+p=$(pg_repo pg-sd-f); printf '%s\n' '{"permissions":{"allow":["Bash(sh .claude/hooks/quality-gate.sh:*)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"osascript -e \"display notification\""}]}]}}' > "$p/project/.claude/settings.local.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) f=ok ;; *) f="no($out)" ;; esac
+#      (g) the entry every pre-0.23.0 project carries, with its copy gone: `[ -f
+#          .claude/hooks/quality-gate.sh ] || exit 0; sh .claude/hooks/quality-gate.sh` exits
+#          0 by its own guard, so an interrupted migration — scripts deleted, entries not yet —
+#          had the project's entry silent and the plugin's wrapper standing down on it. Nothing
+#          ran. The entry is evidence only together with the file it names. Review round 2.
+#          Fixtures (a) and (b) therefore carry the copy on disk, as a migrated-in-place
+#          project does; (g) is (a) without it.
+p=$(pg_repo pg-sd-g); printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"[ -f .claude/hooks/quality-gate.sh ] || exit 0; sh .claude/hooks/quality-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) g=ok ;; *) g="no($out)" ;; esac
+[ "$a$b$c$d$e$f$g" = "okokokokokokok" ] && report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" ok \
+  || report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" no "settings=$a local=$b file-alone=$c other-event=$d other-gate=$e permission-plus-other-stop=$f entry-without-file=$g"
+
+# 208. #256 AC3 — the digest's event is SessionStart, not Stop. Named under SessionStart it
+#      stands down; named under Stop, where no digest runs, it prints the digest.
+p=$(pg_repo pg-dg-a); mkdir -p "$p/project/.claude/hooks"; cp "$ROOT/hooks/steering-digest.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/.claude/hooks/"
+printf '%s\n' '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"sh .claude/hooks/steering-digest.sh"}]}]}}' > "$p/project/.claude/settings.json"
+out=$(run_pg "$p" steering-digest.sh); case "$out" in *"exit=0"*) a=ok ;; *) a="no($out)" ;; esac; [ -s "$TMP/pgout" ] && a="no(printed)"
+p=$(pg_repo pg-dg-b); printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/steering-digest.sh"}]}]}}' > "$p/project/.claude/settings.json"
+out=$(run_pg "$p" steering-digest.sh); case "$(cat "$TMP/pgout")" in *"Repo facts"*) b=ok ;; *) b="no($out: $(head -c 80 "$TMP/pgout"))" ;; esac
+[ "$a$b" = "okok" ] && report "plugin-gate pairs the digest with SessionStart" ok \
+  || report "plugin-gate pairs the digest with SessionStart" no "session-start=$a stop=$b"
+
+# 209. #256 — a broken install is loud. A gate the wrapper cannot find beside itself, and a name
+#      the wrapper does not run, both block with a remedy rather than exiting 0 or 127.
+p=$(pg_repo pg-missing); rm -f "$p/plugin/hooks/review-gate.sh"; out=$(run_pg "$p" review-gate.sh)
+case "$out" in *"exit=2"*) a=ok ;; *) a="no($out)" ;; esac
+case "$(cat "$TMP/pgout")" in *'"decision":"continue"'*) a2=ok ;; *) a2=no ;; esac
+case "$(cat "$TMP/pgerr")" in *"install"*) a3=ok ;; *) a3=no ;; esac
+p=$(pg_repo pg-badname); out=$(run_pg "$p" ../../etc/passwd)
+case "$out" in *"exit=2"*) b=ok ;; *) b="no($out)" ;; esac
+out=$(run_pg "$p" ""); case "$out" in *"exit=2"*) b2=ok ;; *) b2="no($out)" ;; esac
+[ "$a$a2$a3$b$b2" = "okokokokok" ] && report "plugin-gate blocks on a gate it cannot find or does not run" ok \
+  || report "plugin-gate blocks on a gate it cannot find or does not run" no "missing=$a json=$a2 remedy=$a3 path=$b empty=$b2"
+
 # --- guards: assets/check-locks.py -------------------------------------------------
 #
 # The lock guard answers "has a rulebook drifted from what was agreed". It can also answer
@@ -2610,6 +2718,76 @@ case "$(cat "$TMP/dgout")" in *"degraded"*) c1=ok ;; *) c1=no ;; esac
 [ -s "$TMP/dgerr" ] && c2=no || c2=ok
 [ "$c1$c2" = "okok" ] && report "a stale gate-lib degrades the digest visibly, not silently" ok \
   || report "a stale gate-lib degrades the digest visibly, not silently" no "visible=$c1 clean-stderr=$c2"
+
+# --- assets: where the library is, once the gates ship from the plugin (#256) -----------
+#
+# Both shipped checks source gate-lib.sh to ask the gates' own question. Until #256 they looked
+# in hooks/, .claude/hooks/ and .agents/hooks/, which are where a copy lived. A Claude Code
+# project migrated by `init` has no copy, so the checks learn two more places: GATE_SDD_HOOKS,
+# the explicit answer for CI and a by-hand run, first; and $CLAUDE_PLUGIN_ROOT/hooks, which the
+# plugin's own gate puts in every validator's environment at turn end, LAST. Last, because this
+# repository's turn-end validators run with the installed plugin's root in their environment
+# too, and a dogfood run must read hooks/ from source, not an installed copy. The order is the
+# whole point of these cases.
+
+# 215. #256 AC5 — GATE_SDD_HOOKS, then the plugin root, in a project with no copy. The error
+#      names both variables when neither is set and no copy exists, so a by-hand run in a
+#      migrated project is told what to set rather than told to re-copy a file that should not
+#      exist.
+lib_elsewhere() { # lib_elsewhere <name> — a directory holding only the plugin's gate-lib.sh
+  mkdir -p "$TMP/$1/hooks" && cp "$ROOT/hooks/gate-lib.sh" "$TMP/$1/hooks/" && echo "$TMP/$1"
+}
+L=$(lib_elsewhere lib-plugin)
+r=$(anchor_repo anc-env-var '- Owns: x'); rm -f "$r/hooks/gate-lib.sh"
+out=$( cd "$r" && GATE_SDD_HOOKS="$L/hooks" sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" )
+[ "$out" = "0" ] && a=ok || a="no(exit=$out: $(head -c 120 "$TMP/aerr"))"
+r=$(anchor_repo anc-plugin-root '- Owns: x'); rm -f "$r/hooks/gate-lib.sh"
+out=$( cd "$r" && CLAUDE_PLUGIN_ROOT="$L" sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" )
+[ "$out" = "0" ] && b=ok || b="no(exit=$out: $(head -c 120 "$TMP/aerr"))"
+r=$(anchor_repo anc-nowhere '- Owns: x'); rm -f "$r/hooks/gate-lib.sh"
+out=$( cd "$r" && env -u GATE_SDD_HOOKS -u CLAUDE_PLUGIN_ROOT sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" ); err=$(cat "$TMP/aerr")
+[ "$out" = "1" ] && c=ok || c="no(exit=$out)"
+case "$err" in *GATE_SDD_HOOKS*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *CLAUDE_PLUGIN_ROOT*) c3=ok ;; *) c3=no ;; esac
+# The pin: a copy beside the check wins over a plugin root whose library is broken.
+B=$(lib_elsewhere lib-broken); : > "$B/hooks/gate-lib.sh"
+r=$(anchor_repo anc-local-wins '- Owns: x')
+out=$( cd "$r" && CLAUDE_PLUGIN_ROOT="$B" sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" )
+[ "$out" = "0" ] && d=ok || d="no(exit=$out: $(head -c 120 "$TMP/aerr"))"
+# The variable set and pointing at a directory with no library is an answer that is wrong, not
+# an answer that is missing: it fails naming the path, rather than reading whatever copy is
+# beside the check while the workflow says it reads the plugin. Review round 1's LOW.
+r=$(anchor_repo anc-env-wrong '- Owns: x')
+out=$( cd "$r" && GATE_SDD_HOOKS="$TMP/no-such-dir/hooks" sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" ); err=$(cat "$TMP/aerr")
+[ "$out" = "1" ] && e=ok || e="no(exit=$out)"
+case "$err" in *"no-such-dir"*) e2=ok ;; *) e2=no ;; esac
+[ "$a$b$c$c2$c3$d$e$e2" = "okokokokokokokok" ] && report "check-steering-anchors finds the library by GATE_SDD_HOOKS, then a copy, then the plugin root" ok \
+  || report "check-steering-anchors finds the library by GATE_SDD_HOOKS, then a copy, then the plugin root" no "env=$a plugin=$b nowhere=$c names-env=$c2 names-root=$c3 local-wins=$d env-wrong=$e names-path=$e2"
+
+# 216. #256 AC5 — the same four for check-unreviewed-work.sh, which runs in a consumer's CI
+#      where `init` has the workflow check the plugin out and set GATE_SDD_HOOKS. The branch
+#      under test is `main`, which carries no spec, so a found library answers exit 0 and says
+#      so; a library not found is exit 1 before any branch is examined.
+r=$(uw_repo uw-env-var); rm -f "$r/hooks/gate-lib.sh"; tip=$(git -C "$r" rev-parse main)
+out=$( cd "$r" && GATE_SDD_HOOKS="$L/hooks" sh scripts/check-unreviewed-work.sh main "$tip" 2>"$TMP/uwerr"; echo "exit=$?" )
+case "$out" in *"exit=0"*) a=ok ;; *) a="no($out: $(head -c 120 "$TMP/uwerr"))" ;; esac
+r=$(uw_repo uw-plugin-root); rm -f "$r/hooks/gate-lib.sh"; tip=$(git -C "$r" rev-parse main)
+out=$( cd "$r" && CLAUDE_PLUGIN_ROOT="$L" sh scripts/check-unreviewed-work.sh main "$tip" 2>"$TMP/uwerr"; echo "exit=$?" )
+case "$out" in *"exit=0"*) b=ok ;; *) b="no($out: $(head -c 120 "$TMP/uwerr"))" ;; esac
+r=$(uw_repo uw-nowhere); rm -f "$r/hooks/gate-lib.sh"; tip=$(git -C "$r" rev-parse main)
+out=$( cd "$r" && env -u GATE_SDD_HOOKS -u CLAUDE_PLUGIN_ROOT sh scripts/check-unreviewed-work.sh main "$tip" 2>"$TMP/uwerr"; echo "exit=$?" ); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) c=ok ;; *) c="no($out)" ;; esac
+case "$err" in *GATE_SDD_HOOKS*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *CLAUDE_PLUGIN_ROOT*) c3=ok ;; *) c3=no ;; esac
+r=$(uw_repo uw-local-wins); tip=$(git -C "$r" rev-parse main)
+out=$( cd "$r" && CLAUDE_PLUGIN_ROOT="$B" sh scripts/check-unreviewed-work.sh main "$tip" 2>"$TMP/uwerr"; echo "exit=$?" )
+case "$out" in *"exit=0"*) d=ok ;; *) d="no($out: $(head -c 120 "$TMP/uwerr"))" ;; esac
+r=$(uw_repo uw-env-wrong); tip=$(git -C "$r" rev-parse main)
+out=$( cd "$r" && GATE_SDD_HOOKS="$TMP/no-such-dir/hooks" sh scripts/check-unreviewed-work.sh main "$tip" 2>"$TMP/uwerr"; echo "exit=$?" ); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) e=ok ;; *) e="no($out)" ;; esac
+case "$err" in *"no-such-dir"*) e2=ok ;; *) e2=no ;; esac
+[ "$a$b$c$c2$c3$d$e$e2" = "okokokokokokokok" ] && report "check-unreviewed-work finds the library by GATE_SDD_HOOKS, then a copy, then the plugin root" ok \
+  || report "check-unreviewed-work finds the library by GATE_SDD_HOOKS, then a copy, then the plugin root" no "env=$a plugin=$b nowhere=$c names-env=$c2 names-root=$c3 local-wins=$d env-wrong=$e names-path=$e2"
 
 # --- guards: scripts/check-receipt-schema.py ---------------------------------------
 #
@@ -6024,6 +6202,11 @@ manifest_repo() {
   cp "$ROOT/.claude-plugin/marketplace.json" "$r/.claude-plugin/"
   cp "$ROOT/hooks/templates/claude-code.settings.json" "$r/hooks/templates/"
   cp "$ROOT/hooks/templates/antigravity.hooks.json" "$r/hooks/templates/"
+  # #256: the plugin's own Claude Code hooks file, and the scripts its commands name. Copied
+  # when present so the fixture stands on the tree as shipped; the cases below remove or
+  # rewrite what they test.
+  [ -f "$ROOT/.claude-plugin/hooks.json" ] && cp "$ROOT/.claude-plugin/hooks.json" "$r/.claude-plugin/"
+  for f in "$ROOT"/hooks/*.sh; do cp "$f" "$r/hooks/"; done
   printf '# AGENTS\n' > "$r/AGENTS.md"
   ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
   cp -R "$ROOT/reviewers" "$r/reviewers"
@@ -6235,6 +6418,130 @@ case "$(cat "$TMP/mferr")" in *Traceback*) c10=no ;; *"not an object"*) c10=ok ;
   && report "an absent or unreadable hook template fails rather than agreeing" ok \
   || report "an absent or unreadable hook template fails rather than agreeing" no \
      "agy-exit=$c0 not-claimed=$c1 agy-named=$c2 cc-exit=$c3 cc-named=$c4 unread-exit=$c5 unread-diag=$c6 null-exit=$c7 null-not-claimed=$c8 list-exit=$c9 list-diag=$c10"
+
+# 210–214. #256 AC8 — the Claude Code gates ship from .claude-plugin/hooks.json, and the guard
+#      holds that file the way it holds the two templates. The control is a pin: the tree as
+#      shipped passes before and after. The old guard knew nothing about the file and exited 0 on
+#      every fixture 211–214 builds, so those cases were red against it; they are what AC8 means
+#      by covered.
+r=$(manifest_repo mf-hooks-control)
+out=$(run_manifest "$r"); [ "$out" = "0" ] && report "check-manifests accepts the plugin's hooks file as shipped" ok \
+  || report "check-manifests accepts the plugin's hooks file as shipped" no "exit=$out: $(cat "$TMP/mferr" | tr '\n' ';' | head -c 300)"
+
+# 211. A hooks.json where Antigravity reads one. hooks/hooks.json is Claude Code's default
+#      location, merged with the declared path and inside the directory Antigravity loads; a
+#      root hooks.json is Antigravity's own plugin location. Either carries Claude Code's nested
+#      Stop shape into a file Antigravity parses, which invalidates its whole hooks file.
+r=$(manifest_repo mf-stray-hooks); cp "$r/.claude-plugin/hooks.json" "$r/hooks/hooks.json" 2>/dev/null || printf '{}' > "$r/hooks/hooks.json"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && a=ok || a=no
+case "$err" in *"hooks/hooks.json"*) a2=ok ;; *) a2=no ;; esac
+r=$(manifest_repo mf-root-hooks); printf '{}' > "$r/hooks.json"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && b=ok || b=no
+case "$err" in *"hooks.json exists at the plugin root"*) b2=ok ;; *) b2=no ;; esac
+[ "$a$a2$b$b2" = "okokokok" ] && report "check-manifests fails on a hooks.json where Antigravity would read it" ok \
+  || report "check-manifests fails on a hooks.json where Antigravity would read it" no "hooks/=$a named=$a2 root=$b named=$b2"
+
+# 212. The file and the field. Absent file: the plugin ships no gates on Claude Code, which is
+#      the install-level fail-open. Field absent while the file exists: unregistered, same
+#      result. Field naming a missing file, or a file that is not a JSON object: the same.
+r=$(manifest_repo mf-no-hooks-file); rm -f "$r/.claude-plugin/hooks.json"
+out=$(run_manifest "$r"); [ "$out" = "1" ] && a=ok || a=no
+r=$(manifest_repo mf-no-hooks-field)
+python3 - "$r/.claude-plugin/plugin.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d.pop("hooks", None); json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && b=ok || b=no
+case "$err" in *'"hooks"'*) b2=ok ;; *) b2=no ;; esac
+r=$(manifest_repo mf-hooks-field-missing-file)
+python3 - "$r/.claude-plugin/plugin.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["hooks"] = "./.claude-plugin/nowhere.json"; json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); [ "$out" = "1" ] && c=ok || c=no
+r=$(manifest_repo mf-hooks-not-object); printf '[]' > "$r/.claude-plugin/hooks.json"
+out=$(run_manifest "$r"); [ "$out" = "1" ] && d=ok || d=no
+[ "$a$b$b2$c$d" = "okokokokok" ] && report "check-manifests requires the hooks file, and the manifest field that names it" ok \
+  || report "check-manifests requires the hooks file, and the manifest field that names it" no "no-file=$a no-field=$b named=$b2 field-dangling=$c not-object=$d"
+
+# 213. A command that names a script the plugin does not ship. The file is read by Claude
+#      Code and run by nobody until a turn ends, so a typo here is a gate that exits 127.
+r=$(manifest_repo mf-hooks-missing-script)
+python3 - "$r/.claude-plugin/hooks.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+for entries in d["hooks"].values():
+    for e in entries:
+        for h in e["hooks"]:
+            h["command"] = h["command"].replace("quality-gate.sh", "nothing.sh")
+json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && a=ok || a=no
+case "$err" in *"nothing.sh"*) a2=ok ;; *) a2=no ;; esac
+[ "$a$a2" = "okok" ] && report "check-manifests fails a hooks command naming a script the plugin does not ship" ok \
+  || report "check-manifests fails a hooks command naming a script the plugin does not ship" no "exit=$a named=$a2"
+
+# 214. Event parity, with the plugin file in the union. The Claude Code side is now the plugin
+#      file plus the project template; together they must still pair with Antigravity's
+#      template as the two templates paired before. Drop Stop from the plugin file and the
+#      Claude Code side enforces less than Antigravity's; drop SessionStart and the digest
+#      has no event.
+r=$(manifest_repo mf-hooks-no-stop)
+python3 - "$r/.claude-plugin/hooks.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["hooks"].pop("Stop"); json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && a=ok || a=no
+case "$err" in *"hook events differ"*) a2=ok ;; *) a2=no ;; esac
+r=$(manifest_repo mf-hooks-no-start)
+python3 - "$r/.claude-plugin/hooks.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p)); d["hooks"].pop("SessionStart"); json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && b=ok || b=no
+case "$err" in *"SessionStart"*) b2=ok ;; *) b2=no ;; esac
+#      Per gate, not only per event: the plugin file is now the ONLY place the Claude Code
+#      review gate is declared, so a Stop that kept quality-gate.sh and lost review-gate.sh
+#      shipped the review gate to no Claude Code project while the event set still matched.
+#      Review round 1's MEDIUM.
+r=$(manifest_repo mf-hooks-one-gate)
+python3 - "$r/.claude-plugin/hooks.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+d["hooks"]["Stop"] = [e for e in d["hooks"]["Stop"] if "quality-gate.sh" in json.dumps(e)]
+json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && c=ok || c=no
+case "$err" in *"review-gate.sh"*) c2=ok ;; *) c2=no ;; esac
+#      Both directions: the Antigravity template is the only place ITS gates are declared, so
+#      a review-gate.sh lost from its Stop must fail the same way. Review round 2.
+r=$(manifest_repo mf-agy-one-gate)
+python3 - "$r/hooks/templates/antigravity.hooks.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+env = next(v for k, v in d.items() if isinstance(v, dict) and "Stop" in v)
+env["Stop"] = [e for e in env["Stop"] if "review-gate.sh" not in json.dumps(e)]
+json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && d=ok || d=no
+case "$err" in *"review-gate.sh"*) d2=ok ;; *) d2=no ;; esac
+#      And every command in the plugin file goes through the wrapper: a gate run directly loses
+#      the .steering/ guard and the stand-down, and every project on the machine gets the
+#      gate's bootstrap block at Stop. Review round 2.
+r=$(manifest_repo mf-no-wrapper)
+python3 - "$r/.claude-plugin/hooks.json" <<'PYX'
+import json, sys
+p = sys.argv[1]; d = json.load(open(p))
+for e in d["hooks"]["Stop"]:
+    for h in e["hooks"]:
+        if "review-gate.sh" in h["command"]:
+            h["command"] = 'sh "${CLAUDE_PLUGIN_ROOT}/hooks/review-gate.sh"'
+json.dump(d, open(p, "w"), indent=2)
+PYX
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && e=ok || e=no
+case "$err" in *"plugin-gate.sh"*) e2=ok ;; *) e2=no ;; esac
+[ "$a$a2$b$b2$c$c2$d$d2$e$e2" = "okokokokokokokokokok" ] && report "check-manifests pairs the plugin's hook events, and the gates under them, with Antigravity's template" ok \
+  || report "check-manifests pairs the plugin's hook events, and the gates under them, with Antigravity's template" no "no-stop=$a differ=$a2 no-start=$b named=$b2 one-gate=$c names-gate=$c2 agy-one-gate=$d agy-names=$d2 no-wrapper=$e names-wrapper=$e2"
 
 # --- guards: scripts/check-leakage.sh ---------------------------------------
 #

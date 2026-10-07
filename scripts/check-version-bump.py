@@ -28,7 +28,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 #: What a consumer actually receives. Kept as prefixes so a new skill or rulebook is
 #: covered on the day it is added rather than the day someone remembers this file.
-SHIPPED = ("skills/", "reviewers/", "hooks/", "assets/", "rules/", "plugin.json", ".claude-plugin/plugin.json")
+SHIPPED = ("skills/", "reviewers/", "hooks/", "assets/", "rules/", "plugin.json", ".claude-plugin/plugin.json", ".claude-plugin/hooks.json")
 
 #: Changing these does not change what is installed.
 EXEMPT = (".claude-plugin/marketplace.json",)
