@@ -133,6 +133,17 @@ CONTRACTS = (
     ),
     (
         "skills/init/SKILL.md",
+        "On **Claude Code, copy no gate script.**",
+        "Since 0.23.0 the Claude Code gates run from the plugin's own hooks file, and a copy "
+        "in the project is the drift #245 measured at 90 to 377 lines: a fix that reaches "
+        "nobody until someone re-runs `init` in every repository. The plugin's gate stands "
+        "down when the project's settings run a copy, so an `init` that copies again puts a "
+        "project back on yesterday's gate with nothing to say so. Review cannot defend it: "
+        "restoring the copy reads as making a project self-contained, which is the "
+        "argument that held for Antigravity and still does there. #256 AC4.",
+    ),
+    (
+        "skills/init/SKILL.md",
         "copy `assets/check-document-set.py` to the project's `scripts/` directory and add it to the `- Validators:` line",
         "This is the ONLY route by which the mode reaches a gate. Delete it and the mode "
         "becomes a comment: declared, never checked. It must stay on the `- Validators:` "
