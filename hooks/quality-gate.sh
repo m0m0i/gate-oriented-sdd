@@ -103,8 +103,18 @@ if [ -n "$globs" ] && git rev-parse --git-dir >/dev/null 2>&1; then
   # git as its own pathspec. Quotes inside a variable are NOT removed on expansion, so a
   # line written '*.py' would hand git a literal quote and match nothing — the same
   # fail-open this script's sibling was fixed for, which is why they are stripped first.
+  #
+  # Unquoted also means pathname expansion, and that is the second half of #1: the shell
+  # matched a bare `*.py` against the repository root before git saw it, so a flat project
+  # with one unchanged `.py` at the root handed git that file's name, git found it clean, and
+  # the gate passed having run nothing for every change below the root (#254). The library's
+  # three copies of this split sit inside `set -f`, and so does this one now. The two lines
+  # are whole lines of their own, because case 203 recognises the region by them, and
+  # expansion is back on before the validator loop, where an `ls *.log` has to work.
+  set -f
   # shellcheck disable=SC2046  # deliberate word-split: one pathspec per glob (#1); quoted, case 164 goes red
   set -- $(printf '%s' "$globs" | tr -d '\042\047')   # \042 = " and \047 = ', stripped so git sees bare globs
+  set +f
   git status --porcelain -- "$@" 2>/dev/null | grep -q . || gate_pass
 fi
 
