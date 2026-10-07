@@ -1908,6 +1908,89 @@ case "$err" in *RAN*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "a line of several globs reaches the quality gate one pathspec per glob" ok \
   || report "a line of several globs reaches the quality gate one pathspec per glob" no "docs-silent=$c1 blocks=$c2 ran=$c3"
 
+# 202. #254 — the split one line above the one case 164 pins. `set -- $(...)` is unquoted so that
+#      each glob reaches git as its own pathspec, and unquoted means pathname expansion too: the
+#      shell matched `*.txt` against the repository root before `git status` saw it. The fixtures
+#      above cannot see that, because every file they change is AT the root, so the expansion
+#      happens to name it. Here the root match is unchanged and the change is one directory
+#      down, which is the flat-layout shape `init` writes for a small project: the shell hands
+#      git `a.txt`, git finds it clean, and the gate passed having run no validator. The library's
+#      three copies of this split sit inside `set -f`; this one never got the two lines. The
+#      docs-only half is the pin for AC2: the skip still saves its cost when nothing matched.
+#
+#      RED-CAPABLE under "drop the `set -f`". Measured in the spec's mutation record.
+r="$TMP/qg-subdir"; mkdir -p "$r/hooks" "$r/.steering" "$r/sub"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+printf -- '- Validators: sh -c "echo RAN >&2; exit 1"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+  && echo one > a.txt && echo two > sub/b.txt && echo doc > NOTES.md && git add -A && git commit -qm init ) >/dev/null 2>&1
+echo more >> "$r/NOTES.md"; out=$(run_qg "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+echo more >> "$r/sub/b.txt"; out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
+case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *RAN*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a bare glob with an unchanged root match still sees a change below the root" ok \
+  || report "a bare glob with an unchanged root match still sees a change below the root" no "docs-silent=$c1 blocks=$c2 ran=$c3"
+
+# 203. #254 AC3 — pin, green before the fix and after: the validators still run with expansion
+#      ON. They run under `eval` in the gate's own shell, so a `set -f` that is not switched back
+#      off before the loop reaches them, and a validator written `ls sub/*.txt` then asks for a
+#      file literally named `sub/*.txt` and fails. The gate would block a clean tree on every
+#      turn, which is the loud direction, and still the wrong one: a gate that blocks on its own
+#      bug is the gate that gets switched off. Same fixture shape as 202, with the change below
+#      the root so the validator is reached.
+#
+#      RED-CAPABLE under "drop the `set +f`". Measured in the spec's mutation record.
+r="$TMP/qg-expand"; mkdir -p "$r/hooks" "$r/.steering" "$r/sub"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+printf -- '- Validators: ls sub/*.txt >/dev/null\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+  && echo one > a.txt && echo two > sub/b.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+echo more >> "$r/sub/b.txt"; out=$(run_qg "$r")
+case "$out" in *"exit=0"*) report "a validator that globs still expands after the split" ok ;;
+                        *) report "a validator that globs still expands after the split" no "$out $(cat "$TMP/qerr" | head -3)" ;; esac
+
+# 204. #254 — the class rather than the instance. The split is deliberate in four places — one in
+#      quality-gate.sh and three in gate-lib.sh — and the library's three sat inside `set -f` from
+#      #1 while the gate's copy did not, for 0.22 releases, because nothing read the shipped shell
+#      for a split outside the region. This case does. It walks hooks/*.sh and assets/*.sh and
+#      tracks a region per file: a whole line that is `set -f` opens one, a whole line that is
+#      `set +f` closes it. The `|| { set +f; return 1; }` on a read inside the region is NOT a
+#      closing line, so the read after it stays covered. Outside a region, a line that is not a
+#      whole-line comment and expands a variable named `*globs` unquoted, or is `set -- $(`, is a
+#      hit. A quoted `"$_globs"` is the assignment and the emptiness test, and is not. Like 189,
+#      the matcher is run on known lines first and awk's own status is read, so a broken pattern
+#      or an empty file list cannot report ok having checked nothing.
+glob_split_re='(^|[^"])[$]_?[A-Za-z]*globs([^A-Za-z_"]|$)|set -- [$][(]'   # bracketed, not backslashed: awk -v unescapes its value
+glob_splits() {  # <file>... — prints file:line: text for each glob split outside a set -f region
+  awk -v re="$glob_split_re" '
+    FNR == 1 { if (inf) print prev ": a set -f region reached the end of the file unclosed"; inf = 0; prev = FILENAME }
+    /^[[:space:]]*set -f[[:space:]]*$/ { inf = 1; next }
+    /^[[:space:]]*set \+f[[:space:]]*$/ { inf = 0; next }
+    !inf && !/^[[:space:]]*#/ && $0 ~ re { print FILENAME ":" FNR ": " $0 }
+    END { if (inf) print prev ": a set -f region reached the end of the file unclosed" }' "$@"
+}
+#      A region that is opened and never closed is a hit too, otherwise dropping the `set +f` line
+#      would read as a file-long region and hide every split after it — and leave the validator
+#      loop with expansion off, which is case 203's half of the same mutation.
+printf '%s\n' 'set -- $(printf "%s" "$globs" | tr -d x)' 'c=$(git diff --name-only a..b -- $_globs)' \
+  'set -f' 'c=$(git diff -- $_globs)' 'set +f' 'd=$(git log -- $_wglobs)' \
+  'echo "see #1"; e=$(git diff -- $globs 2>/dev/null)' 'set -f' 'f=$(git diff -- $_globs)' > "$TMP/globneedle-hit.sh"
+printf '%s\n' '# c=$(git diff -- $_globs)' '  [ -n "$_globs" ] || _globs="*"' '_globs=$(printf "%s" "$_globs" | tr -d x)' \
+  'set -f' 'c=$(git diff -- $_globs) || { set +f; return 1; }' 'd=$(git log -- $_wglobs)' 'set +f' > "$TMP/globneedle-miss.sh"
+n_hit=$(glob_splits "$TMP/globneedle-hit.sh" | wc -l | tr -d ' ')
+n_miss=$(glob_splits "$TMP/globneedle-miss.sh" | wc -l | tr -d ' ')
+splits=$(glob_splits "$ROOT"/hooks/*.sh "$ROOT"/assets/*.sh); rc=$?
+if [ "$n_hit$n_miss" != 50 ]; then
+  report "no shipped shell splits a Source globs value outside set -f" no "matcher self-test: $n_hit of 5 hits, $n_miss of 0 misses"
+elif [ "$rc" -ne 0 ]; then
+  report "no shipped shell splits a Source globs value outside set -f" no "awk exited $rc, so nothing was read"
+elif [ -n "$splits" ]; then
+  report "no shipped shell splits a Source globs value outside set -f" no "$(printf '%s' "$splits" | sed "s|$ROOT/||" | tr '\n' ';')"
+else
+  report "no shipped shell splits a Source globs value outside set -f" ok
+fi
+
 # --- both gates: the library they block through ----------------------------------------
 #
 # Every case above runs these gates with a whole gate-lib.sh. The three states below are the
