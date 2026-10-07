@@ -2618,6 +2618,65 @@ case "$(cat "$TMP/dgout")" in *"degraded"*) c1=ok ;; *) c1=no ;; esac
 [ "$c1$c2" = "okok" ] && report "a stale gate-lib degrades the digest visibly, not silently" ok \
   || report "a stale gate-lib degrades the digest visibly, not silently" no "visible=$c1 clean-stderr=$c2"
 
+# --- assets: where the library is, once the gates ship from the plugin (#256) -----------
+#
+# Both shipped checks source gate-lib.sh to ask the gates' own question. Until #256 they looked
+# in hooks/, .claude/hooks/ and .agents/hooks/, which are where a copy lived. A Claude Code
+# project migrated by `init` has no copy, so the checks learn two more places: GATE_SDD_HOOKS,
+# the explicit answer for CI and a by-hand run, first; and $CLAUDE_PLUGIN_ROOT/hooks, which the
+# plugin's own gate puts in every validator's environment at turn end, LAST. Last, because this
+# repository's turn-end validators run with the installed plugin's root in their environment
+# too, and a dogfood run must read hooks/ from source, not an installed copy. The order is the
+# whole point of these cases.
+
+# 215. #256 AC5 — GATE_SDD_HOOKS, then the plugin root, in a project with no copy. The error
+#      names both variables when neither is set and no copy exists, so a by-hand run in a
+#      migrated project is told what to set rather than told to re-copy a file that should not
+#      exist.
+lib_elsewhere() { # lib_elsewhere <name> — a directory holding only the plugin's gate-lib.sh
+  mkdir -p "$TMP/$1/hooks" && cp "$ROOT/hooks/gate-lib.sh" "$TMP/$1/hooks/" && echo "$TMP/$1"
+}
+L=$(lib_elsewhere lib-plugin)
+r=$(anchor_repo anc-env-var '- Owns: x'); rm -f "$r/hooks/gate-lib.sh"
+out=$( cd "$r" && GATE_SDD_HOOKS="$L/hooks" sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" )
+[ "$out" = "0" ] && a=ok || a="no(exit=$out: $(head -c 120 "$TMP/aerr"))"
+r=$(anchor_repo anc-plugin-root '- Owns: x'); rm -f "$r/hooks/gate-lib.sh"
+out=$( cd "$r" && CLAUDE_PLUGIN_ROOT="$L" sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" )
+[ "$out" = "0" ] && b=ok || b="no(exit=$out: $(head -c 120 "$TMP/aerr"))"
+r=$(anchor_repo anc-nowhere '- Owns: x'); rm -f "$r/hooks/gate-lib.sh"
+out=$( cd "$r" && env -u GATE_SDD_HOOKS -u CLAUDE_PLUGIN_ROOT sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" ); err=$(cat "$TMP/aerr")
+[ "$out" = "1" ] && c=ok || c="no(exit=$out)"
+case "$err" in *GATE_SDD_HOOKS*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *CLAUDE_PLUGIN_ROOT*) c3=ok ;; *) c3=no ;; esac
+# The pin: a copy beside the check wins over a plugin root whose library is broken.
+B=$(lib_elsewhere lib-broken); : > "$B/hooks/gate-lib.sh"
+r=$(anchor_repo anc-local-wins '- Owns: x')
+out=$( cd "$r" && CLAUDE_PLUGIN_ROOT="$B" sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" )
+[ "$out" = "0" ] && d=ok || d="no(exit=$out: $(head -c 120 "$TMP/aerr"))"
+[ "$a$b$c$c2$c3$d" = "okokokokokok" ] && report "check-steering-anchors finds the library by GATE_SDD_HOOKS, then a copy, then the plugin root" ok \
+  || report "check-steering-anchors finds the library by GATE_SDD_HOOKS, then a copy, then the plugin root" no "env=$a plugin=$b nowhere=$c names-env=$c2 names-root=$c3 local-wins=$d"
+
+# 216. #256 AC5 — the same four for check-unreviewed-work.sh, which runs in a consumer's CI
+#      where `init` has the workflow check the plugin out and set GATE_SDD_HOOKS. The branch
+#      under test is `main`, which carries no spec, so a found library answers exit 0 and says
+#      so; a library not found is exit 1 before any branch is examined.
+r=$(uw_repo uw-env-var); rm -f "$r/hooks/gate-lib.sh"; tip=$(git -C "$r" rev-parse main)
+out=$( cd "$r" && GATE_SDD_HOOKS="$L/hooks" sh scripts/check-unreviewed-work.sh main "$tip" 2>"$TMP/uwerr"; echo "exit=$?" )
+case "$out" in *"exit=0"*) a=ok ;; *) a="no($out: $(head -c 120 "$TMP/uwerr"))" ;; esac
+r=$(uw_repo uw-plugin-root); rm -f "$r/hooks/gate-lib.sh"; tip=$(git -C "$r" rev-parse main)
+out=$( cd "$r" && CLAUDE_PLUGIN_ROOT="$L" sh scripts/check-unreviewed-work.sh main "$tip" 2>"$TMP/uwerr"; echo "exit=$?" )
+case "$out" in *"exit=0"*) b=ok ;; *) b="no($out: $(head -c 120 "$TMP/uwerr"))" ;; esac
+r=$(uw_repo uw-nowhere); rm -f "$r/hooks/gate-lib.sh"; tip=$(git -C "$r" rev-parse main)
+out=$( cd "$r" && env -u GATE_SDD_HOOKS -u CLAUDE_PLUGIN_ROOT sh scripts/check-unreviewed-work.sh main "$tip" 2>"$TMP/uwerr"; echo "exit=$?" ); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1"*) c=ok ;; *) c="no($out)" ;; esac
+case "$err" in *GATE_SDD_HOOKS*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *CLAUDE_PLUGIN_ROOT*) c3=ok ;; *) c3=no ;; esac
+r=$(uw_repo uw-local-wins); tip=$(git -C "$r" rev-parse main)
+out=$( cd "$r" && CLAUDE_PLUGIN_ROOT="$B" sh scripts/check-unreviewed-work.sh main "$tip" 2>"$TMP/uwerr"; echo "exit=$?" )
+case "$out" in *"exit=0"*) d=ok ;; *) d="no($out: $(head -c 120 "$TMP/uwerr"))" ;; esac
+[ "$a$b$c$c2$c3$d" = "okokokokokok" ] && report "check-unreviewed-work finds the library by GATE_SDD_HOOKS, then a copy, then the plugin root" ok \
+  || report "check-unreviewed-work finds the library by GATE_SDD_HOOKS, then a copy, then the plugin root" no "env=$a plugin=$b nowhere=$c names-env=$c2 names-root=$c3 local-wins=$d"
+
 # --- guards: scripts/check-receipt-schema.py ---------------------------------------
 #
 # #28. The invariant that makes the mirror-skip unreachable — every MIRRORS destination is

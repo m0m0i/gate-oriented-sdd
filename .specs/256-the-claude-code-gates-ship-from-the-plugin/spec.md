@@ -68,10 +68,16 @@ Measured in T1 on 2026-10-07, bash 3.2.57 as `sh`. Unmutated, the suite is 210 p
 | stand down on the gate's filename alone, the event check dropped | 207 (other-event half), 208 (Stop half) | 208 / 2 / 0 |
 | the `.steering/` guard removed | 206 | 209 / 1 / 0 |
 
+T3, 2026-10-07, suite 217 unmutated. Cases 215 and 216 were red at the old discovery loop on their `GATE_SDD_HOOKS` half (exit 1, "cannot find gate-lib.sh in hooks/, .claude/hooks/ or .agents/hooks/"), and their local-wins half is the pin.
+
+| Mutation of `assets/check-steering-anchors.sh` | Cases red | Suite |
+| :-- | :-- | :-- |
+| `$CLAUDE_PLUGIN_ROOT/hooks` read before the three directories | 215 (local-wins half) | 216 / 1 / 0 |
+
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: cases for the wrapper — no `.steering/` is silent (AC2); settings naming the gate under its event stand it down, the file alone or the gate under another event does not (AC3); the gate it runs sees the project as cwd and blocks through both channels (AC1, AC7); a gate missing from the plugin blocks with a remedy — all red because `hooks/plugin-gate.sh` does not exist. Then the wrapper → green.
 - [x] T2: cases for `scripts/check-manifests.py` — a stray `hooks/hooks.json` and a root `hooks.json` fail; a manifest `"hooks"` field naming nothing readable fails; a command naming a missing script fails; event parity across the plugin file and both templates — red against the current guard. Then `.claude-plugin/hooks.json`, the manifest's `"hooks"` field, the guard, `SHIPPED`, the packager, `- Source globs:` and the Claude Code template, which the parity check reads and so belongs here rather than in T4 → green, with `./scripts/check-manifests.py` and `./scripts/check-version-bump.py` exercised.
-- [ ] T3: cases for library discovery in both `assets/` checks — `GATE_SDD_HOOKS` wins, a project with no copy and `CLAUDE_PLUGIN_ROOT` finds the plugin's, neither set and no copy fails naming all five places, this repository's `hooks/` still wins over a set `CLAUDE_PLUGIN_ROOT` — red. Then the two checks → green.
+- [x] T3: cases for library discovery in both `assets/` checks — `GATE_SDD_HOOKS` wins, a project with no copy and `CLAUDE_PLUGIN_ROOT` finds the plugin's, neither set and no copy fails naming all five places, this repository's `hooks/` still wins over a set `CLAUDE_PLUGIN_ROOT` — red. Then the two checks → green.
 - [ ] T4: `init`'s install and migration steps and its CI instruction, with a `check-skill-contracts.py` pin on the sentence that stops the copy — the pin red first. Then `skills/init/SKILL.md` → green.
 - [ ] T5: `docs/verified.md`'s V1–V5 section, `hooks/templates/README.md`, `docs/fidelity.md`, `AGENTS.md`'s table, ADR-8 (AC9, AC10). `check-readme-claims.py`, `check-contract-path.py` and the full suite green.
