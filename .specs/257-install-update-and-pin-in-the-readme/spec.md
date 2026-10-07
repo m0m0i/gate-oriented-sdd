@@ -96,7 +96,7 @@ Review round 1's guard fixes, 2026-10-07, suite 221 unmutated before and after. 
 
 ## 4. Review findings, and what this branch did with each
 
-`gate-sdd-reviewer` as a subagent, round 1 at `5191a12`: **BLOCKED**, 0 BLOCKER, 3 HIGH, 7 MEDIUM, 2 LOW, 4 INFO. Every validator on the line exited 0; `check-version-bump.py` was red for the bump that lands after the receipt, and `check-backlog-tracker.py` for #262 to #265, filed at 07:40Z while the review ran. `claude plugin validate . --strict` passed. Every finding below the HIGHs was taken too, because a second round was owed either way and most of them were the same edits #262 to #265 called for.
+`gate-sdd-reviewer` as a subagent, round 1 at `5191a12`: **BLOCKED**, 0 BLOCKER, 3 HIGH, 6 MEDIUM, 2 LOW, 4 INFO. Every validator on the line exited 0; `check-version-bump.py` was red for the bump that lands after the receipt, and `check-backlog-tracker.py` for #262 to #265, filed at 07:40Z while the review ran. `claude plugin validate . --strict` passed. Every finding below the HIGHs was taken too, because a second round was owed either way and most of them were the same edits #262 to #265 called for.
 
 - **HIGH, fixed: the `Gate delivery` row sat under "Every row was produced by running it" and claimed what no run produced.** Both cells now carry their marks in both languages: on Claude Code the mechanism is V1 and V2, and a live migrated session and an update arriving are not run (#265); on Antigravity a refresh by re-running `init` is not run.
 - **HIGH, fixed: "exactly one declaration block" had no case.** Case 217's two-blocks half, pinned by mutation; the mutation record has it.
@@ -110,3 +110,13 @@ Review round 1's guard fixes, 2026-10-07, suite 221 unmutated before and after. 
 - **LOW, fixed: the comparison used Python equality**, where `True == 1`. It compares JSON now; case 217's `1`-for-`true` half, red first.
 - **LOW, fixed: the teammate row's Evidence** cites M2b's `Skipped auto-recording … enabled only by repo-authored settings`.
 - **INFO, recorded:** the 0.23.1 bump lands after the receipt; no README claim contradicts #264; the Antigravity reviewer row above the new one is also unverified under the same preamble, and is pre-existing; the reviewer could not fetch the documentation or read issue bodies, and used `cat`, `ls`, `tail` and `head` outside its allow-list for read-only reads.
+
+Round 2 at `d3b6f96`: **CLEAN**, 0 BLOCKER, 0 HIGH, 3 MEDIUM, 3 LOW, 5 INFO. Every round-1 finding re-checked as fixed. That is the stop. The nits below were taken after the receipt only where they touch no path under `- Source globs:`, so the receipt stands; nothing in `scripts/` or the shipped files moved after it.
+
+- **MEDIUM, fixed after the receipt: #260 and #261 shared one `## Open, not planned` bullet**, and the tracker reads one issue per bullet, so #261 was excluded only through row 1's reasoning and the row's discharge would have turned it red. Each has its own bullet now.
+- **MEDIUM, fixed after the receipt:** round 1's MEDIUM count above, which said 7 for six.
+- **MEDIUM, recorded, not changed:** AC11's rewording landed in `d3b6f96` with the `docs/BACKLOG.md` edit it judges, the second time on this branch. A process note, as in round 1.
+- **LOW, fixed after the receipt: the legacy row said "verified for `init`'s form"**, but the case's fixtures run the bare `sh .claude/hooks/<gate>`, and `init`'s file-guarded form of it has no fixture. The cell says which is cased and which is inferred; the inference failing would run both gates, the safe direction.
+- **LOW, fixed after the receipt:** the marks paragraph now says an issue number beside a claim names a downstream observation, the kind of evidence #262 and #263 added, so "one of three marks" in this spec's invariant reads as three marks plus that pointer.
+- **LOW, fixed after the receipt:** a half-width space before 「 in `README.ja.md`.
+- **INFO, recorded, not changed:** the fidelity table's "Every row was produced by running it" heads rows whose cells now say "not run"; the in-cell marks resolve it, and the preamble is pre-existing text. #265's observation is also consistent with the documented timing if no interactive session ran its update pass in between, which the README's "why was not measured" leaves open. The cloud-session gap is INFO because the maintainer's decision is recorded. AC12 and AC13 are post-review steps. The reviewer could not fetch the documentation or read issue bodies, and ran one `head -0` outside its allow-list that produced nothing it used.
