@@ -114,7 +114,7 @@ Asked and answered 2026-10-08.
   - the digest under `SessionStart` in the documented spelling → stands down.
 
   The standing-down halves are red against `37f86b7`. Then the extraction and the resolution → green. AC1–AC3, AC9.
-- [ ] T3: case 222 is a launch below the root, with `CLAUDE_PROJECT_DIR` and the start directory at `project/sub`:
+- [x] T3: case 222 is a launch below the root, with `CLAUDE_PROJECT_DIR` and the start directory at `project/sub`:
   - the root's `settings.json` entry with the root's copy → runs, red against `37f86b7`;
   - the root's `settings.local.json` naming `\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-gate.sh`, with the copy under `sub/` → stands down;
   - the same entry with the copy only at the root → runs;

@@ -2151,10 +2151,12 @@ pg_repo() { # pg_repo <name> — prints the fixture root; plugin/ and project/ b
     && echo one > src.txt && git add -A && git commit -qm init && echo more >> src.txt ) >/dev/null 2>&1
   echo "$_p"
 }
-run_pg() { # run_pg <fixture root> <gate> — runs the wrapper as hooks.json does, from the project,
-  # with CLAUDE_PROJECT_DIR naming it: Claude Code set it to the launch directory for the plugin's
-  # hook and the project's alike in every measured launch (docs/verified.md, #262).
-  ( cd "$1/project" && CLAUDE_PROJECT_DIR="$1/project" CLAUDE_PLUGIN_ROOT="$1/plugin" sh "$1/plugin/hooks/plugin-gate.sh" "$2" >"$TMP/pgout" 2>"$TMP/pgerr" </dev/null; echo "exit=$?" )
+run_pg() { # run_pg <fixture root> <gate> [<dir below project/>] — runs the wrapper as hooks.json
+  # does, launched from the project or the directory below it, with CLAUDE_PROJECT_DIR naming the
+  # launch directory: Claude Code set it so, and ran every hook there, for the plugin's hook and the
+  # project's alike in every measured launch (docs/verified.md, #262).
+  _pgd="$1/project${3:+/$3}"
+  ( cd "$_pgd" && CLAUDE_PROJECT_DIR="$_pgd" CLAUDE_PLUGIN_ROOT="$1/plugin" sh "$1/plugin/hooks/plugin-gate.sh" "$2" >"$TMP/pgout" 2>"$TMP/pgerr" </dev/null; echo "exit=$?" )
 }
 run_pg_bare() { # run_pg_bare <fixture root> <gate> — run_pg outside Claude Code: no CLAUDE_PROJECT_DIR
   ( cd "$1/project" && CLAUDE_PLUGIN_ROOT="$1/plugin" sh "$1/plugin/hooks/plugin-gate.sh" "$2" >"$TMP/pgout" 2>"$TMP/pgerr" </dev/null; echo "exit=$?" )
@@ -2307,6 +2309,38 @@ on_event SessionStart 'sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/steering-digest.
 case "$out" in *"exit=0"*) f=ok ;; *) f="no($out)" ;; esac; [ -s "$TMP/pgout" ] && f="no(printed the digest)"
 [ "$a$b$c$d$e$f" = "okokokokokok" ] && report "plugin-gate stands down on an entry that names the copy through \$CLAUDE_PROJECT_DIR, and on nothing less" ok \
   || report "plugin-gate stands down on an entry that names the copy through \$CLAUDE_PROJECT_DIR, and on nothing less" no "with-copy=$a no-copy=$b space=$c other-variable=$d unset=$e digest=$f"
+
+# 222. #262 AC10 — a session launched below the git root. Claude Code then reads the launch
+#      directory's .claude/settings.json and settings.local.json and the root's
+#      settings.local.json, NOT the root's settings.json, and runs every hook with the launch
+#      directory as cwd and as CLAUDE_PROJECT_DIR (docs/verified.md). Until #262 the wrapper read
+#      the root's two files and resolved a relative path from the root, so it stood down on a
+#      root entry that never ran — and with the plugin enabled at user scope, nothing ran.
+#      Launched from project/sub:
+#      (a) the root's settings.json runs the root's copy — not read by this launch: the gate runs;
+#      (b) the root's settings.local.json names `\"$CLAUDE_PROJECT_DIR\"/…` and the copy is under
+#          sub/ — read, and resolved there: stand down;
+#      (c) the same entry, the copy only at the root — the entry finds nothing: runs;
+#      (d) a relative entry in the root's settings.local.json, the copy only at the root — the
+#          entry's shell resolves it from sub/ and finds nothing: runs;
+#      (e) sub/'s own settings.json runs sub/'s copy — stand down;
+#      (f) outside Claude Code, CLAUDE_PROJECT_DIR unset, from the root — the root's files, as
+#          before #262: (a)'s entry and copy stand down.
+sub_copy() { mkdir -p "$1/project/sub/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$1/project/sub/.claude/hooks/"; }
+p=$(pg_repo pg-sub-a); mkdir -p "$p/project/sub"; with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh sub)
+case "$out" in *"exit=2"*) a=ok ;; *) a="no($out)" ;; esac
+p=$(pg_repo pg-sub-b); sub_copy "$p"; on_event Stop 'sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-gate.sh' > "$p/project/.claude/settings.local.json"; out=$(run_pg "$p" quality-gate.sh sub)
+case "$out" in *"exit=0"*) b=ok ;; *) b="no($out)" ;; esac; [ -s "$TMP/pgout" ] && b="no(printed)"
+p=$(pg_repo pg-sub-c); mkdir -p "$p/project/sub"; with_copy "$p"; on_event Stop 'sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-gate.sh' > "$p/project/.claude/settings.local.json"; out=$(run_pg "$p" quality-gate.sh sub)
+case "$out" in *"exit=2"*) c=ok ;; *) c="no($out)" ;; esac
+p=$(pg_repo pg-sub-d); mkdir -p "$p/project/sub"; with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.local.json"; out=$(run_pg "$p" quality-gate.sh sub)
+case "$out" in *"exit=2"*) d=ok ;; *) d="no($out)" ;; esac
+p=$(pg_repo pg-sub-e); sub_copy "$p"; printf '%s\n' "$sd" > "$p/project/sub/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh sub)
+case "$out" in *"exit=0"*) e=ok ;; *) e="no($out)" ;; esac; [ -s "$TMP/pgout" ] && e="no(printed)"
+p=$(pg_repo pg-sub-f); with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.json"; out=$(run_pg_bare "$p" quality-gate.sh)
+case "$out" in *"exit=0"*) f=ok ;; *) f="no($out)" ;; esac; [ -s "$TMP/pgout" ] && f="no(printed)"
+[ "$a$b$c$d$e$f" = "okokokokokok" ] && report "plugin-gate reads the settings a launch below the git root reads, and resolves from where it was launched" ok \
+  || report "plugin-gate reads the settings a launch below the git root reads, and resolves from where it was launched" no "root-settings=$a root-local-variable=$b root-local-variable-copy-at-root=$c root-local-relative=$d sub-settings=$e unset=$f"
 
 # --- guards: assets/check-locks.py -------------------------------------------------
 #
