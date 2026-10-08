@@ -1,5 +1,5 @@
 # Spec: the stand-down reads an entry that names the copy through `$CLAUDE_PROJECT_DIR`, and every statement of it says when it holds
-- Slug: 262-the-stand-down-reads-the-project-dir-form   Issue: 262   Type: bug   Status: draft
+- Slug: 262-the-stand-down-reads-the-project-dir-form   Issue: 262   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-10-08
 
 ## 1. Requirements (WHAT / WHY)
