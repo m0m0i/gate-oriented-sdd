@@ -125,7 +125,10 @@ fi
 # directory as cwd and as CLAUDE_PROJECT_DIR (measured, docs/verified.md). Reading the root's
 # two files, as this did until #262, stood down on a root entry that never ran: with the plugin
 # enabled at user scope, no gate at all. Launched at the root, the local file is read twice,
-# for one grep. Without CLAUDE_PROJECT_DIR — outside Claude Code — the root's two files.
+# for one grep. That root is CLAUDE_PROJECT_DIR's, found with `git -C`, not the one this script
+# anchored to: the hook can start in another working tree the Bash tool cd'ed into (P1, P4), and
+# its local file is not one the launch read (#262, review round 1). Without CLAUDE_PROJECT_DIR —
+# outside Claude Code — the root's two files.
 _pd=${CLAUDE_PROJECT_DIR:-}
 case "$_pd" in
   *' '*|*'	'*|*'
@@ -133,7 +136,8 @@ case "$_pd" in
   *) _pd_plain=1 ;;
 esac
 if [ -n "$_pd" ]; then
-  set -- "$_pd/.claude/settings.json" "$_pd/.claude/settings.local.json" .claude/settings.local.json
+  _pd_root=$(git -C "$_pd" rev-parse --show-toplevel 2>/dev/null) || _pd_root=$_pd
+  set -- "$_pd/.claude/settings.json" "$_pd/.claude/settings.local.json" "$_pd_root/.claude/settings.local.json"
 else
   set -- .claude/settings.json .claude/settings.local.json
 fi
