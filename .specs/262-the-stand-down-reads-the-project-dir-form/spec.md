@@ -122,5 +122,5 @@ Asked and answered 2026-10-08.
   - `sub/`'s own `settings.json` entry, with the copy under `sub/` → stands down.
 
   Then the evidence files and `_start` → green. AC10, AC9.
-- [ ] T4: case 220 gains a half: `CLAUDE_ENV_FILE` under a directory that does not exist → exit 0, the digest on stdout, nothing on stderr. Red against `37f86b7`, which prints the shell's own error. Then the group redirect → green. AC6.
+- [x] T4: case 220 gains a half: `CLAUDE_ENV_FILE` under a directory that does not exist → exit 0, the digest on stdout, nothing on stderr. Red against `37f86b7`, which prints the shell's own error. Then the group redirect → green. AC6.
 - [ ] T5: a `check-skill-contracts.py` entry for `init`'s condition, red against the current text. Then the statements Design item 5 lists. `check-readme-claims.py`, `check-markdown-fences.py` and `check-leakage.sh` are the check → green. AC7, AC8, and AC10's record.

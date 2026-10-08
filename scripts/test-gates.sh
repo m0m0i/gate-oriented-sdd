@@ -2985,6 +2985,10 @@ case "$out" in *"exit=2"*) c=ok ;; *) c="no($out)" ;; esac
 #      (g) written where the digest stands down — a migration runs in such a session;
 #      (h) never written for either Stop gate;
 #      (i) an empty CLAUDE_ENV_FILE writes nothing and the digest still runs.
+#      (j) a CLAUDE_ENV_FILE that cannot be written — under a directory that does not exist —
+#          costs nothing: exit 0, the digest on stdout, and nothing on stderr. The shell reports
+#          a failed redirection before the command's own 2>/dev/null applies, so until #262 its
+#          error reached SessionStart's stderr (#263's review, a LOW; #262 AC6).
 run_pg_env() { # run_pg_env <fixture root> <gate> <env file> — run_pg with CLAUDE_ENV_FILE
   ( cd "$1/project" && CLAUDE_ENV_FILE="$3" CLAUDE_PROJECT_DIR="$1/project" CLAUDE_PLUGIN_ROOT="$1/plugin" sh "$1/plugin/hooks/plugin-gate.sh" "$2" >"$TMP/pgout" 2>"$TMP/pgerr" </dev/null; echo "exit=$?" )
 }
@@ -3020,8 +3024,10 @@ for gate in quality-gate.sh review-gate.sh; do
 done
 out=$(run_pg_env "$p" steering-digest.sh ""); case "$out" in *"exit=0"*) i=ok ;; *) i="no($out)" ;; esac
 grep -q 'Repo facts' "$TMP/pgout" || i="no(the digest did not run)"
-[ "$a$b$c$d$e$f$g$h$i" = "okokokokokokokokok" ] && report "plugin-gate tells the session's shell where the plugin is, once, without damaging the env file" ok \
-  || report "plugin-gate tells the session's shell where the plugin is, once, without damaging the env file" no "written=$a once=$b no-newline=$c supersedes=$d digest-unchanged=$e no-steering=$f stood-down=$g not-stop=$h empty=$i"
+out=$(run_pg_env "$p" steering-digest.sh "$TMP/env-220-j-missing/env"); case "$out" in *"exit=0"*) j=ok ;; *) j="no($out)" ;; esac
+grep -q 'Repo facts' "$TMP/pgout" || j="no(the digest did not run)"; [ -s "$TMP/pgerr" ] && j="no(stderr: $(head -c 120 "$TMP/pgerr"))"
+[ "$a$b$c$d$e$f$g$h$i$j" = "okokokokokokokokokok" ] && report "plugin-gate tells the session's shell where the plugin is, once, without damaging the env file" ok \
+  || report "plugin-gate tells the session's shell where the plugin is, once, without damaging the env file" no "written=$a once=$b no-newline=$c supersedes=$d digest-unchanged=$e no-steering=$f stood-down=$g not-stop=$h empty=$i unwritable=$j"
 
 # --- guards: scripts/check-receipt-schema.py ---------------------------------------
 #

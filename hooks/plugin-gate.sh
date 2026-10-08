@@ -78,6 +78,8 @@ gate_re=$(printf '%s' "$gate" | sed 's/\./\\./g')   # the name as a pattern: its
 # joined to a line another hook left unterminated, and never written for a root holding a
 # newline, which would split it. A failed write is silent — SessionStart has no blocking
 # channel — and lands where it is loud anyway: the check's own error, naming what to set.
+# Silent means the group's redirect: the shell reports a failed `>>` before a 2>/dev/null on
+# the same command applies (#262).
 if [ "$event" = SessionStart ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
   _root=${DIR%/*}
   case "$_root" in
@@ -89,7 +91,7 @@ if [ "$event" = SessionStart ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
         _nl=""
         [ -s "$CLAUDE_ENV_FILE" ] && [ -n "$(tail -c 1 "$CLAUDE_ENV_FILE")" ] && _nl='
 '
-        printf '%s%s\n' "$_nl" "$_line" >> "$CLAUDE_ENV_FILE" 2>/dev/null || :
+        { printf '%s%s\n' "$_nl" "$_line" >> "$CLAUDE_ENV_FILE"; } 2>/dev/null || :
       fi
       ;;
   esac
