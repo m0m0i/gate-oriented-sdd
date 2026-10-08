@@ -115,6 +115,7 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
 │   ├── review-gate.sh
 │   ├── plugin-gate.sh             ← what .claude-plugin/hooks.json runs: silent without .steering/,
 │   │                                and standing down where a project still runs its own copy
+│   │                                through an entry it can resolve (ADR-8 says which)
 │   ├── steering-digest.sh
 │   ├── steering-digest-antigravity.sh
 │   └── templates/                 ← rendered into the project by init

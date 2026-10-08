@@ -18,12 +18,12 @@
 #      gate's event, AND the file the entry names is on disk where the entry's own shell
 #      would find it — by a relative or absolute path, or through $CLAUDE_PROJECT_DIR (#262).
 #      An entry that reaches the copy any other way is not evidence, and both gates run. The
-#      copied file alone is not evidence; a project
-#      with the file and no entry runs this gate. The entry alone is not evidence either: the
-#      entry every pre-0.23.0 project carries is `[ -f .claude/hooks/quality-gate.sh ] || exit
-#      0; sh .claude/hooks/quality-gate.sh`, which exits 0 by itself once the copy is gone, so
-#      an interrupted migration (scripts deleted, entries not yet) had the project's entry
-#      silent and this wrapper standing down on it (review round 2). Neither running is the
+#      copied file alone is not evidence; a project with the file and no entry runs this gate.
+#      The entry alone is not evidence either: the entry every pre-0.23.0 project carries is
+#      `[ -f .claude/hooks/quality-gate.sh ] || exit 0; sh .claude/hooks/quality-gate.sh`,
+#      which exits 0 by itself once the copy is gone, so an interrupted migration (scripts
+#      deleted, entries not yet) had the project's entry silent and this wrapper standing
+#      down on it (review round 2). Neither running is the
 #      fail-open under `- Owns: gates never fail open`; both running costs a second validator
 #      pass. The two mistakes are not symmetric, so the test is biased toward running.
 #   3. A gate missing from the plugin is a broken install, and a broken install is loud. The

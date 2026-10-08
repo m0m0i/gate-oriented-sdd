@@ -123,4 +123,4 @@ Asked and answered 2026-10-08.
 
   Then the evidence files and `_start` → green. AC10, AC9. Added during T5, as a pin of the committed code: the session launched at the root with the hook started in `sub/`, which is P4's moved cwd. The root's relative entry with the root's copy → runs.
 - [x] T4: case 220 gains a half: `CLAUDE_ENV_FILE` under a directory that does not exist → exit 0, the digest on stdout, nothing on stderr. Red against `37f86b7`, which prints the shell's own error. Then the group redirect → green. AC6.
-- [ ] T5: a `check-skill-contracts.py` entry for `init`'s condition, red against the current text. Then the statements Design item 5 lists. `check-readme-claims.py`, `check-markdown-fences.py` and `check-leakage.sh` are the check → green. AC7, AC8, and AC10's record.
+- [x] T5: a `check-skill-contracts.py` entry for `init`'s condition, red against the current text. Then the statements Design item 5 lists. `check-readme-claims.py`, `check-markdown-fences.py` and `check-leakage.sh` are the check → green. AC7, AC8, and AC10's record.
