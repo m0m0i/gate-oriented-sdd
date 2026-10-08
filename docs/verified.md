@@ -343,7 +343,7 @@ The method: a scratch plugin with a `SessionStart` hook, a `Stop` hook and one e
 
 ### What this run does not support
 
-A mid-session `/reload-plugins` after an update. If it does not fire `SessionStart`, the env file keeps the old root until the next one, and ADR-9 records that as a limit. A person's own terminal, which neither mechanism reaches: there the checks say to set `GATE_SDD_HOOKS`. Whether `CLAUDE_ENV_FILE` stays available to plugin hooks in later versions, since that is measured here, not documented. The migration itself, which is the next section's.
+A mid-session `/reload-plugins` after an update. If it does not fire `SessionStart`, the env file keeps the old root until the next one, and ADR-9 records that as a limit. A person's own terminal, which neither mechanism reaches: there the checks say to set `GATE_SDD_HOOKS`. Whether two `SessionStart` hooks share one env file: the probe had one hook, and the file's name, `sessionstart-hook-0.sh`, suggests one file per hook. Whether `CLAUDE_ENV_FILE` stays available to plugin hooks in later versions, since that is measured here, not documented. The migration itself, which is the next section's.
 
 ## A Claude Code project installed before 0.23.0, migrated as #263 states it
 
