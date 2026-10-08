@@ -77,7 +77,7 @@ Asked and answered 2026-10-08.
   - **Let the shell expand the command (`eval`).** That runs text from a settings file inside a gate. And a command holds more than the path: `eval` of `[ -f … ] || exit 0; sh …` would exit the wrapper.
   - **Parse the JSON.** ADR-8 rejected this for POSIX `sh`, and it would not help: the fault is in reading the command string, not in finding it.
   - **Resolve every variable from the wrapper's environment.** An entry's shell can set its own (`D=…; sh "$D"/…`), and a plugin's hook carries `CLAUDE_PLUGIN_ROOT` where the project's hook does not, so a match would be a guess. `CLAUDE_PROJECT_DIR` is the variable Claude Code documents for this, and the one measured equal in both hooks.
-  - **Resolve a relative word from `$CLAUDE_PROJECT_DIR` instead of `_start`.** The two were equal in every measured launch. `_start` is also where the project's hook was spawned, so it stays right if hooks ever run from a session cwd that has moved, which was not measured.
+  - **Resolve a relative word from `$CLAUDE_PROJECT_DIR` instead of `_start`.** The two were equal in every launch measured for this spec. But #263's P4 (`docs/verified.md`) had already measured them apart: a `Stop` hook ran in the subdirectory the Bash tool had last `cd`ed into. There the project's relative entry finds nothing, and the file-guarded form `init` wrote exits 0. Resolving from `$CLAUDE_PROJECT_DIR` would stand the plugin down on it, and no gate would run. `_start` is the directory both hooks are spawned in. (Corrected during T5, 2026-10-08: this bullet first said the moved cwd was not measured.)
   - **Read only `$CLAUDE_PROJECT_DIR`'s two files**, as Q2 was put. That misses the root's `settings.local.json`, which the measurement found read below the root. The miss would run both gates: the safe direction, but a known miss.
 
 - **Affected files:** `hooks/plugin-gate.sh`; `scripts/test-gates.sh`; `scripts/check-skill-contracts.py`; `skills/init/SKILL.md`; ADR-8's dated line; `docs/fidelity.md`; `docs/layout.md`; `docs/verified.md`; `README.md` and `README.ja.md`; both manifests at the bump.
@@ -121,6 +121,6 @@ Asked and answered 2026-10-08.
   - a relative entry in the root's local file, with the copy only at the root → runs;
   - `sub/`'s own `settings.json` entry, with the copy under `sub/` → stands down.
 
-  Then the evidence files and `_start` → green. AC10, AC9.
+  Then the evidence files and `_start` → green. AC10, AC9. Added during T5, as a pin of the committed code: the session launched at the root with the hook started in `sub/`, which is P4's moved cwd. The root's relative entry with the root's copy → runs.
 - [x] T4: case 220 gains a half: `CLAUDE_ENV_FILE` under a directory that does not exist → exit 0, the digest on stdout, nothing on stderr. Red against `37f86b7`, which prints the shell's own error. Then the group redirect → green. AC6.
 - [ ] T5: a `check-skill-contracts.py` entry for `init`'s condition, red against the current text. Then the statements Design item 5 lists. `check-readme-claims.py`, `check-markdown-fences.py` and `check-leakage.sh` are the check → green. AC7, AC8, and AC10's record.
