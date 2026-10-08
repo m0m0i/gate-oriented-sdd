@@ -104,6 +104,19 @@ fi
 # (2) The project runs its own copy of this gate under this event: stand down. Expansion is
 # off across the block, so a word holding `*`, `?` or `[` is tested as written rather than as
 # whatever it matches here, which is not what the entry's own quotes would run (#262).
+#
+# CLAUDE_PROJECT_DIR is the one variable an entry's path is resolved through. Claude Code's hooks
+# documentation asks for it in a command, each placeholder in double quotes, and the plugin's
+# hook and the project's were measured seeing one value (docs/verified.md, #262). Unquoted, the
+# entry's own shell splits and expands the value, so an unquoted spelling counts only where the
+# value holds no space, tab, newline, `*`, `?` or `[`: elsewhere the entry runs nothing, and
+# standing down on it would leave no gate at all.
+_pd=${CLAUDE_PROJECT_DIR:-}
+case "$_pd" in
+  *' '*|*'	'*|*'
+'*|*'*'*|*'?'*|*'['*) _pd_plain= ;;
+  *) _pd_plain=1 ;;
+esac
 set -f
 for f in .claude/settings.json .claude/settings.local.json; do
   [ -f "$f" ] || continue
@@ -116,10 +129,24 @@ for f in .claude/settings.json .claude/settings.local.json; do
     # The entry is evidence only with the file it names on disk. Every path-shaped word
     # whose last component is the gate's name is tried; one that exists is the copy that
     # runs. Ending in the name is not enough: a project's own `code-review-gate.sh` is not
-    # review-gate.sh (#256 round 3). A path reached through a variable
-    # (`"$CLAUDE_PROJECT_DIR/.claude/hooks/…"`) does not resolve here and so does not stand
-    # this gate down, which is the noisy direction, on purpose.
-    for _path in $(grep -oE -- "[^\"' ]*$gate_re" "$f" 2>/dev/null); do
+    # review-gate.sh (#256 round 3). A word runs to a space or a quote, but a JSON-escaped
+    # quote (`\"`) is part of it: until #262 it ended the word, and the documented
+    # `\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/<gate>` was tested as `/.claude/hooks/<gate>`, at
+    # the filesystem root. The escaped quotes are dropped once a word is read; one leading the
+    # word is what makes the variable quoted. A path reached through any other variable does
+    # not resolve here and does not stand this gate down, which is the noisy direction, on
+    # purpose: a wrapper's guess at a variable the entry may set itself is how a gate goes quiet.
+    for _w in $(grep -oE -- "([^\"' \\\\]|\\\\\")*$gate_re" "$f" 2>/dev/null); do
+      _path=$(printf '%s' "$_w" | sed 's/\\"//g')
+      case "$_path" in
+        '$CLAUDE_PROJECT_DIR/'*|'${CLAUDE_PROJECT_DIR}/'*|'${CLAUDE_PROJECT_DIR:-.}/'*)
+          [ -n "$_pd" ] || continue
+          case "$_w" in '\"'*) ;; *) [ -n "$_pd_plain" ] || continue ;; esac
+          _path=${_path#*/}
+          case "$_path" in *'$'*) continue ;; esac
+          _path="$_pd/$_path" ;;
+        *'$'*) continue ;;
+      esac
       case "$_path" in "$gate"|*/"$gate") [ -f "$_path" ] && exit 0 ;; esac
     done
   fi

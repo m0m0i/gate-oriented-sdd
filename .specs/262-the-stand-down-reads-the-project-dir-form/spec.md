@@ -105,7 +105,7 @@ Asked and answered 2026-10-08.
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: case 207 gains (h) and (i). In (h), an existing `.claude/hooks/code-review-gate.sh` is run under `Stop`, and the review gate runs. In (i), `sh \".claude/hook?/quality-gate.sh\"` is run with the real copy on disk, and the quality gate runs. Both are red against `37f86b7`, which stands down. Then the basename filter and `set -f` across the block → green. AC4, AC5.
-- [ ] T2: the suite pins `CLAUDE_PROJECT_DIR`, as Blast radius says. Case 221 covers the variable spellings:
+- [x] T2: the suite pins `CLAUDE_PROJECT_DIR`, as Blast radius says. Case 221 covers the variable spellings:
   - each of the reproduction's four variable spellings, with the copy → stand down;
   - the same spellings without the copy → runs;
   - unquoted, with a project path holding a space → runs;
