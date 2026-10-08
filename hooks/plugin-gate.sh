@@ -101,7 +101,10 @@ fi
 # (1) Not a harness project: silent.
 [ -d .steering ] || exit 0
 
-# (2) The project runs its own copy of this gate under this event: stand down.
+# (2) The project runs its own copy of this gate under this event: stand down. Expansion is
+# off across the block, so a word holding `*`, `?` or `[` is tested as written rather than as
+# whatever it matches here, which is not what the entry's own quotes would run (#262).
+set -f
 for f in .claude/settings.json .claude/settings.local.json; do
   [ -f "$f" ] || continue
   # Line layout is not assumed: a minified settings file is one line, and a line-wise test
@@ -111,14 +114,17 @@ for f in .claude/settings.json .claude/settings.local.json; do
   if grep -qE -- "\"command\"[[:space:]]*:[[:space:]]*\"([^\"\\\\]|\\\\.)*$gate_re" "$f" 2>/dev/null \
      && grep -qE -- "\"$event\"[[:space:]]*:" "$f" 2>/dev/null; then
     # The entry is evidence only with the file it names on disk. Every path-shaped word
-    # ending in the gate's name is tried; one that exists is the copy that runs. A path
-    # reached through a variable (`"$CLAUDE_PROJECT_DIR/.claude/hooks/…"`) does not resolve
-    # here and so does not stand this gate down, which is the noisy direction, on purpose.
+    # whose last component is the gate's name is tried; one that exists is the copy that
+    # runs. Ending in the name is not enough: a project's own `code-review-gate.sh` is not
+    # review-gate.sh (#256 round 3). A path reached through a variable
+    # (`"$CLAUDE_PROJECT_DIR/.claude/hooks/…"`) does not resolve here and so does not stand
+    # this gate down, which is the noisy direction, on purpose.
     for _path in $(grep -oE -- "[^\"' ]*$gate_re" "$f" 2>/dev/null); do
-      [ -f "$_path" ] && exit 0
+      case "$_path" in "$gate"|*/"$gate") [ -f "$_path" ] && exit 0 ;; esac
     done
   fi
 done
+set +f
 
 # (3) The gate runs from here, beside this file, with the project as cwd.
 [ -f "$DIR/$gate" ] || _plugin_gate_block "Plugin gate: $gate is missing from the plugin's hooks/ directory beside plugin-gate.sh, so the gate cannot run. Re-install the plugin and run again rather than treating this turn as a pass."

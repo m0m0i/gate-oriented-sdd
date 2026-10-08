@@ -2211,8 +2211,23 @@ case "$out" in *"exit=2"*) f=ok ;; *) f="no($out)" ;; esac
 #          project does; (g) is (a) without it.
 p=$(pg_repo pg-sd-g); printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"[ -f .claude/hooks/quality-gate.sh ] || exit 0; sh .claude/hooks/quality-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
 case "$out" in *"exit=2"*) g=ok ;; *) g="no($out)" ;; esac
-[ "$a$b$c$d$e$f$g" = "okokokokokokok" ] && report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" ok \
-  || report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" no "settings=$a local=$b file-alone=$c other-event=$d other-gate=$e permission-plus-other-stop=$f entry-without-file=$g"
+#      (h) a file whose name ENDS in the gate's name without being it. A project's own
+#          `code-review-gate.sh`, on disk and run under Stop, is not a copy of review-gate.sh,
+#          and the review gate runs: `{}` on stdout, where a stand-down prints nothing. #256
+#          round 3's MEDIUM, #262 AC4.
+p=$(pg_repo pg-sd-h); mkdir -p "$p/project/.claude/hooks"; printf 'exit 0\n' > "$p/project/.claude/hooks/code-review-gate.sh"
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/code-review-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" review-gate.sh)
+case "$(cat "$TMP/pgout")" in *'{}'*) h=ok ;; *) h="no($out, stood down)" ;; esac
+#      (i) a word holding a glob character is tested as written. Inside the entry's quotes
+#          `.claude/hook?/quality-gate.sh` names no file, so the entry runs nothing; split
+#          unquoted with expansion on, the wrapper matched it to the real copy and stood
+#          down. The wrapper's own split, which case 204's matcher does not reach (#256
+#          round 4), #262 AC5.
+p=$(pg_repo pg-sd-i); with_copy "$p"
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh \".claude/hook?/quality-gate.sh\""}]}]}}' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=2"*) i=ok ;; *) i="no($out)" ;; esac
+[ "$a$b$c$d$e$f$g$h$i" = "okokokokokokokokok" ] && report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" ok \
+  || report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" no "settings=$a local=$b file-alone=$c other-event=$d other-gate=$e permission-plus-other-stop=$f entry-without-file=$g name-suffix=$h glob-word=$i"
 
 # 208. #256 AC3 — the digest's event is SessionStart, not Stop. Named under SessionStart it
 #      stands down; named under Stop, where no digest runs, it prints the digest.
