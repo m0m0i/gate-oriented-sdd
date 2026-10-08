@@ -156,7 +156,19 @@ for f in "$@"; do
     # word is what makes the variable quoted. A path reached through any other variable does
     # not resolve here and does not stand this gate down, which is the noisy direction, on
     # purpose: a wrapper's guess at a variable the entry may set itself is how a gate goes quiet.
-    for _w in $(grep -oE -- "([^\"' \\\\]|\\\\\")*$gate_re" "$f" 2>/dev/null); do
+    #
+    # The one character before a word is kept when it is a single quote or a backslash, after
+    # which the entry's shell expands nothing. A lone backslash escapes what follows, so its
+    # word is skipped. A single-quoted word counts only as a plain path: one holding a `$` or a
+    # backslash is skipped, since `sh '$CLAUDE_PROJECT_DIR/…'` runs a file named for the
+    # variable, which is no file at all. Until review round 1 the quote ended the word there,
+    # the word read as unquoted, and this stood down while no gate ran.
+    for _w in $(grep -oE -- "[\\\\']?([^\"' \\\\]|\\\\\")*$gate_re" "$f" 2>/dev/null); do
+      case "$_w" in
+        '\"'*) ;;
+        '\'*|"'"*'$'*|"'"*'\'*) continue ;;
+        "'"*) _w=${_w#"'"} ;;
+      esac
       _path=$(printf '%s' "$_w" | sed 's/\\"//g')
       case "$_path" in
         '$CLAUDE_PROJECT_DIR/'*|'${CLAUDE_PROJECT_DIR}/'*|'${CLAUDE_PROJECT_DIR:-.}/'*)

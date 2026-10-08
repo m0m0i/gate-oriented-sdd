@@ -2235,8 +2235,19 @@ case "$(cat "$TMP/pgout")" in *'{}'*) h=ok ;; *) h="no($out, stood down)" ;; esa
 p=$(pg_repo pg-sd-i); with_copy "$p"
 printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh \".claude/hook?/quality-gate.sh\""}]}]}}' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
 case "$out" in *"exit=2"*) i=ok ;; *) i="no($out)" ;; esac
-[ "$a$b$c$d$e$f$g$h$i" = "okokokokokokokokok" ] && report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" ok \
-  || report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" no "settings=$a local=$b file-alone=$c other-event=$d other-gate=$e permission-plus-other-stop=$f entry-without-file=$g name-suffix=$h glob-word=$i"
+#      (j) the entry names the copy by its absolute path — stand down: the path is tested as
+#          written, not under the start directory. No other case reaches that branch (#262,
+#          review round 1).
+#      (k) the entry single-quotes the relative path — stand down: the quote is not part of
+#          the path (#262, review round 1).
+p=$(pg_repo pg-sd-j); with_copy "$p"
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh %s/project/.claude/hooks/quality-gate.sh"}]}]}}\n' "$p" > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=0"*) j=ok ;; *) j="no($out)" ;; esac; [ -s "$TMP/pgout" ] && j="no(printed)"
+p=$(pg_repo pg-sd-k); with_copy "$p"
+printf '%s\n' "{\"hooks\":{\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"sh '.claude/hooks/quality-gate.sh'\"}]}]}}" > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=0"*) k=ok ;; *) k="no($out)" ;; esac; [ -s "$TMP/pgout" ] && k="no(printed)"
+[ "$a$b$c$d$e$f$g$h$i$j$k" = "okokokokokokokokokokok" ] && report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" ok \
+  || report "plugin-gate stands down on a settings entry for the same gate and event, and on nothing less" no "settings=$a local=$b file-alone=$c other-event=$d other-gate=$e permission-plus-other-stop=$f entry-without-file=$g name-suffix=$h glob-word=$i absolute=$j single-quoted=$k"
 
 # 208. #256 AC3 — the digest's event is SessionStart, not Stop. Named under SessionStart it
 #      stands down; named under Stop, where no digest runs, it prints the digest.
@@ -2274,6 +2285,10 @@ out=$(run_pg "$p" ""); case "$out" in *"exit=2"*) b2=ok ;; *) b2="no($out)" ;; e
 #      (d) another variable naming the same directory — runs: only CLAUDE_PROJECT_DIR is read;
 #      (e) CLAUDE_PROJECT_DIR unset — runs: the wrapper does not guess the entry's value;
 #      (f) the digest's SessionStart entry in the documented spelling — stands down.
+#      (g) the variable single-quoted, or its `$` escaped — the entry's shell does not expand
+#          it and runs nothing, so the gate runs. The extraction stopped at the quote and read
+#          the word as unquoted, and the wrapper stood down with no gate running (#262, review
+#          round 1).
 pd_spellings='sh \"${CLAUDE_PROJECT_DIR:-.}\"/.claude/hooks/quality-gate.sh
 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-gate.sh
 sh \"$CLAUDE_PROJECT_DIR/.claude/hooks/quality-gate.sh\"
@@ -2307,8 +2322,14 @@ case "$out" in *"exit=2"*) e=ok ;; *) e="no($out)" ;; esac
 p=$(pg_repo pg-pd-f); mkdir -p "$p/project/.claude/hooks"; cp "$ROOT/hooks/steering-digest.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/.claude/hooks/"
 on_event SessionStart 'sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/steering-digest.sh' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" steering-digest.sh)
 case "$out" in *"exit=0"*) f=ok ;; *) f="no($out)" ;; esac; [ -s "$TMP/pgout" ] && f="no(printed the digest)"
-[ "$a$b$c$d$e$f" = "okokokokokok" ] && report "plugin-gate stands down on an entry that names the copy through \$CLAUDE_PROJECT_DIR, and on nothing less" ok \
-  || report "plugin-gate stands down on an entry that names the copy through \$CLAUDE_PROJECT_DIR, and on nothing less" no "with-copy=$a no-copy=$b space=$c other-variable=$d unset=$e digest=$f"
+p=$(pg_repo pg-pd-g); with_copy "$p"; g=
+for _s in "sh '\$CLAUDE_PROJECT_DIR/.claude/hooks/quality-gate.sh'" 'sh \\$CLAUDE_PROJECT_DIR/.claude/hooks/quality-gate.sh'; do
+  on_event Stop "$_s" > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
+  case "$out" in *"exit=2"*) ;; *) g="$g[$_s: $out] " ;; esac
+done
+[ -z "$g" ] && g=ok || g="no($g)"
+[ "$a$b$c$d$e$f$g" = "okokokokokokok" ] && report "plugin-gate stands down on an entry that names the copy through \$CLAUDE_PROJECT_DIR, and on nothing less" ok \
+  || report "plugin-gate stands down on an entry that names the copy through \$CLAUDE_PROJECT_DIR, and on nothing less" no "with-copy=$a no-copy=$b space=$c other-variable=$d unset=$e digest=$f unexpanded=$g"
 
 # 222. #262 AC10 — a session launched below the git root. Claude Code then reads the launch
 #      directory's .claude/settings.json and settings.local.json and the root's
