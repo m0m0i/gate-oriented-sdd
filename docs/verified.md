@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-10-07 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
+Last **updated**: 2026-10-08 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
 
 The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The two Antigravity rows carry the date they were verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
@@ -10,7 +10,7 @@ The version table below carries a date beside each row. Claude Code's row was re
 
 | Component | Version |
 | :-- | :-- |
-| Claude Code | 2.1.292 — the #257 section of 2026-10-07. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
+| Claude Code | 2.1.293 — the #263 and #264 section of 2026-10-08. 2.1.292 was the #257 section of 2026-10-07. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
 | Antigravity CLI (`agy`) | 1.2.16 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
 | Antigravity IDE | 2.3.1 — verified 2026-08-21, and not re-run since |
 | Platform | macOS (darwin, arm64) |
@@ -324,6 +324,26 @@ Whether auto-update actually delivers a new plugin version to a project between 
 ### What this run does not support
 
 The trust dialog. M2c's declaration came from `--settings`, which needs no trust, and M2b's trusted session could not log in, so no run saw a trusted project's own `.claude/settings.json` reconcile a pinned marketplace. The documentation says a trusted project's entries are honoured and an untrusted one's ignored, and M2b observed the second half. Also not supported: a populated cache for M2c's install, which a third session or `/plugin` would have completed, and anything about auto-update actually delivering a version, which nothing here waited for.
+
+## Where the plugin is, from the session's own shell (#263, #264)
+
+**Run on 2026-10-08, Claude Code 2.1.293**, before #263's spec chose a mechanism, because #264 is a check that passes at turn end and fails in the shell `implement` and a reviewer use, and the documentation answers half of why. It says `CLAUDE_PLUGIN_ROOT` and the other path variables "aren't present in the environment of commands Claude runs through the Bash tool, in the main session or in a subagent" (`plugins/manifest-reference`). It lists `CLAUDE_ENV_FILE` for `SessionStart` hooks, but not among the variables a plugin's hooks receive. And it says `bin/` "at the plugin root [is] on the `PATH` of the Bash tool's shell while the plugin is enabled", with "claude.ai and Cowork don't install a plugin that has a top-level `bin/` directory" (`plugins/components`).
+
+The method: a scratch plugin with a `SessionStart` hook, a `Stop` hook and one executable in `bin/`, loaded with `--plugin-dir` into headless sessions (`claude -p --setting-sources project,local --strict-mcp-config`, Bash and Agent allowed) in a scratch git project. `--setting-sources project,local` kept the user-scope install of this plugin from loading beside it. The `SessionStart` hook logged `CLAUDE_ENV_FILE` and appended one `export` to it; the `Stop` hook logged whether either mechanism had reached it.
+
+**P1 — a plugin's `SessionStart` hook gets `CLAUDE_ENV_FILE`, and its export reaches every Bash command of the session. Holds.** The hook received `~/.claude/session-env/<session id>/sessionstart-hook-0.sh`. The exported value was present in the main session's Bash, and in the Bash of a general-purpose subagent spawned through the Agent tool. It was still present after a `cd` into a subdirectory, after `git worktree add` and a `cd` into the new worktree, and after a `cd` outside the project, which the tool reset to the project root.
+
+**P2 — it survives `/compact` and `--resume`, and accumulates.** The session was resumed with `/compact`, then resumed again to read the variable. It was present. The `SessionStart` hook fired for each, and the file, kept across all three, held one copy of the line per `SessionStart`. `hooks/plugin-gate.sh` therefore appends only when the last line it wrote differs.
+
+**P3 — a plugin's `bin/` is on the Bash tool's `PATH`, with the same reach.** The executable ran by bare name in the main session, in the subagent, and after each `cd` above.
+
+**P4 — neither reaches a `Stop` hook.** The `Stop` hook found no executable on its `PATH` and no exported variable. At turn end the gate has `CLAUDE_PLUGIN_ROOT` (V1), so each of the two variables the checks read is set in exactly one of the two places. Observed in passing: that `Stop` hook ran with the subdirectory the Bash tool had last `cd`ed into as its cwd, not the project root. The gates anchor to `git rev-parse --show-toplevel` before anything else, so they are unaffected.
+
+**The reproduction, at `9dd73bc`, in a scratch tree with `.steering/` and no hooks directory.** The 0.22.0 copy of `check-steering-anchors.sh`, taken from the cached 0.22.0 plugin, exited 1 (`cannot find gate-lib.sh in hooks/, .claude/hooks/ or .agents/hooks/`), with `CLAUDE_PLUGIN_ROOT` unset and with it set to the installed 0.23.1. The branch base's copy exited 1 in this session's own Bash, where neither variable is set, and 0 with `CLAUDE_PLUGIN_ROOT` set.
+
+### What this run does not support
+
+A mid-session `/reload-plugins` after an update. If it does not fire `SessionStart`, the env file keeps the old root until the next one, and ADR-9 records that as a limit. A person's own terminal, which neither mechanism reaches: there the checks say to set `GATE_SDD_HOOKS`. Whether `CLAUDE_ENV_FILE` stays available to plugin hooks in later versions, since that is measured here, not documented. The migration itself, which is the next section's.
 
 ## Still to verify
 

@@ -1,0 +1,28 @@
+# ADR-9: The plugin tells the session's shell where it is
+- Status: accepted
+- Date: 2026-10-08; #263, #264
+
+## Context
+ADR-8 took the Claude Code gates out of projects. Two checks `init` still copies into every project source `gate-lib.sh` to ask the gates' own question: `check-steering-anchors.sh`, which is on every `- Validators:` line, and `check-unreviewed-work.sh`, which runs in CI. Since ADR-8 they found the library through `GATE_SDD_HOOKS`, then a copy, then `$CLAUDE_PLUGIN_ROOT/hooks`. That covered turn end, where the plugin's gate runs the validators in its own environment, and it covered CI, where the workflow checks the plugin out. It did not cover the session's own shell, which is where `implement` runs the validators inside its loop and every reviewer runs "the project's own validators". Claude Code documents `CLAUDE_PLUGIN_ROOT` as absent there: "The variables aren't present in the environment of commands Claude runs through the Bash tool, in the main session or in a subagent" (`plugins/manifest-reference`). A migrated project's anchor check therefore exited 0 at turn end and 1 by hand for the same tree (#264). A reviewer that reports it returns non-CLEAN for a tree the gate passes, and an author who learns to ignore one failing validator has learned to ignore a validator.
+
+## Decision
+On `SessionStart`, `hooks/plugin-gate.sh` appends `export GATE_SDD_PLUGIN_ROOT='<plugin root>'` to `CLAUDE_ENV_FILE`. Claude Code sources that file before every Bash command of the session. Both checks read `$GATE_SDD_PLUGIN_ROOT/hooks` last, after the project's copies and after `$CLAUDE_PLUGIN_ROOT/hooks`. The wrapper writes before its silence and stand-down checks, so the variable exists in the session where `init` creates `.steering/` and in the session where a migration runs. A terminal outside any Claude Code session sets `GATE_SDD_HOOKS`, and the checks' error says so.
+
+## Consequences
+- `implement` and a reviewer get the turn-end verdict by hand with nothing to remember. Each of the two plugin variables is set in exactly one place, turn end or the session's shell, so they cannot disagree.
+- This rests on a measured behaviour, not a documented one. Claude Code documents `CLAUDE_ENV_FILE` for `SessionStart` hooks, but its list of the variables a plugin's hooks receive does not include it. `docs/verified.md` records the run on 2.1.293: main session, subagent, a worktree `cd`, `/compact` and `--resume`. If a later version withdraws it, the checks fail closed and name what to set. That is #264's state, not a fail-open. Re-verify when the version column moves.
+- The env file is shared with other hooks, and it gains a line on every `SessionStart`. The wrapper appends only when its last line there differs, and never joins a line another hook left unterminated.
+- After a mid-session `/reload-plugins` that follows an update, the file may still name the old root. That case is unmeasured. Old cache directories stay on disk, so a by-hand run would read the previous version's library until the next `SessionStart`. The verdict at turn end is unaffected.
+- On a machine with a user-scope install, every session's Bash carries one more variable, in every project. Nothing reads it outside the two checks.
+- Antigravity is unchanged. Its projects copy the library into `.agents/hooks/`, and the checks find it there.
+- A copied check can still fall behind the plugin. Nothing reports that except the README's comparison command.
+
+## Alternatives considered
+- **Resolve the plugin from `~/.claude/plugins/installed_plugins.json`.** Claude Code gives the file's fields and no stability promise. On the machine where this was decided it held two entries at two versions and six cached versions, and which one loads in a project with both is V4's open question. A wrong guess reads a library older than the gate's, so the check could pass where the gate blocks.
+- **The digest prints the path, and `implement` and the reviewer contract export it.** That is a rule in the layer that can be talked out of it, repeated on every command because each Bash call is a fresh shell. The reviewer is copied into the project rather than loaded as plugin content, so even `${CLAUDE_PLUGIN_ROOT}` substitution does not reach its text. This decision is the same direction, moved into the hook layer.
+- **`init` writes `GATE_SDD_HOOKS` into the project's settings `env`.** The value would be one person's version-specific cache path. Committed, it is wrong for everyone else. Kept local, it goes stale at every update and keeps resolving to an old library, because old cache directories stay. It also outranks every copy.
+- **`init` copies `gate-lib.sh` again.** ADR-8 rejects it as "the same drift, in the file that holds the fixes", and a copy outranks the plugin at turn end.
+- **The checks carry the reader they need.** A copy of the question that can disagree with its subject is #14 and #23.
+- **Write `GATE_SDD_HOOKS` itself into the env file.** It is read first, so a dual-target project would read the plugin's library by hand and its own copy at turn end. And a file sourced before every command would override a person's own export.
+- **Ship the checks from the plugin.** The `- Validators:` line is one line both harnesses' gates run, and a plugin path resolves nowhere in a dual-target project or a terminal.
+- **A plugin `bin/` locator on the Bash tool's `PATH`.** It is documented, and it measured the same as the env file. But "claude.ai and Cowork don't install a plugin that has a top-level `bin/` directory" (`plugins/components`), and this plugin's top level is the repository root (ADR-1).
