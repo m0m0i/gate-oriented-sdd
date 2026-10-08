@@ -2863,6 +2863,60 @@ case "$out" in *"exit=2"*) c=ok ;; *) c="no($out)" ;; esac
 [ "$a$b$c" = "okokok" ] && report "a migrated project's anchor check gives one verdict at turn end and in the session's shell" ok \
   || report "a migrated project's anchor check gives one verdict at turn end and in the session's shell" no "turn-end=$a session-shell=$b control-blocks=$c"
 
+# 220. #264 AC1 — where GATE_SDD_PLUGIN_ROOT comes from. On SessionStart Claude Code hands each
+#      hook a CLAUDE_ENV_FILE, a shell script it sources before every Bash command of the session,
+#      the main session's and a subagent's alike (docs/verified.md). The wrapper appends one
+#      export naming the plugin root beside it. The file is shared with other hooks and kept
+#      across --resume and /compact, so the halves are about not damaging it as much as writing:
+#      (a) a seeded line survives, exactly one export is added, and sourcing the file yields the
+#          root — from a fixture whose path holds a space and a single quote;
+#      (b) a second SessionStart adds nothing: the file was measured gaining a line per event;
+#      (c) a seeded last line with no newline is not joined to the export;
+#      (d) an older root already in the file is superseded, not skipped;
+#      (e) the digest prints what it printed without the file, and nothing on stderr;
+#      (f) written in a project without .steering/, still silent — `init` runs in a session that
+#          started before it wrote .steering/, and step 4 needs the variable by hand;
+#      (g) written where the digest stands down — a migration runs in such a session;
+#      (h) never written for either Stop gate;
+#      (i) an empty CLAUDE_ENV_FILE writes nothing and the digest still runs.
+run_pg_env() { # run_pg_env <fixture root> <gate> <env file> — run_pg with CLAUDE_ENV_FILE
+  ( cd "$1/project" && CLAUDE_ENV_FILE="$3" CLAUDE_PLUGIN_ROOT="$1/plugin" sh "$1/plugin/hooks/plugin-gate.sh" "$2" >"$TMP/pgout" 2>"$TMP/pgerr"; echo "exit=$?" )
+}
+sourced() { # sourced <env file> <var> — the value a Bash command would see after the file runs
+  sh -c '. "$1" && eval "printf %s \"\${$2-UNSET}\""' _ "$1" "$2" 2>/dev/null
+}
+roots_in() { grep -c '^export GATE_SDD_PLUGIN_ROOT=' "$1" 2>/dev/null; }
+p=$(pg_repo "pg env'220"); ef="$TMP/env-220-a"; printf 'export OTHER_HOOK=1\n' > "$ef"
+out=$(run_pg_env "$p" steering-digest.sh "$ef")
+[ "$(head -1 "$ef")" = "export OTHER_HOOK=1" ] && [ "$(roots_in "$ef")" = 1 ] && [ "$(sourced "$ef" GATE_SDD_PLUGIN_ROOT)" = "$p/plugin" ] \
+  && [ "$(sourced "$ef" OTHER_HOOK)" = 1 ] && a=ok || a="no($out; $(cat "$ef"))"
+run_pg_env "$p" steering-digest.sh "$ef" >/dev/null
+[ "$(roots_in "$ef")" = 1 ] && b=ok || b="no($(roots_in "$ef") lines)"
+ef="$TMP/env-220-c"; printf 'export OTHER_HOOK=1' > "$ef"; run_pg_env "$p" steering-digest.sh "$ef" >/dev/null
+[ "$(sourced "$ef" OTHER_HOOK)" = 1 ] && [ "$(sourced "$ef" GATE_SDD_PLUGIN_ROOT)" = "$p/plugin" ] && c=ok || c="no($(cat "$ef"))"
+ef="$TMP/env-220-d"; printf "export GATE_SDD_PLUGIN_ROOT='/old/root'\n" > "$ef"; run_pg_env "$p" steering-digest.sh "$ef" >/dev/null
+[ "$(sourced "$ef" GATE_SDD_PLUGIN_ROOT)" = "$p/plugin" ] && d=ok || d="no($(cat "$ef"))"
+run_pg "$p" steering-digest.sh >/dev/null; cp "$TMP/pgout" "$TMP/pgout-plain"
+out=$(run_pg_env "$p" steering-digest.sh "$TMP/env-220-e")
+case "$out" in *"exit=0"*) e=ok ;; *) e="no($out)" ;; esac
+cmp -s "$TMP/pgout" "$TMP/pgout-plain" || e="no(stdout differs)"; [ -s "$TMP/pgerr" ] && e="no(stderr $(head -c 80 "$TMP/pgerr"))"
+grep -q 'Repo facts' "$TMP/pgout-plain" || e="no(the digest did not run)"
+p=$(pg_repo pg-env-220-f); rm -rf "$p/project/.steering"; ef="$TMP/env-220-f"
+out=$(run_pg_env "$p" steering-digest.sh "$ef")
+[ "$(sourced "$ef" GATE_SDD_PLUGIN_ROOT)" = "$p/plugin" ] && f=ok || f="no($out)"; [ -s "$TMP/pgout" ] && f="no(printed)"
+p=$(pg_repo pg-env-220-g); mkdir -p "$p/project/.claude/hooks"; cp "$ROOT/hooks/steering-digest.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/.claude/hooks/"
+printf '%s\n' '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"sh .claude/hooks/steering-digest.sh"}]}]}}' > "$p/project/.claude/settings.json"
+ef="$TMP/env-220-g"; out=$(run_pg_env "$p" steering-digest.sh "$ef")
+[ "$(sourced "$ef" GATE_SDD_PLUGIN_ROOT)" = "$p/plugin" ] && g=ok || g="no($out)"; [ -s "$TMP/pgout" ] && g="no(printed: the digest did not stand down)"
+p=$(pg_repo pg-env-220-h); h=ok
+for gate in quality-gate.sh review-gate.sh; do
+  run_pg_env "$p" "$gate" "$TMP/env-220-h" >/dev/null; [ -e "$TMP/env-220-h" ] && h="no($gate wrote)"
+done
+out=$(run_pg_env "$p" steering-digest.sh ""); case "$out" in *"exit=0"*) i=ok ;; *) i="no($out)" ;; esac
+grep -q 'Repo facts' "$TMP/pgout" || i="no(the digest did not run)"
+[ "$a$b$c$d$e$f$g$h$i" = "okokokokokokokokok" ] && report "plugin-gate tells the session's shell where the plugin is, once, without damaging the env file" ok \
+  || report "plugin-gate tells the session's shell where the plugin is, once, without damaging the env file" no "written=$a once=$b no-newline=$c supersedes=$d digest-unchanged=$e no-steering=$f stood-down=$g not-stop=$h empty=$i"
+
 # --- guards: scripts/check-receipt-schema.py ---------------------------------------
 #
 # #28. The invariant that makes the mirror-skip unreachable — every MIRRORS destination is

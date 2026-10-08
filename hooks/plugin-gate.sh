@@ -6,7 +6,8 @@
 # re-running `init` and opening a pull request in every repository that copied it. The gate
 # itself is unchanged and runs beside this file, with the project as cwd (verified: V1 in
 # docs/verified.md). What this wrapper adds is the three decisions a plugin-shipped gate has to
-# make that a copied one never did:
+# make that a copied one never did, and on SessionStart one statement a copy never needed to
+# make: where the plugin is, for the session's own shell — (0) below.
 #
 #   1. A project without .steering/ does not use the harness. A user-scope install reaches
 #      every project on the machine, so the gate must be silent there — exit 0, no output.
@@ -58,6 +59,38 @@ case "$gate" in
 esac
 
 gate_re=$(printf '%s' "$gate" | sed 's/\./\\./g')   # the name as a pattern: its dots literal
+
+# (0) Tell the session's own shell where the plugin is (#264). CLAUDE_PLUGIN_ROOT reaches this
+# hook and, by Claude Code's documentation, never a command the agent runs through its Bash
+# tool — so the two checks `init` copies into a project, which find gate-lib.sh through the
+# plugin since #256, passed at turn end and failed when `implement` or a reviewer ran them.
+# On SessionStart Claude Code hands each hook a CLAUDE_ENV_FILE that it sources before every
+# Bash command of the session, a subagent's included (verified: docs/verified.md), and the
+# checks read GATE_SDD_PLUGIN_ROOT last, after any copy. Written before (1) and (2), because
+# both sessions that need it most are ones this wrapper would otherwise leave: `init` writes
+# .steering/ in a session that started without it, and a migration runs in one whose digest
+# stood down; step 4 of `init` runs the validators by hand in both. Elsewhere the variable is
+# inert. The file is shared with other hooks and kept across --resume and /compact, gaining a
+# line per SessionStart, so the export is appended only when the last one there differs, never
+# joined to a line another hook left unterminated, and never written for a root holding a
+# newline, which would split it. A failed write is silent — SessionStart has no blocking
+# channel — and lands where it is loud anyway: the check's own error, naming what to set.
+if [ "$event" = SessionStart ] && [ -n "${CLAUDE_ENV_FILE:-}" ]; then
+  _root=${DIR%/*}
+  case "$_root" in
+    *'
+'*) ;;
+    *)
+      _line="export GATE_SDD_PLUGIN_ROOT='$(printf '%s' "$_root" | sed "s/'/'\\\\''/g")'"
+      if [ "$(grep '^export GATE_SDD_PLUGIN_ROOT=' "$CLAUDE_ENV_FILE" 2>/dev/null | tail -n 1)" != "$_line" ]; then
+        _nl=""
+        [ -s "$CLAUDE_ENV_FILE" ] && [ -n "$(tail -c 1 "$CLAUDE_ENV_FILE")" ] && _nl='
+'
+        printf '%s%s\n' "$_nl" "$_line" >> "$CLAUDE_ENV_FILE" 2>/dev/null || :
+      fi
+      ;;
+  esac
+fi
 
 # Anchor to the repository root, as the gates do, so .steering/ and .claude/ resolve from
 # wherever the hook was invoked.
