@@ -370,6 +370,24 @@ A mid-session `/reload-plugins` after an update. If it does not fire `SessionSta
 - **The installed plugin delivering the fix.** 0.24.0 was not released, so the branch was loaded with `--plugin-dir`, and no plugin update arrived between sessions.
 - **Other installs.** No Antigravity or dual-target project was migrated, and neither was a project carrying a `- Mode:` line: this one predates it, and the document-set check was not added.
 
+## Which settings a launch reads, and where its hooks run (#262)
+
+**Run on 2026-10-08, Claude Code 2.1.293**, before #262's design. The stand-down in `hooks/plugin-gate.sh` reads the project's settings and resolves the paths they name, so it depends on which files Claude Code read and where it ran their hooks. The method: a scratch plugin and a scratch git project, each `Stop` hook logging `CLAUDE_PROJECT_DIR` and its cwd, in headless sessions (`claude -p --tools "" --strict-mcp-config --setting-sources project,local --plugin-dir <scratch plugin>`).
+
+**L1 — the plugin's hook and the project's see one value. Holds.** Both saw `CLAUDE_PROJECT_DIR` set to the launch directory, and both ran with that directory as cwd. So the wrapper can resolve an entry's `$CLAUDE_PROJECT_DIR` to the value in its own environment.
+
+**L2 — a launch below the git root reads three of the four files.** Launched from `sub/` of a git repository, Claude Code read `sub/.claude/settings.json`, `sub/.claude/settings.local.json` and the root's `.claude/settings.local.json`. It did not read the root's `.claude/settings.json`. Every hook ran with `sub/` as both cwd and `CLAUDE_PROJECT_DIR`. The control, launched from the root, fired the root's `settings.json` hook. The settings documentation says the shared file is read "from the session's primary working directory". That the local file is read at the root is measured, not documented.
+
+**The consequence, at `37f86b7`.** The wrapper read the git root's two files and resolved a relative path from the root. A launch below the root could therefore stand the plugin down on a root `settings.json` entry Claude Code never ran, and with the plugin enabled at user scope no gate ran. Since #262 the wrapper reads L2's files, and resolves a relative path from the directory the hook started in. That is not always `CLAUDE_PROJECT_DIR`: P4 above saw a plugin's `Stop` hook run in the subdirectory the Bash tool had last `cd`ed into. The wrapper resolves from there on the inference that the project's own hook starts in the same directory, so its shell resolves the entry's path from there too.
+
+### What this run does not support
+
+- **A worktree session.** The hooks documentation says `CLAUDE_PROJECT_DIR` "stays put" at the session's start. Not measured here.
+- **A project hook's cwd after a Bash `cd`.** P4 saw a plugin's hook follow the `cd`, and no project settings hook was measured there. If the project's hook stays at the launch directory, resolving from the start directory finds nothing the entry runs, and both gate sets run: the noisy direction.
+- **The wrapper in a live session.** The probe's hooks only logged. `scripts/test-gates.sh` holds the wrapper to these results in fixtures, under "plugin-gate stands down on an entry that names the copy through `$CLAUDE_PROJECT_DIR`, and on nothing less" and "plugin-gate reads the settings a launch below the git root reads, and resolves from where it was launched".
+- **Later versions.** That the root's `settings.local.json` is read below the root is measured on one version, not documented.
+- **User and managed settings**, which the wrapper does not read.
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.

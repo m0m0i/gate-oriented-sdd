@@ -14,11 +14,11 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Twenty-eight today. A twenty-ninth needs an argument, in the spec that proposes it, for why review cannot
+Twenty-nine today. A thirtieth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
-with it, #26 the twenty-fourth, #79 the twenty-fifth, #256 the twenty-sixth without moving it, and #263 the
-twenty-seventh and twenty-eighth; a cap that is not moved with the entry reads as already exceeded, and the next author
+with it, #26 the twenty-fourth, #79 the twenty-fifth, #256 the twenty-sixth without moving it, #263 the
+twenty-seventh and twenty-eighth, and #262 the twenty-ninth; a cap that is not moved with the entry reads as already exceeded, and the next author
 cannot tell whether the list is at its limit or the sentence is stale — which is how this said twenty-five over twenty-six.
 """
 
@@ -154,6 +154,19 @@ CONTRACTS = (
         "consumers' migrations. Review cannot defend it: this repository reads hooks/ from "
         "source and has no copy to go stale, so the deletion reads as trimming a migration "
         "detail, and the damage lands only in installs that never appear in its diffs.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "names its copy by a relative or absolute path, or through `$CLAUDE_PROJECT_DIR`",
+        "The migration's first step tells a user what an unmigrated project runs: the plugin's "
+        "gates stand down on an entry that runs a copy. That holds only for the entries "
+        "plugin-gate.sh can resolve, and an entry reaching the copy any other way runs both "
+        "gate sets, two blocks for one failure. Stated without the condition, the sentence "
+        "was #262: a downstream project wrote the form Claude Code's hooks documentation asks "
+        "for and got both. Review cannot defend it, and the record shows that twice: the "
+        "unconditional sentence passed review at #256, which wrote it, and at #263, which "
+        "rewrote the bullet around it. Without its condition the sentence still reads as "
+        "complete, and the condition reads as qualification a reviewer could trim.",
     ),
     (
         "skills/init/SKILL.md",
