@@ -2326,6 +2326,10 @@ case "$out" in *"exit=0"*) f=ok ;; *) f="no($out)" ;; esac; [ -s "$TMP/pgout" ] 
 #      (e) sub/'s own settings.json runs sub/'s copy — stand down;
 #      (f) outside Claude Code, CLAUDE_PROJECT_DIR unset, from the root — the root's files, as
 #          before #262: (a)'s entry and copy stand down.
+#      (g) launched at the root, the hook started in sub/ — the cwd the Bash tool last cd'ed
+#          into, which #263's P4 measured a Stop hook running in. The root's relative entry
+#          finds nothing from there, so the gate runs; resolved from CLAUDE_PROJECT_DIR instead
+#          of the start directory, the wrapper stood down and nothing ran.
 sub_copy() { mkdir -p "$1/project/sub/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$1/project/sub/.claude/hooks/"; }
 p=$(pg_repo pg-sub-a); mkdir -p "$p/project/sub"; with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh sub)
 case "$out" in *"exit=2"*) a=ok ;; *) a="no($out)" ;; esac
@@ -2339,8 +2343,11 @@ p=$(pg_repo pg-sub-e); sub_copy "$p"; printf '%s\n' "$sd" > "$p/project/sub/.cla
 case "$out" in *"exit=0"*) e=ok ;; *) e="no($out)" ;; esac; [ -s "$TMP/pgout" ] && e="no(printed)"
 p=$(pg_repo pg-sub-f); with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.json"; out=$(run_pg_bare "$p" quality-gate.sh)
 case "$out" in *"exit=0"*) f=ok ;; *) f="no($out)" ;; esac; [ -s "$TMP/pgout" ] && f="no(printed)"
-[ "$a$b$c$d$e$f" = "okokokokokok" ] && report "plugin-gate reads the settings a launch below the git root reads, and resolves from where it was launched" ok \
-  || report "plugin-gate reads the settings a launch below the git root reads, and resolves from where it was launched" no "root-settings=$a root-local-variable=$b root-local-variable-copy-at-root=$c root-local-relative=$d sub-settings=$e unset=$f"
+p=$(pg_repo pg-sub-g); mkdir -p "$p/project/sub"; with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.json"
+out=$( cd "$p/project/sub" && CLAUDE_PROJECT_DIR="$p/project" CLAUDE_PLUGIN_ROOT="$p/plugin" sh "$p/plugin/hooks/plugin-gate.sh" quality-gate.sh >"$TMP/pgout" 2>"$TMP/pgerr" </dev/null; echo "exit=$?" )
+case "$out" in *"exit=2"*) g=ok ;; *) g="no($out)" ;; esac
+[ "$a$b$c$d$e$f$g" = "okokokokokokok" ] && report "plugin-gate reads the settings a launch below the git root reads, and resolves from where it was launched" ok \
+  || report "plugin-gate reads the settings a launch below the git root reads, and resolves from where it was launched" no "root-settings=$a root-local-variable=$b root-local-variable-copy-at-root=$c root-local-relative=$d sub-settings=$e unset=$f moved-cwd=$g"
 
 # --- guards: assets/check-locks.py -------------------------------------------------
 #
