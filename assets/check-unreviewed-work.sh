@@ -29,15 +29,19 @@ fi
 
 # gate-lib.sh is `hooks/` in the harness repo, `.agents/hooks/` in an Antigravity project, and
 # `.claude/hooks/` in a Claude Code project installed before 0.23.0. Since #256 a Claude Code
-# project has no copy: its gates run from the plugin, and this check finds the library the same
-# two ways. GATE_SDD_HOOKS is the explicit answer, for CI (where `init` has the workflow check
-# the plugin out) and for a run by hand, and it is read first. $CLAUDE_PLUGIN_ROOT/hooks is
-# what the plugin's own gate puts in every validator's environment at turn end, and it is read
-# LAST, after the three directories: this repository's turn-end validators carry the installed
-# plugin's root in their environment too, and a dogfood run must read hooks/ from source rather
-# than from an installed copy. Finding the library is the problem that produced #16, so this
-# FAILS when it cannot — a guard that skips because it could not locate its own dependency is
-# the bug this script exists to prevent — and the failure names every place it looked.
+# project has no copy: its gates run from the plugin, and this check finds the library the way
+# each place it runs can say where the plugin is. GATE_SDD_HOOKS is the explicit answer, for CI
+# (where `init` has the workflow check the plugin out) and for a terminal outside any Claude
+# Code session, and it is read first. $CLAUDE_PLUGIN_ROOT/hooks is what the plugin's own gate
+# puts in every validator's environment at turn end. $GATE_SDD_PLUGIN_ROOT/hooks is what the
+# plugin's SessionStart hook writes into the session's env file, so the session's own shell —
+# `implement`'s loop, a reviewer — has it, where Claude Code documents CLAUDE_PLUGIN_ROOT as
+# absent (#264). Each of those two is set in exactly one of the two places, so they cannot
+# disagree. Both are read LAST, after the three directories: this repository's sessions carry
+# the installed plugin's root too, and a dogfood run must read hooks/ from source rather than
+# from an installed copy. Finding the library is the problem that produced #16, so this FAILS
+# when it cannot — a guard that skips because it could not locate its own dependency is the bug
+# this script exists to prevent — and the failure names every place it looked.
 lib=""
 if [ -n "${GATE_SDD_HOOKS:-}" ]; then
   # Set and wrong is not the same as unset: a workflow whose checkout path and this variable
@@ -57,10 +61,17 @@ if [ -z "$lib" ]; then
   done
 fi
 [ -z "$lib" ] && [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$CLAUDE_PLUGIN_ROOT/hooks/gate-lib.sh" ] && lib="$CLAUDE_PLUGIN_ROOT/hooks/gate-lib.sh"
+[ -z "$lib" ] && [ -n "${GATE_SDD_PLUGIN_ROOT:-}" ] && [ -f "$GATE_SDD_PLUGIN_ROOT/hooks/gate-lib.sh" ] && lib="$GATE_SDD_PLUGIN_ROOT/hooks/gate-lib.sh"
 if [ -z "$lib" ]; then
-  echo "check-unreviewed-work: cannot find gate-lib.sh in \$GATE_SDD_HOOKS, hooks/, .claude/hooks/, .agents/hooks/ or \$CLAUDE_PLUGIN_ROOT/hooks/." >&2
-  echo "  A Claude Code project installed at 0.23.0 or later has no copy: set GATE_SDD_HOOKS to a checkout" >&2
-  echo "  of the plugin's hooks/ directory, which is what its CI does." >&2
+  echo "check-unreviewed-work: cannot find gate-lib.sh in \$GATE_SDD_HOOKS, hooks/, .claude/hooks/, .agents/hooks/, \$CLAUDE_PLUGIN_ROOT/hooks/ or \$GATE_SDD_PLUGIN_ROOT/hooks/." >&2
+  # A variable that is set and names no library is reported by value: after a plugin update
+  # removes the cache directory a session's env file still names, this is the line that says so.
+  [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && echo "  CLAUDE_PLUGIN_ROOT is '$CLAUDE_PLUGIN_ROOT', and there is no hooks/gate-lib.sh under it." >&2
+  [ -n "${GATE_SDD_PLUGIN_ROOT:-}" ] && echo "  GATE_SDD_PLUGIN_ROOT is '$GATE_SDD_PLUGIN_ROOT', and there is no hooks/gate-lib.sh under it." >&2
+  echo "  In a Claude Code session the plugin's SessionStart hook sets GATE_SDD_PLUGIN_ROOT. Unset there, the" >&2
+  echo "  plugin was not enabled when the session started: enable it and start a new session." >&2
+  echo "  From a terminal outside a Claude Code session, or in CI, set GATE_SDD_HOOKS to a checkout of the" >&2
+  echo "  plugin's hooks/ directory, which is what CI does." >&2
   echo "  Without it this check cannot ask the question the gate asks, and a guard that cannot" >&2
   echo "  do its job must not report success. See #16." >&2
   exit 1
