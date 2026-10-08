@@ -1,5 +1,5 @@
 # Spec: the copied checks find `gate-lib.sh` from the session's own shell, and `init` states the whole 0.23.0 migration
-- Slug: 263-copied-checks-find-gate-lib-from-any-shell   Issue: 263, with #264   Type: bug   Status: approved
+- Slug: 263-copied-checks-find-gate-lib-from-any-shell   Issue: 263, with #264   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-10-08
 
 One spec for two issues, as `docs/BACKLOG.md` row 1 directs: they have one cause, and #263's re-copy is half a fix while the re-copied check still fails by hand (#264). The branch is named for #263; #264 closes with it.
@@ -86,4 +86,4 @@ Asked and answered 2026-10-08. Both mechanisms in Q1 were measured before asking
 - [x] T2: case 220, the write. A seeded `CLAUDE_ENV_FILE` keeps the seeded line and gains exactly one `export GATE_SDD_PLUGIN_ROOT=…` line. Sourcing it gives the plugin root, for a fixture root containing a space and a `'`. A second run adds no line. The line is written without `.steering/` and where the digest stands down, never for either `Stop` gate, and nothing is written with the variable unset. The digest's stdout is unchanged. Red against `9dd73bc`, then the wrapper → green. AC1.
 - [x] T3: `check-skill-contracts.py` entries for the migration's re-copy sentence and for step 4's by-hand run in the session's shell, red against `9dd73bc`'s `skills/init/SKILL.md`. Then `init` → green. AC4, AC5, AC8.
 - [x] T4: the statements. ADR-9, ADR-8's dated line, both READMEs' migration paragraph, and `docs/verified.md`'s section for the measurements already taken, with the version row. The guards (`check-readme-claims.py`, `check-markdown-fences.py`, `check-leakage.sh`) are the check. AC6's first half, AC7.
-- [ ] T5: the AC6 migration run on the project named before it, with the maintainer's go-ahead to push there, recorded in `docs/verified.md`, and **Still to verify** ticked or narrowed. AC6.
+- [x] T5: the AC6 migration run on the project named before it, with the maintainer's go-ahead to push there, recorded in `docs/verified.md`, and **Still to verify** ticked or narrowed. AC6.

@@ -345,11 +345,37 @@ The method: a scratch plugin with a `SessionStart` hook, a `Stop` hook and one e
 
 A mid-session `/reload-plugins` after an update. If it does not fire `SessionStart`, the env file keeps the old root until the next one, and ADR-9 records that as a limit. A person's own terminal, which neither mechanism reaches: there the checks say to set `GATE_SDD_HOOKS`. Whether `CLAUDE_ENV_FILE` stays available to plugin hooks in later versions, since that is measured here, not documented. The migration itself, which is the next section's.
 
+## A Claude Code project installed before 0.23.0, migrated as #263 states it
+
+**Run on 2026-10-08, Claude Code 2.1.293, gate-sdd at #263's branch (`229f19a`)**, on a real Python project of the maintainer's: uv, ruff, mypy and pytest, with GitHub Actions CI. Its `.claude/hooks/` held the four copied gate scripts, its settings ran them on `Stop` and `SessionStart`, and its `scripts/` held the 0.22.0 anchor check, byte-identical to the cached 0.22.0. Its `- Validators:` line is `ruff check`, `ruff format --check`, `mypy`, `pytest` and the anchor check. The work was done in a worktree on a new branch, opened as a draft pull request so that CI ran, and nothing was merged.
+
+**M1 — before.** All five validators and `check-locks.py` exited 0.
+
+**M2 — step 1 alone is #263, in a real project.** With the copies and their entries removed and the declaration written, the 0.22.0 anchor check exited 1 (`cannot find gate-lib.sh in hooks/, .claude/hooks/ or .agents/hooks/`), both with and without `CLAUDE_PLUGIN_ROOT`.
+
+**M3 — steps 2 to 4, applied as written, found one gap.** Step 2 re-copied the two checks. It also refreshed `check-locks.py` and the reviewer contract, which both differed from the plugin's, and the lock still passed. Step 3 as first written turned CI red: the plugin checkout at `.gate-sdd/` sits inside the workspace, and the project's `ruff check` and `ruff format --check` walk the whole tree, so both failed on the plugin's own files, while its scoped `mypy` and `pytest` passed. A `.gitignore` entry fixed it, and `init` now says so. Step 4's search found four context files that the deletion made false: the agent context file and the development contract, which said the gates live in `.claude/hooks/`; a `.gitignore` comment, which listed that directory as committed wiring; and a steering paragraph naming `quality-gate.sh`, which made a claim 0.22.1 had already fixed. Each change was shown as a diff and agreed before the commit.
+
+**M4 — live sessions, with the branch's plugin loaded.** The sessions ran as `claude -p --plugin-dir <this branch> --setting-sources local`. The migrated settings enable the installed 0.23.1, and `local` kept it out.
+- At `SessionStart` the plugin's digest printed the project's facts, and the session's env file held exactly one `export GATE_SDD_PLUGIN_ROOT=…`, naming this branch's root.
+- In the session's own shell `GATE_SDD_PLUGIN_ROOT` was set and `CLAUDE_PLUGIN_ROOT` unset, and all five validators exited 0 by hand.
+- A general-purpose subagent ran the same five, plus `printenv`, and every result was the same.
+- At the turn end after a valid source change, the transcript's `stop_hook_summary` shows the plugin's quality gate (2.7 s) and review gate running with no error.
+- A second session planted an unused import. The turn end was blocked with ``Quality gate: a gating validator failed. … --- uv run ruff check F401 `os` imported but unused``, and after the revert the next turn end passed.
+
+**M5 — the pull request's CI.** All five jobs were green. Both lint-and-test legs checked the plugin out at `.gate-sdd` (`ref: main`) and printed `check-steering-anchors: 5 of 7 anchor(s) resolved, none unreadable`, with ruff clean. The unreviewed-work job printed `… carries no spec … no review to demand`, which it can reach only after sourcing the library through `GATE_SDD_HOOKS`.
+
+### What this run does not support
+
+- **`init` as a skill.** An agent followed step 3's text, so detection, the interview and the skill's own reading of it did not run.
+- **The installed plugin delivering the fix.** 0.24.0 was not released, so the branch was loaded with `--plugin-dir`, and no plugin update arrived between sessions.
+- **Other installs.** No Antigravity or dual-target project was migrated, and neither was a project carrying a `- Mode:` line: this one predates it, and the document-set check was not added.
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
 - [ ] Whether plugin-shipped `hooks.json` fires identically to the global one.
-- [ ] A Claude Code project migrated by `init` at 0.23.0, in a real session: the plugin's gates blocking, the project's CI finding the library through `GATE_SDD_HOOKS`, and a plugin update arriving between sessions (#256).
+- [x] A Claude Code project migrated in a real session: the plugin's gates blocking, every validator passing by hand and in a subagent, and the project's CI finding the library through `GATE_SDD_HOOKS` — run on 2026-10-08 for #263, section above.
+- [ ] On a migrated project: a plugin update arriving between sessions, and the migration run by the `init` skill itself rather than by an agent following its step 3 (#256, #263).
 - [ ] V3's other branch through a trusted project file. #257's M2c honoured the pin from `--settings`; the trust dialog in front of a project's own declaration was not run (#256, #257).
 - [ ] A Claude Code cloud session on a project `init` migrated at 0.23.0, which the documentation says runs no gate (#260).
 - [x] `PreInvocation` step injection as the `SessionStart` substitute, including a once-per-session guard (#144).
