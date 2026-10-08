@@ -14,11 +14,12 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Twenty-five today. A twenty-sixth needs an argument, in the spec that proposes it, for why review cannot
+Twenty-eight today. A twenty-ninth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
-with it, #26 the twenty-fourth, and #79 the twenty-fifth; a cap that is not moved with the entry reads as already exceeded, and the next author
-cannot tell whether the list is at its limit or the sentence is stale.
+with it, #26 the twenty-fourth, #79 the twenty-fifth, #256 the twenty-sixth without moving it, and #263 the
+twenty-seventh and twenty-eighth; a cap that is not moved with the entry reads as already exceeded, and the next author
+cannot tell whether the list is at its limit or the sentence is stale — which is how this said twenty-five over twenty-six.
 """
 
 import pathlib
@@ -141,6 +142,30 @@ CONTRACTS = (
         "project back on yesterday's gate with nothing to say so. Review cannot defend it: "
         "restoring the copy reads as making a project self-contained, which is the "
         "argument that held for Antigravity and still does there. #256 AC4.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "Re-copy `assets/check-steering-anchors.sh` and `assets/check-unreviewed-work.sh` from the plugin over the project's copies",
+        "A Claude Code project's copies of the two checks predate the plugin lookup and look "
+        "for gate-lib.sh only in the directories the migration's first step empties, so a "
+        "migration without this sentence leaves the plugin's quality gate blocking every "
+        "turn that changes source, and CI red: the first-turn block init's step 4 exists "
+        "to prevent, whose usual cure is switching the gate off. That is #263, found in two "
+        "consumers' migrations. Review cannot defend it: this repository reads hooks/ from "
+        "source and has no copy to go stale, so the deletion reads as trimming a migration "
+        "detail, and the damage lands only in installs that never appear in its diffs.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "Every gating validator runs clean on the current tree, run by hand in the session's own shell",
+        "The session's shell is where implement's loop and every reviewer run the "
+        "validators, and it is the one place the plugin's turn-end environment does not "
+        "reach: CLAUDE_PLUGIN_ROOT is documented absent there, and GATE_SDD_PLUGIN_ROOT "
+        "arrives only through the SessionStart hook. An init that verifies only through "
+        "the gate declares success on a tree whose validators pass at turn end and fail "
+        "for implement and the reviewer — two verdicts for one tree, which is #264. Review "
+        "cannot defend it: dropping the by-hand half reads as removing a redundant second "
+        "run of the same commands.",
     ),
     (
         "skills/init/SKILL.md",
