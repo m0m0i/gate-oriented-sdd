@@ -217,7 +217,7 @@ agy plugin install ./gate-oriented-sdd
   ls .claude/hooks/ 2>/dev/null; grep -nE '"(Stop|SessionStart)"' .claude/settings.json
   ```
 
-  `init` をもう一度実行してください。`init` は `gate-lib.sh`、`quality-gate.sh`、`review-gate.sh`、`steering-digest.sh` と、それらの `Stop`・`SessionStart` エントリを削除し、`PostToolUse` の高速チェックは残したまま、宣言を書き込みます。ゲートの修正のためにそのプロジェクトで pull request が必要になるのは、これが最後です。ただし、現在の `init` に書かれている移行手順だけでは足りません（#263）。コピーしてある `check-steering-anchors.sh` と `check-unreviewed-work.sh` は、プラグイン経由でライブラリを見つける 0.23.0 のものに入れ替えてください。それらを実行する CI のジョブには、すべてプラグインの checkout と `GATE_SDD_HOOKS` を追加してください。また、`.claude/hooks/` を読んでいるものがほかにないか、プロジェクトの中を探してください。最初の入れ替えを忘れると、ソースを変えるターンのたびに品質ゲートがブロックします。移行済みのプロジェクトでアンカーチェックを手で実行するときは、`GATE_SDD_HOOKS` にプラグインの `hooks/` を設定する必要があります（#264）。この手順は、ここでは実在のプロジェクトで実行していません。#263 に、下流の2つのプロジェクトで移行した記録があります。移行済みのプロジェクトでは、クラウドセッションでゲートが動きません（#260）。この欠落は、現時点では対象外としています。
+  `init` をもう一度実行してください。`init` は `gate-lib.sh`、`quality-gate.sh`、`review-gate.sh`、`steering-digest.sh` と、それらの `Stop`・`SessionStart` エントリを削除し、`PostToolUse` の高速チェックは残したまま、宣言を書き込みます。ゲートの修正のためにそのプロジェクトで pull request が必要になるのは、これが最後です。あわせて、`check-steering-anchors.sh` と `check-unreviewed-work.sh` をコピーし直します。0.23.0 より前のコピーのままだと、ソースを変えるターンのたびに品質ゲートがブロックするからです。それらを実行する CI のジョブにはすべてプラグインの checkout と `GATE_SDD_HOOKS` を追加し、`.claude/hooks/` を読んでいたものがほかにないかをプロジェクトの中で探します。どの変更も、先に差分を見せてから行います（#263）。Claude Code のセッションの中でどちらかのチェックを手で実行すると、`GATE_SDD_PLUGIN_ROOT` を通じてプラグインが見つかります。この変数は、セッションの開始時にプラグインが設定します。セッションの外のターミナルでは、`GATE_SDD_HOOKS` にプラグインの `hooks/` を設定してください（#264）。`docs/verified.md` のために、実在する Claude Code のプロジェクトを1つ、この手順に沿って移行しました。`init` のスキル自体は実行していません。ゲート、手で実行したバリデータ、サブエージェントで実行したバリデータ、CI のどれも通っています。新しく加わった次の手順は、この実行で見つかったものです。CI がチェックアウトしたプラグインを `.gitignore` に入れておかないと、ツリー全体を走査するリンターがそのファイルで失敗します。移行済みのプロジェクトでは、クラウドセッションでゲートが動きません（#260）。この欠落は、現時点では対象外としています。
 - **Antigravity** には更新コマンドがありません。1.2.16 の `agy plugin` のコマンド一覧にありません（検証済み。`docs/verified.md` の #257 の節）。一度アンインストールしてから、新しい clone かリリースアーカイブからインストールし直します。この手順はここでは実行していません。そのあと、`init` の再実行か手作業でコピーを更新します。5つのファイルはまとめてコピーしてください。各ゲートは、自分より古い `gate-lib.sh` と一緒に使われるとブロックするからです。
 
   ```bash
@@ -249,7 +249,7 @@ agy plugin install ./gate-oriented-sdd
 | ルール検出                      | ルートの `AGENTS.md`（正のコンテキストとして読み込み） | `rules/AGENTS.md`（プラグインローダーが自動検出してマージ） |
 | ターン終了時の品質ゲート        | 完全（`Stop`, exit 2） | 完全（`Stop`, `{"decision":"continue"}`） |
 | review receipt のゲート         | 完全                   | 完全                                      |
-| ゲートの配布 | プラグインから（`.claude-plugin/hooks.json` がゲートを実行する。V1、V2）。修正はプラグインの更新で届く。移行済みの実セッションでの実行と、更新が届くことの確認は未実施（#265） | `init` が `.agents/hooks/` にコピー。修正はコピーの更新で届き、`init` の再実行による更新は未実施 |
+| ゲートの配布 | プラグインから（`.claude-plugin/hooks.json` がゲートを実行する。V1、V2）。修正はプラグインの更新で届く。移行済みのプロジェクトでの実セッションは検証済み（`docs/verified.md` の #263 の節）。更新が届くことの確認は未実施（#265） | `init` が `.agents/hooks/` にコピー。修正はコピーの更新で届き、`init` の再実行による更新は未実施 |
 | 編集ごとの高速フィードバック    | 完全（`PostToolUse`）  | 完全（`PostToolUse`、観測のみ）           |
 | steering digest の注入          | 完全（`SessionStart`） | 完全（`PreInvocation`、ターン1のステップ注入） |
 | compaction 後の steering 再注入 | 完全（`SessionStart`） | **なし**（該当するイベントが存在しない）  |

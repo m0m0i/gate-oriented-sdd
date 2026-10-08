@@ -25,6 +25,7 @@ A reviewer is adapted per project and pinned there; the project owns its text, a
 - The stand-down reads text, not JSON by event, and needs the entry and the file it names: the shipped pre-0.23.0 entry exits 0 by its own guard once the copy is gone, so an entry alone would have silenced both in a half-migrated project. A settings file whose `Stop` command names an existing copy without running it still silences both; nothing writes that, and the alternative was parsing JSON in POSIX `sh`.
 - Antigravity projects still drift. `docs/fidelity.md` says so; this is the second real gap after compaction re-injection.
 - This repository keeps running its hooks from source (ADR-6). Its `.claude/settings.json` is the stand-down evidence, so the installed plugin's gates are silent here.
+- 2026-10-08: a by-hand run of the two checks inside a Claude Code session no longer needs `GATE_SDD_HOOKS`. The plugin's `SessionStart` hook writes `GATE_SDD_PLUGIN_ROOT` into the session's env file, and the checks read it after any copy (ADR-9, #264). A terminal outside a session still sets `GATE_SDD_HOOKS`, and so does CI.
 
 ## Alternatives considered
 - **Keep copying, and have the digest report the lag** — the copy still drifts, and CI's unreviewed-work check keeps running yesterday's fail-open fixes.

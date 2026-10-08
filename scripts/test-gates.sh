@@ -15,6 +15,14 @@
 set -u
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+# Every place the shipped checks look for gate-lib.sh is a variable a case sets on purpose, and
+# none is inherited. Run from a Claude Code session with the plugin installed, the Bash tool
+# carries GATE_SDD_PLUGIN_ROOT from the plugin's SessionStart hook (#264), so a "found nowhere"
+# half would find the installed library and pass; and CLAUDE_ENV_FILE, if a session exports it,
+# is that session's own env file, which a plugin-gate.sh case must never append to.
+unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE
+
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 pass=0; fail=0
@@ -2788,6 +2796,126 @@ case "$out" in *"exit=1"*) e=ok ;; *) e="no($out)" ;; esac
 case "$err" in *"no-such-dir"*) e2=ok ;; *) e2=no ;; esac
 [ "$a$b$c$c2$c3$d$e$e2" = "okokokokokokokok" ] && report "check-unreviewed-work finds the library by GATE_SDD_HOOKS, then a copy, then the plugin root" ok \
   || report "check-unreviewed-work finds the library by GATE_SDD_HOOKS, then a copy, then the plugin root" no "env=$a plugin=$b nowhere=$c names-env=$c2 names-root=$c3 local-wins=$d env-wrong=$e names-path=$e2"
+
+# 218. #264 AC1–AC3 — the session's own shell. CLAUDE_PLUGIN_ROOT reaches the plugin's hooks and,
+#      by Claude Code's documentation, never the Bash tool, so `implement` and a reviewer ran the
+#      anchor check in a migrated project and got exit 1 for a tree the gate passed. The plugin's
+#      SessionStart hook now writes GATE_SDD_PLUGIN_ROOT into the session's env file (case 220),
+#      and both checks read it LAST, at the plugin's rank. Six halves per check:
+#      (a) no copy, only GATE_SDD_PLUGIN_ROOT — found;
+#      (b) a copy beside the check wins over a broken GATE_SDD_PLUGIN_ROOT — this repository's
+#          own runs, and every project with a copy, read the copy;
+#      (c) GATE_SDD_HOOKS still wins over it — CI and an explicit export;
+#      (d) set, and no library there — exit 1 naming the value, which is what a session sees
+#          after its plugin's cache directory is removed;
+#      (e) nothing set, no copy — exit 1, naming the new place beside the five old ones;
+#      (f) the same error says what to do outside a Claude Code session, where nothing sets it.
+anc_218() { # anc_218 <name> <env assignments...> — runs the anchor check in a fixture with no copy
+  _n=$1; shift; _r=$(anchor_repo "$_n" '- Owns: x'); rm -f "$_r/hooks/gate-lib.sh"
+  ( cd "$_r" && env "$@" sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" )
+}
+uw_218() { # uw_218 <name> <env assignments...> — the same for check-unreviewed-work.sh, on main
+  _n=$1; shift; _r=$(uw_repo "$_n"); rm -f "$_r/hooks/gate-lib.sh"; _t=$(git -C "$_r" rev-parse main)
+  ( cd "$_r" && env "$@" sh scripts/check-unreviewed-work.sh main "$_t" >/dev/null 2>"$TMP/uwerr"; printf '%s' "$?" )
+}
+for chk in anc uw; do
+  [ "$chk" = anc ] && errf="$TMP/aerr" || errf="$TMP/uwerr"
+  out=$("${chk}_218" "$chk-218-a" GATE_SDD_PLUGIN_ROOT="$L"); [ "$out" = 0 ] && a=ok || a="no(exit=$out: $(head -c 120 "$errf"))"
+  # (b) keeps its copy: the fixture is built again without the rm.
+  if [ "$chk" = anc ]; then _r=$(anchor_repo "$chk-218-b" '- Owns: x')
+    out=$( cd "$_r" && GATE_SDD_PLUGIN_ROOT="$B" sh assets/check-steering-anchors.sh >/dev/null 2>"$errf"; printf '%s' "$?" )
+  else _r=$(uw_repo "$chk-218-b"); _t=$(git -C "$_r" rev-parse main)
+    out=$( cd "$_r" && GATE_SDD_PLUGIN_ROOT="$B" sh scripts/check-unreviewed-work.sh main "$_t" >/dev/null 2>"$errf"; printf '%s' "$?" )
+  fi
+  [ "$out" = 0 ] && b=ok || b="no(exit=$out: $(head -c 120 "$errf"))"
+  out=$("${chk}_218" "$chk-218-c" GATE_SDD_HOOKS="$L/hooks" GATE_SDD_PLUGIN_ROOT="$B"); [ "$out" = 0 ] && c=ok || c="no(exit=$out: $(head -c 120 "$errf"))"
+  out=$("${chk}_218" "$chk-218-d" GATE_SDD_PLUGIN_ROOT="$TMP/no-such-plugin"); err=$(cat "$errf")
+  [ "$out" = 1 ] && d=ok || d="no(exit=$out)"
+  case "$err" in *"$TMP/no-such-plugin"*) d2=ok ;; *) d2=no ;; esac
+  out=$("${chk}_218" "$chk-218-e"); err=$(cat "$errf")
+  [ "$out" = 1 ] && e=ok || e="no(exit=$out)"
+  case "$err" in *GATE_SDD_PLUGIN_ROOT*) e2=ok ;; *) e2=no ;; esac
+  case "$err" in *GATE_SDD_HOOKS*) e3=ok ;; *) e3=no ;; esac
+  case "$err" in *"outside a Claude Code session"*) f=ok ;; *) f=no ;; esac
+  [ "$chk" = anc ] && name=check-steering-anchors || name=check-unreviewed-work
+  [ "$a$b$c$d$d2$e$e2$e3$f" = "okokokokokokokokok" ] && report "$name finds the library from the session's shell by GATE_SDD_PLUGIN_ROOT, last" ok \
+    || report "$name finds the library from the session's shell by GATE_SDD_PLUGIN_ROOT, last" no "found=$a copy-wins=$b hooks-wins=$c set-wrong=$d names-value=$d2 nowhere=$e names-new=$e2 names-hooks=$e3 terminal-remedy=$f"
+done
+
+# 219. #264 — the reproduction, end to end: one tree, one verdict. A Claude Code project migrated
+#      to the plugin — no hooks directory at all — whose `- Validators:` line runs the copied
+#      anchor check. At turn end the plugin's wrapper runs the quality gate with
+#      CLAUDE_PLUGIN_ROOT in its environment and the validator passes. By hand, in the session's
+#      shell, only GATE_SDD_PLUGIN_ROOT is there, and against 9dd73bc the same validator exited 1.
+#      The third half is the control that keeps the first honest: the wrapper run with neither
+#      variable blocks, so the validator really is reached and really does depend on finding the
+#      library — a gate that skipped its validators would pass the first half too.
+p=$(pg_repo pg-migrated); mkdir -p "$p/project/scripts"
+cp "$ROOT/assets/check-steering-anchors.sh" "$p/project/scripts/"
+printf -- '- Validators: sh scripts/check-steering-anchors.sh\n- Source globs: *.txt\n- Reviewer: test-reviewer\n' > "$p/project/.steering/tech.md"
+printf -- '- Owns: x\n' > "$p/project/.steering/product.md"
+printf '%s\n' '{"hooks":{"PostToolUse":[{"matcher":"Write|Edit","hooks":[{"type":"command","command":"true"}]}]}}' > "$p/project/.claude/settings.json"
+out=$(run_pg "$p" quality-gate.sh); case "$out" in *"exit=0"*) a=ok ;; *) a="no($out: $(head -c 160 "$TMP/pgerr"))" ;; esac
+out=$( cd "$p/project" && GATE_SDD_PLUGIN_ROOT="$p/plugin" sh scripts/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" )
+[ "$out" = 0 ] && b=ok || b="no(exit=$out: $(head -c 160 "$TMP/aerr"))"
+out=$( cd "$p/project" && sh "$p/plugin/hooks/plugin-gate.sh" quality-gate.sh >/dev/null 2>"$TMP/pgerr"; echo "exit=$?" )
+case "$out" in *"exit=2"*) c=ok ;; *) c="no($out)" ;; esac
+[ "$a$b$c" = "okokok" ] && report "a migrated project's anchor check gives one verdict at turn end and in the session's shell" ok \
+  || report "a migrated project's anchor check gives one verdict at turn end and in the session's shell" no "turn-end=$a session-shell=$b control-blocks=$c"
+
+# 220. #264 AC1 — where GATE_SDD_PLUGIN_ROOT comes from. On SessionStart Claude Code hands each
+#      hook a CLAUDE_ENV_FILE, a shell script it sources before every Bash command of the session,
+#      the main session's and a subagent's alike (docs/verified.md). The wrapper appends one
+#      export naming the plugin root beside it. The file is shared with other hooks and kept
+#      across --resume and /compact, so the halves are about not damaging it as much as writing:
+#      (a) a seeded line survives, exactly one export is added, and sourcing the file yields the
+#          root — from a fixture whose path holds a space and a single quote;
+#      (b) a second SessionStart adds nothing: the file was measured gaining a line per event;
+#      (c) a seeded last line with no newline is not joined to the export;
+#      (d) an older root already in the file is superseded, not skipped;
+#      (e) the digest prints what it printed without the file, and nothing on stderr;
+#      (f) written in a project without .steering/, still silent — `init` runs in a session that
+#          started before it wrote .steering/, and step 4 needs the variable by hand;
+#      (g) written where the digest stands down — a migration runs in such a session;
+#      (h) never written for either Stop gate;
+#      (i) an empty CLAUDE_ENV_FILE writes nothing and the digest still runs.
+run_pg_env() { # run_pg_env <fixture root> <gate> <env file> — run_pg with CLAUDE_ENV_FILE
+  ( cd "$1/project" && CLAUDE_ENV_FILE="$3" CLAUDE_PLUGIN_ROOT="$1/plugin" sh "$1/plugin/hooks/plugin-gate.sh" "$2" >"$TMP/pgout" 2>"$TMP/pgerr"; echo "exit=$?" )
+}
+sourced() { # sourced <env file> <var> — the value a Bash command would see after the file runs
+  sh -c '. "$1" && eval "printf %s \"\${$2-UNSET}\""' _ "$1" "$2" 2>/dev/null
+}
+roots_in() { grep -c '^export GATE_SDD_PLUGIN_ROOT=' "$1" 2>/dev/null; }
+p=$(pg_repo "pg env'220"); ef="$TMP/env-220-a"; printf 'export OTHER_HOOK=1\n' > "$ef"
+out=$(run_pg_env "$p" steering-digest.sh "$ef")
+[ "$(head -1 "$ef")" = "export OTHER_HOOK=1" ] && [ "$(roots_in "$ef")" = 1 ] && [ "$(sourced "$ef" GATE_SDD_PLUGIN_ROOT)" = "$p/plugin" ] \
+  && [ "$(sourced "$ef" OTHER_HOOK)" = 1 ] && a=ok || a="no($out; $(cat "$ef"))"
+run_pg_env "$p" steering-digest.sh "$ef" >/dev/null
+[ "$(roots_in "$ef")" = 1 ] && b=ok || b="no($(roots_in "$ef") lines)"
+ef="$TMP/env-220-c"; printf 'export OTHER_HOOK=1' > "$ef"; run_pg_env "$p" steering-digest.sh "$ef" >/dev/null
+[ "$(sourced "$ef" OTHER_HOOK)" = 1 ] && [ "$(sourced "$ef" GATE_SDD_PLUGIN_ROOT)" = "$p/plugin" ] && c=ok || c="no($(cat "$ef"))"
+ef="$TMP/env-220-d"; printf "export GATE_SDD_PLUGIN_ROOT='/old/root'\n" > "$ef"; run_pg_env "$p" steering-digest.sh "$ef" >/dev/null
+[ "$(sourced "$ef" GATE_SDD_PLUGIN_ROOT)" = "$p/plugin" ] && d=ok || d="no($(cat "$ef"))"
+run_pg "$p" steering-digest.sh >/dev/null; cp "$TMP/pgout" "$TMP/pgout-plain"
+out=$(run_pg_env "$p" steering-digest.sh "$TMP/env-220-e")
+case "$out" in *"exit=0"*) e=ok ;; *) e="no($out)" ;; esac
+cmp -s "$TMP/pgout" "$TMP/pgout-plain" || e="no(stdout differs)"; [ -s "$TMP/pgerr" ] && e="no(stderr $(head -c 80 "$TMP/pgerr"))"
+grep -q 'Repo facts' "$TMP/pgout-plain" || e="no(the digest did not run)"
+p=$(pg_repo pg-env-220-f); rm -rf "$p/project/.steering"; ef="$TMP/env-220-f"
+out=$(run_pg_env "$p" steering-digest.sh "$ef")
+[ "$(sourced "$ef" GATE_SDD_PLUGIN_ROOT)" = "$p/plugin" ] && f=ok || f="no($out)"; [ -s "$TMP/pgout" ] && f="no(printed)"
+p=$(pg_repo pg-env-220-g); mkdir -p "$p/project/.claude/hooks"; cp "$ROOT/hooks/steering-digest.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/.claude/hooks/"
+printf '%s\n' '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"sh .claude/hooks/steering-digest.sh"}]}]}}' > "$p/project/.claude/settings.json"
+ef="$TMP/env-220-g"; out=$(run_pg_env "$p" steering-digest.sh "$ef")
+[ "$(sourced "$ef" GATE_SDD_PLUGIN_ROOT)" = "$p/plugin" ] && g=ok || g="no($out)"; [ -s "$TMP/pgout" ] && g="no(printed: the digest did not stand down)"
+p=$(pg_repo pg-env-220-h); h=ok
+for gate in quality-gate.sh review-gate.sh; do
+  run_pg_env "$p" "$gate" "$TMP/env-220-h" >/dev/null; [ -e "$TMP/env-220-h" ] && h="no($gate wrote)"
+done
+out=$(run_pg_env "$p" steering-digest.sh ""); case "$out" in *"exit=0"*) i=ok ;; *) i="no($out)" ;; esac
+grep -q 'Repo facts' "$TMP/pgout" || i="no(the digest did not run)"
+[ "$a$b$c$d$e$f$g$h$i" = "okokokokokokokokok" ] && report "plugin-gate tells the session's shell where the plugin is, once, without damaging the env file" ok \
+  || report "plugin-gate tells the session's shell where the plugin is, once, without damaging the env file" no "written=$a once=$b no-newline=$c supersedes=$d digest-unchanged=$e no-steering=$f stood-down=$g not-stop=$h empty=$i"
 
 # --- guards: scripts/check-receipt-schema.py ---------------------------------------
 #
