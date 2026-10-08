@@ -124,3 +124,17 @@ Asked and answered 2026-10-08.
   Then the evidence files and `_start` → green. AC10, AC9. Added during T5, as a pin of the committed code: the session launched at the root with the hook started in `sub/`, which is P4's moved cwd. The root's relative entry with the root's copy → runs.
 - [x] T4: case 220 gains a half: `CLAUDE_ENV_FILE` under a directory that does not exist → exit 0, the digest on stdout, nothing on stderr. Red against `37f86b7`, which prints the shell's own error. Then the group redirect → green. AC6.
 - [x] T5: a `check-skill-contracts.py` entry for `init`'s condition, red against the current text. Then the statements Design item 5 lists. `check-readme-claims.py`, `check-markdown-fences.py` and `check-leakage.sh` are the check → green. AC7, AC8, and AC10's record.
+
+## 4. Review findings, and what this branch did with each
+
+`gate-sdd-reviewer`, run as a subagent.
+
+**Round 1, at `947a7fd`: BLOCKED**, no BLOCKER, 2 HIGH. Every validator was green. AC9's red against `37f86b7` was established by reading the diff, because the reviewer's allow-list does not let it check out the base's `hooks/`.
+
+- **HIGH, fixed: a single-quoted `$CLAUDE_PROJECT_DIR` word stood the gate down while no gate ran** (`hooks/plugin-gate.sh`, AC2). The extraction stopped at `'`, so the word read as unquoted, and a JSON-escaped `$` took the same path. Design item 2 was amended first (`fb7ee97`). Then case 221 (g), red, and the fix (`cb6a98e`).
+- **HIGH, fixed: both READMEs called the absolute-path stand-down verified, and no case ran one** (C-1). Case 207 (j) now does, a pin green before and after (`cb6a98e`), so the row's citation of 207's report holds as written. 207 (k) pins a single-quoted relative path, which the fix above strips.
+- **MEDIUM, fixed: `docs/verified.md` and ADR-8 stated that the project's hook follows the Bash tool's `cd`** (C-9). P4 measured a plugin's hook. Both now say the project's is inferred, and the new section's "does not support" list names it (`ca7e98b`). So does the Design's rejected bullet (`fb7ee97`).
+- **LOW, fixed: the root's `settings.local.json` was found from the start directory's root.** Design item 1 was amended (`fb7ee97`). Then case 222 (h), red, and `git -C "$CLAUDE_PROJECT_DIR"` (`adaeee7`).
+- **LOW, fixed: `docs/fidelity.md` and `docs/layout.md` did not say both sets run.** Each clause now does, so the documents meet AC7's wording as well as Design item 5's (`ca7e98b`).
+- **LOW, fixed: `docs/verified.md` cited cases 221 and 222 by number.** It cites the reports, per G-9 (`ca7e98b`).
+- **INFO, recorded, not changed: `AGENTS.md`, `.steering/tech.md`'s Gates paragraph and ADR-8's consequence on this repository say its plugin gates stand down, without a condition.** Since #262 that holds for a launch at the root, and below it the plugin's gates run, as Blast radius records. They are outside this diff and describe the launch at the root, where it still holds. The next edit to any of them should carry the condition.
