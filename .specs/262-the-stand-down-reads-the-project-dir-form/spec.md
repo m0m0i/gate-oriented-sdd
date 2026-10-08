@@ -93,7 +93,7 @@ Asked and answered 2026-10-08.
 
 - **Why this cannot recur:**
   - **The resolution.** The cases name each spelling, each launch and each kind of non-evidence, so a resolution that drops one goes red. AC5's half covers the wrapper's own split, which case 204's matcher does not reach (#256, round 4).
-  - **The statements.** `check-skill-contracts.py` pins `init`'s condition, the statement a migrating user follows. **Not closed:** the other statements can lose the condition again, and nothing reads them.
+  - **The statements.** `check-skill-contracts.py` pins `init`'s condition, the statement a migrating user follows. It is the guard's twenty-ninth entry, and the docstring asks for an argument why review cannot defend the sentence instead. The record is that argument: the unconditional sentence passed review twice, at #256, which wrote it, and at #263, which rewrote the bullet around it. A sentence without its condition still reads as complete, and a condition added later reads as qualification a reviewer could trim. **Not closed:** the other statements can lose the condition again, and nothing reads them. (Added during T5, 2026-10-08, before the entry it argues for.)
 
 - **Limits, recorded rather than fixed:**
   - **The root's local file is measured, not documented.** If Claude Code stops reading the root's `settings.local.json` below the root, the wrapper reads one file more than the launch does. A relative or `$CLAUDE_PROJECT_DIR` entry there resolves below the root and finds nothing. Only an absolute path to an existing copy could stand the plugin down wrongly, and nothing writes that.
