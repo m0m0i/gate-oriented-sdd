@@ -1,5 +1,5 @@
 # Spec: the copied checks find `gate-lib.sh` from the session's own shell, and `init` states the whole 0.23.0 migration
-- Slug: 263-copied-checks-find-gate-lib-from-any-shell   Issue: 263, with #264   Type: bug   Status: draft
+- Slug: 263-copied-checks-find-gate-lib-from-any-shell   Issue: 263, with #264   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-10-08
 
 One spec for two issues, as `docs/BACKLOG.md` row 1 directs: they have one cause, and #263's re-copy is half a fix while the re-copied check still fails by hand (#264). The branch is named for #263; #264 closes with it.
