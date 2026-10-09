@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-10-08 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
+Last **updated**: 2026-10-09 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
 
 The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The two Antigravity rows carry the date they were verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
@@ -10,7 +10,7 @@ The version table below carries a date beside each row. Claude Code's row was re
 
 | Component | Version |
 | :-- | :-- |
-| Claude Code | 2.1.293 — the #263 and #264 section of 2026-10-08. 2.1.292 was the #257 section of 2026-10-07. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
+| Claude Code | 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
 | Antigravity CLI (`agy`) | 1.2.16 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
 | Antigravity IDE | 2.3.1 — verified 2026-08-21, and not re-run since |
 | Platform | macOS (darwin, arm64) |
@@ -343,7 +343,7 @@ The method: a scratch plugin with a `SessionStart` hook, a `Stop` hook and one e
 
 ### What this run does not support
 
-A mid-session `/reload-plugins` after an update. If it does not fire `SessionStart`, the env file keeps the old root until the next one, and ADR-9 records that as a limit. A person's own terminal, which neither mechanism reaches: there the checks say to set `GATE_SDD_HOOKS`. Whether two `SessionStart` hooks share one env file: the probe had one hook, and the file's name, `sessionstart-hook-0.sh`, suggests one file per hook. Whether `CLAUDE_ENV_FILE` stays available to plugin hooks in later versions, since that is measured here, not documented. The migration itself, which is the next section's.
+A mid-session `/reload-plugins` after an update. If it does not fire `SessionStart`, the env file keeps the old root until the next one, and ADR-9 records that as a limit. #265's R1 found the variable still unset after a reload and a resume, following an update from 0.23.1: unset rather than old. A person's own terminal, which neither mechanism reaches: there the checks say to set `GATE_SDD_HOOKS`. Whether two `SessionStart` hooks share one env file: the probe had one hook, and the file's name, `sessionstart-hook-0.sh`, suggests one file per hook. Whether `CLAUDE_ENV_FILE` stays available to plugin hooks in later versions, since that is measured here, not documented. The migration itself, which is the next section's.
 
 ## A Claude Code project installed before 0.23.0, migrated as #263 states it
 
@@ -388,12 +388,37 @@ A mid-session `/reload-plugins` after an update. If it does not fire `SessionSta
 - **Later versions.** That the root's `settings.local.json` is read below the root is measured on one version, not documented.
 - **User and managed settings**, which the wrapper does not read.
 
+## Auto-update, the desktop app, and what a reload reruns (#265)
+
+**Observed on 2026-10-07, and measured on 2026-10-08 and 2026-10-09, Claude Code 2.1.292 and 2.1.293**, on the maintainer's machine. #265 recorded that 0.23.0 did not arrive by auto-update and left the cause unmeasured. Nothing was installed, updated or refreshed to measure it: the by-hand updates in U1 and R1 were made in the course of other work, and are recorded as observed. The sources are `~/.claude/plugins/known_marketplaces.json` and `installed_plugins.json`, the marketplace clone's reflog, `ps eww` on running Claude Code processes, the timestamps and `entrypoint` field of the session transcripts under `~/.claude/projects/`, and V3's debug log, which survived in a scratch directory. The maintainer's by-hand update of 2026-10-09 02:22, after U4's reading, re-cloned the marketplace, so its reflog no longer shows the positions U1 and U4 give. All times are UTC. The pass is read against its documentation: "In an interactive session, after you send your first message, Claude Code waits a random delay of up to ten minutes. It then refreshes every marketplace with auto-update on and updates the plugins installed from them on disk", and the new versions "load on your next launch" (`plugins/loading`).
+
+**U1 — 0.23.0 did not reach the machine for three hours.** The `gate-oriented-sdd` marketplace is declared in user settings with `"autoUpdate": true`. Its `lastUpdated` was 2026-10-06 21:46:14, written by V3's `claude plugin install gate-sdd@gate-oriented-sdd --scope project` at 21:46:03. An install named as `<plugin>@<marketplace>` refreshes that marketplace first, and the refresh "doesn't depend on the marketplace's auto-update setting or on `DISABLE_AUTOUPDATER`" (`plugins/loading`), so it was not a pass. V3 records the session before the install as leaving `known_marketplaces.json` unchanged, and the install as moving nothing, which holds for the clone and the installs: only `lastUpdated` moved. 0.23.0 (#256) merged at 2026-10-07 03:25:07, and its release was published at 03:29:59. A terminal session on 2.1.292, whose first message was at 06:37:28, found the marketplace clone at the commit before the merge and both installs, user scope and one project scope, at 0.22.0. From 06:42:07 it ran `claude plugin marketplace update gate-oriented-sdd`, then `claude plugin update gate-sdd@gate-oriented-sdd`, and the same with `-s project` in the other project, which moved both to 0.23.0. `update` printed `Restart to apply changes.`
+
+**U2 — a session the Claude desktop app starts runs no pass.** On 2026-10-08, `ps eww` on three Claude Code processes the desktop app had started, one per Code-tab session at 2.1.293, found `DISABLE_AUTOUPDATER=1` and `CLAUDE_CODE_ENTRYPOINT=claude-desktop` in each environment. A `claude` started in a terminal had neither. Neither variable is set in the shell profiles or in user settings, so the app sets them. The documentation says that under `DISABLE_AUTOUPDATER=1` "the whole pass is off … unless you also set `FORCE_AUTOUPDATE_PLUGINS=1`" (`plugins/loading`), and describes `FORCE_AUTOUPDATE_PLUGINS` as "Set to `1` to force plugin auto-updates even when the main auto-updater is disabled via `DISABLE_AUTOUPDATER`" (`env-vars`). V3's debug log comes from a headless 2.1.290 run started in a desktop session's shell, which carries that session's environment. It has `Plugin autoupdate: skipped (auto-updater disabled)`. The desktop session that measured this sent its first message at 2026-10-08 09:38:46, and no marketplace was refreshed in the ten minutes after it, or by 2026-10-09 02:12.
+
+**U3 — a terminal session's pass, seen once.** On 2026-10-08 `lastUpdated` moved to 08:52:24 for `claude-plugins-official` and to 08:52:28 for `gate-oriented-sdd`. Those are the two marketplaces with auto-update on, the first by its default and the second by the declaration, and the two with it off kept theirs. A terminal session whose process started at 08:42:48 had sent its first message at 08:44:31, 7.9 minutes before, and the transcripts show no other terminal session typing in those ten minutes. Nothing newer than the installed 0.24.0 had been released, so the pass refreshed and installed nothing.
+
+**U4 — no session that runs a pass started in #265's window, or in 0.24.1's.** From 0.23.0's release to 06:37:28, every typed message in the transcripts came from a desktop session (U2). The observing session's own pass was due within ten minutes of its first message, and its by-hand update came 4.7 minutes in. 0.24.1 was published at 2026-10-08 09:31:08. At 2026-10-09 02:12, the marketplace clone and the user-scope install were still at 0.24.0, with `lastUpdated` still at 08:52:28. Every session that had typed since the release was a desktop session, or U3's terminal session, whose pass had already run. The maintainer then updated by hand.
+
+**R1 — neither `/reload-plugins` nor the resume after it set `GATE_SDD_PLUGIN_ROOT`.** A terminal session on 2.1.293 had started under 0.23.1, whose hook writes no such variable. From 2026-10-08 04:57:39 it ran `claude plugin marketplace update` and `claude plugin update`, which moved the user scope to 0.24.0. A headless session started at 04:58:24 printed the variable as the 0.24.0 root. The maintainer ran `/reload-plugins` in the first session at 05:36:29, and that process exited after 05:37:53. A new process resumed the session at 08:27:23. The transcript records no `SessionStart` hook output for the resume, though it does for the session's start. At 08:27:45 the resumed shell had the variable unset. P2 kept the env file across a resume, so a line written by either step would have reached that shell, and neither wrote one. The resume is the unexpected half, since P2 saw `SessionStart` fire on one.
+
+### What this run does not support
+
+- **A pass installing a new version.** U3's pass found nothing newer, so the #256 section's open item on auto-update delivering a version stays open, and so does the **Still to verify** item on an update arriving between sessions.
+- **`FORCE_AUTOUPDATE_PLUGINS=1`**, and from which place it reaches the pass: the process environment, a settings file's `env`, or neither. That is #274.
+- **A headless session that nothing disables.** V3's log shows a headless run evaluating the pass. Whether one runs it without the variable was not seen.
+- **The desktop app elsewhere.** One machine on macOS, with the app's Claude Code at 2.1.293, and a 2.1.290 CLI started from a desktop session's shell, by V3's log.
+- **A session that left no transcript** under `~/.claude/projects/`. U3 and U4 could not see one.
+- **Which of R1's two steps should have set the variable.** The reading came after both. Whether its resume fired `SessionStart` at all, against P2, was not seen.
+- **R1 between two versions that both write the variable.** There the env file would name the old root, as ADR-9 expected. Not run.
+
 ## Still to verify
 
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
 - [ ] Whether plugin-shipped `hooks.json` fires identically to the global one.
 - [x] A Claude Code project migrated in a real session: the plugin's gates blocking, every validator passing by hand and in a subagent, and the project's CI finding the library through `GATE_SDD_HOOKS` — run on 2026-10-08 for #263, section above.
-- [ ] On a migrated project: a plugin update arriving between sessions, and the migration run by the `init` skill itself rather than by an agent following its step 3 (#256, #263).
+- [ ] On a migrated project: a plugin update arriving between sessions, and the migration run by the `init` skill itself rather than by an agent following its step 3 (#256, #263). #265's U2: never in a session the desktop app starts.
+- [ ] `FORCE_AUTOUPDATE_PLUGINS=1` restoring the pass in a session the desktop app starts, and from which settings file (#274).
 - [ ] V3's other branch through a trusted project file. #257's M2c honoured the pin from `--settings`; the trust dialog in front of a project's own declaration was not run (#256, #257).
 - [ ] A Claude Code cloud session on a project `init` migrated at 0.23.0, which the documentation says runs no gate (#260).
 - [x] `PreInvocation` step injection as the `SessionStart` substitute, including a once-per-session guard (#144).
