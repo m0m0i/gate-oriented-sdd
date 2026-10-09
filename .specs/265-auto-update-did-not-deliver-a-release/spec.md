@@ -1,5 +1,5 @@
 # Spec: Auto-update did not deliver a release, and the desktop app is why
-- Slug: 265-auto-update-did-not-deliver-a-release   Issue: 265   Type: chore   Status: draft
+- Slug: 265-auto-update-did-not-deliver-a-release   Issue: 265   Type: chore   Status: approved
 - Author: m0m0i   Date: 2026-10-09
 
 ## 1. Requirements (WHAT / WHY)
@@ -59,7 +59,7 @@ Run 2026-10-08 and 2026-10-09. #265 assumed the cause unmeasured. Reading the pl
 
 ### Open question for approval
 
-- **Where the follow-up goes in the backlog.** As designed, row 1 records it in `Why here` and is not placed, which is the precedent. Merging this pull request closes #265, row 1's only `Item`, and that reddens `check-backlog-tracker.py` on every open pull request until a refinement discharges the row. The other choice is to place the follow-up in row 1's `Item` now, as the row's next item, which keeps every pull request green but makes the placement here rather than at a refinement.
+- **Where the follow-up goes in the backlog.** Resolved on 2026-10-09: the spec was approved as designed, so row 1 records the follow-up in `Why here` and does not place it. Merging closes #265, row 1's only `Item`, which reddens `check-backlog-tracker.py` on every open pull request until a refinement discharges the row and places the follow-up. Placing it in `Item` now was the alternative.
 
 ## 3. Tasks (TDD-ordered)
 
