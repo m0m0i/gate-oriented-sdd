@@ -1,5 +1,5 @@
 # Spec: Auto-update did not deliver a release, and the desktop app is why
-- Slug: 265-auto-update-did-not-deliver-a-release   Issue: 265   Type: chore   Status: approved
+- Slug: 265-auto-update-did-not-deliver-a-release   Issue: 265   Type: chore   Status: done
 - Author: m0m0i   Date: 2026-10-09
 
 ## 1. Requirements (WHAT / WHY)
@@ -8,14 +8,14 @@
 - **What must NOT change:** #265's **What must NOT change**, stated as checks. No shipped path changes. Every `docs/verified.md` statement that auto-update delivering a version is unmeasured stays: lines 308, 326 and 370 byte-identical, line 396's item still `- [ ]` with its sentence intact, and no `- [ ]` anywhere becomes `- [x]`. Nothing in either README changes outside the paragraph and the table row named in AC5. Nothing in either ADR changes outside the one dated line each gains.
 - Why now: #265's **Why now**. The measurement turns its "why was not measured" into a cause: a machine used only through the Claude desktop app runs no auto-update pass, so it receives no gate fix, and ADR-8 makes the plugin update the only route a gate fix has.
 - Acceptance criteria:
-  - [ ] **AC1:** `docs/verified.md` has one new section citing #265, directly before `## Still to verify`, holding U1 to U4, R1 and a **What this run does not support**, with every time in UTC.
-  - [ ] **AC2:** U1 carries #265's four observations — the times, 0.22.0 and 0.23.0, Claude Code 2.1.292, both install scopes and the printed `Restart to apply changes.` — and says what wrote the 2026-10-06 21:46:14 `lastUpdated`.
-  - [ ] **AC3:** U2 names the two variables read from the desktop-started processes, quotes the two documentation sentences and the debug line, and gives the desktop session's ten minutes without a refresh. U3 gives the terminal session's pass, U4 reads #265's window and 0.24.1's against U2 and U3, and R1 gives the reload result with its session, version and times.
-  - [ ] **AC4:** the invariants under **What must NOT change** hold for `docs/verified.md`, and `## Still to verify` gains exactly one item, unticked, for `FORCE_AUTOUPDATE_PLUGINS=1`, citing the follow-up issue.
-  - [ ] **AC5:** in `README.md` and `README.ja.md`, the paragraph headed `"autoUpdate": true` no longer carries the #265 sentences and carries the desktop-app sentence instead, and the drift table gains the desktop-app row directly after the row about the user scope declared by `marketplace add`. The text is the Design's.
-  - [ ] **AC6:** ADR-8 and ADR-9 each gain one dated line, the Design's, as the last item of **Consequences**.
-  - [ ] **AC7:** the follow-up issue exists, typed `bug`, and `docs/BACKLOG.md` row 1's `Why here` cites it; `./scripts/check-backlog-tracker.py` fails between the filing and the citation and exits 0 after it.
-  - [ ] **AC8:** every validator on `.steering/tech.md`'s `- Validators:` line exits 0, `./scripts/check-readme-claims.py` prints the merge-base's line, `./scripts/check-version-bump.py <merge-base>` prints `no shipped file changed`, and `./scripts/test-gates.sh` reports the merge-base's count.
+  - [x] **AC1:** `docs/verified.md` has one new section citing #265, directly before `## Still to verify`, holding U1 to U4, R1 and a **What this run does not support**, with every time in UTC.
+  - [x] **AC2:** U1 carries #265's four observations — the times, 0.22.0 and 0.23.0, Claude Code 2.1.292, both install scopes and the printed `Restart to apply changes.` — and says what wrote the 2026-10-06 21:46:14 `lastUpdated`.
+  - [x] **AC3:** U2 names the two variables read from the desktop-started processes, quotes the two documentation sentences and the debug line, and gives the desktop session's ten minutes without a refresh. U3 gives the terminal session's pass, U4 reads #265's window and 0.24.1's against U2 and U3, and R1 gives the reload result with its session, version and times.
+  - [x] **AC4:** the invariants under **What must NOT change** hold for `docs/verified.md`, and `## Still to verify` gains exactly one item, unticked, for `FORCE_AUTOUPDATE_PLUGINS=1`, citing the follow-up issue.
+  - [x] **AC5:** in `README.md` and `README.ja.md`, the paragraph headed `"autoUpdate": true` no longer carries the #265 sentences and carries the desktop-app sentence instead, and the drift table gains the desktop-app row directly after the row about the user scope declared by `marketplace add`. The text is the Design's.
+  - [x] **AC6:** ADR-8 and ADR-9 each gain one dated line, the Design's, as the last item of **Consequences**.
+  - [x] **AC7:** the follow-up issue exists, typed `bug`, and `docs/BACKLOG.md` row 1's `Why here` cites it; `./scripts/check-backlog-tracker.py` fails between the filing and the citation and exits 0 after it.
+  - [x] **AC8:** every validator on `.steering/tech.md`'s `- Validators:` line exits 0, `./scripts/check-readme-claims.py` prints the merge-base's line, `./scripts/check-version-bump.py <merge-base>` prints `no shipped file changed`, and `./scripts/test-gates.sh` reports the merge-base's count.
 - Out of scope: the remedy, which is the follow-up issue's; the other statements that a gate fix arrives by plugin update — `docs/fidelity.md`'s **Gate delivery** row, `docs/layout.md`, `hooks/templates/README.md`, `skills/init/SKILL.md` and ADR-8's first consequence as written — which row 1 lists for that issue's spec; the README's "then a new session or `/reload-plugins`" under **Updating**, which holds for the gates, and the checks' "unset" diagnosis, both left to the next change to the checks as row 1 already records.
 
 ### Clarifications
