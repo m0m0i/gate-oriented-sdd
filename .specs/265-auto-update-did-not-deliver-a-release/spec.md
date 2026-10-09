@@ -48,7 +48,7 @@ Run 2026-10-08 and 2026-10-09. #265 assumed the cause unmeasured. Reading the pl
 
   | Check | Command | Expected |
   | :-- | :-- | :-- |
-  | lines 308, 326, 370 untouched | `git diff -U0 <merge-base> -- docs/verified.md \| grep -c '^-[^-]'` | the count of lines T2 changes on purpose — 4: **Last updated**, the version row, line 346, line 396 |
+  | lines 308, 326, 370 untouched | `git diff -U0 <merge-base> -- docs/verified.md \| grep -v '^--- ' \| grep -c '^-'` | the count of lines T2 changes on purpose — 4: **Last updated**, the version row, line 346, line 396. Amended during T2: the first form, `grep -c '^-[^-]'`, skipped line 396, a removed list item whose diff line starts `-- [ ]`, and counted 3 |
   | nothing ticked | `git diff <merge-base> -- docs/verified.md \| grep -c '^+- \[x\]'` | `0` |
   | one item added | `git diff <merge-base> -- docs/verified.md \| grep -c '^+- \[ \]'` | `2` — the new item, and line 396 rewritten |
   | READMEs' old sentences gone | `grep -c 'One observation so far (#265)' README.md`; `grep -c '原因は確かめていません' README.ja.md` | `0`, `0` |
