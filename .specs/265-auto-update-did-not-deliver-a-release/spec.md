@@ -65,5 +65,5 @@ Run 2026-10-08 and 2026-10-09. #265 assumed the cause unmeasured. Reading the pl
 
 - [x] T1: file the follow-up issue; run `./scripts/check-backlog-tracker.py` and see it name the issue as absent; cite it in row 1's `Why here`; see it exit 0. AC7.
 - [x] T2: write the `docs/verified.md` section and its four touch-ups, with the Coverage gap's checks run before (baseline: all zero) and after. AC1 to AC4.
-- [ ] T3: both READMEs, in one commit, with their checks. AC5.
+- [x] T3: both READMEs, in one commit, with their checks. AC5.
 - [ ] T4: both ADRs, in one commit, with their check. AC6; then AC8 on the tip.
