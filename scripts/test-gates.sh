@@ -5721,14 +5721,18 @@ RMEOF
 RMEOF
   # #257. Both READMEs quote the Claude Code declaration init renders. The block is built from
   # the template rather than written out here, so the fixture follows the file the guard compares
-  # against and case 217 tests the comparison, not a second copy of the template.
+  # against and case 217 tests the comparison, not a second copy of the template. The keys are
+  # read from the guard copied beside it for the same reason: a tuple here was the second copy,
+  # and when #274 added `env` to the guard's it sent seven cases red for a fixture that disagreed
+  # with its subject (#14, #23).
   mkdir -p "$r/hooks/templates"
   cp "$ROOT/hooks/templates/claude-code.settings.json" "$r/hooks/templates/"
   python3 - "$r" <<'PYEOF'
-import json, pathlib, sys
+import json, pathlib, re, sys
 r = pathlib.Path(sys.argv[1])
+keys = re.findall(r'"([^"]+)"', re.search(r'^DECLARATION_KEYS = \((.*)\)$', (r / "scripts/check-readme-claims.py").read_text(), re.M).group(1))
 t = json.loads((r / "hooks/templates/claude-code.settings.json").read_text())
-block = json.dumps({k: t[k] for k in ("extraKnownMarketplaces", "enabledPlugins")}, indent=2)
+block = json.dumps({k: t[k] for k in keys}, indent=2)
 for name in ("README.md", "README.ja.md"):
     p = r / name
     p.write_text(p.read_text() + "\n## Install\n\n```json\n" + block + "\n```\n")
@@ -6375,10 +6379,11 @@ case "$err" in *"README.md: the declaration block also sets \`hooks\`"*) c12=ok 
 # commit something else. Review round 1 found the branch had no case.
 decl_second() { # $1 repo, $2 indent for the appended block
   python3 - "$1" "$2" <<'PYEOF'
-import json, pathlib, sys
+import json, pathlib, re, sys
 r, pad = pathlib.Path(sys.argv[1]), sys.argv[2]
+keys = re.findall(r'"([^"]+)"', re.search(r'^DECLARATION_KEYS = \((.*)\)$', (r / "scripts/check-readme-claims.py").read_text(), re.M).group(1))
 t = json.loads((r / "hooks/templates/claude-code.settings.json").read_text())
-d = {k: t[k] for k in ("extraKnownMarketplaces", "enabledPlugins")}
+d = {k: t[k] for k in keys}
 d["extraKnownMarketplaces"]["gate-oriented-sdd"]["autoUpdate"] = False
 body = "\n".join(pad + l for l in json.dumps(d, indent=2).split("\n"))
 p = r / "README.md"
