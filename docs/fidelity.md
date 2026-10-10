@@ -10,7 +10,7 @@ What each harness actually supports, and what this harness does about the differ
 | Marketplace / git install | yes | no — local path only | verified from docs |
 | Quality gate blocks a turn | `Stop`, exit 2 | `Stop`, `{"decision":"continue"}` | **verified — both block** |
 | Review-receipt gate | `Stop` | `Stop` | verified via the same mechanism |
-| Gate delivery | from the plugin: `.claude-plugin/hooks.json` runs `hooks/plugin-gate.sh`, and a fix arrives by plugin update, whose pass a session the Claude desktop app starts runs only with the `env` line `init` writes (#274) | copied into `.agents/hooks/` by `init`, and a fix arrives by running `init` again | **verified on Claude Code** (V1, V2 in `verified.md`; the pass with the line, from a desktop session's shell, F2); the Antigravity copy is the cwd constraint below |
+| Gate delivery | from the plugin: `.claude-plugin/hooks.json` runs `hooks/plugin-gate.sh`, and a fix arrives by plugin update, whose pass a session the Claude desktop app starts runs only with the `env` line `init` writes (#274) | copied into `.agents/hooks/` by `init`, and a fix arrives by running `init` again | **verified on Claude Code** (V1, V2 in `verified.md`; the pass with the line, F2 and F3); the Antigravity copy is the cwd constraint below |
 | Per-edit feedback | `PostToolUse`, exit 2 to stderr | `PostToolUse`, observe-only | verified — both fire |
 | Deny a tool call outright | `PreToolUse` | `PreToolUse`, `decision: deny` | not exercised by this harness |
 | Rules discovery | root `AGENTS.md` (read as canonical context) | `rules/AGENTS.md` (auto-discovered and merged by plugin loader) | verified — symlinked, kept in sync by `check-manifests.py` |
