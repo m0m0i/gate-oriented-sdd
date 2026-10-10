@@ -154,11 +154,12 @@ Then run `init` in a project. On Claude Code it writes this declaration into the
       "autoUpdate": true
     }
   },
-  "enabledPlugins": { "gate-sdd@gate-oriented-sdd": true }
+  "enabledPlugins": { "gate-sdd@gate-oriented-sdd": true },
+  "env": { "FORCE_AUTOUPDATE_PLUGINS": "1" }
 }
 ```
 
-That puts the harness in front of everyone who opens the repository, except where the drift table below says otherwise. The gates run from the plugin (verified, V1 in [`docs/verified.md`](./docs/verified.md)), so a gate fix reaches the project by plugin update, with no pull request in it; whether and when the update arrives is under **Keeping the gates current**. `claude plugin install gate-sdd@gate-oriented-sdd --scope project` is not a substitute, because it writes only the `enabledPlugins` half (verified, M1 in [`docs/verified.md`](./docs/verified.md)).
+That puts the harness in front of everyone who opens the repository, except where the drift table below says otherwise. The gates run from the plugin (verified, V1 in [`docs/verified.md`](./docs/verified.md)), so a gate fix reaches the project by plugin update, with no pull request in it; whether and when the update arrives is under **Keeping the gates current**. The `env` line keeps that update's pass on in a session the Claude desktop app starts, which runs none without it (verified, U2 and F2 in [`docs/verified.md`](./docs/verified.md)); a collaborator who wants it off sets the same key to `"0"` in their own `.claude/settings.local.json`, which outranks the project's file (documented, not run). `claude plugin install gate-sdd@gate-oriented-sdd --scope project` is not a substitute, because it writes only the `enabledPlugins` entry (verified, M1 in [`docs/verified.md`](./docs/verified.md)).
 
 **Google Antigravity** — install either from a standalone release archive or a clone:
 

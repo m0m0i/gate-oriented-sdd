@@ -51,6 +51,6 @@ Run 2026-10-10. The issue lists four directions and chooses none, and the backlo
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: case 221 in `scripts/test-gates.sh`, red on the merge-base's wrapper for the right reason, then the line in `hooks/plugin-gate.sh`, green. AC1, AC2.
-- [ ] T2: `"env"` in `DECLARATION_KEYS`, red against the template and both READMEs, then the template's line, both READMEs' fences and the sentence after each, green. AC3, and AC6's opt-out.
+- [x] T2: `"env"` in `DECLARATION_KEYS`, red against the template and both READMEs, then the template's line, both READMEs' fences and the sentence after each, green. AC3, and AC6's opt-out.
 - [ ] T3: the statements, in one commit: `docs/fidelity.md`, `docs/layout.md`, `hooks/templates/README.md`, `skills/init/SKILL.md`, ADR-8, and the rest of both READMEs. AC5, AC6.
 - [ ] T4: `docs/verified.md`: the section with F1 and F2 from the saved logs, F3 from the maintainer's desktop session in this checkout with the line in its gitignored `.claude/settings.local.json` if Q4 holds, the version row, **Last updated**, and the `## Still to verify` item. AC4; then AC7 on the tip.

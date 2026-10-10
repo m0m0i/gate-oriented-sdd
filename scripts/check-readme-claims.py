@@ -84,7 +84,13 @@ BADGE_LABEL = "gate-sdd"
 TEMPLATE = pathlib.Path("hooks/templates/claude-code.settings.json")
 #: What the quote holds, and all it holds. The template's `hooks` carries a per-project
 #: placeholder, so a README showing it would be quoting something no project receives verbatim.
-DECLARATION_KEYS = ("extraKnownMarketplaces", "enabledPlugins")
+#: `env` joined at #274: the Claude desktop app starts every session with DISABLE_AUTOUPDATER=1,
+#: which turns the plugin auto-update pass off, and the template's `FORCE_AUTOUPDATE_PLUGINS=1`
+#: is what turns it back on. Dropped from the template, the declaration a project commits would
+#: again leave a desktop-only machine at the version it installed, with the README still saying
+#: a gate fix arrives by plugin update; dropped from the README alone, a consumer copying the
+#: quote would commit a declaration `init` no longer writes. Either way this guard names the file.
+DECLARATION_KEYS = ("extraKnownMarketplaces", "enabledPlugins", "env")
 #: A fenced `json` block. The declaration is the one whose object has `extraKnownMarketplaces`;
 #: the README may carry other JSON, and only that one is the claim. Indented fences count, because
 #: a fence inside a list item is indented and this README writes its Updating fences that way: a
