@@ -71,7 +71,7 @@ your-project/
 
 ### Where the gates run from
 
-On Claude Code the gates run from the installed plugin, so `init` writes no gate script. `.claude/settings.json` declares the marketplace with `"autoUpdate": true`, enables the plugin and keeps the per-language fast check, and a gate fix arrives by plugin update (#256, ADR-8). On Antigravity a plugin hook runs with the plugin directory as its working directory, so `init` copies the five scripts into `.agents/hooks/`, and a fix arrives by running `init` again. A dual-target project gets both halves. On either harness, the copied checks in `scripts/` and the reviewer contract change only when someone copies them again or re-runs `init`; a plugin update does not reach them. The README's Install section says how to do each.
+On Claude Code the gates run from the installed plugin, so `init` writes no gate script. `.claude/settings.json` declares the marketplace with `"autoUpdate": true`, enables the plugin, sets `FORCE_AUTOUPDATE_PLUGINS=1` in its `env` and keeps the per-language fast check, and a gate fix arrives by plugin update, in the desktop app's sessions too, which run no pass without that line (#256, #274, ADR-8). On Antigravity a plugin hook runs with the plugin directory as its working directory, so `init` copies the five scripts into `.agents/hooks/`, and a fix arrives by running `init` again. A dual-target project gets both halves. On either harness, the copied checks in `scripts/` and the reviewer contract change only when someone copies them again or re-runs `init`; a plugin update does not reach them. The README's Install section says how to do each.
 
 ### The chain
 
