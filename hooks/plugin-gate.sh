@@ -6,8 +6,9 @@
 # re-running `init` and opening a pull request in every repository that copied it. The gate
 # itself is unchanged and runs beside this file, with the project as cwd (verified: V1 in
 # docs/verified.md). What this wrapper adds is the three decisions a plugin-shipped gate has to
-# make that a copied one never did, and on SessionStart one statement a copy never needed to
-# make: where the plugin is, for the session's own shell — (0) below.
+# make that a copied one never did, and on SessionStart two statements a copy never needed to
+# make: where the plugin is, for the session's own shell — (0) below — and whether this session
+# runs the plugin auto-update pass — (4).
 #
 #   1. A project without .steering/ does not use the harness. A user-scope install reaches
 #      every project on the machine, so the gate must be silent there — exit 0, no output.

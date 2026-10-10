@@ -164,7 +164,7 @@ claude plugin install gate-sdd@gate-oriented-sdd
 }
 ```
 
-下のずれの表に挙げる場合を除き、これでリポジトリを開く全員の環境でハーネスが有効になります。ゲートはプラグインから実行されます（検証済み。[`docs/verified.md`](./docs/verified.md) の V1）。そのため、ゲートの修正はプラグインの更新でプロジェクトに届き、プロジェクトに pull request を出す必要はありません。更新が届くかどうか、届くならいつかは、「**ゲートを最新に保つ**」で説明します。`env` の行は、Claude デスクトップアプリから始めたセッションでも自動更新を有効に保ちます。この行がなければ、そのセッションでは自動更新が行われません（検証済み。[`docs/verified.md`](./docs/verified.md) の U2 と F2）。自分の環境でだけ無効にしたい場合は、自分の `.claude/settings.local.json` で同じキーに `"0"` を設定します。このファイルはプロジェクトのファイルより優先されます（ドキュメント記載、未実施）。`claude plugin install gate-sdd@gate-oriented-sdd --scope project` はこの宣言の代わりになりません。このコマンドが書き込むのは `enabledPlugins` の部分だけだからです（検証済み。[`docs/verified.md`](./docs/verified.md) の M1）。
+下のずれの表に挙げる場合を除き、これでリポジトリを開く全員の環境でハーネスが有効になります。ゲートはプラグインから実行されます（検証済み。[`docs/verified.md`](./docs/verified.md) の V1）。そのため、ゲートの修正はプラグインの更新でプロジェクトに届き、プロジェクトに pull request を出す必要はありません。更新が届くかどうか、届くならいつかは、「**ゲートを最新に保つ**」で説明します。`env` の行は、Claude デスクトップアプリから始めたセッションでも自動更新を有効に保ちます。この行がなければ、そのセッションでは自動更新が行われません（U2 は検証済み。この行で自動更新が戻ることはデスクトップセッションのシェルから検証、[`docs/verified.md`](./docs/verified.md) の F2。アプリ自身が始めたセッションでは未実施、F3）。自分の環境でだけ無効にしたい場合は、自分の `.claude/settings.local.json` で同じキーに `"0"` を設定します。このファイルはプロジェクトのファイルより優先されます（ドキュメント記載、未実施）。`claude plugin install gate-sdd@gate-oriented-sdd --scope project` はこの宣言の代わりになりません。このコマンドが書き込むのは `enabledPlugins` の部分だけだからです（検証済み。[`docs/verified.md`](./docs/verified.md) の M1）。
 
 **Google Antigravity**
 
