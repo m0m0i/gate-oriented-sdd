@@ -6,6 +6,7 @@
     }
   },
   "enabledPlugins": { "gate-sdd@gate-oriented-sdd": true },
+  "env": { "FORCE_AUTOUPDATE_PLUGINS": "1" },
   "hooks": {
     "PostToolUse": [
       {

@@ -6,8 +6,9 @@
 # re-running `init` and opening a pull request in every repository that copied it. The gate
 # itself is unchanged and runs beside this file, with the project as cwd (verified: V1 in
 # docs/verified.md). What this wrapper adds is the three decisions a plugin-shipped gate has to
-# make that a copied one never did, and on SessionStart one statement a copy never needed to
-# make: where the plugin is, for the session's own shell — (0) below.
+# make that a copied one never did, and on SessionStart two statements a copy never needed to
+# make: where the plugin is, for the session's own shell — (0) below — and whether this session
+# runs the plugin auto-update pass — (4).
 #
 #   1. A project without .steering/ does not use the harness. A user-scope install reaches
 #      every project on the machine, so the gate must be silent there — exit 0, no output.
@@ -191,6 +192,35 @@ for f in "$@"; do
 done
 set +f
 
-# (3) The gate runs from here, beside this file, with the project as cwd.
+# (3) The gate runs from here, beside this file, with the project as cwd. A Stop gate is exec'd,
+# as it always was; the digest runs as a child, so that (4) can follow it under its heading, and
+# its exit status is kept.
 [ -f "$DIR/$gate" ] || _plugin_gate_block "Plugin gate: $gate is missing from the plugin's hooks/ directory beside plugin-gate.sh, so the gate cannot run. Re-install the plugin and run again rather than treating this turn as a pass."
-exec sh "$DIR/$gate"
+[ "$event" = SessionStart ] || exec sh "$DIR/$gate"
+sh "$DIR/$gate"; _rc=$?
+
+# (4) After the digest: say when this session runs no plugin auto-update pass (#274). ADR-8 made
+# that pass the only route a gate fix has to a Claude Code project, and the Claude desktop app
+# starts every session with DISABLE_AUTOUPDATER=1, which turns the pass off unless
+# FORCE_AUTOUPDATE_PLUGINS=1 is also set (plugins/loading, env-vars). So a machine used only
+# through the app stayed at the version it installed, and nothing said so (#265, U2 to U4 in
+# docs/verified.md). The template `init` renders carries the env line since 0.25.0; this is for
+# every project whose settings predate it, and for a person who turned the line off. Read from
+# the process environment, which a hook inherits from the session: U2 read these variables from
+# the same processes with `ps eww`. The documented spellings only — `1` for the two the
+# documentation gives as `=1`, non-empty for the traffic variable, as its env-vars row says —
+# and FORCE counts as `1` alone; another spelling is not read, in either direction. The version
+# is the manifest Claude Code loads, beside hooks/, or `unknown` when it cannot be read: a local
+# marketplace loads a plugin in place, so the cache directory's name is not a source. A
+# statement, as the header requires, and never under Stop (exec'd above), never without
+# .steering/ and never where the digest stands down ((1) and (2) exit first).
+_off=""
+[ "${DISABLE_AUTOUPDATER:-}" = 1 ] && _off="DISABLE_AUTOUPDATER=1"
+[ "${DISABLE_UPDATES:-}" = 1 ] && _off="${_off:+$_off and }DISABLE_UPDATES=1"
+[ -n "${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:-}" ] \
+  && _off="${_off:+$_off and }CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=$(printf '%s' "$CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC" | tr '\n' ' ')"
+if [ -n "$_off" ] && [ "${FORCE_AUTOUPDATE_PLUGINS:-}" != 1 ]; then
+  _ver=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "${DIR%/*}/.claude-plugin/plugin.json" 2>/dev/null | head -1)
+  echo "- This session runs no plugin auto-update pass: the environment has $_off, and FORCE_AUTOUPDATE_PLUGINS is not 1. gate-sdd stays at the loaded ${_ver:-unknown} until a by-hand update (claude plugin marketplace update gate-oriented-sdd, then claude plugin update gate-sdd@gate-oriented-sdd), or until a settings file's env sets FORCE_AUTOUPDATE_PLUGINS=1 and a new session starts."
+fi
+exit $_rc

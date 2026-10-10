@@ -3065,6 +3065,65 @@ grep -q 'Repo facts' "$TMP/pgout" || j="no(the digest did not run)"; [ -s "$TMP/
 [ "$a$b$c$d$e$f$g$h$i$j" = "okokokokokokokokokok" ] && report "plugin-gate tells the session's shell where the plugin is, once, without damaging the env file" ok \
   || report "plugin-gate tells the session's shell where the plugin is, once, without damaging the env file" no "written=$a once=$b no-newline=$c supersedes=$d digest-unchanged=$e no-steering=$f stood-down=$g not-stop=$h empty=$i unwritable=$j"
 
+# 221. #274 AC1, AC2 — a pass that is off is said to be off. The Claude desktop app starts every
+#      session with DISABLE_AUTOUPDATER=1, which turns the plugin auto-update pass off unless
+#      FORCE_AUTOUPDATE_PLUGINS=1 is also set, so a machine used only through the app stays at the
+#      version it installed, and until #274 nothing said so (#265's U2 to U4, docs/verified.md).
+#      On SessionStart the wrapper reads the process environment, which a hook inherits from the
+#      session, and after the digest prints one factual line naming the variables set and the
+#      loaded version. Each branch controls the four variables itself: the suite may run from a
+#      desktop session, whose shell carries the app's variable, and a branch that inherited it
+#      would pass or fail by where the suite was run.
+#      (a) DISABLE_AUTOUPDATER=1 alone: exit 0, the digest, and the line last on stdout naming
+#          the variable and the manifest's version; nothing on stderr;
+#      (b) with FORCE_AUTOUPDATE_PLUGINS=1 as well: the digest and no line;
+#      (c) none of the four: no line;
+#      (d) DISABLE_UPDATES=1: the line names it;
+#      (e) CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1: the line names it;
+#      (f) both Stop gates under (a)'s environment: the line nowhere on stdout;
+#      (g) no .steering/ under (a): silent;
+#      (h) the digest standing down under (a): silent;
+#      (i) no manifest under (a): the line, with `unknown` for the version.
+#      RED-CAPABILITY: by sequence. On the merge-base's wrapper (a), (d), (e) and (i) fail: no line.
+run_pg_auto() { # run_pg_auto <fixture root> <gate> [VAR=value ...] — run_pg with the four auto-update variables cleared, then the given ones set
+  _ar=$1; _ag=$2; shift 2
+  ( unset DISABLE_AUTOUPDATER DISABLE_UPDATES CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC FORCE_AUTOUPDATE_PLUGINS
+    for _kv in "$@"; do export "$_kv"; done
+    cd "$_ar/project" && CLAUDE_PROJECT_DIR="$_ar/project" CLAUDE_PLUGIN_ROOT="$_ar/plugin" sh "$_ar/plugin/hooks/plugin-gate.sh" "$_ag" >"$TMP/pgout" 2>"$TMP/pgerr" </dev/null; echo "exit=$?" )
+}
+off_line() { tail -n 1 "$TMP/pgout" | grep -- 'runs no plugin auto-update pass'; }  # the line, when it is last on stdout
+with_manifest() { mkdir -p "$1/plugin/.claude-plugin"; printf '{"name":"gate-sdd","version":"9.9.9"}\n' > "$1/plugin/.claude-plugin/plugin.json"; }
+p=$(pg_repo pg-auto-221); with_manifest "$p"
+out=$(run_pg_auto "$p" steering-digest.sh DISABLE_AUTOUPDATER=1)
+case "$out" in *"exit=0"*) a=ok ;; *) a="no($out)" ;; esac
+grep -q 'Repo facts' "$TMP/pgout" || a="no(no digest)"
+if l=$(off_line); then case "$l" in *"DISABLE_AUTOUPDATER=1"*"9.9.9"*) ;; *) a="no(line: $(printf '%s' "$l" | head -c 160))" ;; esac
+else a="no(no line; last: $(tail -n 1 "$TMP/pgout" | head -c 100))"; fi
+[ -s "$TMP/pgerr" ] && a="no(stderr: $(head -c 80 "$TMP/pgerr"))"
+run_pg_auto "$p" steering-digest.sh DISABLE_AUTOUPDATER=1 FORCE_AUTOUPDATE_PLUGINS=1 >/dev/null
+grep -q 'runs no plugin auto-update pass' "$TMP/pgout" && b="no(line under FORCE)" || b=ok
+grep -q 'Repo facts' "$TMP/pgout" || b="no(no digest)"
+run_pg_auto "$p" steering-digest.sh >/dev/null
+grep -q 'runs no plugin auto-update pass' "$TMP/pgout" && c="no(line with nothing set)" || c=ok
+run_pg_auto "$p" steering-digest.sh DISABLE_UPDATES=1 >/dev/null
+if l=$(off_line); then case "$l" in *"DISABLE_UPDATES=1"*) d=ok ;; *) d="no($(printf '%s' "$l" | head -c 120))" ;; esac; else d="no(no line)"; fi
+run_pg_auto "$p" steering-digest.sh CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 >/dev/null
+if l=$(off_line); then case "$l" in *"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"*) e=ok ;; *) e="no($(printf '%s' "$l" | head -c 120))" ;; esac; else e="no(no line)"; fi
+f=ok; for gate in quality-gate.sh review-gate.sh; do
+  run_pg_auto "$p" "$gate" DISABLE_AUTOUPDATER=1 >/dev/null
+  grep -q 'runs no plugin auto-update pass' "$TMP/pgout" && f="no($gate printed it)"
+done
+q=$(pg_repo pg-auto-221-g); with_manifest "$q"; rm -rf "$q/project/.steering"
+out=$(run_pg_auto "$q" steering-digest.sh DISABLE_AUTOUPDATER=1); case "$out" in *"exit=0"*) g=ok ;; *) g="no($out)" ;; esac; [ -s "$TMP/pgout" ] && g="no(printed)"
+q=$(pg_repo pg-auto-221-h); with_manifest "$q"; mkdir -p "$q/project/.claude/hooks"; cp "$ROOT/hooks/steering-digest.sh" "$ROOT/hooks/gate-lib.sh" "$q/project/.claude/hooks/"
+printf '%s\n' '{"hooks":{"SessionStart":[{"matcher":"startup","hooks":[{"type":"command","command":"sh .claude/hooks/steering-digest.sh"}]}]}}' > "$q/project/.claude/settings.json"
+out=$(run_pg_auto "$q" steering-digest.sh DISABLE_AUTOUPDATER=1); case "$out" in *"exit=0"*) h=ok ;; *) h="no($out)" ;; esac; [ -s "$TMP/pgout" ] && h="no(printed)"
+q=$(pg_repo pg-auto-221-i)
+run_pg_auto "$q" steering-digest.sh DISABLE_AUTOUPDATER=1 >/dev/null
+if l=$(off_line); then case "$l" in *"unknown"*) i=ok ;; *) i="no($(printf '%s' "$l" | head -c 120))" ;; esac; else i="no(no line)"; fi
+[ "$a$b$c$d$e$f$g$h$i" = "okokokokokokokokok" ] && report "plugin-gate says when this session runs no plugin auto-update pass, after the digest, and only then" ok \
+  || report "plugin-gate says when this session runs no plugin auto-update pass, after the digest, and only then" no "disabled=$a forced=$b none=$c updates=$d traffic=$e stop=$f no-steering=$g stood-down=$h no-manifest=$i"
+
 # --- guards: scripts/check-receipt-schema.py ---------------------------------------
 #
 # #28. The invariant that makes the mirror-skip unreachable — every MIRRORS destination is
@@ -5662,14 +5721,18 @@ RMEOF
 RMEOF
   # #257. Both READMEs quote the Claude Code declaration init renders. The block is built from
   # the template rather than written out here, so the fixture follows the file the guard compares
-  # against and case 217 tests the comparison, not a second copy of the template.
+  # against and case 217 tests the comparison, not a second copy of the template. The keys are
+  # read from the guard copied beside it for the same reason: a tuple here was the second copy,
+  # and when #274 added `env` to the guard's it sent seven cases red for a fixture that disagreed
+  # with its subject (#14, #23).
   mkdir -p "$r/hooks/templates"
   cp "$ROOT/hooks/templates/claude-code.settings.json" "$r/hooks/templates/"
   python3 - "$r" <<'PYEOF'
-import json, pathlib, sys
+import json, pathlib, re, sys
 r = pathlib.Path(sys.argv[1])
+keys = re.findall(r'"([^"]+)"', re.search(r'^DECLARATION_KEYS = \((.*)\)$', (r / "scripts/check-readme-claims.py").read_text(), re.M).group(1))
 t = json.loads((r / "hooks/templates/claude-code.settings.json").read_text())
-block = json.dumps({k: t[k] for k in ("extraKnownMarketplaces", "enabledPlugins")}, indent=2)
+block = json.dumps({k: t[k] for k in keys}, indent=2)
 for name in ("README.md", "README.ja.md"):
     p = r / name
     p.write_text(p.read_text() + "\n## Install\n\n```json\n" + block + "\n```\n")
@@ -6316,10 +6379,11 @@ case "$err" in *"README.md: the declaration block also sets \`hooks\`"*) c12=ok 
 # commit something else. Review round 1 found the branch had no case.
 decl_second() { # $1 repo, $2 indent for the appended block
   python3 - "$1" "$2" <<'PYEOF'
-import json, pathlib, sys
+import json, pathlib, re, sys
 r, pad = pathlib.Path(sys.argv[1]), sys.argv[2]
+keys = re.findall(r'"([^"]+)"', re.search(r'^DECLARATION_KEYS = \((.*)\)$', (r / "scripts/check-readme-claims.py").read_text(), re.M).group(1))
 t = json.loads((r / "hooks/templates/claude-code.settings.json").read_text())
-d = {k: t[k] for k in ("extraKnownMarketplaces", "enabledPlugins")}
+d = {k: t[k] for k in keys}
 d["extraKnownMarketplaces"]["gate-oriented-sdd"]["autoUpdate"] = False
 body = "\n".join(pad + l for l in json.dumps(d, indent=2).split("\n"))
 p = r / "README.md"
