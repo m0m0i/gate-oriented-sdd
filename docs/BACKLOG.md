@@ -66,7 +66,7 @@ Bullets, never a table — here and under **What changed at this refinement**. `
 - **#264** — row 1, which stays, 2026-10-08 — shipped as #270, with #263.
 - **#262** — row 1, which stays, 2026-10-08 — shipped as #272.
 - **#265** — row 1, 2026-10-09 — shipped as #275.
-- **#274** — row 1, 2026-10-10 — shipped as #277.
+- **#274** — row 1, 2026-10-10 — shipped as #277, with its F3 record as #280.
 
 Added by #174, which was row 1 and was argued for by five consecutive refinements. Two forms leave the work live, and neither is a discharge by shipping: a fold, where an entry under `## Open, not planned` joins a row, and its inverse, where a row moves there. Both are recorded here because the claim that left — a position, or "open and deliberately not a row" — was a claim either way.
 
