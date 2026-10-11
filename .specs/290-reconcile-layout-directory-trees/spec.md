@@ -1,5 +1,5 @@
 # Spec: Reconcile docs/layout.md with check-document-cascade and current layout
-- Slug: 290-reconcile-layout-directory-trees   Issue: 290   Type: chore   Status: draft
+- Slug: 290-reconcile-layout-directory-trees   Issue: 290   Type: chore   Status: done
 - Author: m0m0i   Date: 2026-10-12
 
 ## 1. Requirements (WHAT / WHY)
