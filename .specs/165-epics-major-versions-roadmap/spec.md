@@ -1,6 +1,6 @@
 # Spec: Redefine an epic as a major version, rename EPICS.md to ROADMAP.md, and rename skill to roadmap
 
-- Slug: 165-epics-major-versions-roadmap   Issue: 165   Type: feature   Status: approved
+- Slug: 165-epics-major-versions-roadmap   Issue: 165   Type: feature   Status: done
 - Author: Hiroyuki Momoi   Date: 2026-10-11
 
 ## 1. Requirements (WHAT / WHY)
@@ -14,19 +14,19 @@
   4. `EPICS.md` holding major versions is a misnomer; a document named `EPICS.md` attracts backlog-level items rather than release-level milestone commitments.
   5. Inception skills must terminate in something the harness uses. Redefining epics as major versions provides a mechanical terminus: versions map to release milestones, and `Completes:` cites PRD capabilities that can be cross-checked.
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN the skill defines a major version THE SYSTEM SHALL define it as a content commitment with a demo, not a date or calendar phase.
-  - [ ] **AC2:** The skill SHALL be renamed to `roadmap` (`skills/roadmap/SKILL.md`), and WHEN the document is authored THE SYSTEM SHALL write `<docs>/ROADMAP.md`.
-  - [ ] **AC3:** `assets/check-document-set.py` SHALL name `ROADMAP.md` in `FULL_ONLY_DOCS` and map it to `roadmap` in `DOC_OWNER`.
-  - [ ] **AC4:** The `Walking skeleton` field SHALL be removed from the skill instructions and template. 1.0 is the skeleton by definition.
-  - [ ] **AC5:** WHEN a version entry is written THE SYSTEM SHALL NOT list issues and SHALL NOT name a backlog row; membership is derived in `BACKLOG.md` via position against `## Lines`.
-  - [ ] **AC6:** WHEN a version entry is written THE SYSTEM SHALL carry a `Completes:` field citing PRD capability ids.
-  - [ ] **AC7:** Version entry headers in `ROADMAP.md` SHALL use the `## <major.minor>-<name>` format (e.g., `## 1.0-baseline-harness`).
-  - [ ] **AC8:** The template in `skills/roadmap/SKILL.md` SHALL carry its own definitions in its preamble, so a reader of `ROADMAP.md` alone knows that issue and row membership are derived in `BACKLOG.md` rather than written here.
-  - [ ] **AC9:** `README.md` and `README.ja.md` SHALL agree across the flow diagram, the skills table, and the minimum-set opt-in table, replacing `epics` with `roadmap` and removing stale references to `EPICS.md` and any outdated justification citing #22.
-  - [ ] **AC10:** `skills/init/SKILL.md`'s opt-in three description SHALL name `roadmap` / `ROADMAP.md` rather than `epics` / `EPICS.md`.
-  - [ ] **AC11:** `skills/backlog/SKILL.md` and `docs/layout.md` SHALL reference `roadmap` and `ROADMAP.md` rather than `epics` and `EPICS.md`.
-  - [ ] **AC12:** `docs/EPICS.md` SHALL be rewritten and replaced by `docs/ROADMAP.md` defining major versions (content commitments, demos, completed capabilities) conforming to the new template, passing `assets/check-document-set.py`.
-  - [ ] **AC13:** Automated test cases in `scripts/test-gates.sh` SHALL verify the updated docset checks for `ROADMAP.md` and `roadmap`, template invariants in `skills/roadmap/SKILL.md` (major version definition, `Completes:` field, absence of `Walking skeleton` and issue lists), and red-capability under named mutation.
+  - [x] **AC1:** WHEN the skill defines a major version THE SYSTEM SHALL define it as a content commitment with a demo, not a date or calendar phase.
+  - [x] **AC2:** The skill SHALL be renamed to `roadmap` (`skills/roadmap/SKILL.md`), and WHEN the document is authored THE SYSTEM SHALL write `<docs>/ROADMAP.md`.
+  - [x] **AC3:** `assets/check-document-set.py` SHALL name `ROADMAP.md` in `FULL_ONLY_DOCS` and map it to `roadmap` in `DOC_OWNER`.
+  - [x] **AC4:** The `Walking skeleton` field SHALL be removed from the skill instructions and template. 1.0 is the skeleton by definition.
+  - [x] **AC5:** WHEN a version entry is written THE SYSTEM SHALL NOT list issues and SHALL NOT name a backlog row; membership is derived in `BACKLOG.md` via position against `## Lines`.
+  - [x] **AC6:** WHEN a version entry is written THE SYSTEM SHALL carry a `Completes:` field citing PRD capability ids.
+  - [x] **AC7:** Version entry headers in `ROADMAP.md` SHALL use the `## <major.minor>-<name>` format (e.g., `## 1.0-baseline-harness`).
+  - [x] **AC8:** The template in `skills/roadmap/SKILL.md` SHALL carry its own definitions in its preamble, so a reader of `ROADMAP.md` alone knows that issue and row membership are derived in `BACKLOG.md` rather than written here.
+  - [x] **AC9:** `README.md` and `README.ja.md` SHALL agree across the flow diagram, the skills table, and the minimum-set opt-in table, replacing `epics` with `roadmap` and removing stale references to `EPICS.md` and any outdated justification citing #22.
+  - [x] **AC10:** `skills/init/SKILL.md`'s opt-in three description SHALL name `roadmap` / `ROADMAP.md` rather than `epics` / `EPICS.md`.
+  - [x] **AC11:** `skills/backlog/SKILL.md` and `docs/layout.md` SHALL reference `roadmap` and `ROADMAP.md` rather than `epics` and `EPICS.md`.
+  - [x] **AC12:** `docs/EPICS.md` SHALL be rewritten and replaced by `docs/ROADMAP.md` defining major versions (content commitments, demos, completed capabilities) conforming to the new template, passing `assets/check-document-set.py`.
+  - [x] **AC13:** Automated test cases in `scripts/test-gates.sh` SHALL verify the updated docset checks for `ROADMAP.md` and `roadmap`, template invariants in `skills/roadmap/SKILL.md` (major version definition, `Completes:` field, absence of `Walking skeleton` and issue lists), and red-capability under named mutation.
 - Out of scope:
   - The backlog's `## Lines` section and `Serves` column (handled by #164).
   - The `- Reconciled against PRD:` line and its cascade enforcement guard (deferred to #166).
@@ -85,4 +85,4 @@ Three questions, resolved before design (2026-10-11):
 
 - [x] T1: failing test in `scripts/test-gates.sh` (Case 224 asserting roadmap skill template invariants, and docset test updates) — then the implementation updating `assets/check-document-set.py`, renaming `skills/epics/SKILL.md` to `skills/roadmap/SKILL.md` with major version definitions, and updating `skills/init/SKILL.md` and `skills/backlog/SKILL.md`
 - [x] T2: rewrite `docs/EPICS.md` to `docs/ROADMAP.md` conforming to the new template, and update `README.md`, `README.ja.md`, and `docs/layout.md` — then verify all 13 gating validators pass cleanly
-- [ ] T3: refactor and verification pass across all validators, with named mutation proving red-capability of Case 224 in `scripts/test-gates.sh`
+- [x] T3: refactor and verification pass across all validators, with named mutation proving red-capability of Case 224 in `scripts/test-gates.sh`
