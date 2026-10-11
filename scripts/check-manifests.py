@@ -316,6 +316,30 @@ elif root_agents.is_file():
     except OSError as e:
         errors.append(f"cannot read {rules_agents.relative_to(ROOT)} or {root_agents.relative_to(ROOT)}: {e}")
 
+# The three directory contracts init step 3 copies into a project (#83). Each ships under
+# assets/directory-contracts/ with its leading dot dropped, and this repository's own copy at
+# the dotted path is the one it runs by, so the two must stay identical — otherwise a consumer
+# installs a contract this repository no longer holds itself to. The comparison needs the
+# dogfood, and a release payload (package-release.py, checked by this script unpacked) ships
+# none: a tree without .specs/ is that payload, and only the sources are required of it.
+CONTRACTS_SRC = PLUGIN / "assets" / "directory-contracts"
+has_dogfood = (ROOT / ".specs").is_dir()
+for dogfood in (".specs/README.md", ".specs/_archive/README.md", ".work_logs/README.md"):
+    shipped = CONTRACTS_SRC / dogfood.replace(".specs/", "specs/").replace(".work_logs/", "work_logs/")
+    local = ROOT / dogfood
+    if not shipped.is_file():
+        errors.append(f"missing: {shipped.relative_to(ROOT)} (init step 3 copies it to {dogfood})")
+    elif not has_dogfood:
+        continue
+    elif not local.is_file():
+        errors.append(f"missing: {dogfood} (this repository's copy of {shipped.relative_to(ROOT)})")
+    else:
+        try:
+            if shipped.read_text() != local.read_text():
+                errors.append(f"{shipped.relative_to(ROOT)} has drifted from {dogfood}; they must be identical")
+        except OSError as e:
+            errors.append(f"cannot read {shipped.relative_to(ROOT)} or {dogfood}: {e}")
+
 if errors:
     print("manifest check FAILED", file=sys.stderr)
     for e in errors:
