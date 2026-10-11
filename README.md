@@ -47,10 +47,10 @@ A gate that fires on ordinary turns gets disabled, and a disabled gate protects 
 **Inception — once per project:**
 
 ```
-northstar ──▶ prd ──▶ design-doc ──▶ epics ──▶ backlog ──▶ sprint
-   metric      capabilities  architecture   demos    ordered,    1 item :
-                                                     coarse      N issues
-        └───────────────▶ contract ◀───────────────┘
+northstar ──▶ prd ──▶ design-doc ──▶ roadmap ──▶ backlog ──▶ sprint
+   metric      capabilities  architecture   demos     ordered,    1 item :
+                                                      coarse      N issues
+        └───────────────▶ contract ◀────────────────┘
                     coding rules, compiled
                     into the reviewer's rulebook
 ```
@@ -100,7 +100,7 @@ Opt-in, and worth adding when the project justifies it — three skills, each fo
 | Skill | Why it is opt-in |
 | :-- | :-- |
 | `northstar` | `init`'s interview already produces the `- Owns:` anchor by another route |
-| `epics` | nothing consumes it mechanically **yet** — the gap is #166, not a decision |
+| `roadmap` | nothing consumes it mechanically **yet** — the gap is #166, not a decision |
 | `contract` | run before there are commits and review findings to compile, it produces a *worse* rulebook rather than an absent one |
 
 **Every skill is always available.** `init` detects the active harness (Claude Code, Google Antigravity, or both) and installs `.steering/`, `.specs/`, `.work_logs/`, the issue templates, the appropriate rule pointers (`CLAUDE.md` / `GEMINI.md`), the reviewer, and the hooks — never the skills themselves, which ship with the plugin, and on Claude Code not the gates either: the plugin ships them, and `init` writes only the settings that enable it, beside the per-language fast check. The choice above governs which documents get created and which skills are in the flow, never whether one can be run.
@@ -119,7 +119,7 @@ The middle of that chain is not this plugin's invention — it is **GitHub's**. 
 | `northstar` | the metric, its levers, the quality laws in order | the `Owns:` anchor the reviewer reads for severity |
 | `prd` | users, capabilities with stable ids, the boundary | ids that specs cite |
 | `design-doc` | architecture, its seams, the decisions worth recording | `.steering/structure.md` + ADRs |
-| `epics` | capability-sized chunks that each end in a demo | grouped work |
+| `roadmap` | major versions as content commitments with demos | release milestones |
 | `backlog` | one ordered list — ordered, not prioritized | the order `sprint` takes from |
 | `sprint` | decomposes the top into issues, 1 item : N issues | typed tracker issues |
 | `contract` | coding rules, tiered by how they can be checked | the reviewer's rulebook |

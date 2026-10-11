@@ -84,5 +84,5 @@ Three questions, resolved before design (2026-10-11):
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
 - [x] T1: failing test in `scripts/test-gates.sh` (Case 224 asserting roadmap skill template invariants, and docset test updates) — then the implementation updating `assets/check-document-set.py`, renaming `skills/epics/SKILL.md` to `skills/roadmap/SKILL.md` with major version definitions, and updating `skills/init/SKILL.md` and `skills/backlog/SKILL.md`
-- [ ] T2: rewrite `docs/EPICS.md` to `docs/ROADMAP.md` conforming to the new template, and update `README.md`, `README.ja.md`, and `docs/layout.md` — then verify all 13 gating validators pass cleanly
+- [x] T2: rewrite `docs/EPICS.md` to `docs/ROADMAP.md` conforming to the new template, and update `README.md`, `README.ja.md`, and `docs/layout.md` — then verify all 13 gating validators pass cleanly
 - [ ] T3: refactor and verification pass across all validators, with named mutation proving red-capability of Case 224 in `scripts/test-gates.sh`
