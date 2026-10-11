@@ -1,5 +1,5 @@
 # Spec: Gates fail open on exit code 2 and unescaped control characters in Antigravity
-- Slug: 282-antigravity-gate-fail-open   Issue: 282   Type: bug   Status: approved
+- Slug: 282-antigravity-gate-fail-open   Issue: 282   Type: bug   Status: done
 - Author: Hiroyuki Momoi   Date: 2026-10-11
 
 ## 1. Requirements (WHAT / WHY)
@@ -78,3 +78,11 @@ Asked and answered 2026-10-11:
 - [x] T1: regression tests for Antigravity exit 0, Claude Code exit 2, and control character escaping (tabs and carriage returns) — then the fix in `hooks/gate-lib.sh` and bootstrap guards in `hooks/quality-gate.sh` and `hooks/review-gate.sh`
 - [x] T2: regression test for `steering-digest-antigravity.sh` turn-0 delivery vs turn-1 suppression — then the fix in `hooks/steering-digest-antigravity.sh`
 - [x] T3: test coverage for dual-target bootstrap guard parity across both harnesses — then docs and fidelity alignment
+
+### Evidence, 2026-10-11
+
+- AC1: `scripts/test-gates.sh` case 229 verifies `gate_block` exits 0 with `{"decision":"continue","reason":"..."}` under `ANTIGRAVITY_AGENT=1`.
+- AC2: `scripts/test-gates.sh` case 229 verifies `gate_block` exits 2 and outputs message to stderr under clean env (Claude Code).
+- AC3: `scripts/test-gates.sh` case 229 verifies horizontal tabs, carriage returns, newlines, double quotes, and backslashes are escaped into valid RFC 8259 JSON parsing cleanly via `python3 -c "import json; json.loads(...)"`.
+- AC4: `scripts/test-gates.sh` case 230 verifies `hooks/steering-digest-antigravity.sh` executes on `{"invocationNum": 0}` and emits `{}` on `{"invocationNum": 1}`, `{"invocationNum": 2}`, and `{"invocationNum": 42}`.
+- AC5: regression tests failed before the fixes (228 passed, 2 failed) and pass after (230 passed, 0 failed). Case 201 also verifies `_gate_bootstrap_block` matches `gate_block` byte-for-byte in stdout, stderr, and exit code across both Claude Code and Antigravity environments.
