@@ -1,5 +1,5 @@
 # Spec: init step 3 lists three READMEs the plugin ships no source for
-- Slug: 83-init-readme-sources   Issue: 83   Type: bug   Status: approved
+- Slug: 83-init-readme-sources   Issue: 83   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-10-12
 
 ## 1. Requirements (WHAT / WHY)
