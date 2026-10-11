@@ -272,7 +272,7 @@ if isinstance(a, dict) and isinstance(b, dict):
                 errors.append(f"antigravity {event}: tool events need the nested {{matcher, hooks:[...]}} form")
             if event not in TOOL_EVENTS and nested:
                 errors.append(f"antigravity {event}: non-tool events need the flat {{type, command}} form")
-    # Claude Code uses SessionStart for steering digest injection; Antigravity uses PreInvocation (turn 1).
+    # Claude Code uses SessionStart for steering digest injection; Antigravity uses PreInvocation (turn 0).
     if (a_events - {"SessionStart"}) != (b_events - {"PreInvocation"}):
         errors.append(
             f"hook events differ: Claude Code {sorted(a_events)} (plugin hooks file plus template) "

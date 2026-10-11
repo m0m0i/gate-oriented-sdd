@@ -88,11 +88,11 @@ The reason text reaches the model, so a gate message on Antigravity carries the 
 
 | | Claude Code | Antigravity |
 | :-- | :-- | :-- |
-| Block a turn ending | exit code `2` | stdout `{"decision": "continue", "reason": "…"}` |
+| Block a turn ending | exit code `2` | stdout `{"decision": "continue", "reason": "…"}` with exit `0` |
 | Message to the model | stderr | the `reason` field |
 | Non-blocking pass | exit `0` | `{}` |
 
-One gate script can serve both: emit the JSON on stdout **and** exit 2. Each harness reads the channel it cares about and ignores the other.
+One gate script serves both: `gate_block` emits the JSON on stdout and stderr, then inspects the environment (`ANTIGRAVITY_CONVERSATION_ID` or `ANTIGRAVITY_AGENT`) to exit 0 on Antigravity (where non-zero exit fails open; A1, A2, #282) and exit 2 on Claude Code.
 
 ## The inception chain — northstar, prd, epics
 

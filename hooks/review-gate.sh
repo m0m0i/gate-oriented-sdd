@@ -46,6 +46,9 @@ DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 _gate_bootstrap_block() {             # gate_block, for the one state that cannot call it
   printf '{"decision":"continue","reason":"%s"}\n' "$1"
   printf '%s\n' "$1" >&2
+  if [ -n "${ANTIGRAVITY_CONVERSATION_ID:-}" ] || [ -n "${ANTIGRAVITY_AGENT:-}" ]; then
+    exit 0
+  fi
   exit 2
 }
 if [ ! -r "$DIR/gate-lib.sh" ]; then

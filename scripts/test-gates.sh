@@ -23,7 +23,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # is that session's own env file, which a plugin-gate.sh case must never append to. So is
 # CLAUDE_PROJECT_DIR: the quality gate runs this suite from a Stop hook, where it names this
 # repository, and the wrapper's stand-down reads the settings under it (#262).
-unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR
+unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR ANTIGRAVITY_CONVERSATION_ID ANTIGRAVITY_AGENT
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -2123,11 +2123,75 @@ sed -n '/^_gate_bootstrap_block() {/,/^}$/p' "$TMP/bs-region-1" > "$TMP/bs-fn.sh
 ( . "$TMP/bs-fn.sh"; _gate_bootstrap_block 'bootstrap drift probe' ) \
   >"$TMP/bs-cp-out" 2>"$TMP/bs-cp-err"; bs_cpexit=$?
 if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-lib-out" "$TMP/bs-cp-out" \
-     && cmp -s "$TMP/bs-lib-err" "$TMP/bs-cp-err" && [ "$bs_libexit" = "$bs_cpexit" ]; then c3=ok; else c3=no; fi
+     && cmp -s "$TMP/bs-lib-err" "$TMP/bs-cp-err" && [ "$bs_libexit" = "$bs_cpexit" ] && [ "$bs_libexit" -eq 2 ]; then c3=ok; else c3=no; fi
 
-[ "$c1$c2$c3" = "okokok" ] && report "the bootstrap guard is one copy, and it still matches gate_block" ok \
+( export ANTIGRAVITY_AGENT=1; . "$ROOT/hooks/gate-lib.sh"; gate_block 'bootstrap drift probe' ) \
+  >"$TMP/bs-agy-lib-out" 2>"$TMP/bs-agy-lib-err"; bs_agy_libexit=$?
+( export ANTIGRAVITY_AGENT=1; . "$TMP/bs-fn.sh"; _gate_bootstrap_block 'bootstrap drift probe' ) \
+  >"$TMP/bs-agy-cp-out" 2>"$TMP/bs-agy-cp-err"; bs_agy_cpexit=$?
+if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-agy-lib-out" "$TMP/bs-agy-cp-out" \
+     && cmp -s "$TMP/bs-agy-lib-err" "$TMP/bs-agy-cp-err" \
+     && [ "$bs_agy_libexit" = "$bs_agy_cpexit" ] && [ "$bs_agy_libexit" -eq 0 ]; then c4=ok; else c4=no; fi
+
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "the bootstrap guard is one copy, and it still matches gate_block" ok \
   || report "the bootstrap guard is one copy, and it still matches gate_block" no \
-     "discovered=$bs_regions/$c1 identical=$c2 channels=$c3 (lib exit=$bs_libexit, copy exit=$bs_cpexit)"
+     "discovered=$bs_regions/$c1 identical=$c2 cc-channels=$c3 agy-channels=$c4 (cc-exit=$bs_libexit/$bs_cpexit, agy-exit=$bs_agy_libexit/$bs_agy_cpexit)"
+
+
+# --- gate_block: dual-target exit codes and character escaping (#282) ------
+#
+# #282. Under Claude Code, gate_block must exit 2 with the message on stderr.
+# Under Antigravity (ANTIGRAVITY_CONVERSATION_ID or ANTIGRAVITY_AGENT set),
+# non-zero exit is treated as an execution failure and fails open; gate_block
+# must emit {"decision":"continue","reason":"..."} on stdout and exit 0.
+#
+# Control characters (tabs, carriage returns, newlines) must be escaped in JSON
+# so protojson / RFC 8259 unmarshalers do not reject the hook output.
+
+# 1. Claude Code baseline: exit 2, message on stderr, valid continue JSON on stdout
+( . "$ROOT/hooks/gate-lib.sh"; gate_block "standard block" ) >"$TMP/gb_cc_out" 2>"$TMP/gb_cc_err"; ex_cc=$?
+c1=no; c2=no; c3=no
+[ "$ex_cc" -eq 2 ] && c1=ok
+case "$(cat "$TMP/gb_cc_out")" in *'"decision":"continue"'*) c2=ok ;; esac
+[ "$(cat "$TMP/gb_cc_err")" = "standard block" ] && c3=ok
+
+# 2. Antigravity via ANTIGRAVITY_AGENT: exit 0, message on stderr, valid continue JSON on stdout
+( export ANTIGRAVITY_AGENT=1; . "$ROOT/hooks/gate-lib.sh"; gate_block "antigravity agent block" ) >"$TMP/gb_agy1_out" 2>"$TMP/gb_agy1_err"; ex_agy1=$?
+c4=no; c5=no; c6=no
+[ "$ex_agy1" -eq 0 ] && c4=ok
+case "$(cat "$TMP/gb_agy1_out")" in *'"decision":"continue"'*) c5=ok ;; esac
+[ "$(cat "$TMP/gb_agy1_err")" = "antigravity agent block" ] && c6=ok
+
+# 3. Antigravity via ANTIGRAVITY_CONVERSATION_ID: exit 0
+( export ANTIGRAVITY_CONVERSATION_ID="conv-123"; . "$ROOT/hooks/gate-lib.sh"; gate_block "antigravity conv block" ) >"$TMP/gb_agy2_out" 2>"$TMP/gb_agy2_err"; ex_agy2=$?
+c7=no
+[ "$ex_agy2" -eq 0 ] && c7=ok
+
+[ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] \
+  && report "gate_block exits 2 on Claude Code and exits 0 on Antigravity with continue JSON" ok \
+  || report "gate_block exits 2 on Claude Code and exits 0 on Antigravity with continue JSON" no \
+     "cc-exit=$c1 cc-json=$c2 cc-err=$c3 agy-agent-exit=$c4 agy-agent-json=$c5 agy-agent-err=$c6 agy-conv-exit=$c7"
+
+# 4. Control character escaping: tabs, carriage returns, quotes, backslashes, newlines
+probe_str='hello\world
+with "quotes"	and	tabs
+and CRLF'
+( . "$ROOT/hooks/gate-lib.sh"; gate_block "$probe_str" ) >"$TMP/gb_esc_out" 2>/dev/null || true
+c_esc=no
+if python3 -c '
+import json, sys
+with open(sys.argv[1], "r") as f:
+    data = json.load(f)
+if data.get("decision") != "continue" or data.get("reason") != sys.argv[2]:
+    sys.exit(1)
+' "$TMP/gb_esc_out" "$probe_str" 2>/dev/null; then
+  c_esc=ok
+fi
+[ "$c_esc" = "ok" ] \
+  && report "gate_block escapes backslashes, quotes, tabs, and carriage returns as valid JSON" ok \
+  || report "gate_block escapes backslashes, quotes, tabs, and carriage returns as valid JSON" no \
+     "json-parse failed or reason mismatch"
+
 
 
 # --- hooks/plugin-gate.sh: the gates as the plugin runs them (#256) ---------------------
@@ -6548,9 +6612,9 @@ case "$out_rv" in *"exit=0"*) c6=ok ;; *) c6=no ;; esac
 
 # --- hooks: hooks/steering-digest-antigravity.sh ------------------------------
 #
-# #144. PreInvocation hook on Antigravity:
-# - When invocationNum == 1, emit {"injectSteps": [{"ephemeralMessage": "<digest>"}]}
-# - When invocationNum != 1 or missing/malformed, emit {}
+# #144, #282. PreInvocation hook on Antigravity:
+# - When invocationNum == 0, emit {"injectSteps": [{"ephemeralMessage": "<digest>"}]}
+# - When invocationNum != 0 or missing/malformed, emit {}
 # - Anchor to git repository root if invoked from a subdirectory
 # - Handle missing .steering/ cleanly without malformed JSON
 
@@ -6565,9 +6629,9 @@ agy_digest_repo() {
   echo "$r"
 }
 
-# 1. Turn 1 injects steering digest in injectSteps ephemeralMessage with exit 0
-r=$(agy_digest_repo agy-digest-turn1)
-raw=$(printf '{"invocationNum": 1}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+# 1. Turn 0 injects steering digest in injectSteps ephemeralMessage with exit 0
+r=$(agy_digest_repo agy-digest-turn0)
+raw=$(printf '{"invocationNum": 0}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
 exit_code=$?
 c1_exit=no; c1_json=no
 [ "$exit_code" -eq 0 ] && c1_exit=ok
@@ -6581,9 +6645,9 @@ if not ("## Repo facts" in msg and "safety and correctness" in msg and "test-rev
   c1_json=ok
 fi
 
-# 2. Turn 2 emits empty object {} with exit 0
-r=$(agy_digest_repo agy-digest-turn2)
-raw=$(printf '{"invocationNum": 2}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+# 2. Turn 1 emits empty object {} with exit 0
+r=$(agy_digest_repo agy-digest-turn1)
+raw=$(printf '{"invocationNum": 1}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
 exit_code=$?
 c2_exit=no; c2_json=no
 [ "$exit_code" -eq 0 ] && c2_exit=ok
@@ -6615,7 +6679,7 @@ fi
 
 # 4. Subdirectory invocation (.agents) anchors to repository root
 r=$(agy_digest_repo agy-digest-subdir)
-raw=$(printf '{"invocationNum": 1}' | ( cd "$r/.agents" && sh ../hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+raw=$(printf '{"invocationNum": 0}' | ( cd "$r/.agents" && sh ../hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
 exit_code=$?
 c4=no
 if [ "$exit_code" -eq 0 ] && python3 -c '
@@ -6631,7 +6695,7 @@ fi
 # 5. Missing .steering directory outputs fallback digest without error
 r=$(agy_digest_repo agy-digest-nosteering)
 rm -rf "$r/.steering"
-raw=$(printf '{"invocationNum": 1}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+raw=$(printf '{"invocationNum": 0}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
 exit_code=$?
 c5=no
 if [ "$exit_code" -eq 0 ] && python3 -c '
@@ -6645,9 +6709,10 @@ if "## Repo facts" not in msg:
 fi
 
 [ "$c1_exit$c1_json$c2_exit$c2_json$c3$c4$c5" = "okokokokokokok" ] \
-  && report "steering-digest-antigravity.sh injects on turn 1, passes on later turns, and anchors to root" ok \
-  || report "steering-digest-antigravity.sh injects on turn 1, passes on later turns, and anchors to root" no \
-     "turn1-exit=$c1_exit turn1-json=$c1_json turn2-exit=$c2_exit turn2-json=$c2_json invalid=$c3 subdir=$c4 nosteering=$c5"
+  && report "steering-digest-antigravity.sh injects on turn 0, passes on later turns, and anchors to root" ok \
+  || report "steering-digest-antigravity.sh injects on turn 0, passes on later turns, and anchors to root" no \
+     "turn0-exit=$c1_exit turn0-json=$c1_json turn1-exit=$c2_exit turn1-json=$c2_json invalid=$c3 subdir=$c4 nosteering=$c5"
+
 
 
 # --- guards: scripts/check-manifests.py ---------------------------------------
