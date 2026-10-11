@@ -29,11 +29,11 @@
   - `hooks/steering-digest-antigravity.sh:35`: checks `data.get("invocationNum") != 1` based on an assumed 1-indexed turn counter, whereas Antigravity's `invocationNum` is 0-indexed and starts at 0.
 
 - Acceptance criteria:
-  - [ ] **AC1:** WHEN `gate_block` is called in an Antigravity environment (`ANTIGRAVITY_CONVERSATION_ID` or `ANTIGRAVITY_AGENT` is non-empty), THE SYSTEM SHALL emit `{"decision":"continue","reason":"..."}` on stdout and exit 0.
-  - [ ] **AC2:** WHEN `gate_block` is called in an environment without Antigravity variables (Claude Code), THE SYSTEM SHALL emit the JSON on stdout, the message on stderr, and exit 2.
-  - [ ] **AC3:** WHEN `gate_block` is given a reason string containing horizontal tabs, carriage returns, newlines, double quotes, or backslashes, THE SYSTEM SHALL output strictly valid JSON whose unmarshaled `reason` matches the input message.
-  - [ ] **AC4:** WHEN `hooks/steering-digest-antigravity.sh` receives `{"invocationNum": 0}`, THE SYSTEM SHALL execute `steering-digest.sh` and emit `{"injectSteps": [{"ephemeralMessage": "<digest>"}]}` on stdout; and for `{"invocationNum": N}` where N > 0, it SHALL emit `{}` and exit 0.
-  - [ ] **AC5:** Regression tests for AC1, AC2, AC3, and AC4 in `scripts/test-gates.sh` fail before the fix and pass after.
+  - [x] **AC1:** WHEN `gate_block` is called in an Antigravity environment (`ANTIGRAVITY_CONVERSATION_ID` or `ANTIGRAVITY_AGENT` is non-empty), THE SYSTEM SHALL emit `{"decision":"continue","reason":"..."}` on stdout and exit 0.
+  - [x] **AC2:** WHEN `gate_block` is called in an environment without Antigravity variables (Claude Code), THE SYSTEM SHALL emit the JSON on stdout, the message on stderr, and exit 2.
+  - [x] **AC3:** WHEN `gate_block` is given a reason string containing horizontal tabs, carriage returns, newlines, double quotes, or backslashes, THE SYSTEM SHALL output strictly valid JSON whose unmarshaled `reason` matches the input message.
+  - [x] **AC4:** WHEN `hooks/steering-digest-antigravity.sh` receives `{"invocationNum": 0}`, THE SYSTEM SHALL execute `steering-digest.sh` and emit `{"injectSteps": [{"ephemeralMessage": "<digest>"}]}` on stdout; and for `{"invocationNum": N}` where N > 0, it SHALL emit `{}` and exit 0.
+  - [x] **AC5:** Regression tests for AC1, AC2, AC3, and AC4 in `scripts/test-gates.sh` fail before the fix and pass after.
 
 - Out of scope:
   - Context re-injection after compaction on Antigravity (no hook event exists; documented in `docs/fidelity.md`).
@@ -77,4 +77,4 @@ Asked and answered 2026-10-11:
 
 - [x] T1: regression tests for Antigravity exit 0, Claude Code exit 2, and control character escaping (tabs and carriage returns) — then the fix in `hooks/gate-lib.sh` and bootstrap guards in `hooks/quality-gate.sh` and `hooks/review-gate.sh`
 - [x] T2: regression test for `steering-digest-antigravity.sh` turn-0 delivery vs turn-1 suppression — then the fix in `hooks/steering-digest-antigravity.sh`
-- [ ] T3: test coverage for dual-target bootstrap guard parity across both harnesses — then docs and fidelity alignment
+- [x] T3: test coverage for dual-target bootstrap guard parity across both harnesses — then docs and fidelity alignment

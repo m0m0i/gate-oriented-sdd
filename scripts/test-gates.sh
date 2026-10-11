@@ -2123,11 +2123,19 @@ sed -n '/^_gate_bootstrap_block() {/,/^}$/p' "$TMP/bs-region-1" > "$TMP/bs-fn.sh
 ( . "$TMP/bs-fn.sh"; _gate_bootstrap_block 'bootstrap drift probe' ) \
   >"$TMP/bs-cp-out" 2>"$TMP/bs-cp-err"; bs_cpexit=$?
 if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-lib-out" "$TMP/bs-cp-out" \
-     && cmp -s "$TMP/bs-lib-err" "$TMP/bs-cp-err" && [ "$bs_libexit" = "$bs_cpexit" ]; then c3=ok; else c3=no; fi
+     && cmp -s "$TMP/bs-lib-err" "$TMP/bs-cp-err" && [ "$bs_libexit" = "$bs_cpexit" ] && [ "$bs_libexit" -eq 2 ]; then c3=ok; else c3=no; fi
 
-[ "$c1$c2$c3" = "okokok" ] && report "the bootstrap guard is one copy, and it still matches gate_block" ok \
+( export ANTIGRAVITY_AGENT=1; . "$ROOT/hooks/gate-lib.sh"; gate_block 'bootstrap drift probe' ) \
+  >"$TMP/bs-agy-lib-out" 2>"$TMP/bs-agy-lib-err"; bs_agy_libexit=$?
+( export ANTIGRAVITY_AGENT=1; . "$TMP/bs-fn.sh"; _gate_bootstrap_block 'bootstrap drift probe' ) \
+  >"$TMP/bs-agy-cp-out" 2>"$TMP/bs-agy-cp-err"; bs_agy_cpexit=$?
+if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-agy-lib-out" "$TMP/bs-agy-cp-out" \
+     && cmp -s "$TMP/bs-agy-lib-err" "$TMP/bs-agy-cp-err" \
+     && [ "$bs_agy_libexit" = "$bs_agy_cpexit" ] && [ "$bs_agy_libexit" -eq 0 ]; then c4=ok; else c4=no; fi
+
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "the bootstrap guard is one copy, and it still matches gate_block" ok \
   || report "the bootstrap guard is one copy, and it still matches gate_block" no \
-     "discovered=$bs_regions/$c1 identical=$c2 channels=$c3 (lib exit=$bs_libexit, copy exit=$bs_cpexit)"
+     "discovered=$bs_regions/$c1 identical=$c2 cc-channels=$c3 agy-channels=$c4 (cc-exit=$bs_libexit/$bs_cpexit, agy-exit=$bs_agy_libexit/$bs_agy_cpexit)"
 
 
 # --- gate_block: dual-target exit codes and character escaping (#282) ------
