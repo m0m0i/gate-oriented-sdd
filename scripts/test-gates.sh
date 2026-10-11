@@ -7846,6 +7846,37 @@ grep -Fxq -- "$h" "$ROOT/docs/BACKLOG.md" && c2=ok || c2=no
   || report "check-backlog-tracker names the heading the template and this repository's document carry" no \
      "constant=$c0 template=$c1 document=$c2"
 
+# 223. #164 — backlog derives version membership from lines instead of an Epic column.
+#
+# The Epic column in BACKLOG.md suffered from three structural defects: more than half the rows
+# left it blank because non-epic work (spikes, refactors, migrations, harness chores) had no epic
+# to cite; writing an epic on a row made version membership look like an intrinsic property of the
+# item rather than a consequence of the total order; and a row could easily cite an epic that
+# contradicted its position relative to other rows.
+#
+# The fix derives version membership from boundary lines in a dedicated `## Lines` section
+# immediately preceding the table, drops the Epic column in favor of a 5-column table, specifies
+# row N format for Blocks to prevent confusion with issue numbers, defines the sizing gradient
+# across the ready line, and provides guidance for brownfield/no-skeleton contexts and minimum mode.
+b_skill="$ROOT/skills/backlog/SKILL.md"
+s_skill="$ROOT/skills/sprint/SKILL.md"
+
+grep -Fq '| # | Item | Blocks | Rough size | Why here |' "$b_skill" && c0=ok || c0=no
+grep -Fq '| # | Item | Epic | Blocks | Rough size | Why here |' "$b_skill" && c1=stale || c1=ok
+grep -Fq '## Lines' "$b_skill" && c2=ok || c2=no
+grep -Eq -- '- \*\*Ready line:\*\* row' "$b_skill" && c3=ok || c3=no
+grep -Fq 'Version and release membership are derived from position against the lines in ## Lines, never written on a row.' "$b_skill" && c4=ok || c4=no
+grep -Fq 'row 3, row 7' "$b_skill" && c5=ok || c5=no
+grep -Fq '#3, #7' "$b_skill" && c6=stale || c6=ok
+grep -Fq 'closing the live falsifier' "$b_skill" && c7=ok || c7=no
+grep -Fq 'minimum' "$b_skill" && grep -Fq 'read PRD capabilities directly and draw only the ready line' "$b_skill" && c8=ok || c8=no
+grep -Fq 'above the ready line' "$s_skill" && c9=ok || c9=no
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokokok" ] \
+  && report "backlog derives version membership from lines, drops Epic column, and defines ready line" ok \
+  || report "backlog derives version membership from lines, drops Epic column, and defines ready line" no \
+     "hdr=$c0/$c1 lines=$c2/$c3 preamble=$c4 blocks=$c5/$c6 no-skel=$c7 min-mode=$c8 sprint=$c9"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 

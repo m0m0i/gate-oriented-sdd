@@ -74,6 +74,6 @@ Four questions, resolved before design (2026-10-11):
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
-- [ ] T1: failing test in `scripts/test-gates.sh` (Case 223) asserting backlog lines format, template invariants, and skill instructions — then the implementation in `skills/backlog/SKILL.md` and `skills/sprint/SKILL.md` that makes it pass
+- [x] T1: failing test in `scripts/test-gates.sh` (Case 223) asserting backlog lines format, template invariants, and skill instructions — then the implementation in `skills/backlog/SKILL.md` and `skills/sprint/SKILL.md` that makes it pass
 - [ ] T2: migrate `docs/BACKLOG.md` to add `## Lines` with ready line and version lines, and update preamble — then verify `./scripts/check-backlog-tracker.py` passes cleanly
 - [ ] T3: refactor and verification pass across all validators, with named mutation proving red-capability of Case 223

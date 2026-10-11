@@ -31,11 +31,11 @@ Ordering is the entire value. A list of everything that must be built is not a b
 
 ## Steps
 
-1. Read the epics. Start from the walking skeleton — it is always first, because it is what discovers integration problems while they are cheap.
+1. Read the epics. Start from the walking skeleton — it is always first, because it is what discovers integration problems while they are cheap. When no epic is a walking skeleton (or the skeleton has already shipped), start from the epic or item closing the live falsifier, or the lead item the author names (#74). In a `minimum`-mode project (`EPICS.md` is absent), read PRD capabilities directly and draw only the ready line.
 2. **Weigh value, risk, cost, and dependency together** — not size alone, and not enthusiasm. The item that would most change the plan if it went badly goes as early as its dependencies allow.
 3. **Force a total order.** No ties. When two items feel equal, that is the comparison worth making, not the one to avoid — ask which you would drop if only one could ship, and order by the answer.
 4. **Flag the ones that block others.** A slip on a blocking item moves everything after it, so mark it on its row. It is an attribute of the item, not a second ranking.
-5. **Note roughly how many issues each item is worth.** One backlog item usually becomes several issues — a change, the tests that were missing around it, the migration it forces. An item nobody can size at all is a signal: it needs a spike, or it needs to go back to `epics`.
+5. **Note roughly how many issues each item is worth, and draw the ready line.** One backlog item usually becomes several issues — a change, the tests that were missing around it, the migration it forces. An item nobody can size at all is a signal: it needs a spike, or it needs to go back to `epics`. Refinement is a sizing gradient: items above the ready line are shaped and sized for `sprint` to decompose; items below are coarse.
 6. **Record what left before recording the order.** Every row discharged since the last refinement goes under `## Discharged since last refinement`, one line and all four parts of it, and that section is pruned to the two most recent refinements' worth on the way past. Then record the order and the reasoning, so the next refinement starts from the argument rather than from scratch, and hand to `sprint`, which decomposes the top items into issues.
 
 ## Template
@@ -45,11 +45,16 @@ Ordering is the entire value. A list of everything that must be built is not a b
 
 - Last refined: <YYYY-MM-DD>
 - Ordered, not prioritized. Position reflects value, risk, cost, and dependency together. There is no separate priority field, and adding one would contradict this.
+- Version and release membership are derived from position against the lines in ## Lines, never written on a row.
 
-| # | Item | Epic | Blocks | Rough size | Why here |
-| :-- | :-- | :-- | :-- | :-- | :-- |
-| 1 | <item> — **#n**, **#n** | EPIC-n | #3, #7 | <~n issues> | <the risk it retires, or what it unblocks> |
-| 2 | <item> | EPIC-n | — | <~n issues> | <why above #3 specifically> |
+## Lines
+- **Ready line:** row <n> — work above this line is shaped and ready for sprint to decompose; work below is coarse.
+- **<Version> line:** row <n> — items up to row <n> complete <version or outcome>.
+
+| # | Item | Blocks | Rough size | Why here |
+| :-- | :-- | :-- | :-- | :-- |
+| 1 | <item> — **#n**, **#n** | row 3, row 7 | <~n issues> | <the risk it retires, or what it unblocks> |
+| 2 | <item> | — | <~n issues> | <why above row 3 specifically> |
 
 The **Item** cell names the issues this row is live work for. `Why here` may cite any issue, including closed ones, as reasoning — "#146 left this row by shipping" is correct and has to stay sayable. That split is what lets the list be compared against the tracker without every piece of history reading as stale work.
 
@@ -80,8 +85,10 @@ Issues that are open and deliberately not rows. One line each: the issue, why it
 
 ## Rules
 
-- **The walking skeleton goes first.** Always. Reordering it later is how integration risk gets discovered at the end.
+- **The walking skeleton goes first.** Always. Reordering it later is how integration risk gets discovered at the end. When no epic is a walking skeleton (or the skeleton has already shipped), lead with the epic or item closing the live falsifier, or the lead item the author names (#74).
 - **One list, one position per item.** No priority labels, no tiers, no separate critical list. A second statement of sequence can contradict the first, and then neither is believed.
+- **Version and release membership are derived from position, not written on a row.** The Epic column is not replaced by a Serves column; membership reasoning and capability linkages stay in Why here, avoiding another column that goes blank across rows.
+- **Refinement is a sizing gradient.** The top of the list (above the ready line) is shaped and sized for sprint to decompose; work below is coarse. Backlog maintains the ready line during refinement; sprint takes items strictly from above the ready line without moving the line, preserving sprint's invariant ("One edit per row, naming the issues that row became; leave the order, the Why here reasoning, and every other row untouched").
 - **"Ordered" rather than "prioritized" is not pedantry.** Priority reads as one dimension; a position has to absorb value, risk, cost, and dependency at once. The `Why here` column is where that reasoning lives, and a backlog without it is a ranking nobody can argue with — which means nobody can correct it either.
 - **No ties.** "These two are both high" is the comparison being dodged.
 - **This skill creates no issues.** Ordering is cheap and reversible; an issue is a commitment. Keeping them separate is what lets the plan change without leaving debris in the tracker.
@@ -94,6 +101,8 @@ Issues that are open and deliberately not rows. One line each: the issue, why it
 
 ## Red flags
 
+- The ready line is placed below unshaped or unsized items. Then sprint will either guess at decomposition or be blocked by discovery.
+- An Epic or Serves column has appeared in the table. Version and milestone membership belong to position against lines in ## Lines, not on a row.
 - A priority column has appeared beside the position column. One of them is now lying, and people will learn which by trial.
 - Half the list is flagged as blocking. Then blocking means nothing, and the flag has become a way of saying "important" without paying for a position.
 - The order matches the epic numbers. Ordering by the sequence things were thought of is not ordering.
