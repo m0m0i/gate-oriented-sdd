@@ -12,7 +12,6 @@ Establishes the mechanical terminus for the planning chain:
 Run from the repository root. Exits 0 when downstream documents are reconciled against PRD.md.
 """
 
-import os
 import pathlib
 import re
 import subprocess
@@ -71,9 +70,9 @@ def main():
     docs_value = steering_value(text, "Docs").strip() or "docs/"
     if "://" in docs_value:
         fail(
-            f"`- Docs: {docs_value}` names another repository, so the document cascade cannot be "
-            f"verified from here. Remove this checker from `- Validators:` for a multi-repo install, "
-            f"or point `- Docs:` at a local directory."
+            f"`- Docs: {docs_value}` names another repository, so the document cascade "
+            "cannot be verified from here. Remove this checker from `- Validators:` for a "
+            "multi-repo install, or point `- Docs:` at a local directory."
         )
 
     docs = pathlib.Path(docs_value)
@@ -133,7 +132,8 @@ def main():
             continue
 
         lines = [
-            line for line in doc_text.splitlines()
+            line
+            for line in doc_text.splitlines()
             if re.match(r"^ *- *Reconciled against PRD:", line)
         ]
         if not lines:
@@ -141,7 +141,8 @@ def main():
             continue
         if len(lines) > 1:
             failures.append(
-                f"{doc_path} carries multiple `- Reconciled against PRD:` declarations ({len(lines)})"
+                f"{doc_path} carries multiple `- Reconciled against PRD:` declarations "
+                f"({len(lines)})"
             )
             continue
 
@@ -160,7 +161,10 @@ def main():
             )
 
     if failures:
-        fail(f"document cascade verification failed on {len(failures)} item(s):\n  " + "\n  ".join(failures))
+        fail(
+            f"document cascade verification failed on {len(failures)} item(s):\n  "
+            + "\n  ".join(failures)
+        )
 
     print(
         f"check-document-cascade: mode `{mode}` at `{docs}/` — {len(required_names)} "
