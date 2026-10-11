@@ -67,7 +67,7 @@ skill:     prd   design-doc   backlog  sprint   spec implement worklog
 | Skill | 任意である理由 |
 | :-- | :-- |
 | `northstar` | `init` の対話が、別ルートで同じ `- Owns:` アンカーを作ってしまう |
-| `epics` | 機械的に読む先が**まだ**どこにもない。これは決定ではなく、#166 で埋めるべき穴です |
+| `roadmap` | 機械的に読む先が**まだ**どこにもない。これは決定ではなく、#166 で埋めるべき穴です |
 | `contract` | commit もレビュー指摘も溜まらないうちに走らせると、ルールブックが「無い」のではなく「悪い」ものができあがる |
 
 **skill はどれも、常に使えます。** `init` はアクティブなハーネス（Claude Code、Google Antigravity、または両方）を検出し、`.steering/`、`.specs/`、`.work_logs/`、issue テンプレート、適切なルールポインタ（`CLAUDE.md` / `GEMINI.md`）、reviewer、そして hook を設置します。skill 本体はプラグインに同梱されているので、設置しません。Claude Code ではゲートも同梱されているので設置せず、`init` が書くのはプラグインを有効にする設定と言語ごとの高速チェックだけです。ここでの選択が決めるのは、どのドキュメントを作るか、どの skill をフローに乗せるかであって、その skill を使えるかどうかではありません。
@@ -87,9 +87,9 @@ skill:     prd   design-doc   backlog  sprint   spec implement worklog
 **上流。プロジェクトにつき一度:**
 
 ```text
-northstar ──▶ prd ──▶ design-doc ──▶ epics ──▶ backlog ──▶ sprint
-   指標       ケイパビリティ  アーキテクチャ   デモ単位   順序づけ   1項目:N Issue
-        └───────────────▶ contract ◀───────────────┘
+northstar ──▶ prd ──▶ design-doc ──▶ roadmap ──▶ backlog ──▶ sprint
+   指標       ケイパビリティ  アーキテクチャ   デモ単位     順序づけ   1項目:N Issue
+        └───────────────▶ contract ◀─────────────────┘
                   コーディング規約を
                   reviewer のルールブックへ compile
 ```
@@ -124,7 +124,7 @@ Issue、ブランチ、spec ディレクトリ、PR は同じ slug を共有し�
 | `northstar`  | 指標、そのレバー、優先順位をつけた品質法則                                 | reviewer が重大度判定に読む `Owns:` アンカー |
 | `prd`        | 利用者、安定した ID つきのケイパビリティ、対象外の線引き                   | spec が引用する ID                           |
 | `design-doc` | アーキテクチャ、その継ぎ目、記録すべき決定                                 | `.steering/structure.md` と ADR              |
-| `epics`      | それぞれがデモで終わる、ケイパビリティ規模の塊                             | まとまった作業                               |
+| `roadmap`    | それぞれがデモで終わるメジャーバージョンのコミットメント                   | リリースマイルストーン                       |
 | `backlog`    | ひとつの順序つきリスト。ordered であって prioritized ではない              | `sprint` が上から取る順序                    |
 | `sprint`     | 上位を Issue に分解する（1項目:N Issue）                                   | 型付きの tracker Issue                       |
 | `contract`   | 検査方法で階層化したコーディング規約                                       | reviewer のルールブック                      |

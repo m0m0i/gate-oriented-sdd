@@ -56,11 +56,11 @@ DOC_OWNER = {
     # it leaves the reader to search the skill list — which is the state #127 closed for the
     # mandatory three.
     "NORTH_STAR.md": "northstar",
-    "EPICS.md": "epics",
+    "ROADMAP.md": "roadmap",
     "CONTRACT.md": "contract",
 }
-#: What `full` adds. One document per opt-in skill: northstar, epics, contract.
-FULL_ONLY_DOCS = ("NORTH_STAR.md", "EPICS.md", "CONTRACT.md")
+#: What `full` adds. One document per opt-in skill: northstar, roadmap, contract.
+FULL_ONLY_DOCS = ("NORTH_STAR.md", "ROADMAP.md", "CONTRACT.md")
 #: The issue templates sit INSIDE the chain rather than beside it — the Issue step is where
 #: the type is decided, and the type decides the spec's shape. Required in every mode —
 #: they are part of the install-time invariant, which is the half `bootstrap` still claims.

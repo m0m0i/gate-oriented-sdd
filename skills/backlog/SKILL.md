@@ -1,6 +1,6 @@
 ---
 name: backlog
-description: Order the whole of the known work into a product backlog, with an explicit critical path and reasons for the order. Use after epics, and to refine again when reality diverges. Creates no issues — sprint does that.
+description: Order the whole of the known work into a product backlog, with an explicit critical path and reasons for the order. Use after roadmap, and to refine again when reality diverges. Creates no issues — sprint does that.
 ---
 
 # backlog — Everything known, in one order
@@ -31,11 +31,11 @@ Ordering is the entire value. A list of everything that must be built is not a b
 
 ## Steps
 
-1. Read the epics. Start from the walking skeleton — it is always first, because it is what discovers integration problems while they are cheap. When no epic is a walking skeleton (or the skeleton has already shipped), start from the epic or item closing the live falsifier, or the lead item the author names (#74). In a `minimum`-mode project (`EPICS.md` is absent), read PRD capabilities directly and draw only the ready line.
+1. Read the roadmap. Start from 1.0 — it is always first, because 1.0 is the walking skeleton by definition and what discovers integration problems while they are cheap. In a project where 1.0 has already shipped, start from the version line or item closing the live falsifier, or the lead item the author names (#74). In a `minimum`-mode project (`ROADMAP.md` is absent), read PRD capabilities directly and draw only the ready line.
 2. **Weigh value, risk, cost, and dependency together** — not size alone, and not enthusiasm. The item that would most change the plan if it went badly goes as early as its dependencies allow.
 3. **Force a total order.** No ties. When two items feel equal, that is the comparison worth making, not the one to avoid — ask which you would drop if only one could ship, and order by the answer.
 4. **Flag the ones that block others.** A slip on a blocking item moves everything after it, so mark it on its row. It is an attribute of the item, not a second ranking.
-5. **Note roughly how many issues each item is worth, and draw the ready line.** One backlog item usually becomes several issues — a change, the tests that were missing around it, the migration it forces. An item nobody can size at all is a signal: it needs a spike, or it needs to go back to `epics`. Refinement is a sizing gradient: items above the ready line are shaped and sized for `sprint` to decompose; items below are coarse.
+5. **Note roughly how many issues each item is worth, and draw the ready line.** One backlog item usually becomes several issues — a change, the tests that were missing around it, the migration it forces. An item nobody can size at all is a signal: it needs a spike, or it needs to go back to `roadmap` or `design-doc`. Refinement is a sizing gradient: items above the ready line are shaped and sized for `sprint` to decompose; items below are coarse.
 6. **Record what left before recording the order.** Every row discharged since the last refinement goes under `## Discharged since last refinement`, one line and all four parts of it, and that section is pruned to the two most recent refinements' worth on the way past. Then record the order and the reasoning, so the next refinement starts from the argument rather than from scratch, and hand to `sprint`, which decomposes the top items into issues.
 
 ## Template

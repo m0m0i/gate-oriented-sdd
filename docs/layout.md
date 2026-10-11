@@ -12,7 +12,7 @@ your-project/
 │   ├── DESIGN.md                  ← design-doc   architecture and its seams
 │   ├── decisions/
 │   │   └── ADR-<n>-<slug>.md      ← design-doc   one file per contested decision
-│   ├── EPICS.md                   ← epics        demonstrable chunks
+│   ├── ROADMAP.md                 ← roadmap      major versions, content commitments
 │   ├── BACKLOG.md                 ← backlog      product backlog, ordered, coarse
 │   └── CONTRACT.md                ← contract     coding rules, by enforcement tier
 │
@@ -125,7 +125,7 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
 ├── evals/                         ← under development: authored, unverified
 └── docs/                          ← verified.md, fidelity.md, skill-anatomy.md, layout.md,
                                      and the inception documents this repo wrote about itself:
-                                     NORTH_STAR, PRD, EPICS, BACKLOG, CONTRACT, DESIGN, decisions/
+                                     NORTH_STAR, PRD, ROADMAP, BACKLOG, CONTRACT, DESIGN, decisions/
 ```
 
 ### Distribution artifact (`gate-sdd.zip`) vs direct clone
