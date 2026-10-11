@@ -33,7 +33,7 @@
 
 ### Clarifications
 
-Four questions, resolved before design:
+Four questions, resolved before design (2026-10-11):
 1. **Should `Serves` be a column or live in `Why here`?** — *Answered: Live in `Why here`.* A dedicated column repeats the exact failure mode of `Epic` — blank or em-dash cells on more than half the rows. `Why here` already holds value, risk, cost, dependency, and capability linkages. Rejected: **`Serves` column** (creates another column that rots and goes blank).
 2. **Who maintains the ready line, and does `sprint` move it?** — *Answered: `backlog` maintains the ready line during refinement.* `sprint` takes items from above the ready line from the top without moving the line, preserving `sprint`'s invariant: "One edit per row, naming the issues that row became; leave the order, the `Why here` reasoning, and every other row untouched" (`skills/sprint/SKILL.md:33`). Moving the line inside `sprint` would turn `sprint` into a second author of backlog boundaries. Rejected: **`sprint` moves the ready line** (violates `sprint`'s single-cell edit invariant).
 3. **What leads when no walking skeleton exists?** — *Answered: The epic or item closing the live falsifier, or the lead item the author names.* (#74 bullet 1). Step 1 and Rule 1 state this explicitly. Rejected: **silence on no-skeleton** (leaves Step 1 binding to nothing on brownfield projects).
