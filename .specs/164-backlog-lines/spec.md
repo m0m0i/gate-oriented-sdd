@@ -1,6 +1,6 @@
 # Spec: Derive backlog version membership from lines instead of an Epic column
 
-- Slug: 164-backlog-lines   Issue: 164   Type: feature   Status: draft
+- Slug: 164-backlog-lines   Issue: 164   Type: feature   Status: approved
 - Author: Hiroyuki Momoi   Date: 2026-10-11
 
 ## 1. Requirements (WHAT / WHY)
