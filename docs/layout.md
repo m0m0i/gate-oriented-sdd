@@ -29,13 +29,16 @@ your-project/
 │   └── structure.md               ←   where code belongs
 │
 ├── .specs/                        ← spec         LIVE work only
+│   ├── README.md                  ← init         the directory's contract, from assets/directory-contracts/
 │   ├── 42-add-retry-policy/
 │   │   ├── spec.md                ←   Requirements → Design → TDD Tasks
 │   │   └── .review-receipt        ← implement    what the reviewer found, and at which SHA
 │   └── _archive/
+│       ├── README.md              ← init         the directory's contract
 │       └── 17-parse-durations/    ← archive      swept on request, git mv, slug preserved
 │
 ├── .work_logs/
+│   ├── README.md                  ← init         the directory's contract
 │   └── 2026-08-21.md              ← worklog      append-only session log
 │
 ├── AGENTS.md                      ← init         canonical rulebook, always generated
@@ -124,13 +127,14 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
 ├── rules/
 │   └── AGENTS.md                  ← symlink to ../AGENTS.md for Antigravity rule discovery
 ├── AGENTS.md                      ← canonical rulebook (read by Claude Code at root)
-├── assets/                        ← copied into the project by init: check scripts and issue templates
+├── assets/                        ← copied into the project by init: check scripts, issue templates, directory contracts
 │   ├── check-steering-anchors.sh
 │   ├── check-document-set.py
 │   ├── check-document-cascade.py
 │   ├── check-unreviewed-work.sh
 │   ├── check-locks.py
-│   └── issue-templates/          ← copied into the project's .github/
+│   ├── issue-templates/          ← copied into the project's .github/
+│   └── directory-contracts/      ← the READMEs of .specs/, .specs/_archive/ and .work_logs/, dots dropped
 ├── scripts/                       ← the CI guards
 ├── evals/                         ← under development: authored, unverified
 └── docs/                          ← verified.md, fidelity.md, skill-anatomy.md, layout.md, reviews/,

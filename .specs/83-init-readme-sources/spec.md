@@ -11,10 +11,10 @@
 - Acceptance criteria:
   - [x] **AC1:** The plugin ships `assets/directory-contracts/specs/README.md`, `assets/directory-contracts/specs/_archive/README.md` and `assets/directory-contracts/work_logs/README.md`, each byte-identical to this repository's `.specs/README.md`, `.specs/_archive/README.md` and `.work_logs/README.md` respectively.
   - [x] **AC2:** `scripts/check-manifests.py` fails, naming the path, when any of the three sources is missing or differs from this repository's copy at the matching dotted path — failing on the tree before AC1's files exist, passing after.
-  - [ ] **AC3:** WHEN `init` runs step 3, `skills/init/SKILL.md` tells it to copy each of the three from `assets/directory-contracts/` to the same path under the leading dot, and to treat one that already exists as the project's file; the Rules' list of files never changed without a diff names `.work_logs/` beside `.specs/`.
-  - [ ] **AC4:** `docs/layout.md` shows the three READMEs in the project tree as written by `init`, and `assets/directory-contracts/` in the harness tree.
-  - [ ] **AC5:** `docs/BACKLOG.md` cites #83 in neither row 1's Item cell nor the 1.0.0 line, and row 1's `Why here` records that it left by shipping, so `./scripts/check-backlog-tracker.py` stays clean after the merge closes it.
-  - [ ] **AC6:** every command on the `- Validators:` line exits 0.
+  - [x] **AC3:** WHEN `init` runs step 3, `skills/init/SKILL.md` tells it to copy each of the three from `assets/directory-contracts/` to the same path under the leading dot, and to treat one that already exists as the project's file; the Rules' list of files never changed without a diff names `.work_logs/` beside `.specs/`.
+  - [x] **AC4:** `docs/layout.md` shows the three READMEs in the project tree as written by `init`, and `assets/directory-contracts/` in the harness tree.
+  - [x] **AC5:** `docs/BACKLOG.md` cites #83 in neither row 1's Item cell nor the 1.0.0 line, and row 1's `Why here` records that it left by shipping, so `./scripts/check-backlog-tracker.py` stays clean after the merge closes it.
+  - [x] **AC6:** every command on the `- Validators:` line exits 0.
 - Out of scope: a consumer-side check that the three READMEs exist (the issue's "nothing enforces" — it would block every existing install on a re-run's absence and is a decision for the document-set checker, not this fix); `docs/verified.md`'s #76 row, a dated observation that stays true of that run; rewording the READMEs themselves.
 
 ### Clarifications
@@ -31,4 +31,4 @@
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: identity check in `check-manifests.py`, run red on the tree without the sources, then the three sources — green (AC1, AC2)
-- [ ] T2: `init` step 3 and its Rules line, `docs/layout.md`, `docs/BACKLOG.md` row 1 (AC3, AC4, AC5), every validator green (AC6)
+- [x] T2: `init` step 3 and its Rules line, `docs/layout.md`, `docs/BACKLOG.md` row 1 (AC3, AC4, AC5), every validator green (AC6)
