@@ -25,13 +25,13 @@ Ordering is the entire value. A list of everything that must be built is not a b
 
 ## Where it goes
 
-`<docs>/BACKLOG.md` — the product backlog, refined in place.
+`<docs>/BACKLOG.md` — the product backlog, refined in place. `<docs>/BACKLOG.md` carries `- Reconciled against PRD: <sha>` in its preamble, recording the PRD commit it reconciles against.
 
 `<docs>` is the `- Docs:` line in `.steering/tech.md`, which defaults to `docs/`. In a multi-repo product it points at the shared documentation repository instead, so product-level truth has one home rather than one per repo.
 
 ## Steps
 
-1. Read the roadmap. Start from 1.0 — it is always first, because 1.0 is the walking skeleton by definition and what discovers integration problems while they are cheap. In a project where 1.0 has already shipped, start from the version line or item closing the live falsifier, or the lead item the author names (#74). In a `minimum`-mode project (`ROADMAP.md` is absent), read PRD capabilities directly and draw only the ready line.
+1. Read the roadmap. Start from 1.0 — it is always first, because 1.0 is the walking skeleton by definition and what discovers integration problems while they are cheap. In a project where 1.0 has already shipped, start from the version line or item closing the live falsifier, or the lead item the author names (#74). In a `minimum`-mode project (`ROADMAP.md` is absent), read PRD capabilities directly and draw only the ready line. Record `- Reconciled against PRD: <sha>` in `<docs>/BACKLOG.md` using the latest commit touching the PRD: `git log -n 1 --format=%H -- <docs>/PRD.md`.
 2. **Weigh value, risk, cost, and dependency together** — not size alone, and not enthusiasm. The item that would most change the plan if it went badly goes as early as its dependencies allow.
 3. **Force a total order.** No ties. When two items feel equal, that is the comparison worth making, not the one to avoid — ask which you would drop if only one could ship, and order by the answer.
 4. **Flag the ones that block others.** A slip on a blocking item moves everything after it, so mark it on its row. It is an attribute of the item, not a second ranking.
@@ -43,6 +43,7 @@ Ordering is the entire value. A list of everything that must be built is not a b
 ```markdown
 # Product backlog
 
+- Reconciled against PRD: <sha>
 - Last refined: <YYYY-MM-DD>
 - Ordered, not prioritized. Position reflects value, risk, cost, and dependency together. There is no separate priority field, and adding one would contradict this.
 - Version and release membership are derived from position against the lines in ## Lines, never written on a row.

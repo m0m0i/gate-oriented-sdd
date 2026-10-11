@@ -28,6 +28,7 @@ Evidence gathering only:
   - `./assets/check-steering-anchors.sh`
   - `./assets/check-locks.py`
   - `./assets/check-document-set.py`
+  - `./assets/check-document-cascade.py`
   - `./scripts/check-contract-path.py`
   - `./scripts/check-readme-claims.py`
   - `./scripts/check-reviewer-allow-list.py`

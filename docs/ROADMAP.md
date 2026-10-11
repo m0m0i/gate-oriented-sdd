@@ -1,5 +1,7 @@
 # Roadmap
 
+- Reconciled against PRD: 99e15913803d5e882a1cfc2e2713c6a6d1b081cd
+
 Major versions are content commitments, milestone demos, and capability completions — not dates or calendar quarters. Issue and backlog row membership are derived in BACKLOG.md from position relative to version lines in ## Lines, never listed here.
 
 ## 1.0-baseline-harness

@@ -21,13 +21,13 @@ A rule that lands in Narrative is not a lesser rule. It is a rule you have decid
 
 ## Where it goes
 
-`<docs>/CONTRACT.md` — with its Judgment-tier rules compiled into the reviewer's rulebook.
+`<docs>/CONTRACT.md` — with its Judgment-tier rules compiled into the reviewer's rulebook. `<docs>/CONTRACT.md` carries `- Reconciled against PRD: <sha>` in its preamble, recording the PRD commit it reconciles against.
 
 `<docs>` is the `- Docs:` line in `.steering/tech.md`, which defaults to `docs/`. In a multi-repo product it points at the shared documentation repository instead, so product-level truth has one home rather than one per repo.
 
 ## Steps
 
-1. **Read what the project already does**, before writing what it should. `.steering/tech.md`, the linter and formatter config, the existing code, and — most valuable — the last fifty commits and any review comments. A convention followed in the code and absent from the document is still a convention.
+1. **Read what the project already does**, before writing what it should. `.steering/tech.md`, the linter and formatter config, the existing code, and — most valuable — the last fifty commits and any review comments. A convention followed in the code and absent from the document is still a convention. Record `- Reconciled against PRD: <sha>` in `<docs>/CONTRACT.md` using the latest commit touching the PRD: `git log -n 1 --format=%H -- <docs>/PRD.md`.
 2. **Draft the rules** from the template below. Prefer rules the project already follows; a contract full of aspirations it has never met is a contract that gets ignored on day one.
 3. **Tier every rule.** For each, ask: could a linter check this? Then it belongs in the linter, and writing it in prose instead is choosing not to enforce it. Could a reviewer check it against a diff? Then it belongs in the rulebook with an id. Neither? Narrative.
 4. **Compile the Judgment tier into the rulebook.** Add each as a rule in the project's reviewer rulebook — id, severity, rationale, and a concrete check. Severity is anchored to the quality property from `.steering/product.md`. Then re-pin the lock.
@@ -39,6 +39,7 @@ A rule that lands in Narrative is not a lesser rule. It is a rule you have decid
 ```markdown
 # Development contract
 
+- Reconciled against PRD: <sha>
 - Applies to: <what code this governs>
 - Quality anchor: <the property from .steering/product.md that decides severities>
 

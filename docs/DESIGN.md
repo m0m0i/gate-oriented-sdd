@@ -1,5 +1,6 @@
 # Design
 
+- Reconciled against PRD: 99e15913803d5e882a1cfc2e2713c6a6d1b081cd
 - Serves: the capabilities in `docs/PRD.md`. The directory pictures are `docs/layout.md` and are not repeated here.
 - Status: accepted — this describes what ships at 0.4.2, not a proposal.
 

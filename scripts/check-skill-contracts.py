@@ -14,11 +14,11 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Twenty-nine today. A thirtieth needs an argument, in the spec that proposes it, for why review cannot
+Thirty today. A thirty-first needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
 with it, #26 the twenty-fourth, #79 the twenty-fifth, #256 the twenty-sixth without moving it, #263 the
-twenty-seventh and twenty-eighth, and #262 the twenty-ninth; a cap that is not moved with the entry reads as already exceeded, and the next author
+twenty-seventh and twenty-eighth, #262 the twenty-ninth, and #166 the thirtieth; a cap that is not moved with the entry reads as already exceeded, and the next author
 cannot tell whether the list is at its limit or the sentence is stale — which is how this said twenty-five over twenty-six.
 """
 
@@ -190,6 +190,16 @@ CONTRACTS = (
         "the check-steering-anchors entry exists: what the deletion removes is a check that "
         "then says nothing, and a check saying nothing is indistinguishable from a check "
         "passing.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "copy `assets/check-document-cascade.py` to the project's `scripts/` directory and add it to the `- Validators:` line",
+        "The document cascade is checked by check-document-cascade.py, and this sentence in "
+        "init is the only route by which an install adds it to the project's validators. Delete "
+        "it and downstream documents drift from PRD.md silently — #166 AC8. Review cannot defend "
+        "it for the same reason the check-document-set entry exists: what the deletion removes "
+        "is a check that then says nothing, and a check saying nothing is indistinguishable "
+        "from a check passing.",
     ),
     (
         "skills/init/SKILL.md",

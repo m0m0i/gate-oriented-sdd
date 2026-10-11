@@ -51,6 +51,7 @@ Run these before every commit. The `- Validators:` line in `.steering/tech.md` i
 ./assets/check-steering-anchors.sh  # steering's machine-read lines still parse
 ./assets/check-locks.py             # rulebooks match their locks (--update to re-pin)
 ./assets/check-document-set.py      # the installed document set matches the declared mode
+./assets/check-document-cascade.py  # downstream documents reconcile against PRD.md
 ./scripts/check-contract-path.py    # every statement of the contract's path agrees
 ./scripts/check-readme-claims.py    # the README's Status claims match what they describe
 ./scripts/check-reviewer-allow-list.py  # the reviewer's allow-list covers the Validators line

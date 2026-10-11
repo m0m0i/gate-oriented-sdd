@@ -1,5 +1,6 @@
 # Product backlog
 
+- Reconciled against PRD: 99e15913803d5e882a1cfc2e2713c6a6d1b081cd
 - Last refined: 2026-10-11 (twenty-second refinement — see **What changed**)
 - Ordered, not prioritized. Position reflects value, risk, cost, and dependency together. There is no separate priority field, and adding one would contradict this.
 - Version and release membership are derived from position against the lines in ## Lines, never written on a row.
