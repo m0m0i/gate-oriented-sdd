@@ -12,13 +12,13 @@ Bridges the PRD's capabilities to the code's structure. Two mechanical outputs, 
 
 ## Where it goes
 
-`<docs>/DESIGN.md`, with one file per decision under `<docs>/decisions/ADR-<n>-<slug>.md` — and `.steering/structure.md` written from it.
+`<docs>/DESIGN.md`, with one file per decision under `<docs>/decisions/ADR-<n>-<slug>.md` — and `.steering/structure.md` written from it. `<docs>/DESIGN.md` carries `- Reconciled against PRD: <sha>` in its preamble, recording the PRD commit it reconciles against.
 
 `<docs>` is the `- Docs:` line in `.steering/tech.md`, which defaults to `docs/`. In a multi-repo product it points at the shared documentation repository instead, so product-level truth has one home rather than one per repo.
 
 ## Steps
 
-1. **Read the PRD.** The design serves capabilities. A component serving no capability is either infrastructure that should say so, or scope that arrived without being agreed.
+1. **Read the PRD.** The design serves capabilities. A component serving no capability is either infrastructure that should say so, or scope that arrived without being agreed. Record `- Reconciled against PRD: <sha>` in `<docs>/DESIGN.md` using the latest commit touching the PRD: `git log -n 1 --format=%H -- <docs>/PRD.md`.
 2. **Draw the components and the seams between them.** The seams matter more than the boxes: a seam is where two parts must agree, and every integration failure lives at one.
 3. **For each seam, say what crosses it** — the shape of the data, who produces it, who consumes it, and what happens when they disagree about the shape. In a multi-repo product, give the seam a stable id so both sides cite the same document.
 4. **Record the contested decisions as ADRs**, one per decision. A decision with no alternative considered is not a decision; leave it out.

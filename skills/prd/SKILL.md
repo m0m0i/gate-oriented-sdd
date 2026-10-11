@@ -11,7 +11,7 @@ Capability ids are the mechanical output — in whatever prefix this project use
 
 ## Where it goes
 
-`<docs>/PRD.md` — summarised into `.steering/product.md`.
+`<docs>/PRD.md` — summarised into `.steering/product.md`. Modifying `<docs>/PRD.md` advances its commit SHA and invalidates downstream documents (`DESIGN.md`, `ROADMAP.md`, `BACKLOG.md`, `CONTRACT.md`) until their `- Reconciled against PRD: <sha>` lines are re-stamped.
 
 `<docs>` is the `- Docs:` line in `.steering/tech.md`, which defaults to `docs/`. In a multi-repo product it points at the shared documentation repository instead, so product-level truth has one home rather than one per repo.
 
@@ -57,6 +57,7 @@ Capability ids are the mechanical output — in whatever prefix this project use
 - Every capability cites a lever. If none fits, either the lever list is incomplete or the capability does not belong.
 - Ids are immutable once anything cites them. Change the wording freely; never the id.
 - Ask rather than invent. A PRD full of plausible assumptions is the most expensive document in the project, because everything downstream inherits them.
+- **Modifying the PRD advances its commit SHA.** Downstream documents carry `- Reconciled against PRD: <sha>` and the document cascade check will fail closed until downstream documents are reconciled and stamped with the new commit SHA.
 
 ## Red flags
 

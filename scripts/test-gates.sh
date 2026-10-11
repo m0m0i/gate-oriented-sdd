@@ -7910,6 +7910,119 @@ grep -Fq '"EPICS.md"' "$ds_script" && c10=stale || c10=ok
   || report "roadmap defines major versions as content commitments with demos, not issue lists" no \
      "file=$c0 name=$c1 dest=$c2 hdr=$c3 completes=$c4 demo=$c5 skel=$c6 issues=$c7 ds-doc=$c8 ds-owner=$c9 ds-stale=$c10"
 
+# 225. #166 — check-document-cascade enforces the document cascade against PRD commit SHA.
+#
+# Downstream inception documents (DESIGN.md, BACKLOG.md, and under full mode ROADMAP.md and
+# CONTRACT.md) must declare `- Reconciled against PRD: <sha>` on one physical line matching the
+# latest commit SHA modifying PRD.md. NORTH_STAR.md is upstream and exempt. Bootstrap mode
+# defers checking. Uncommitted working tree changes to PRD.md fail closed.
+cascade_repo() {
+  m=${2-}
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/.steering" "$r/docs"
+  [ -f "$ROOT/assets/check-document-cascade.py" ] && cp "$ROOT/assets/check-document-cascade.py" "$r/scripts/" && chmod +x "$r/scripts/check-document-cascade.py"
+  d=${3:-docs/}
+  mkdir -p "$r/$d"
+  {
+    printf '# Tech\n\n'
+    printf -- '- Validators: ./scripts/check-document-cascade.py\n'
+    printf -- '- Docs: %s\n' "$d"
+    [ -n "$m" ] && printf -- '- Mode: %s\n' "$m"
+  } > "$r/.steering/tech.md"
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t )
+  echo "$r"
+}
+run_cascade() { ( cd "$1" && python3 scripts/check-document-cascade.py >"$TMP/cout" 2>"$TMP/cerr"; printf '%s' "$?" ) }
+
+# 1. bootstrap mode exits 0 without requiring documents
+r=$(cascade_repo cas-boot bootstrap)
+out=$(run_cascade "$r"); [ "$out" = "0" ] && c0=ok || c0=no
+
+# 2. minimum mode with matching SHA on DESIGN and BACKLOG exits 0
+r=$(cascade_repo cas-min minimum)
+echo "Initial PRD" > "$r/docs/PRD.md"
+( cd "$r" && git add docs/PRD.md && git commit -qm "add PRD" )
+sha=$( cd "$r" && git rev-parse HEAD )
+printf '# Design\n\n- Reconciled against PRD: %s\n' "$sha" > "$r/docs/DESIGN.md"
+printf '# Backlog\n\n- Reconciled against PRD: %s\n' "$sha" > "$r/docs/BACKLOG.md"
+out=$(run_cascade "$r"); [ "$out" = "0" ] && c1=ok || c1=no
+
+# 3. full mode with matching SHA on all four documents exits 0; NORTH_STAR carrying no line is accepted
+r=$(cascade_repo cas-full full)
+echo "Initial PRD" > "$r/docs/PRD.md"
+( cd "$r" && git add docs/PRD.md && git commit -qm "add PRD" )
+sha=$( cd "$r" && git rev-parse HEAD )
+printf '# Design\n\n- Reconciled against PRD: %s\n' "$sha" > "$r/docs/DESIGN.md"
+printf '# Backlog\n\n- Reconciled against PRD: %s\n' "$sha" > "$r/docs/BACKLOG.md"
+printf '# Roadmap\n\n- Reconciled against PRD: %s\n' "$sha" > "$r/docs/ROADMAP.md"
+printf '# Contract\n\n- Reconciled against PRD: %s\n' "$sha" > "$r/docs/CONTRACT.md"
+printf '# North Star\n\nNo cascade line here\n' > "$r/docs/NORTH_STAR.md"
+out=$(run_cascade "$r"); [ "$out" = "0" ] && c2=ok || c2=no
+
+# 4. full mode missing CONTRACT.md fails and names it
+rm "$r/docs/CONTRACT.md"
+out=$(run_cascade "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c3=ok || c3=no
+case "$err" in *CONTRACT.md*) c4=ok ;; *) c4=no ;; esac
+
+# 5. minimum mode missing reconciliation line on DESIGN.md fails and names DESIGN.md
+r=$(cascade_repo cas-min-noline minimum)
+echo "Initial PRD" > "$r/docs/PRD.md"
+( cd "$r" && git add docs/PRD.md && git commit -qm "add PRD" )
+sha=$( cd "$r" && git rev-parse HEAD )
+printf '# Design\n\nNo reconciliation line\n' > "$r/docs/DESIGN.md"
+printf '# Backlog\n\n- Reconciled against PRD: %s\n' "$sha" > "$r/docs/BACKLOG.md"
+out=$(run_cascade "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c5=ok || c5=no
+case "$err" in *DESIGN.md*) c6=ok ;; *) c6=no ;; esac
+
+# 6. malformed reconciliation line fails
+r=$(cascade_repo cas-min-badsha minimum)
+echo "Initial PRD" > "$r/docs/PRD.md"
+( cd "$r" && git add docs/PRD.md && git commit -qm "add PRD" )
+sha=$( cd "$r" && git rev-parse HEAD )
+printf '# Design\n\n- Reconciled against PRD: not-a-valid-sha\n' > "$r/docs/DESIGN.md"
+printf '# Backlog\n\n- Reconciled against PRD: %s\n' "$sha" > "$r/docs/BACKLOG.md"
+out=$(run_cascade "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c7=ok || c7=no
+case "$err" in *DESIGN.md*) c8a=ok ;; *) c8a=no ;; esac
+case "$err" in *not-a-valid-sha*) c8b=ok ;; *) c8b=no ;; esac
+[ "$c8a$c8b" = "okok" ] && c8=ok || c8=no
+
+# 7. stale SHA fails, naming document, recorded sha, and current PRD sha
+r=$(cascade_repo cas-min-stale minimum)
+echo "Initial PRD" > "$r/docs/PRD.md"
+( cd "$r" && git add docs/PRD.md && git commit -qm "add PRD" )
+old_sha=$( cd "$r" && git rev-parse HEAD )
+echo "Updated PRD" >> "$r/docs/PRD.md"
+( cd "$r" && git commit -qam "update PRD" )
+new_sha=$( cd "$r" && git rev-parse HEAD )
+printf '# Design\n\n- Reconciled against PRD: %s\n' "$old_sha" > "$r/docs/DESIGN.md"
+printf '# Backlog\n\n- Reconciled against PRD: %s\n' "$new_sha" > "$r/docs/BACKLOG.md"
+out=$(run_cascade "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c9=ok || c9=no
+case "$err" in *"$old_sha"*) c10a=ok ;; *) c10a=no ;; esac
+case "$err" in *"$new_sha"*) c10b=ok ;; *) c10b=no ;; esac
+case "$err" in *DESIGN.md*) c10c=ok ;; *) c10c=no ;; esac
+[ "$c10a$c10b$c10c" = "okokok" ] && c10=ok || c10=no
+
+# 8. uncommitted modifications to PRD.md fail closed
+r=$(cascade_repo cas-min-dirty minimum)
+echo "Initial PRD" > "$r/docs/PRD.md"
+( cd "$r" && git add docs/PRD.md && git commit -qm "add PRD" )
+sha=$( cd "$r" && git rev-parse HEAD )
+printf '# Design\n\n- Reconciled against PRD: %s\n' "$sha" > "$r/docs/DESIGN.md"
+printf '# Backlog\n\n- Reconciled against PRD: %s\n' "$sha" > "$r/docs/BACKLOG.md"
+echo "uncommitted change" >> "$r/docs/PRD.md"
+out=$(run_cascade "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c11=ok || c11=no
+case "$err" in *uncommitted*) c12=ok ;; *) c12=no ;; esac
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12" = "okokokokokokokokokokokokok" ] \
+  && report "check-document-cascade enforces reconciliation against PRD commit SHA across modes" ok \
+  || report "check-document-cascade enforces reconciliation against PRD commit SHA across modes" no \
+     "boot=$c0 min=$c1 full=$c2 miss-doc=$c3/$c4 miss-line=$c5/$c6 bad-sha=$c7/$c8 stale=$c9/$c10 dirty=$c11/$c12"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
+
 

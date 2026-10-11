@@ -9,13 +9,13 @@ A capability is too large to build in one branch. A major version is the largest
 
 ## Where it goes
 
-`<docs>/ROADMAP.md` — one section per major version (`## <major.minor>-<name>`).
+`<docs>/ROADMAP.md` — one section per major version (`## <major.minor>-<name>`). `<docs>/ROADMAP.md` carries `- Reconciled against PRD: <sha>` in its preamble, recording the PRD commit it reconciles against.
 
 `<docs>` is the `- Docs:` line in `.steering/tech.md`, which defaults to `docs/`. In a multi-repo product it points at the shared documentation repository instead, so product-level truth has one home rather than one per repo.
 
 ## Steps
 
-1. Read the PRD. Work one major version at a time, and define each as a content commitment with a clear theme.
+1. Read the PRD. Work one major version at a time, and define each as a content commitment with a clear theme. Record `- Reconciled against PRD: <sha>` in `<docs>/ROADMAP.md` using the latest commit touching the PRD: `git log -n 1 --format=%H -- <docs>/PRD.md`.
 2. **Format version headers as `## <major.minor>-<name>`** (e.g. `## 1.0-baseline-harness`, `## 2.0-dual-target-parity`).
 3. **1.0 is the walking skeleton by definition** — the thinnest end-to-end path through the whole system that discovers integration problems while they are still cheap. Subsequent versions build on it and do not carry a walking skeleton field.
 4. **Name the capabilities completed** from the PRD on the `- Completes:` line (e.g. `CAP-1, CAP-2`).
@@ -27,6 +27,8 @@ A capability is too large to build in one branch. A major version is the largest
 
 ```markdown
 # Roadmap
+
+- Reconciled against PRD: <sha>
 
 Major versions are content commitments, milestone demos, and capability completions — not dates or calendar quarters. Issue and backlog row membership are derived in BACKLOG.md from position relative to version lines in ## Lines, never listed here.
 
