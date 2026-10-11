@@ -15,16 +15,26 @@
 #         gate_pass
 
 # JSON string escaping, enough for the messages gates actually produce
-# (backslashes, quotes, newlines). Gate messages are ours, not user input.
+# (backslashes, quotes, newlines, tabs, carriage returns). Gate messages are ours, not user input.
 _gate_json_escape() {
-  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | awk 'BEGIN{ORS=""} {print sep $0; sep="\\n"}'
+  printf '%s' "$1" | awk 'BEGIN{ORS=""} {
+    gsub(/\\/, "\\\\");
+    gsub(/"/, "\\\"");
+    gsub(/\r/, "\\r");
+    gsub(/\t/, "\\t");
+    print sep $0;
+    sep="\\n";
+  }'
 }
 
-# Block the turn. Speaks to both harnesses, then exits non-zero for Claude Code.
+# Block the turn. Speaks to both harnesses, exiting 0 for Antigravity and 2 for Claude Code.
 gate_block() {
   _msg=$1
   printf '{"decision":"continue","reason":"%s"}\n' "$(_gate_json_escape "$_msg")"
   printf '%s\n' "$_msg" >&2
+  if [ -n "${ANTIGRAVITY_CONVERSATION_ID:-}" ] || [ -n "${ANTIGRAVITY_AGENT:-}" ]; then
+    exit 0
+  fi
   exit 2
 }
 

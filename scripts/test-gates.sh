@@ -23,7 +23,7 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # is that session's own env file, which a plugin-gate.sh case must never append to. So is
 # CLAUDE_PROJECT_DIR: the quality gate runs this suite from a Stop hook, where it names this
 # repository, and the wrapper's stand-down reads the settings under it (#262).
-unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR
+unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR ANTIGRAVITY_CONVERSATION_ID ANTIGRAVITY_AGENT
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -2128,6 +2128,62 @@ if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-lib-out" "$TMP/bs-cp-out" \
 [ "$c1$c2$c3" = "okokok" ] && report "the bootstrap guard is one copy, and it still matches gate_block" ok \
   || report "the bootstrap guard is one copy, and it still matches gate_block" no \
      "discovered=$bs_regions/$c1 identical=$c2 channels=$c3 (lib exit=$bs_libexit, copy exit=$bs_cpexit)"
+
+
+# --- gate_block: dual-target exit codes and character escaping (#282) ------
+#
+# #282. Under Claude Code, gate_block must exit 2 with the message on stderr.
+# Under Antigravity (ANTIGRAVITY_CONVERSATION_ID or ANTIGRAVITY_AGENT set),
+# non-zero exit is treated as an execution failure and fails open; gate_block
+# must emit {"decision":"continue","reason":"..."} on stdout and exit 0.
+#
+# Control characters (tabs, carriage returns, newlines) must be escaped in JSON
+# so protojson / RFC 8259 unmarshalers do not reject the hook output.
+
+# 1. Claude Code baseline: exit 2, message on stderr, valid continue JSON on stdout
+( . "$ROOT/hooks/gate-lib.sh"; gate_block "standard block" ) >"$TMP/gb_cc_out" 2>"$TMP/gb_cc_err"; ex_cc=$?
+c1=no; c2=no; c3=no
+[ "$ex_cc" -eq 2 ] && c1=ok
+case "$(cat "$TMP/gb_cc_out")" in *'"decision":"continue"'*) c2=ok ;; esac
+[ "$(cat "$TMP/gb_cc_err")" = "standard block" ] && c3=ok
+
+# 2. Antigravity via ANTIGRAVITY_AGENT: exit 0, message on stderr, valid continue JSON on stdout
+( export ANTIGRAVITY_AGENT=1; . "$ROOT/hooks/gate-lib.sh"; gate_block "antigravity agent block" ) >"$TMP/gb_agy1_out" 2>"$TMP/gb_agy1_err"; ex_agy1=$?
+c4=no; c5=no; c6=no
+[ "$ex_agy1" -eq 0 ] && c4=ok
+case "$(cat "$TMP/gb_agy1_out")" in *'"decision":"continue"'*) c5=ok ;; esac
+[ "$(cat "$TMP/gb_agy1_err")" = "antigravity agent block" ] && c6=ok
+
+# 3. Antigravity via ANTIGRAVITY_CONVERSATION_ID: exit 0
+( export ANTIGRAVITY_CONVERSATION_ID="conv-123"; . "$ROOT/hooks/gate-lib.sh"; gate_block "antigravity conv block" ) >"$TMP/gb_agy2_out" 2>"$TMP/gb_agy2_err"; ex_agy2=$?
+c7=no
+[ "$ex_agy2" -eq 0 ] && c7=ok
+
+[ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] \
+  && report "gate_block exits 2 on Claude Code and exits 0 on Antigravity with continue JSON" ok \
+  || report "gate_block exits 2 on Claude Code and exits 0 on Antigravity with continue JSON" no \
+     "cc-exit=$c1 cc-json=$c2 cc-err=$c3 agy-agent-exit=$c4 agy-agent-json=$c5 agy-agent-err=$c6 agy-conv-exit=$c7"
+
+# 4. Control character escaping: tabs, carriage returns, quotes, backslashes, newlines
+probe_str='hello\world
+with "quotes"	and	tabs
+and CRLF'
+( . "$ROOT/hooks/gate-lib.sh"; gate_block "$probe_str" ) >"$TMP/gb_esc_out" 2>/dev/null || true
+c_esc=no
+if python3 -c '
+import json, sys
+with open(sys.argv[1], "r") as f:
+    data = json.load(f)
+if data.get("decision") != "continue" or data.get("reason") != sys.argv[2]:
+    sys.exit(1)
+' "$TMP/gb_esc_out" "$probe_str" 2>/dev/null; then
+  c_esc=ok
+fi
+[ "$c_esc" = "ok" ] \
+  && report "gate_block escapes backslashes, quotes, tabs, and carriage returns as valid JSON" ok \
+  || report "gate_block escapes backslashes, quotes, tabs, and carriage returns as valid JSON" no \
+     "json-parse failed or reason mismatch"
+
 
 
 # --- hooks/plugin-gate.sh: the gates as the plugin runs them (#256) ---------------------
