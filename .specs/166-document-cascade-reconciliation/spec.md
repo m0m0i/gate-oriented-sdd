@@ -1,6 +1,6 @@
 # Spec: Enforce the document cascade with a reconciliation line and a guard
 
-- Slug: 166-document-cascade-reconciliation   Issue: 166   Type: feature   Status: draft
+- Slug: 166-document-cascade-reconciliation   Issue: 166   Type: feature   Status: done
 - Author: Hiroyuki Momoi   Date: 2026-10-12
 
 ## 1. Requirements (WHAT / WHY)
