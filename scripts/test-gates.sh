@@ -4468,7 +4468,7 @@ docset_repo() {
   for t in feature bug chore; do printf 'x\n' > "$r/.github/ISSUE_TEMPLATE/$t.md"; done
   echo "$r"
 }
-add_full_docs() { for f in NORTH_STAR EPICS CONTRACT; do printf 'x\n' > "$1/docs/$f.md"; done; }
+add_full_docs() { for f in NORTH_STAR ROADMAP CONTRACT; do printf 'x\n' > "$1/docs/$f.md"; done; }
 run_docset() { ( cd "$1" && python3 scripts/check-document-set.py >/dev/null 2>"$TMP/derr"; printf '%s' "$?" ) }
 
 # 56. Both modes verified in both directions, and the mandatory set checked under BOTH.
@@ -4492,7 +4492,7 @@ case "$err" in *CONTRACT.md*) c3=ok ;; *) c3=no ;; esac
 # minimum mode must NOT report the optional three as missing...
 r=$(docset_repo ds-min-quiet minimum)
 out=$(run_docset "$r"); err=$(cat "$TMP/derr")
-case "$err" in *CONTRACT.md*|*EPICS.md*|*NORTH_STAR.md*) c4=no ;; *) c4=ok ;; esac
+case "$err" in *CONTRACT.md*|*ROADMAP.md*|*NORTH_STAR.md*) c4=no ;; *) c4=ok ;; esac
 
 # ...but it must still verify the MANDATORY set. A mode that checks nothing is not a mode.
 r=$(docset_repo ds-min-gap minimum); rm "$r/docs/BACKLOG.md"
@@ -4892,7 +4892,7 @@ r=$(init_tree ds-tgt-full bootstrap); target_in "$r" full; spec_in "$r/.specs/7-
 out=$(run_docset "$r"); err=$(cat "$TMP/derr")
 [ "$out" = "1" ] && c4=ok || c4=no
 case "$err" in *NORTH_STAR.md*) c5=ok ;; *) c5=no ;; esac
-case "$err" in *EPICS.md*) c6=ok ;; *) c6=no ;; esac
+case "$err" in *ROADMAP.md*) c6=ok ;; *) c6=no ;; esac
 case "$err" in *CONTRACT.md*) c7=ok ;; *) c7=no ;; esac
 case "$err" in *PRD.md*) c8=ok ;; *) c8=no ;; esac
 
@@ -4902,7 +4902,7 @@ case "$err" in *PRD.md*) c8=ok ;; *) c8=no ;; esac
 r=$(init_tree ds-tgt-min bootstrap); target_in "$r" minimum; spec_in "$r/.specs/7-a-thing"
 out=$(run_docset "$r"); err=$(cat "$TMP/derr")
 [ "$out" = "1" ] && c9=ok || c9=no
-case "$err" in *NORTH_STAR.md*|*EPICS.md*) c10=no ;; *) c10=ok ;; esac
+case "$err" in *NORTH_STAR.md*|*ROADMAP.md*) c10=no ;; *) c10=ok ;; esac
 case "$err" in *PRD.md*) c11=ok ;; *) c11=no ;; esac
 
 # The target must not rescue a bootstrap project that has NOT started: no spec, still green.
@@ -4913,7 +4913,7 @@ out=$(run_docset "$r"); [ "$out" = "0" ] && c12=ok || c12=no
 [ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12" = "okokokokokokokokokokokok" ] \
   && report "a bootstrap block names the target's documents, and no target keeps today's wording" ok \
   || report "a bootstrap block names the target's documents, and no target keeps today's wording" no \
-     "absent-red=$c1 absent-quiet-on-optional=$c2 absent-names-mandatory=$c3 full-red=$c4 names-northstar=$c5 names-epics=$c6 names-contract=$c7 full-names-mandatory=$c8 min-red=$c9 min-quiet-on-optional=$c10 min-names-mandatory=$c11 no-spec-stays-green=$c12"
+     "absent-red=$c1 absent-quiet-on-optional=$c2 absent-names-mandatory=$c3 full-red=$c4 names-northstar=$c5 names-roadmap=$c6 names-contract=$c7 full-names-mandatory=$c8 min-red=$c9 min-quiet-on-optional=$c10 min-names-mandatory=$c11 no-spec-stays-green=$c12"
 
 # 72. A `- Target:` that cannot be honoured is loud; an absent one is not; a spent one is unread.
 #
@@ -4993,7 +4993,7 @@ r=$(init_tree ds-adv-full bootstrap); target_in "$r" full
 s=$(sout_docset "$r")
 case "$s" in *"6 document(s)"*) c3=ok ;; *) c3=no ;; esac
 case "$s" in *"NORTH_STAR.md (via northstar)"*) c4=ok ;; *) c4=no ;; esac
-case "$s" in *"EPICS.md (via epics)"*) c5=ok ;; *) c5=no ;; esac
+case "$s" in *"ROADMAP.md (via roadmap)"*) c5=ok ;; *) c5=no ;; esac
 case "$s" in *"CONTRACT.md (via contract)"*) c6=ok ;; *) c6=no ;; esac
 case "$s" in *"PRD.md (via prd)"*) c7=ok ;; *) c7=no ;; esac
 # The counts that are not documents must survive the change unconflated.
@@ -5010,12 +5010,12 @@ case "$s" in *'`- Mode: full`'*) c10=ok ;; *) c10=no ;; esac
 r=$(init_tree ds-adv-min bootstrap); target_in "$r" minimum
 s=$(sout_docset "$r")
 case "$s" in *"3 document(s)"*) c11=ok ;; *) c11=no ;; esac
-case "$s" in *NORTH_STAR.md*|*EPICS.md*) c12=no ;; *) c12=ok ;; esac
+case "$s" in *NORTH_STAR.md*|*ROADMAP.md*) c12=no ;; *) c12=ok ;; esac
 
 [ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12" = "okokokokokokokokokokokok" ] \
   && report "the bootstrap advisory line names the target's set, in units that stay separate" ok \
   || report "the bootstrap advisory line names the target's set, in units that stay separate" no \
-     "absent-three=$c1 absent-quiet=$c2 full-six=$c3 names-northstar=$c4 names-epics=$c5 names-contract=$c6 names-prd=$c7 templates-own-unit=$c8 dirs-own-unit=$c9 names-one-mode=$c10 min-three=$c11 min-quiet=$c12"
+     "absent-three=$c1 absent-quiet=$c2 full-six=$c3 names-northstar=$c4 names-roadmap=$c5 names-contract=$c6 names-prd=$c7 templates-own-unit=$c8 dirs-own-unit=$c9 names-one-mode=$c10 min-three=$c11 min-quiet=$c12"
 
 # 70. A project that already had a bug template under its own name must pass after init.
 #
@@ -7876,6 +7876,39 @@ grep -Fq 'above the ready line' "$s_skill" && c9=ok || c9=no
   && report "backlog derives version membership from lines, drops Epic column, and defines ready line" ok \
   || report "backlog derives version membership from lines, drops Epic column, and defines ready line" no \
      "hdr=$c0/$c1 lines=$c2/$c3 preamble=$c4 blocks=$c5/$c6 no-skel=$c7 min-mode=$c8 sprint=$c9"
+
+# 224. #165 — roadmap defines major versions as content commitments with demos, not issue lists.
+#
+# Epics previously suffered from three structural defects: they were cut by outcome and listed
+# individual issues, competing with the backlog for granularity and issue tracking; they carried
+# a permanent `Walking skeleton: yes | no` field that became awkward boilerplate after 1.0; and
+# they lacked a mechanical terminus.
+#
+# The fix renames the skill to `roadmap` and the document to `ROADMAP.md`, redefines an epic as a
+# major version formatted as `## <major.minor>-<name>` representing a content commitment with a demo,
+# introduces a `Completes:` line referencing PRD capabilities, removes the `Walking skeleton` field
+# (1.0 is the skeleton by definition), derives version and issue membership in BACKLOG.md, and
+# updates check-document-set.py to recognize ROADMAP.md owned by roadmap.
+r_skill="$ROOT/skills/roadmap/SKILL.md"
+e_skill="$ROOT/skills/epics/SKILL.md"
+ds_script="$ROOT/assets/check-document-set.py"
+
+[ -f "$r_skill" ] && [ ! -f "$e_skill" ] && c0=ok || c0=no
+grep -Fq 'name: roadmap' "$r_skill" 2>/dev/null && c1=ok || c1=no
+grep -Fq '<docs>/ROADMAP.md' "$r_skill" 2>/dev/null && c2=ok || c2=no
+grep -Fq '## <major.minor>-<name>' "$r_skill" 2>/dev/null && c3=ok || c3=no
+grep -Fq -- '- Completes:' "$r_skill" 2>/dev/null && c4=ok || c4=no
+grep -Fq -- '- Demo:' "$r_skill" 2>/dev/null && c5=ok || c5=no
+grep -Fq -- '- Walking skeleton:' "$r_skill" 2>/dev/null && c6=stale || c6=ok
+grep -Fq -- '- Issues:' "$r_skill" 2>/dev/null && c7=stale || c7=ok
+grep -Fq '"ROADMAP.md"' "$ds_script" && c8=ok || c8=no
+grep -Fq '"ROADMAP.md": "roadmap"' "$ds_script" && c9=ok || c9=no
+grep -Fq '"EPICS.md"' "$ds_script" && c10=stale || c10=ok
+
+[ "$c0$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10" = "okokokokokokokokokokok" ] \
+  && report "roadmap defines major versions as content commitments with demos, not issue lists" ok \
+  || report "roadmap defines major versions as content commitments with demos, not issue lists" no \
+     "file=$c0 name=$c1 dest=$c2 hdr=$c3 completes=$c4 demo=$c5 skel=$c6 issues=$c7 ds-doc=$c8 ds-owner=$c9 ds-stale=$c10"
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
