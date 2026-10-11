@@ -22,12 +22,12 @@
   Issue #166 added `assets/check-document-cascade.py` and updated `skills/init/SKILL.md` to copy it to a consumer's `scripts/` directory and add it to `- Validators:`. `docs/layout.md` was not updated during #166 and currently under-reports the copied checks. Additionally, recent structural additions (`rules/AGENTS.md`, root `AGENTS.md`, `docs/reviews/`) are missing from the harness repository tree. A reader comparing `docs/layout.md` with `skills/init/SKILL.md` or the repository root finds discrepancies.
 
 - Acceptance criteria:
-  - [ ] **AC1:** `docs/layout.md`'s project tree under `## A project using the harness` lists `check-document-cascade.py` among the copied checks in `scripts/`, exactly matching the five checks documented in `skills/init/SKILL.md` and `assets/`.
-  - [ ] **AC2:** `docs/layout.md`'s repository tree under `## The harness repository` reflects `assets/` containing the five check scripts alongside `issue-templates/`, matching what `init` copies.
-  - [ ] **AC3:** `docs/layout.md`'s repository tree includes `rules/` (with `rules/AGENTS.md`) and root `AGENTS.md`, and notes `reviews/` under `docs/`.
-  - [ ] **AC4:** `docs/layout.md` maintains single-line paragraphs and list items (no hard wraps) and passes `./scripts/check-markdown-fences.py`.
-  - [ ] **AC5:** Every contract statement in `docs/layout.md` continues to pass `./scripts/check-contract-path.py`.
-  - [ ] **AC6:** All existing validators on `- Validators:` exit 0.
+  - [x] **AC1:** `docs/layout.md`'s project tree under `## A project using the harness` lists `check-document-cascade.py` among the copied checks in `scripts/`, exactly matching the five checks documented in `skills/init/SKILL.md` and `assets/`.
+  - [x] **AC2:** `docs/layout.md`'s repository tree under `## The harness repository` reflects `assets/` containing the five check scripts alongside `issue-templates/`, matching what `init` copies.
+  - [x] **AC3:** `docs/layout.md`'s repository tree includes `rules/` (with `rules/AGENTS.md`) and root `AGENTS.md`, and notes `reviews/` under `docs/`.
+  - [x] **AC4:** `docs/layout.md` maintains single-line paragraphs and list items (no hard wraps) and passes `./scripts/check-markdown-fences.py`.
+  - [x] **AC5:** Every contract statement in `docs/layout.md` continues to pass `./scripts/check-contract-path.py`.
+  - [x] **AC6:** All existing validators on `- Validators:` exit 0.
 
 - Out of scope:
   - Modifying any runtime gate scripts, hooks, skills, or validator logic.
@@ -60,4 +60,4 @@ None needed — requirements were unambiguous and completely specified by Issue 
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: reconcile `docs/layout.md` project and harness directory trees with `check-document-cascade.py`, `rules/`, `AGENTS.md`, and `docs/reviews/`, and verify all validators pass (AC1–AC6)
+- [x] T1: reconcile `docs/layout.md` project and harness directory trees with `check-document-cascade.py`, `rules/`, `AGENTS.md`, and `docs/reviews/`, and verify all validators pass (AC1–AC6)

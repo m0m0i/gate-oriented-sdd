@@ -64,7 +64,8 @@ your-project/
 │
 ├── scripts/                       ← init         copied checks, in the project's own scripts directory:
 │                                                 check-steering-anchors.sh, check-document-set.py,
-│                                                 check-unreviewed-work.sh, check-locks.py
+│                                                 check-document-cascade.py, check-unreviewed-work.sh,
+│                                                 check-locks.py
 │
 └── <your source>                  ← untouched by the harness
 ```
@@ -120,10 +121,19 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
 │   ├── steering-digest.sh
 │   ├── steering-digest-antigravity.sh
 │   └── templates/                 ← rendered into the project by init
-├── assets/issue-templates/        ← copied into the project's .github/
+├── rules/
+│   └── AGENTS.md                  ← symlink to ../AGENTS.md for Antigravity rule discovery
+├── AGENTS.md                      ← canonical rulebook (read by Claude Code at root)
+├── assets/                        ← copied into the project by init: check scripts and issue templates
+│   ├── check-steering-anchors.sh
+│   ├── check-document-set.py
+│   ├── check-document-cascade.py
+│   ├── check-unreviewed-work.sh
+│   ├── check-locks.py
+│   └── issue-templates/          ← copied into the project's .github/
 ├── scripts/                       ← the CI guards
 ├── evals/                         ← under development: authored, unverified
-└── docs/                          ← verified.md, fidelity.md, skill-anatomy.md, layout.md,
+└── docs/                          ← verified.md, fidelity.md, skill-anatomy.md, layout.md, reviews/,
                                      and the inception documents this repo wrote about itself:
                                      NORTH_STAR, PRD, ROADMAP, BACKLOG, CONTRACT, DESIGN, decisions/
 ```
