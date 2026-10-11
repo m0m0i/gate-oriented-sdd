@@ -6738,6 +6738,10 @@ manifest_repo() {
   printf '# AGENTS\n' > "$r/AGENTS.md"
   ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
   cp -R "$ROOT/reviewers" "$r/reviewers"
+  # #83: the three directory contracts init copies, and this repository's copies of them.
+  mkdir -p "$r/assets" "$r/.specs/_archive" "$r/.work_logs"
+  [ -d "$ROOT/assets/directory-contracts" ] && cp -R "$ROOT/assets/directory-contracts" "$r/assets/"
+  for f in .specs/README.md .specs/_archive/README.md .work_logs/README.md; do cp "$ROOT/$f" "$r/$f"; done
   echo "$r"
 }
 run_manifest() { ( cd "$1" && python3 scripts/check-manifests.py >/dev/null 2>"$TMP/mferr"; printf '%s' "$?" ) }
@@ -6767,6 +6771,39 @@ case "$err" in *"missing: AGENTS.md"*|*"missing: rules/AGENTS.md"*) c6=ok ;; *) 
 [ "$c0$c1$c2$c3$c4$c5$c6" = "okokokokokokok" ] && report "check-manifests verifies rules/AGENTS.md matches AGENTS.md and fails closed" ok \
   || report "check-manifests verifies rules/AGENTS.md matches AGENTS.md and fails closed" no \
      "control=$c0 missing-rules-exit=$c1 missing-rules-err=$c2 drift-exit=$c3 drift-err=$c4 missing-root-exit=$c5 missing-root-err=$c6"
+
+# #83. init step 3 copies .specs/README.md, .specs/_archive/README.md and .work_logs/README.md
+# from assets/directory-contracts/, and this repository's own copies are the ones it runs by.
+# A missing source, or a source drifted from its dogfood copy, must fail and name the path.
+r=$(manifest_repo mf-dc-missing)
+rm -f "$r/assets/directory-contracts/specs/_archive/README.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && d1=ok || d1=no
+case "$err" in *"missing: assets/directory-contracts/specs/_archive/README.md"*) d2=ok ;; *) d2=no ;; esac
+
+r=$(manifest_repo mf-dc-drift)
+printf 'drifted\n' >> "$r/.work_logs/README.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && d3=ok || d3=no
+case "$err" in *"assets/directory-contracts/work_logs/README.md has drifted from .work_logs/README.md"*) d4=ok ;; *) d4=no ;; esac
+
+r=$(manifest_repo mf-dc-no-dogfood)
+rm -f "$r/.specs/README.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = "1" ] && d5=ok || d5=no
+case "$err" in *"missing: .specs/README.md"*) d6=ok ;; *) d6=no ;; esac
+
+# A release payload ships no .specs/ or .work_logs/: the sources alone are required of it.
+r=$(manifest_repo mf-dc-release)
+rm -r "$r/.specs" "$r/.work_logs"
+out=$(run_manifest "$r"); [ "$out" = "0" ] && d7=ok || d7=no
+rm -f "$r/assets/directory-contracts/work_logs/README.md"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+case "$out:$err" in 1:*"missing: assets/directory-contracts/work_logs/README.md"*) d8=ok ;; *) d8=no ;; esac
+
+[ "$d1$d2$d3$d4$d5$d6$d7$d8" = "okokokokokokokok" ] && report "check-manifests holds the three directory contracts to their dogfood copies and fails closed" ok \
+  || report "check-manifests holds the three directory contracts to their dogfood copies and fails closed" no \
+     "missing-exit=$d1 missing-err=$d2 drift-exit=$d3 drift-err=$d4 no-dogfood-exit=$d5 no-dogfood-err=$d6 release=$d7 release-missing=$d8"
 
 # #235. Claude Code registers every Markdown file under a plugin's agents/, at any depth, and
 # Antigravity's loader processes the directory too. The reviewers, their rulebooks, the contract
