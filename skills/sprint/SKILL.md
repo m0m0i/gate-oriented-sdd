@@ -21,7 +21,7 @@ If the iteration is worth a retrospective, that belongs in `.work_logs/` via `wo
 
 ## Steps
 
-1. Read the product backlog and the epics. **Take from the top.** The order already encodes value, risk, cost, and dependency; an iteration assembled by picking interesting items from further down silently overrides a decision someone already made. If the top item is genuinely wrong to start now, that is not a reason to skip it — it is a reason to refine again. Go and change the order in `backlog`, with the reasoning recorded, then come back and take from the top. Reordering by selection leaves the document saying one thing while the team does another.
+1. Read the product backlog and the epics. **Take from the top, above the ready line.** The order already encodes value, risk, cost, and dependency, and work above the ready line is shaped and sized for decomposition; an iteration assembled by picking interesting items from further down silently overrides a decision someone already made. Do not move the ready line — taking items consumes rows, while the boundary is maintained by backlog during refinement. If the top item is genuinely wrong to start now, that is not a reason to skip it — it is a reason to refine again. Go and change the order in `backlog`, with the reasoning recorded, then come back and take from the top. Reordering by selection leaves the document saying one thing while the team does another.
 2. **Decompose each item into issues.** Split until each one is genuinely *one branch's worth of work* — one spec, one PR, one review. The usual seams:
    - the change itself
    - test coverage the change turns out to need but that does not exist yet
@@ -37,7 +37,7 @@ If the iteration is worth a retrospective, that belongs in `.work_logs/` via `wo
 
 - **One issue = one spec = one branch = one PR.** If an issue cannot be closed by a single PR, it is more than one issue. This is the invariant the whole flow rests on, and the first exception is how it stops being one.
 - **Every issue is typed.** An untyped issue makes `spec` guess, and it guesses feature — the wrong shape for a bug and for a chore.
-- **Take from the top.** Skipping down the list is re-ordering without recording it, and the backlog stops describing what actually happens.
+- **Take from the top, above the ready line.** Skipping down the list is re-ordering without recording it, and the backlog stops describing what actually happens. Do not move the ready line.
 - **Decompose here, not in the backlog.** Ordering coarse items is cheap and revisable; decomposing early freezes guesses into the plan.
 - **Issues for this iteration only.**
 - **Unplanned work is visible.** A bug found mid-iteration that must be fixed now gets its own issue and is named as unplanned when the iteration is reviewed. Silently absorbing it is how an iteration appears to have gone well while the plan quietly stops meaning anything.

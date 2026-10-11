@@ -2,8 +2,8 @@
 
 - Last refined: 2026-10-11 (twenty-first refinement — see **What changed**)
 - Ordered, not prioritized. Position reflects value, risk, cost, and dependency together. There is no separate priority field, and adding one would contradict this.
-
-- There is no `Epic` column. It was deleted by decision on 2026-09-20 — see **Triggers that have already fired** — and #164 replaces it with version lines whose membership is derived from position. Until #164 ships this table runs ahead of the skill's own template, and membership reasoning lives in `Why here`.
+- Version and release membership are derived from position against the lines in ## Lines, never written on a row.
+- There is no `Epic` column. It was deleted by decision on 2026-09-20 — see **Triggers that have already fired** — and replaced by #164 with version lines in `## Lines` whose membership is derived from position. Membership reasoning lives in `Why here`.
 
 ## A note on how this list was built
 
@@ -43,7 +43,10 @@ Added by #174, which was row 1 and was argued for by five consecutive refinement
 
 ## Unshaped`. It did not take #274's F3 reading. That is a release question, not an ordering one: the 0.25.0 cut waits on it, and `docs/verified.md`'s `## Still to verify` holds it. **54 open issues against 19 rows**, nine deliberately unplanned: #36, #108, #124, #170, #171, #184, #185, #249 and #261.
 
-## The ordered list
+## Lines
+
+- **Ready line:** row 3 — work above this line is shaped and ready for sprint to decompose; work below is coarse.
+- **0.26.0 line:** row 3 — items up to row 3 complete the planning chain (#164–#166), defining backlog boundaries and cascade enforcement.
 
 | # | Item | Blocks | Rough size | Why here |
 | :-- | :-- | :-- | :-- | :-- |
