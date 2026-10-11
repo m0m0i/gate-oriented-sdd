@@ -76,5 +76,5 @@ Asked and answered 2026-10-11:
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
 - [x] T1: regression tests for Antigravity exit 0, Claude Code exit 2, and control character escaping (tabs and carriage returns) — then the fix in `hooks/gate-lib.sh` and bootstrap guards in `hooks/quality-gate.sh` and `hooks/review-gate.sh`
-- [ ] T2: regression test for `steering-digest-antigravity.sh` turn-0 delivery vs turn-1 suppression — then the fix in `hooks/steering-digest-antigravity.sh`
+- [x] T2: regression test for `steering-digest-antigravity.sh` turn-0 delivery vs turn-1 suppression — then the fix in `hooks/steering-digest-antigravity.sh`
 - [ ] T3: test coverage for dual-target bootstrap guard parity across both harnesses — then docs and fidelity alignment

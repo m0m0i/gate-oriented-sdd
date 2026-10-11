@@ -6604,9 +6604,9 @@ case "$out_rv" in *"exit=0"*) c6=ok ;; *) c6=no ;; esac
 
 # --- hooks: hooks/steering-digest-antigravity.sh ------------------------------
 #
-# #144. PreInvocation hook on Antigravity:
-# - When invocationNum == 1, emit {"injectSteps": [{"ephemeralMessage": "<digest>"}]}
-# - When invocationNum != 1 or missing/malformed, emit {}
+# #144, #282. PreInvocation hook on Antigravity:
+# - When invocationNum == 0, emit {"injectSteps": [{"ephemeralMessage": "<digest>"}]}
+# - When invocationNum != 0 or missing/malformed, emit {}
 # - Anchor to git repository root if invoked from a subdirectory
 # - Handle missing .steering/ cleanly without malformed JSON
 
@@ -6621,9 +6621,9 @@ agy_digest_repo() {
   echo "$r"
 }
 
-# 1. Turn 1 injects steering digest in injectSteps ephemeralMessage with exit 0
-r=$(agy_digest_repo agy-digest-turn1)
-raw=$(printf '{"invocationNum": 1}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+# 1. Turn 0 injects steering digest in injectSteps ephemeralMessage with exit 0
+r=$(agy_digest_repo agy-digest-turn0)
+raw=$(printf '{"invocationNum": 0}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
 exit_code=$?
 c1_exit=no; c1_json=no
 [ "$exit_code" -eq 0 ] && c1_exit=ok
@@ -6637,9 +6637,9 @@ if not ("## Repo facts" in msg and "safety and correctness" in msg and "test-rev
   c1_json=ok
 fi
 
-# 2. Turn 2 emits empty object {} with exit 0
-r=$(agy_digest_repo agy-digest-turn2)
-raw=$(printf '{"invocationNum": 2}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+# 2. Turn 1 emits empty object {} with exit 0
+r=$(agy_digest_repo agy-digest-turn1)
+raw=$(printf '{"invocationNum": 1}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
 exit_code=$?
 c2_exit=no; c2_json=no
 [ "$exit_code" -eq 0 ] && c2_exit=ok
@@ -6671,7 +6671,7 @@ fi
 
 # 4. Subdirectory invocation (.agents) anchors to repository root
 r=$(agy_digest_repo agy-digest-subdir)
-raw=$(printf '{"invocationNum": 1}' | ( cd "$r/.agents" && sh ../hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+raw=$(printf '{"invocationNum": 0}' | ( cd "$r/.agents" && sh ../hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
 exit_code=$?
 c4=no
 if [ "$exit_code" -eq 0 ] && python3 -c '
@@ -6687,7 +6687,7 @@ fi
 # 5. Missing .steering directory outputs fallback digest without error
 r=$(agy_digest_repo agy-digest-nosteering)
 rm -rf "$r/.steering"
-raw=$(printf '{"invocationNum": 1}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
+raw=$(printf '{"invocationNum": 0}' | ( cd "$r" && sh hooks/steering-digest-antigravity.sh 2>"$TMP/agy_dig_err" ))
 exit_code=$?
 c5=no
 if [ "$exit_code" -eq 0 ] && python3 -c '
@@ -6701,9 +6701,10 @@ if "## Repo facts" not in msg:
 fi
 
 [ "$c1_exit$c1_json$c2_exit$c2_json$c3$c4$c5" = "okokokokokokok" ] \
-  && report "steering-digest-antigravity.sh injects on turn 1, passes on later turns, and anchors to root" ok \
-  || report "steering-digest-antigravity.sh injects on turn 1, passes on later turns, and anchors to root" no \
-     "turn1-exit=$c1_exit turn1-json=$c1_json turn2-exit=$c2_exit turn2-json=$c2_json invalid=$c3 subdir=$c4 nosteering=$c5"
+  && report "steering-digest-antigravity.sh injects on turn 0, passes on later turns, and anchors to root" ok \
+  || report "steering-digest-antigravity.sh injects on turn 0, passes on later turns, and anchors to root" no \
+     "turn0-exit=$c1_exit turn0-json=$c1_json turn1-exit=$c2_exit turn1-json=$c2_json invalid=$c3 subdir=$c4 nosteering=$c5"
+
 
 
 # --- guards: scripts/check-manifests.py ---------------------------------------

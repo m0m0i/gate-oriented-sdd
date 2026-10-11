@@ -5,11 +5,11 @@
 # PreInvocation before every model invocation and pipes session metadata
 # over stdin as JSON, including {"invocationNum": N}.
 #
-# On turn 1 (invocationNum == 1), this hook executes steering-digest.sh,
+# On turn 0 (invocationNum == 0), this hook executes steering-digest.sh,
 # packages its output into Antigravity's step injection schema:
 #   {"injectSteps": [{"ephemeralMessage": "<digest>"}]}
 #
-# On all subsequent turns (invocationNum > 1) or on unexpected/malformed
+# On all subsequent turns (invocationNum > 0) or on unexpected/malformed
 # input, it emits {} and exits 0 so normal turns proceed with zero overhead.
 
 set -u
@@ -32,7 +32,7 @@ try:
 except Exception:
     data = {}
 
-if not isinstance(data, dict) or data.get("invocationNum") != 1:
+if not isinstance(data, dict) or data.get("invocationNum") != 0:
     print("{}")
     sys.exit(0)
 
