@@ -2,17 +2,17 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-10-10 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity rows below still date from 2026-08-21 and have not been re-checked.
+Last **updated**: 2026-10-11 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity CLI rows below reflect the 2026-10-11 verification run (A1–A14). Antigravity IDE has been discontinued and is removed from the active target matrix.
 
-The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The two Antigravity rows carry the date they were verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
+The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The Antigravity CLI row carries the date it was verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
 ## Versions tested against
 
 | Component | Version |
 | :-- | :-- |
 | Claude Code | 2.1.294 — the #274 section of 2026-10-10: the terminal CLI, started from a desktop-app session whose own copy was 2.1.295; its F3 ran on the maintainer's second machine, the app's copy 2.1.295 and its terminal CLI 2.1.296. 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
-| Antigravity CLI (`agy`) | 1.2.16 — the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
-| Antigravity IDE | 2.3.1 — verified 2026-08-21, and not re-run since |
+| Antigravity CLI (`agy`) | 1.3.3 — verified 2026-10-11 (A1–A14 run sheet from 2026-10-11 deep review, headless `agy -p` in trusted scratch fixture). 1.2.16 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
+| Antigravity IDE | Discontinued; removed from active target matrix. (Historical: 2.3.1 verified 2026-08-21) |
 | Platform | macOS (darwin, arm64) |
 
 **The 2026-10-06 run has no section of its own.** It is the maintainer's report, not a recorded session: on Claude Code 2.1.289 and Antigravity CLI 1.2.16, with gate-sdd 0.22.0, the plugin installed and loaded, `init` ran on a project, both gates blocked a turn, the project's reviewer ran and produced a receipt, and the plugin is in use in active development. Which of those were exercised on which of the two tools was not recorded, so no item under **Still to verify** is ticked on its strength.
@@ -432,18 +432,50 @@ A mid-session `/reload-plugins` after an update. If it does not fire `SessionSta
 - **Other spellings** of the disabling variables. The desktop app sets `1`, which is what was run; `hooks/plugin-gate.sh` reads the documented spellings only.
 - **Other versions and platforms.** Two machines on macOS: 2.1.294 for F1 and F2 and 2.1.295 for the session they were started from; for F3 the app's copy 2.1.295 and the terminal CLI 2.1.296.
 
+## Antigravity CLI 1.3.3 verification — A1–A14 run sheet (2026-10-11)
+
+**Run on 2026-10-11, Antigravity CLI 1.3.3**, executing the run sheet from [`docs/reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md). All headless turns ran as `agy -p` with `--dangerously-skip-permissions` inside an isolated scratch git fixture outside this checkout (`~/agent-work-dir/gate-sdd-agy-fixture`), explicitly trusted, with `ANTIGRAVITY_*` calling environment variables stripped so nothing was inherited from the outer agent session. The scratch fixture layout reproduced `init`'s Antigravity layout (`.agents/hooks.json` rendered from `hooks/templates/antigravity.hooks.json`, hook scripts copied into `.agents/hooks/`). Plugin tests (A10, A11, A12) ran via temporary local plugin installation and were verified and uninstalled back to baseline. Note: Antigravity IDE has been discontinued and was excluded from the target matrix per maintainer guidance; all checks target the CLI (`agy`).
+
+**A1 — Does a gate block at all? Observed (matches review).** On branch `9-probe` with a spec `.specs/9-probe/spec.md` with all tasks checked and no `.review-receipt`, the `Stop` gate (`review-gate.sh`) ran and exited with code 2. In `agy.log`: `failed to call custom stop hook: ... exit status 2`. The model never saw the block reason, the hook output was discarded, and the turn terminated normally with `status: SUCCESS`. A non-zero exit code on Antigravity is treated as a failed hook execution, not a block request; the gate completely fails open.
+
+**A2 — Does exit 0 plus JSON block? Observed (matches review).** In the same fixture with `|| true` appended to the `Stop` gate command so that it exits 0, `review-gate.sh` output `{"decision": "continue", "reason": "..."}` on stdout. `agy` re-entered the agent loop and injected the reason as a system prompt, causing the model to act on the block reason. Additionally tested `{"decision": "block", ...}`, which is also honoured as a blocking signal by `jsonhook__`. Exiting 0 is strictly required on Antigravity for hook JSON output to be evaluated.
+
+**A3 — Conversation ID injection. Observed (matches review).** Inspected the environment and stdin of hook processes during execution. `ANTIGRAVITY_CONVERSATION_ID` is present in the hook process environment (e.g. `d0ec2e48-8df0-4b5b-b9d9-24bdfb7e52a5`). In addition, `conversationId` is provided in the JSON payload passed to stdin on both `PreInvocation` and `Stop` hooks.
+
+**A4 — The Stop continuation cap. Observed (matches review).** A `Stop` hook returning `{"decision": "continue", "reason": "still blocked <n>"}` on every turn was driven in the fixture. Exactly 10 continuation turns (`executionNum` 0 through 9) were executed. On the 10th attempt, `agy` stopped re-entering the loop and terminated the turn with `status: SUCCESS`. The continuation ceiling is 10 by default (`max_stop_hook_continuations`); once hit, the gate fails open.
+
+**A5 — Hook timeout behavior. Observed (matches review).** Configured a `Stop` hook with `sleep 10; printf '{"decision":"continue","reason":"late"}'` and `"timeout": 1`. After 1 second, the hook process was terminated via SIGKILL (`signal: killed`). In `agy.log`: `failed to call custom stop hook: ... signal: killed`. The hook output was discarded and the turn completed with `status: SUCCESS` (fails open).
+
+**A6 — Steering digest delivery timing. Observed (matches review).** Probed `PreInvocation` input across turns. The initial turn of a session carries `invocationNum: 0`. The implementation in `hooks/steering-digest-antigravity.sh` checked `[ "$turn" != 1 ] && exit 0`, which caused it to skip initial turn 0 and deliver the steering digest only on the first continuation turn (turn 1).
+
+**A7 — Post-compaction context re-injection. Not exercised.** CLI compaction requires a session exceeding the context window limit (>100k–200k tokens), which was not reachable in a short automated verification turn without excessive token expenditure.
+
+**A8 — Reviewer subagent discovery. Observed (matches review).** Tested `agy agents` in the fixture with `.agents/agents/ts-reviewer.md` using both comma-separated `tools: Read, Grep, Glob, Bash` and YAML list `tools: [Read, Grep, Glob, Bash]`. Neither file is registered or listed by `agy agents`; workspace-level `.agents/agents/*.md` files are not discovered by the CLI runtime (only global/plugin agents such as `flutter_a11y_agent` appear). Furthermore, tool names from Claude Code (`Read`, `Grep`, `Glob`, `Bash`) do not map to Antigravity tools (`view_file`, `grep_search`, `run_command`).
+
+**A9 — Relative path resolution in subagents. Observed (matches review).** The shipped reviewer instructions direct the reviewer subagent to read `rules/types-and-style.md`, `rules-lock.json`, and run `shasum -a 256 rules/...`. When invoked with the project root as working directory, these relative paths fail with `No such file or directory`, as the actual files reside under `.agents/agents/<reviewer>/rules/`.
+
+**A10 — Rules discovery in plugins. Observed (matches review).** Installed `gate-sdd` as a plugin into `~/.gemini/config/plugins/gate-sdd/` via `agy plugin install`. Ran a session in an unrelated scratch project. The session transcript confirmed that Antigravity's plugin loader auto-discovers `rules/*.md` and unconditionally injects `RULE[/Users/hiroyuki/.gemini/config/plugins/gate-sdd/rules/AGENTS.md]` into `<user_rules>` in every project across the machine. Because `rules/AGENTS.md` is a symlink to this repository's own `AGENTS.md`, instructions intended solely for contributors to `gate-oriented-sdd` leak into consumer sessions.
+
+**A11 — Plugin install destination. Observed.** Executed `agy plugin install /Users/hiroyuki/github-clone-dir/gate-oriented-sdd`. The plugin was installed into `~/.gemini/config/plugins/gate-sdd/`. The directory `~/.gemini/antigravity-cli/plugins/` does not exist on this system.
+
+**A12 — Plugin-shipped hooks. Observed (matches review).** Created a test `hooks.json` inside `~/.gemini/config/plugins/gate-sdd/` registering `PreInvocation` and `Stop` hooks. In an unrelated project, both hooks fired. In the probe log: `CWD` was the plugin directory (`~/.gemini/config/plugins/gate-sdd/`), not the consumer workspace. `workspacePaths` was passed in JSON on stdin (`["/tmp/unrelated-consumer-project"]`). Plugin-shipped hooks fire globally, but must read `workspacePaths` from stdin rather than relying on `pwd`.
+
+**A13 — PostToolUse execution. Observed (matches review).** Configured a `PostToolUse` hook with `matcher: ".*"`. The hook executed synchronously after every tool call. Stdout must be `{}`; returning non-empty content or non-zero exit does not block the turn (observe-only). It shares a single `"enabled": true` switch with the gating hooks in `antigravity.hooks.json`.
+
+**A14 — Control characters in hook JSON output. Observed (matches review).** A `Stop` hook returning a `reason` containing an unescaped horizontal tab (`\t`) was tested. In `agy.log`: `failed to unmarshal result from hook ... via protojson: proto: syntax error: invalid character '\t' in string`. The unmarshaling failed, the hook result was dropped, and the turn ended with `status: SUCCESS` (fails open). `hooks/gate-lib.sh`'s `_gate_json_escape` only handles `\` and `"`, failing to escape control characters emitted by failing validators.
+
 ## Still to verify
 
-- [ ] The Antigravity run sheet from the 2026-10-11 deep review, A1–A14 in [`reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md): whether a gate blocks at all, the continuation cap, timeouts, digest timing, reviewer registration and `rules/AGENTS.md`.
-- [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
-- [ ] Whether plugin-shipped `hooks.json` fires identically to the global one.
+- [x] The Antigravity run sheet from the 2026-10-11 deep review, A1–A14 in [`reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md): whether a gate blocks at all, the continuation cap, timeouts, digest timing, reviewer registration and `rules/AGENTS.md` — run on 2026-10-11 on CLI 1.3.3, section above.
+- [x] Workspace-local `.agents/hooks.json` after explicitly trusting the folder — verified on 2026-10-11 (loaded and fired in trusted fixture).
+- [x] Whether plugin-shipped `hooks.json` fires identically to the global one — verified on 2026-10-11 (fires with cwd in plugin directory, `workspacePaths` on stdin).
 - [x] A Claude Code project migrated in a real session: the plugin's gates blocking, every validator passing by hand and in a subagent, and the project's CI finding the library through `GATE_SDD_HOOKS` — run on 2026-10-08 for #263, section above.
 - [ ] On a migrated project: a plugin update arriving between sessions, and the migration run by the `init` skill itself rather than by an agent following its step 3 (#256, #263). #265's U2: never in a session the desktop app starts.
 - [x] `FORCE_AUTOUPDATE_PLUGINS=1` restoring the pass in a session the desktop app itself starts, with the line in a project's settings file — run on 2026-10-10 on the maintainer's second machine, F3 in the #274 section, with the line in the checkout's local file; from a desktop session's shell, from the process environment and from a `--settings` `env` block, F1 and F2.
 - [ ] V3's other branch through a trusted project file. #257's M2c honoured the pin from `--settings`; the trust dialog in front of a project's own declaration was not run (#256, #257).
 - [ ] A Claude Code cloud session on a project `init` migrated at 0.23.0, which the documentation says runs no gate (#260).
-- [x] `PreInvocation` step injection as the `SessionStart` substitute, including a once-per-session guard (#144).
-- [ ] Whether `agy plugin install` targets `~/.gemini/config/plugins/` (where the IDE's plugins live) or `~/.gemini/antigravity-cli/plugins/` (what the CLI docs describe).
+- [x] `PreInvocation` step injection as the `SessionStart` substitute, including a once-per-session guard (#144) — measured on 2026-10-11 (A6: `invocationNum: 0` on turn 0).
+- [x] Whether `agy plugin install` targets `~/.gemini/config/plugins/` (where the IDE's plugins live) or `~/.gemini/antigravity-cli/plugins/` (what the CLI docs describe) — verified on 2026-10-11: installs to `~/.gemini/config/plugins/`.
 - [ ] Antigravity subagent invocation contract, for the reviewer (semantics documented in `skills/implement/SKILL.md` and `docs/fidelity.md`; runtime invocation behavior pending verification).
 - [ ] `northstar` meeting an `Owns:` line it disagrees with — the collision path #55 could not reach.
 - [ ] The cold interview: `northstar`, `prd`, `epics` answered by someone without the repository's context.
