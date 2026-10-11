@@ -434,6 +434,7 @@ A mid-session `/reload-plugins` after an update. If it does not fire `SessionSta
 
 ## Still to verify
 
+- [ ] The Antigravity run sheet from the 2026-10-11 deep review, A1–A14 in [`reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md): whether a gate blocks at all, the continuation cap, timeouts, digest timing, reviewer registration and `rules/AGENTS.md`.
 - [ ] Workspace-local `.agents/hooks.json` after explicitly trusting the folder.
 - [ ] Whether plugin-shipped `hooks.json` fires identically to the global one.
 - [x] A Claude Code project migrated in a real session: the plugin's gates blocking, every validator passing by hand and in a subagent, and the project's CI finding the library through `GATE_SDD_HOOKS` — run on 2026-10-08 for #263, section above.
