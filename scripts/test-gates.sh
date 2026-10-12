@@ -2703,6 +2703,17 @@ case "$out" in *"not checked"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "a remote Docs line says the contract was not checked" ok \
   || report "a remote Docs line says the contract was not checked" no "exit=$c1 said=$c2 [$out]"
 
+# 235. A combined tier is still a Judgment row. #84's own acceptance run met a real contract
+# with five `Mechanical + Judgment` rows — a rule linted AND judged — and a guard matching the
+# whole cell counted ten of its fifteen ids and checked nothing about the other five.
+r=$(contract_repo ct-combined)
+printf '| P-4 | linted and judged | Mechanical + Judgment | HIGH | lint and rulebook |\n' >> "$r/docs/CONTRACT.md"
+out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"P-4"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a Mechanical + Judgment row is checked as a Judgment row" ok \
+  || report "a Mechanical + Judgment row is checked as a Judgment row" no "exit=$c1 id=$c2 [$err]"
+
 # 20. A legacy receipt with no reviewed_by must still clear the gate.
 #
 # AC2 of #9. The field is new, and every receipt written before it existed lacks it. The

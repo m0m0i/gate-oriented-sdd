@@ -154,7 +154,8 @@ def _judgment_ids(contract: str) -> list[str]:
 
     Columns are found by the header rather than by position, so a contract that reorders or
     adds columns is still read; a table without both headers is not a Rules table and is
-    skipped.
+    skipped. A combined tier — `Mechanical + Judgment`, a rule both linted and judged — is a
+    Judgment row: matching the whole cell left five real rows unchecked on #84's own run.
     """
     ids: list[str] = []
     cols: tuple[int, int] | None = None
@@ -166,7 +167,11 @@ def _judgment_ids(contract: str) -> list[str]:
         names = [c.lower() for c in cells]
         if "id" in names and "tier" in names:
             cols = (names.index("id"), names.index("tier"))
-        elif cols and len(cells) > max(cols) and cells[cols[1]].lower() == "judgment":
+        elif (
+            cols
+            and len(cells) > max(cols)
+            and "judgment" in re.split(r"[^a-z]+", cells[cols[1]].lower())
+        ):
             ids.append(cells[cols[0]])
     return ids
 
