@@ -93,4 +93,4 @@ Both hooks run from the repository's own `hooks/` directory rather than from a c
 
 ## Where the contract lives
 
-`docs/CONTRACT.md` is the development contract. It was compiled **from** the reviewer's rulebook at `.claude/agents/gate-sdd-reviewer/rules/`, not the reverse: the rulebook was hand-authored one rule per incident, and the contract indexes it and tiers what sits around it. A new Judgment rule is added to the rulebook first and then to the contract's table, and nothing checks that the two agree.
+`docs/CONTRACT.md` is the development contract. It was compiled **from** the reviewer's rulebook at `.claude/agents/gate-sdd-reviewer/rules/`, not the reverse: the rulebook was hand-authored one rule per incident, and the contract indexes it and tiers what sits around it. A new Judgment rule is added to the rulebook first and then to the contract's table. `check-locks.py` fails when a Judgment row names an id the rulebook does not define (#84); that a row's wording and severity agree with its rule is still checked by nothing.

@@ -35,5 +35,5 @@
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: `test-gates.sh` cases after case 19's fixtures — the control first, then a missing id, a mention-only id, a `G-10`-for-`G-1` near-miss, the stripped path, one copy of two lacking an id, a contract with Judgment rows and no `- Reviewer:`, no contract, and a remote `- Docs:` — run red, then the contract half of `check-locks.py` — green (AC4, AC5)
 - [x] T2: `check-skill-contracts.py` pins, run red, then `init` step 1's row and step 3's two branches — green (AC1, AC2, AC3, AC5)
-- [ ] T3: `docs/CONTRACT.md`, `.steering/tech.md`, `AGENTS.md`, and `docs/BACKLOG.md` row 1 recording #84 as discharged, then every validator green (AC6, AC8)
+- [x] T3: `docs/CONTRACT.md`, `.steering/tech.md`, `AGENTS.md`, and `docs/BACKLOG.md` row 1 recording #84 as discharged, then every validator green (AC6, AC8)
 - [ ] T4: the upgrade-path run on a scratch clone of #76's target, recorded in `observations.md`; `check-leakage.sh` by hand before the commit (AC7)

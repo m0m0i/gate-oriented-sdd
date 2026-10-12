@@ -40,7 +40,7 @@ Blocks a merge: a BLOCKER or HIGH finding; a failing validator; a missing, stale
 
 ## Rules
 
-The rulebook is the source for every Judgment row and holds each rule's rationale and check; this table is its index, and nothing checks that the two agree — the lock pins the rulebook, not this file (#23's shape).
+The rulebook is the source for every Judgment row and holds each rule's rationale and check; this table is its index. `check-locks.py` fails when a Judgment row names an id the rulebook does not define (#84); nothing checks that a row's wording or severity agrees with its rule — the lock pins the rulebook, not this file (#23's shape).
 
 | id | Rule | Tier | Severity | Enforced by |
 | :-- | :-- | :-- | :-- | :-- |
@@ -51,7 +51,7 @@ The rulebook is the source for every Judgment row and holds each rule's rational
 | M-5 | Skills keep their load-bearing sentences | Mechanical | — | `check-skill-contracts.py` |
 | M-6 | No spec template splits a red step from its green step | Mechanical | — | `check-templates.py` |
 | M-7 | Steering's machine-read lines parse | Mechanical | — | `check-steering-anchors.sh` |
-| M-8 | Shipped rulebooks match their locks | Mechanical | — | `check-locks.py` |
+| M-8 | Shipped rulebooks match their locks, and every Judgment id in this table is defined in the reviewer's rulebook | Mechanical | — | `check-locks.py` |
 | M-9 | The gates behave, on every path the suite pins | Mechanical | — | `test-gates.sh` |
 | M-10 | Guards do not rely on `assert` | Mechanical | — | the `test-gates.sh` case that runs them under `python3 -O` |
 | M-11 | A shipped-path change carries a version bump | Mechanical | — | `check-version-bump.py`, CI on pull requests only; `C-6` flags it earlier |
