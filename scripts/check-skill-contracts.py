@@ -235,6 +235,37 @@ CONTRACTS = (
         "receipt cannot say otherwise. See #9, and #25 which depends on this.",
     ),
     (
+        "skills/init/SKILL.md",
+        "the rules this project compiled for itself, which step 3 keeps rather than replaces",
+        "Step 1's inventory is what tells step 3 the rulebook is the project's. Without the row "
+        "it named `.claude/` and `.agents/` as directories and never the reviewer inside them or "
+        "the contract it answers to, which is #84's root cause. Review cannot defend it: a table "
+        "row reads as one more signal among seven, and its loss looks like nothing.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "A reviewer already in the agents directory is the project's, not a reference to replace",
+        "The upgrade branch of step 3's reviewer bullet. Without it the bullet knows only the "
+        "fresh install, and a re-run copies a reference rulebook over the one `contract` "
+        "compiled — #84. check-locks.py now fails on the result, but only after the rulebook "
+        "is gone; this sentence is what keeps it from going.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "look in history before installing anything",
+        "The stripped branch. The rulebook a contract cites is usually still in git, and "
+        "without this sentence the only route left is `contract` recompiling from the contract's "
+        "one-line rows — a worse rulebook than the one history holds. #84, clarification 2.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "Re-pin with `--update` only a drift the user confirms was deliberate",
+        "init edits nothing in a rulebook it keeps, so an unconditional re-pin changes nothing "
+        "when there is no drift and silently accepts the drift when there is: the lock "
+        "agreeing with whatever is on disk. #84's first review, MEDIUM. Review cannot defend "
+        "it: 're-pin after any change' reads as the same advice, one word shorter.",
+    ),
+    (
         "skills/implement/SKILL.md",
         "waiting means keeping the turn open",
         "The review gate fires on turn end. A turn stays open across tool calls, so a spawned "

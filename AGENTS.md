@@ -49,7 +49,8 @@ Run these before every commit. The `- Validators:` line in `.steering/tech.md` i
 ./scripts/check-templates.py        # no spec template splits a red step from its green step,
                                     # and no live spec sequences a task after the review
 ./assets/check-steering-anchors.sh  # steering's machine-read lines still parse
-./assets/check-locks.py             # rulebooks match their locks (--update to re-pin)
+./assets/check-locks.py             # rulebooks match their locks and define the contract's
+                                    # Judgment ids (--update to re-pin)
 ./assets/check-document-set.py      # the installed document set matches the declared mode
 ./assets/check-document-cascade.py  # downstream documents reconcile against PRD.md
 ./scripts/check-contract-path.py    # every statement of the contract's path agrees
