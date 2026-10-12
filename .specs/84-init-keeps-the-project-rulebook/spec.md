@@ -1,5 +1,5 @@
 # Spec: init installs a reference rulebook over a project whose CONTRACT.md cites rules it does not carry
-- Slug: 84-init-keeps-the-project-rulebook   Issue: 84   Type: bug   Status: approved
+- Slug: 84-init-keeps-the-project-rulebook   Issue: 84   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-10-12
 
 ## 1. Requirements (WHAT / WHY)
