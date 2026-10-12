@@ -242,7 +242,7 @@ Every row was produced by running it. Method, versions, and open questions: [`do
 | :-- | :-- | :-- |
 | Skills | full | full — same path, same format |
 | Reviewer and rulebook | full — `init` copies them into `.claude/agents/`, and the reviewer is invoked by name | full — the same files, copied into `.agents/agents/`, and registered from the file with `define_subagent` |
-| Rules discovery | root `AGENTS.md` (canonical context) | `rules/AGENTS.md` (auto-discovered and merged by plugin loader) |
+| Rules discovery | the project's root `AGENTS.md`, imported by `CLAUDE.md` (`@AGENTS.md`) | `rules/AGENTS.md` (auto-discovered and merged by plugin loader) |
 | Quality gate on turn end | full — `Stop`, exit 2 | full — `Stop`, `{"decision":"continue"}` |
 | Review-receipt gate | full | full |
 | Gate delivery | from the plugin — `.claude-plugin/hooks.json` runs the gates (V1, V2), and a fix arrives by plugin update, whose pass a session the Claude desktop app starts runs only with the `env` line `init` writes (#274); a live session on a migrated project verified (#263's section of `docs/verified.md`), an update arriving not run (#265); the line restoring the pass verified from a desktop session's shell (F2) and in a session the app itself started (F3) | copied into `.agents/hooks/` by `init`, and a fix arrives by refreshing the copies; a refresh by re-running `init` not run |

@@ -432,6 +432,19 @@ A mid-session `/reload-plugins` after an update. If it does not fire `SessionSta
 - **Other spellings** of the disabling variables. The desktop app sets `1`, which is what was run; `hooks/plugin-gate.sh` reads the documented spellings only.
 - **Other versions and platforms.** Two machines on macOS: 2.1.294 for F1 and F2 and 2.1.295 for the session they were started from; for F3 the app's copy 2.1.295 and the terminal CLI 2.1.296.
 
+## How a consumer's `CLAUDE.md` brings `AGENTS.md` into a session (#239)
+
+**Run on 2026-10-12, Claude Code 2.1.296**, in two scratch projects outside any repository with a `CLAUDE.md` above them. Each was a fresh `git init` with the same `AGENTS.md`, which stated two facts no other file states. `claude -p --tools "" --strict-mcp-config --model sonnet --output-format json` ran with `--settings` set to `disableAllHooks` and `agents-md@builtin`'s `instructionFiles` pinned to `claude-md-or-agents-md`, the default. With no tools and no MCP server, an answer can only come from what loaded at start. Both runs answered in one turn.
+
+| Root `CLAUDE.md` | Q1 | Q2 |
+| :-- | :-- | :-- |
+| `@AGENTS.md`, the form `init` step 3 now writes | answered from `AGENTS.md` | answered from `AGENTS.md` |
+| one line of prose linking `AGENTS.md` | `NOT-IN-CONTEXT` | `NOT-IN-CONTEXT` |
+
+The prose run explained itself: the project's `CLAUDE.md` only points to `AGENTS.md`, whose contents were not loaded. This is #237's measurement of this repository's `.claude/CLAUDE.md` (`@../AGENTS.md`), repeated in the shape a consumer gets: a root `CLAUDE.md` importing a root `AGENTS.md`.
+
+**What this run does not support:** that an `init` run writes the import. The skill now says to, and `check-skill-contracts.py` pins the sentence, but no `init` has run since. Nor does it support anything about `GEMINI.md` on Antigravity, where whether an import is expanded was not measured.
+
 ## Antigravity CLI 1.3.3 verification — A1–A14 run sheet (2026-10-11)
 
 **Run on 2026-10-11, Antigravity CLI 1.3.3**, executing the run sheet from [`docs/reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md). All headless turns ran as `agy -p` with `--dangerously-skip-permissions` inside an isolated scratch git fixture outside this checkout (`~/agent-work-dir/gate-sdd-agy-fixture`), explicitly trusted, with `ANTIGRAVITY_*` calling environment variables stripped so nothing was inherited from the outer agent session. The scratch fixture layout reproduced `init`'s Antigravity layout (`.agents/hooks.json` rendered from `hooks/templates/antigravity.hooks.json`, hook scripts copied into `.agents/hooks/`). Plugin tests (A10, A11, A12) ran via temporary local plugin installation and were verified and uninstalled back to baseline. Note: Antigravity IDE has been discontinued and was excluded from the target matrix per maintainer guidance; all checks target the CLI (`agy`).

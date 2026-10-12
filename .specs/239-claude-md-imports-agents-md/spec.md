@@ -1,5 +1,5 @@
 # Spec: init does not say how CLAUDE.md points at AGENTS.md, and a prose pointer keeps AGENTS.md out of a Claude Code session
-- Slug: 239-claude-md-imports-agents-md   Issue: 239   Type: bug   Status: approved
+- Slug: 239-claude-md-imports-agents-md   Issue: 239   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-10-12
 
 ## 1. Requirements (WHAT / WHY)
@@ -29,4 +29,4 @@ None needed — the issue's open questions are answered by the repo: the row's C
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: the pin, run red, then `init` step 3's sentence — green (AC1, AC2)
-- [ ] T2: the probe recorded in `docs/verified.md`, then the fidelity row, both READMEs, `docs/layout.md` and backlog row 1; every validator green (AC3, AC4, AC5)
+- [x] T2: the probe recorded in `docs/verified.md`, then the fidelity row, both READMEs, `docs/layout.md` and backlog row 1; every validator green (AC3, AC4, AC5)
