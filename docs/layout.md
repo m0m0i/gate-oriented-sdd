@@ -42,8 +42,8 @@ your-project/
 │   └── 2026-08-21.md              ← worklog      append-only session log
 │
 ├── AGENTS.md                      ← init         canonical rulebook, always generated
-├── CLAUDE.md                      ← init         pointer for Claude Code (points to AGENTS.md)
-├── GEMINI.md                      ← init         pointer for Antigravity (points to AGENTS.md)
+├── CLAUDE.md                      ← init         pointer for Claude Code (imports AGENTS.md with @AGENTS.md, #239)
+├── GEMINI.md                      ← init         symlink to AGENTS.md for Antigravity, #239
 │
 ├── .claude/                       ← init         Claude Code wiring — no gate script: the gates ship from the plugin
 │   ├── settings.json              ←   the marketplace declaration, the enabled plugin, the PostToolUse fast check
@@ -126,7 +126,7 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
 │   └── templates/                 ← rendered into the project by init
 ├── rules/
 │   └── AGENTS.md                  ← symlink to ../AGENTS.md for Antigravity rule discovery
-├── AGENTS.md                      ← canonical rulebook (read by Claude Code at root)
+├── AGENTS.md                      ← canonical rulebook (imported here by .claude/CLAUDE.md, #237)
 ├── assets/                        ← copied into the project by init: check scripts, issue templates, directory contracts
 │   ├── check-steering-anchors.sh
 │   ├── check-document-set.py

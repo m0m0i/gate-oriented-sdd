@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-10-11 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity CLI rows below reflect the 2026-10-11 verification run (A1–A14). Antigravity IDE has been discontinued and is removed from the active target matrix.
+Last **updated**: 2026-10-12 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity CLI rows below reflect the 2026-10-11 verification run (A1–A14). Antigravity IDE has been discontinued and is removed from the active target matrix.
 
 The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The Antigravity CLI row carries the date it was verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
@@ -10,8 +10,8 @@ The version table below carries a date beside each row. Claude Code's row was re
 
 | Component | Version |
 | :-- | :-- |
-| Claude Code | 2.1.294 — the #274 section of 2026-10-10: the terminal CLI, started from a desktop-app session whose own copy was 2.1.295; its F3 ran on the maintainer's second machine, the app's copy 2.1.295 and its terminal CLI 2.1.296. 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
-| Antigravity CLI (`agy`) | 1.3.3 — verified 2026-10-11 (A1–A14 run sheet from 2026-10-11 deep review, headless `agy -p` in trusted scratch fixture). 1.2.16 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
+| Claude Code | 2.1.296 — the #239 section of 2026-10-12. 2.1.294 — the #274 section of 2026-10-10: the terminal CLI, started from a desktop-app session whose own copy was 2.1.295; its F3 ran on the maintainer's second machine, the app's copy 2.1.295 and its terminal CLI 2.1.296. 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
+| Antigravity CLI (`agy`) | 1.3.3 — the #239 section of 2026-10-12, and verified 2026-10-11 (A1–A14 run sheet from 2026-10-11 deep review, headless `agy -p` in trusted scratch fixture). 1.2.16 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
 | Antigravity IDE | Discontinued; removed from active target matrix. (Historical: 2.3.1 verified 2026-08-21) |
 | Platform | macOS (darwin, arm64) |
 
@@ -431,6 +431,31 @@ A mid-session `/reload-plugins` after an update. If it does not fire `SessionSta
 - **The opt-out**, a local file's `"0"` outranking the project's `"1"`: documented precedence, not run.
 - **Other spellings** of the disabling variables. The desktop app sets `1`, which is what was run; `hooks/plugin-gate.sh` reads the documented spellings only.
 - **Other versions and platforms.** Two machines on macOS: 2.1.294 for F1 and F2 and 2.1.295 for the session they were started from; for F3 the app's copy 2.1.295 and the terminal CLI 2.1.296.
+
+## How a consumer's `CLAUDE.md` brings `AGENTS.md` into a session (#239)
+
+**Run on 2026-10-12, Claude Code 2.1.296**, in two scratch projects outside any repository with a `CLAUDE.md` above them. Each was a fresh `git init` with the same `AGENTS.md`, which stated two facts no other file states. `claude -p --tools "" --strict-mcp-config --model sonnet --output-format json` ran with `--settings` set to `disableAllHooks` and `agents-md@builtin`'s `instructionFiles` pinned to `claude-md-or-agents-md`, the default. With no tools and no MCP server, an answer can only come from what loaded at start. Both runs answered in one turn.
+
+| Root `CLAUDE.md` | Q1 | Q2 |
+| :-- | :-- | :-- |
+| `@AGENTS.md`, the form `init` step 3 now writes | answered from `AGENTS.md` | answered from `AGENTS.md` |
+| one line of prose linking `AGENTS.md` | `NOT-IN-CONTEXT` | `NOT-IN-CONTEXT` |
+
+The prose run explained itself: the project's `CLAUDE.md` only points to `AGENTS.md`, whose contents were not loaded. This is #237's measurement of this repository's `.claude/CLAUDE.md` (`@../AGENTS.md`), repeated in the shape a consumer gets: a root `CLAUDE.md` importing a root `AGENTS.md`.
+
+**Antigravity CLI 1.3.3, the same day, run by the maintainer.** It used the same question, with different facts, in scratch `git init` projects under the system temp directory, each with an agy session started inside it. The prompt forbade tools, and each answer named its source file.
+
+| Root `GEMINI.md` | Q1 | Q2 |
+| :-- | :-- | :-- |
+| the two facts written in it, the positive control | answered, from `GEMINI.md` | answered |
+| a symlink to `AGENTS.md`, the form `init` step 3 now writes | answered, from `GEMINI.md` | answered |
+| `@AGENTS.md` | `NOT-IN-CONTEXT` | `NOT-IN-CONTEXT` |
+| one line of prose linking `AGENTS.md` | `NOT-IN-CONTEXT` | `NOT-IN-CONTEXT` |
+| absent, `AGENTS.md` only | `NOT-IN-CONTEXT` | `NOT-IN-CONTEXT` |
+
+Antigravity expands no import, follows no prose pointer, and reads no project `AGENTS.md` on its own, so the import that works on Claude Code loads nothing there. One run's source line also named a rule at a path that does not exist on the machine, outside the scratch project; the positive control rules out a session that never loaded the project, and nothing else was learned about that path.
+
+**What these runs do not support:** that an `init` run writes either form. The skill now says to, and `check-skill-contracts.py` pins both sentences, but no `init` has run since. Nor do they show that agy's answers involved no tool call: the prompt forbade tools, but no tool-disabling flag was used.
 
 ## Antigravity CLI 1.3.3 verification — A1–A14 run sheet (2026-10-11)
 
