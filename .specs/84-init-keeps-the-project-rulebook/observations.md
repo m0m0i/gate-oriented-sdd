@@ -49,3 +49,14 @@ Both restore commands are the ones step 3 now gives, run verbatim. In both cases
 - An Antigravity install (`.agents/agents/`), and a dual-target one on a real project. Case 231 covers the dual-target check on a fixture only.
 - A project reviewer with no `rules-lock.json`, so the step 3 sentence about saying so (#19) was not reached on a real target.
 - The fallback to `contract` when history holds no rulebook. This target's history always had it.
+
+## Second pass, after the first review
+
+The reviewer found the restore commands above too broad: they name the whole agents directory, so they can roll back files unrelated to the reviewer. AC3 now restores only `<agents dir>/<reviewer>.md` and `<agents dir>/<reviewer>/`, then falls through to the upgrade branch. Both cases were re-run on the same clone with the narrowed commands from step 3, verbatim, and the guard at `475fde7`.
+
+| Case | Before restore | Restore | After |
+| :-- | :-- | :-- | :-- |
+| `.claude/agents/` deleted, not committed | exit 1 | `git checkout HEAD -- .claude/agents/python-reviewer.md .claude/agents/python-reviewer/` | exit 0, 15 defined, 3 pinned; `_shared/reviewer-contract.md` **still deleted** |
+| `.claude/agents/` and `.steering/` deleted in a commit | exit 1 (no `- Reviewer:` line) | the reviewer's name from `git log --diff-filter=D --name-only -- .claude/agents/ .agents/agents/`, then `git checkout <that>^ --` on its agent file and directory | five files restored, nothing else under `.claude/agents/`; with steering also restored, exit 0, 15 defined, 3 pinned |
+
+The first row is the reason for the fall-through. The narrowed restore leaves the shared reviewer contract absent. The upgrade branch, which the stripped branch now continues into, is what copies it back from the plugin.

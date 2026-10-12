@@ -57,7 +57,8 @@ Stating the carve-out by delimiter instead is what #64 cost: the skills that gen
 ./scripts/check-templates.py        # no spec template splits a red step from its green step,
                                     # and no live spec sequences a task after the review
 ./assets/check-steering-anchors.sh  # steering's machine-read lines still parse
-./assets/check-locks.py             # rulebooks match their locks (--update to re-pin)
+./assets/check-locks.py             # rulebooks match their locks and define the contract's
+                                    # Judgment ids (--update to re-pin)
 ./scripts/test-gates.sh             # the gates still behave
 ./scripts/check-version-bump.py     # shipped changes carry a version bump (PR-only in CI)
 claude plugin validate . --strict

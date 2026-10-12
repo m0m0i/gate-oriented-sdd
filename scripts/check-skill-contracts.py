@@ -258,6 +258,14 @@ CONTRACTS = (
         "one-line rows — a worse rulebook than the one history holds. #84, clarification 2.",
     ),
     (
+        "skills/init/SKILL.md",
+        "Re-pin with `--update` only a drift the user confirms was deliberate",
+        "init edits nothing in a rulebook it keeps, so an unconditional re-pin changes nothing "
+        "when there is no drift and silently accepts the drift when there is: the lock "
+        "agreeing with whatever is on disk. #84's first review, MEDIUM. Review cannot defend "
+        "it: 're-pin after any change' reads as the same advice, one word shorter.",
+    ),
+    (
         "skills/implement/SKILL.md",
         "waiting means keeping the turn open",
         "The review gate fires on turn end. A turn stays open across tool calls, so a spawned "
