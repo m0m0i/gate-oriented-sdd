@@ -28,5 +28,5 @@ None needed — the issue's open questions are answered by the repo: the row's C
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: the pin, run red, then `init` step 3's sentence — green (AC1, AC2)
+- [x] T1: the pin, run red, then `init` step 3's sentence — green (AC1, AC2)
 - [ ] T2: the probe recorded in `docs/verified.md`, then the fidelity row, both READMEs, `docs/layout.md` and backlog row 1; every validator green (AC3, AC4, AC5)

@@ -354,6 +354,14 @@ CONTRACTS = (
         "leaving Antigravity agents without GEMINI.md root rule context. #146.",
     ),
     (
+        "skills/init/SKILL.md",
+        "`CLAUDE.md` imports it with a line reading `@AGENTS.md`",
+        "Under Claude Code's default Project instructions value a CLAUDE.md suppresses native "
+        "AGENTS.md reading, and a prose pointer loads it only if the model decides to open it, "
+        "so the canonical context file is absent at session start (#239, docs/verified.md). "
+        "Review cannot defend it: 'point to it' reads as the same instruction, shorter.",
+    ),
+    (
         "skills/sprint/SKILL.md",
         "creates no parallel record",
         "#79. The rule used to read \"writes no document\", which is true of the tracker and "
