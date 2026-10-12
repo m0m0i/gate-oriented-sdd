@@ -2570,6 +2570,139 @@ else
     || report "unreadable reviewer directory fails rather than being skipped" no "exit=$c1 msg=$c2"
 fi
 
+# --- guards: assets/check-locks.py, the contract half (#84) ------------------------
+#
+# A lock answers "has the rulebook drifted from what was agreed"; it cannot answer "is this
+# the rulebook the project's contract cites". #84: `init` installed a reference rulebook over a
+# project whose CONTRACT.md cited fifteen ids it did not carry, and the lock guard reported the
+# reference lock matching the reference rules — true, and beside the point. These fixtures add
+# a steering file, a contract and a project reviewer to lock_repo, so each case below differs
+# from the passing control by exactly one thing.
+
+# $1 = repo name. lock_repo plus `- Reviewer: proj`, a contract citing P-1 and P-2 as Judgment
+# rows — one Tier cell bare, one in backticks — and a Mechanical M-1 the rulebook must not need,
+# and a pinned project rulebook defining P-1 as a bolded item and P-2 as a heading.
+contract_repo() {
+  r=$(lock_repo "$1"); mkdir -p "$r/.steering" "$r/docs"
+  printf -- '- Reviewer: proj\n- Docs: docs/\n' > "$r/.steering/tech.md"
+  cat > "$r/docs/CONTRACT.md" <<'EOF'
+# Development contract
+
+## Rules
+| id | Rule | Tier | Severity | Enforced by |
+| :-- | :-- | :-- | :-- | :-- |
+| P-1 | a project rule | Judgment | HIGH | rulebook |
+| P-2 | a second rule | `Judgment` | MEDIUM | rulebook |
+| M-1 | a linted rule | Mechanical | — | lint |
+EOF
+  add_project_reviewer "$r" proj
+  printf '\n## P-2 — a second rule\n' >> "$r/.claude/agents/proj/rules/p.md"
+  write_lock "$r/.claude/agents/proj" rules/p.md
+  echo "$r"
+}
+
+# $1 = repo, $2 = id. Adds a Judgment row citing $2 to the contract.
+cite_rule() { printf '| %s | another rule | Judgment | HIGH | rulebook |\n' "$2" >> "$1/docs/CONTRACT.md"; }
+
+# 226. The control: every Judgment id is defined, so the contract half passes and says so.
+#
+# Runs first, as case 36 and case 51 do: every failure below is only evidence if this
+# fixture, unchanged, passes. It also pins that a Mechanical row is not asked of the rulebook.
+r=$(contract_repo ct-control)
+out=$(run_locks "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *"2 Judgment rule id(s)"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a contract whose Judgment ids the rulebook defines passes" ok \
+  || report "a contract whose Judgment ids the rulebook defines passes" no "exit=$c1 counted=$c2 [$out]"
+
+# 227. A Judgment id the rulebook does not carry fails, naming the id, the contract and the
+# rulebook directory. The exact state #84 leaves behind.
+r=$(contract_repo ct-missing); cite_rule "$r" P-3
+out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"P-3"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"docs/CONTRACT.md"*) c3=ok ;; *) c3=no ;; esac
+case "$err" in *".claude/agents/proj"*) c4=ok ;; *) c4=no ;; esac
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "a contract id the rulebook lacks fails, naming id, contract and rulebook" ok \
+  || report "a contract id the rulebook lacks fails, naming id, contract and rulebook" no "exit=$c1 id=$c2 contract=$c3 dir=$c4 [$err]"
+
+# 228. A mention is not a definition. A rulebook that says "unlike P-3" in prose carries no
+# rule P-3, and matching on any occurrence would pass the stripped path on any rulebook that
+# happens to cross-reference the missing ids.
+r=$(contract_repo ct-mention); cite_rule "$r" P-3
+printf '\nUnlike P-3, this rule is about something else.\n' >> "$r/.claude/agents/proj/rules/p.md"
+write_lock "$r/.claude/agents/proj" rules/p.md
+out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"P-3"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a rule id mentioned in prose is not a rule the rulebook defines" ok \
+  || report "a rule id mentioned in prose is not a rule the rulebook defines" no "exit=$c1 id=$c2 [$err]"
+
+# 229. `P-10` does not define `P-1`. A prefix match would let a rulebook with ten rules carry
+# every single-digit id it never wrote.
+r=$(contract_repo ct-prefix)
+printf '# rules\n- **P-10** a tenth rule.\n\n## P-2 — a second rule\n' > "$r/.claude/agents/proj/rules/p.md"
+write_lock "$r/.claude/agents/proj" rules/p.md
+out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"P-1"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"P-2"*) c3=no ;; *) c3=ok ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "P-10 does not define P-1" ok \
+  || report "P-10 does not define P-1" no "exit=$c1 named=$c2 not-P-2=$c3 [$err]"
+
+# 230. The stripped path: the contract cites rules and the reviewer it names has no rulebook
+# anywhere. #76 observed this; with no rulebook directory there is nothing to compare, and a
+# guard that read that as nothing to report would be exiting 0 where it could not do its job.
+r=$(lock_repo ct-stripped); mkdir -p "$r/.steering" "$r/docs"
+printf -- '- Reviewer: proj\n' > "$r/.steering/tech.md"
+printf '| id | Rule | Tier |\n| :-- | :-- | :-- |\n| P-1 | a rule | Judgment |\n' > "$r/docs/CONTRACT.md"
+out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"P-1"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"no rulebook"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a contract citing rules of a reviewer with no rulebook fails" ok \
+  || report "a contract citing rules of a reviewer with no rulebook fails" no "exit=$c1 id=$c2 msg=$c3 [$err]"
+
+# 231. Every copy is checked, not the first. A dual-target project holds the reviewer twice,
+# and either copy can be the reference one `init` put back.
+r=$(contract_repo ct-dual); d="$r/.agents/agents/proj"; mkdir -p "$d/rules"
+printf '# rules\n- **P-1** a project rule.\n' > "$d/rules/p.md"; write_lock "$d" rules/p.md
+out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *".agents/agents/proj"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"P-2"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "each copy of a dual-target reviewer must carry the contract's ids" ok \
+  || report "each copy of a dual-target reviewer must carry the contract's ids" no "exit=$c1 dir=$c2 id=$c3 [$err]"
+
+# 232. Judgment rows and no `- Reviewer:` line: the contract names an enforcer nobody can find.
+r=$(contract_repo ct-noreviewer); printf -- '- Docs: docs/\n' > "$r/.steering/tech.md"
+out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"- Reviewer:"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "Judgment rows with no Reviewer line fail" ok \
+  || report "Judgment rows with no Reviewer line fail" no "exit=$c1 msg=$c2 [$err]"
+
+# 233. No contract: nothing is cited, so the lock half alone decides, and nothing fails on a
+# document `init` never asked the project to write.
+r=$(contract_repo ct-nocontract); mv "$r/docs/CONTRACT.md" "$r/docs/NOT-A-CONTRACT.md"
+out=$(run_locks "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *"match their locks"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "no contract leaves the lock half to decide" ok \
+  || report "no contract leaves the lock half to decide" no "exit=$c1 locks=$c2 [$out]"
+
+# 234. `- Docs:` naming another repository: the contract cannot be read from here. The lock
+# half still decides the exit — failing would leave a multi-repo project no way to keep the
+# lock guard — and the output says the contract was not checked, so the pass is not mistaken
+# for one that looked.
+r=$(contract_repo ct-remote); cite_rule "$r" P-3
+printf -- '- Reviewer: proj\n- Docs: https://example.invalid/docs\n' > "$r/.steering/tech.md"
+out=$(run_locks "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *"not checked"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a remote Docs line says the contract was not checked" ok \
+  || report "a remote Docs line says the contract was not checked" no "exit=$c1 said=$c2 [$out]"
+
 # 20. A legacy receipt with no reviewed_by must still clear the gate.
 #
 # AC2 of #9. The field is new, and every receipt written before it existed lacks it. The

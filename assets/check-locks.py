@@ -21,12 +21,23 @@ matches: a repository that installs this harness into itself has both at once.
 Verifying nothing is not success. A run that hashed no files exits non-zero when locks
 exist, because a guard that did not run must not be indistinguishable from one that ran and
 found everything in order.
+
+A lock proves the rulebook is the text that was agreed; it cannot prove it is the rulebook the
+project's contract cites. So this also checks that every Judgment row of `<docs>/CONTRACT.md`
+names a rule the reviewer `- Reviewer:` names defines (#84): `init` once put a reference
+rulebook over a project whose contract cited fifteen ids it did not carry, and the lock half
+reported the reference lock matching the reference rules — true, and beside the point. It
+checks ids only. Whether a row's severity and wording agree with its rule is still the
+reviewer's to read.
 """
+
+from __future__ import annotations
 
 import hashlib
 import json
 import os
 import pathlib
+import re
 import sys
 import time
 
@@ -125,6 +136,121 @@ for lock_path in lock_paths:
         lock_path.write_text(json.dumps(lock, indent=2) + "\n")
         print(f"re-pinned {lock_path.relative_to(ROOT)}")
 
+
+def _steering_value(text: str, key: str) -> str:
+    """The first value for `key`, read with the expression `check-document-set.py` uses."""
+    for line in text.split("\n"):
+        if m := re.match(rf"^ *- *{key}: *(.*)$", line):
+            return m.group(1)
+    return ""
+
+
+def _cell(text: str) -> str:
+    return text.strip().strip("*`").strip()
+
+
+def _judgment_ids(contract: str) -> list[str]:
+    """The id of every row whose Tier is Judgment, in any table with `id` and `Tier` columns.
+
+    Columns are found by the header rather than by position, so a contract that reorders or
+    adds columns is still read; a table without both headers is not a Rules table and is
+    skipped.
+    """
+    ids: list[str] = []
+    cols: tuple[int, int] | None = None
+    for line in contract.splitlines():
+        if not line.strip().startswith("|"):
+            cols = None
+            continue
+        cells = [_cell(c) for c in line.strip().strip("|").split("|")]
+        names = [c.lower() for c in cells]
+        if "id" in names and "tier" in names:
+            cols = (names.index("id"), names.index("tier"))
+        elif cols and len(cells) > max(cols) and cells[cols[1]].lower() == "judgment":
+            ids.append(cells[cols[0]])
+    return ids
+
+
+def _defines(rulebook: str, rule_id: str) -> bool:
+    """True when a heading or a bolded list item OPENS with the id.
+
+    Both shipped shapes — `## PY-001 — ...` and `- **G-1 — ...**` — and nothing looser. A
+    mention in prose ("unlike G-3") is not a rule, and `G-10` is not `G-1`; matching either
+    would let a rulebook pass on ids it never wrote, which is the stripped path of #84.
+    """
+    head = r"^[ \t]*(?:#{1,6}[ \t]+|[-*][ \t]+\*\*)"
+    return re.search(head + re.escape(rule_id) + r"(?![\w-])", rulebook, re.M) is not None
+
+
+def _read(path: pathlib.Path) -> str | None:
+    try:
+        return path.read_text()
+    except OSError as exc:
+        errors.append(
+            f"{path.relative_to(ROOT)} exists but cannot be read ({exc.strerror}), so the "
+            "contract was not checked against the rulebook. Fix it rather than treating this "
+            "as a pass."
+        )
+        return None
+
+
+contract_note = ""
+_steering = ROOT / ".steering" / "tech.md"
+_tech = (_read(_steering) or "") if _steering.is_file() else ""
+_docs = _steering_value(_tech, "Docs").strip() or "docs/"
+if "://" in _docs:
+    # A URL is not a directory. Failing would leave a multi-repo project no way to keep this
+    # guard, whose lock half still applies to it; passing silently would read as having looked.
+    contract_note = f"contract not checked: `- Docs: {_docs}` names another repository"
+elif (_contract_path := ROOT / _docs / "CONTRACT.md").is_file() and (
+    _contract := _read(_contract_path)
+) is not None:
+    _contract_rel = _contract_path.relative_to(ROOT)
+    _ids = _judgment_ids(_contract)
+    _reviewer = _steering_value(_tech, "Reviewer").strip()
+    if not _ids:
+        contract_note = f"{_contract_rel} cites no Judgment rule id"
+    elif not _reviewer:
+        errors.append(
+            f"{_contract_rel} cites Judgment rule(s) {', '.join(_ids)}, but .steering/tech.md "
+            "has no `- Reviewer:` line naming the reviewer whose rulebook must define them."
+        )
+    else:
+        _rule_dirs = [r for d in AGENT_DIRS if (r := d / _reviewer / "rules").is_dir()]
+        if not _rule_dirs:
+            _where = ", ".join(str(d.relative_to(ROOT)) for d in AGENT_DIRS)
+            errors.append(
+                f"{_contract_rel} cites Judgment rule(s) {', '.join(_ids)} of reviewer "
+                f"`{_reviewer}`, but there is no rulebook for it: no `{_reviewer}/rules/` in "
+                f"{_where or 'any reviewer directory'}.\n"
+                f"      Those rows have no enforcer. Restore the project's rulebook from git "
+                f"history, or run `contract` to compile them into the reviewer installed."
+            )
+        _defined_in: list[str] = []
+        for _rules in _rule_dirs:
+            _rel = _rules.relative_to(ROOT)
+            if not os.access(_rules, os.R_OK | os.X_OK):
+                errors.append(f"{_rel} exists but cannot be read, so the contract was not checked.")
+                continue
+            _texts = [_read(p) for p in sorted(_rules.iterdir()) if p.suffix == ".md"]
+            if None in _texts:
+                continue
+            _book = "\n".join(t for t in _texts if t is not None)
+            if _missing := [i for i in _ids if not _defines(_book, i)]:
+                errors.append(
+                    f"{_rel}: {_contract_rel} cites Judgment rule(s) this rulebook does not "
+                    f"define: {', '.join(_missing)}\n"
+                    f"      Those rows have no enforcer. Restore the project's rulebook "
+                    f"(git log -- {_rel}), or run `contract` to compile them into it."
+                )
+            else:
+                _defined_in.append(str(_rel))
+        if _defined_in and len(_defined_in) == len(_rule_dirs):
+            contract_note = (
+                f"{_contract_rel} cites {len(_ids)} Judgment rule id(s), each defined in "
+                f"{', '.join(_defined_in)}"
+            )
+
 if errors:
     print("lock check FAILED", file=sys.stderr)
     for e in errors:
@@ -136,6 +262,8 @@ if errors:
 # kept reporting success while hashing nothing at all. Naming the directories scanned in
 # every branch is what makes a count of zero legible without reading this file.
 scanned = ", ".join(str(d.relative_to(ROOT)) for d in AGENT_DIRS) or "no reviewer directory"
+if contract_note:
+    print(f"check-locks: {contract_note}")
 
 if not lock_paths:
     # Legitimate: a project may install this guard before its first reviewer exists. Failing
