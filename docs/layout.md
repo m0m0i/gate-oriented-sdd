@@ -43,7 +43,7 @@ your-project/
 │
 ├── AGENTS.md                      ← init         canonical rulebook, always generated
 ├── CLAUDE.md                      ← init         pointer for Claude Code (imports AGENTS.md with @AGENTS.md, #239)
-├── GEMINI.md                      ← init         pointer for Antigravity (points to AGENTS.md)
+├── GEMINI.md                      ← init         symlink to AGENTS.md for Antigravity, #239
 │
 ├── .claude/                       ← init         Claude Code wiring — no gate script: the gates ship from the plugin
 │   ├── settings.json              ←   the marketplace declaration, the enabled plugin, the PostToolUse fast check

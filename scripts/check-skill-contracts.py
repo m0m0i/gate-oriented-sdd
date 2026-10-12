@@ -362,6 +362,14 @@ CONTRACTS = (
         "Review cannot defend it: 'point to it' reads as the same instruction, shorter.",
     ),
     (
+        "skills/init/SKILL.md",
+        "**On Antigravity, `GEMINI.md` is a symlink to `AGENTS.md`**",
+        "Antigravity CLI 1.3.3 expands no @-import and follows no prose pointer in GEMINI.md, "
+        "and reads no project AGENTS.md on its own; only a symlink or inline content loads it "
+        "(#239, docs/verified.md). Review cannot defend it: a GEMINI.md mirroring CLAUDE.md's "
+        "@AGENTS.md reads as consistency, and it loads nothing.",
+    ),
+    (
         "skills/sprint/SKILL.md",
         "creates no parallel record",
         "#79. The rule used to read \"writes no document\", which is true of the tracker and "
