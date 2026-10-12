@@ -149,15 +149,19 @@ def _cell(text: str) -> str:
     return text.strip().strip("*`").strip()
 
 
-def _judgment_ids(contract: str) -> list[str]:
+def _judgment_ids(contract: str) -> list[str] | None:
     """The id of every row whose Tier is Judgment, in any table with `id` and `Tier` columns.
 
     Columns are found by the header rather than by position, so a contract that reorders or
     adds columns is still read; a table without both headers is not a Rules table and is
     skipped. A combined tier — `Mechanical + Judgment`, a rule both linted and judged — is a
     Judgment row: matching the whole cell left five real rows unchecked on #84's own run.
+
+    None when no table has both headers: the contract was not read, which must not be reported
+    as a contract that cites nothing.
     """
     ids: list[str] = []
+    found = False
     cols: tuple[int, int] | None = None
     for line in contract.splitlines():
         if not line.strip().startswith("|"):
@@ -167,13 +171,14 @@ def _judgment_ids(contract: str) -> list[str]:
         names = [c.lower() for c in cells]
         if "id" in names and "tier" in names:
             cols = (names.index("id"), names.index("tier"))
+            found = True
         elif (
             cols
             and len(cells) > max(cols)
             and "judgment" in re.split(r"[^a-z]+", cells[cols[1]].lower())
         ):
             ids.append(cells[cols[0]])
-    return ids
+    return ids if found else None
 
 
 def _defines(rulebook: str, rule_id: str) -> bool:
@@ -187,12 +192,17 @@ def _defines(rulebook: str, rule_id: str) -> bool:
     return re.search(head + re.escape(rule_id) + r"(?![\w-])", rulebook, re.M) is not None
 
 
+def _show(path: pathlib.Path) -> str:
+    """The path as a reader should see it: relative to the root, even from outside it."""
+    return os.path.relpath(path, ROOT)
+
+
 def _read(path: pathlib.Path) -> str | None:
     try:
         return path.read_text()
     except OSError as exc:
         errors.append(
-            f"{path.relative_to(ROOT)} exists but cannot be read ({exc.strerror}), so the "
+            f"{_show(path)} exists but cannot be read ({exc.strerror}), so the "
             "contract was not checked against the rulebook. Fix it rather than treating this "
             "as a pass."
         )
@@ -207,13 +217,17 @@ if "://" in _docs:
     # A URL is not a directory. Failing would leave a multi-repo project no way to keep this
     # guard, whose lock half still applies to it; passing silently would read as having looked.
     contract_note = f"contract not checked: `- Docs: {_docs}` names another repository"
-elif (_contract_path := ROOT / _docs / "CONTRACT.md").is_file() and (
-    _contract := _read(_contract_path)
-) is not None:
-    _contract_rel = _contract_path.relative_to(ROOT)
+elif not (_contract_path := ROOT / _docs / "CONTRACT.md").is_file():
+    contract_note = f"no {_show(_contract_path)}, so no contract rule to check"
+elif (_contract := _read(_contract_path)) is not None:
+    _contract_rel = _show(_contract_path)
     _ids = _judgment_ids(_contract)
     _reviewer = _steering_value(_tech, "Reviewer").strip()
-    if not _ids:
+    if _ids is None:
+        contract_note = (
+            f"contract not checked: {_contract_rel} has no table with `id` and `Tier` columns"
+        )
+    elif not _ids:
         contract_note = f"{_contract_rel} cites no Judgment rule id"
     elif not _reviewer:
         errors.append(

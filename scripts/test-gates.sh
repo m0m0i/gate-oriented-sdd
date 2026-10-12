@@ -2688,8 +2688,9 @@ r=$(contract_repo ct-nocontract); mv "$r/docs/CONTRACT.md" "$r/docs/NOT-A-CONTRA
 out=$(run_locks "$r")
 case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
 case "$out" in *"match their locks"*) c2=ok ;; *) c2=no ;; esac
-[ "$c1$c2" = "okok" ] && report "no contract leaves the lock half to decide" ok \
-  || report "no contract leaves the lock half to decide" no "exit=$c1 locks=$c2 [$out]"
+case "$out" in *"no docs/CONTRACT.md"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "no contract leaves the lock half to decide, and says so" ok \
+  || report "no contract leaves the lock half to decide, and says so" no "exit=$c1 locks=$c2 said=$c3 [$out]"
 
 # 234. `- Docs:` naming another repository: the contract cannot be read from here. The lock
 # half still decides the exit — failing would leave a multi-repo project no way to keep the
@@ -2713,6 +2714,41 @@ case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
 case "$err" in *"P-4"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "a Mechanical + Judgment row is checked as a Judgment row" ok \
   || report "a Mechanical + Judgment row is checked as a Judgment row" no "exit=$c1 id=$c2 [$err]"
+
+# 236. A contract with no Judgment rows asks nothing of the rulebook — so a reviewer with no
+# rulebook at all must still pass. Without the branch, a minimum-mode project whose contract is
+# all Mechanical and Narrative falls into the no-rulebook error and is blocked for a rule it
+# never wrote. The missing rulebook is what makes this case fail if the branch goes.
+r=$(lock_repo ct-nojudgment); mkdir -p "$r/.steering" "$r/docs"
+printf -- '- Reviewer: proj\n' > "$r/.steering/tech.md"
+printf '| id | Rule | Tier |\n| :-- | :-- | :-- |\n| M-1 | a linted rule | Mechanical |\n| N-1 | context | Narrative |\n' > "$r/docs/CONTRACT.md"
+out=$(run_locks "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *"cites no Judgment rule id"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a contract with no Judgment rows passes with no rulebook" ok \
+  || report "a contract with no Judgment rows passes with no rulebook" no "exit=$c1 said=$c2 [$out]"
+
+# 237. A contract with no table carrying both `id` and `Tier` headers was not read, and must
+# not say it cites no Judgment id — that is "did not look" reported as "found nothing".
+r=$(contract_repo ct-notable)
+printf '# Development contract\n\n| Rule id | Rule | Tier (see above) |\n| :-- | :-- | :-- |\n| P-9 | a rule | Judgment |\n' > "$r/docs/CONTRACT.md"
+out=$(run_locks "$r")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *"not checked"*) c2=ok ;; *) c2=no ;; esac
+case "$out" in *"cites no Judgment rule id"*) c3=no ;; *) c3=ok ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a contract with no id and Tier table says it was not checked" ok \
+  || report "a contract with no id and Tier table says it was not checked" no "exit=$c1 said=$c2 not-found-nothing=$c3 [$out]"
+
+# 238. An absolute `- Docs:` path is read like a relative one, not a traceback: `init` offers
+# a path outside the repository for a shared documentation checkout.
+r=$(contract_repo ct-absdocs); cite_rule "$r" P-3
+printf -- '- Reviewer: proj\n- Docs: %s/docs\n' "$r" > "$r/.steering/tech.md"
+out=$(run_locks "$r"); err=$(cat "$TMP/lerr")
+case "$out" in *"exit=1"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"P-3"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"Traceback"*) c3=no ;; *) c3=ok ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "an absolute Docs path is checked, not a traceback" ok \
+  || report "an absolute Docs path is checked, not a traceback" no "exit=$c1 id=$c2 no-traceback=$c3 [$err]"
 
 # 20. A legacy receipt with no reviewed_by must still clear the gate.
 #
