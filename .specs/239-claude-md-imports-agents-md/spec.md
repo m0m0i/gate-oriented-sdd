@@ -18,7 +18,7 @@
 
 ### Clarifications
 - 2026-10-12 — Amended at the maintainer's direction (fold Antigravity into #294): the maintainer's probe on Antigravity CLI 1.3.3 found `GEMINI.md` written as `@AGENTS.md`, as a prose pointer, or absent all leave `AGENTS.md` out, while a symlink and inline content load it. AC1, AC2, AC3 and AC4 widen to cover `GEMINI.md`, and it leaves Out of scope.
-None needed — the issue's open questions are answered by the repo: the row's Claude Code cell can only mean the consumer's `AGENTS.md`, since Claude Code never reads a plugin's install directory; the import is the form #237 measured here and works under every **Project instructions** value but `managed-only`, while a symlink replaces a file the project may already own and dropping `CLAUDE.md` needs a newer floor; extending the sentence keeps #146's pin.
+Before that amendment, none needed — the issue's open questions are answered by the repo: the row's Claude Code cell can only mean the consumer's `AGENTS.md`, since Claude Code never reads a plugin's install directory; the import is the form #237 measured here and works under every **Project instructions** value but `managed-only`, while a symlink replaces a file the project may already own and dropping `CLAUDE.md` needs a newer floor; extending the sentence keeps #146's pin.
 
 ## 2. Design (HOW)
 - Fix approach: one sentence in `init` naming the import and the reason, pinned; a measured probe of the consumer form; the four claim sites reworded to what was measured. Narrower — prose only — leaves the fidelity row claiming an unmeasured form. Wider — a guard that a consumer's `CLAUDE.md` carries the import — would block projects whose user sets `claude-md-and-agents-md` and needs no import.
