@@ -2203,6 +2203,55 @@ echo '# changed' >> "$r/hooks/quality-gate.sh"; run_qg "$r" >/dev/null; n3=$(qgp
 [ "$n1:$n2:$n3:$n4" = "2:3:4:6" ] && report "a changed Validators line, globs line, gate or plugin root runs the validators again" ok \
   || report "a changed Validators line, globs line, gate or plugin root runs the validators again" no "runs=$n1:$n2:$n3:$n4 (want 2:3:4:6)"
 
+# 253. #297 AC8, unchanged — with no `- Source globs:` line the gate runs on every turn end, as it
+#      always has: a project that has not said what source is gets no skip. RED-CAPABLE under
+#      "fingerprint the whole tree when the line is absent" (`[ -n "$globs" ]` -> `true`), which
+#      skips the second, unchanged turn.
+r=$(qgp_repo qgp-noglobs)
+printf -- '- Validators: sh -c "echo x >> ran.log"\n' > "$r/.steering/tech.md"
+run_qg "$r" >/dev/null; run_qg "$r" >/dev/null; n=$(qgp_runs "$r")
+[ "$n" = 2 ] && report "with no Source globs line the quality gate runs on every turn end" ok \
+  || report "with no Source globs line the quality gate runs on every turn end" no "runs=$n"
+
+# 254. #297 AC8, unchanged — outside a git work tree there is nothing to fingerprint, and the gate
+#      runs every time. RED-CAPABLE under "not a work tree, so pass" — an early
+#      `[ "$(git rev-parse --is-inside-work-tree)" = true ] || gate_pass`: measured.
+r="$TMP/qgp-nogit"; mkdir -p "$r/hooks" "$r/.steering"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+printf -- '- Validators: sh -c "echo x >> ran.log"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"; echo one > "$r/src.txt"
+( cd "$r" && GIT_CEILING_DIRECTORIES="$TMP" sh hooks/quality-gate.sh; GIT_CEILING_DIRECTORIES="$TMP" sh hooks/quality-gate.sh ) >/dev/null 2>&1
+n=$(qgp_runs "$r")
+[ "$n" = 2 ] && report "outside a git work tree the quality gate runs on every turn end" ok \
+  || report "outside a git work tree the quality gate runs on every turn end" no "runs=$n"
+
+# 255. #297 AC8 — the gate writes no git object and leaves the real index alone. The fingerprint is
+#      built in a copy with `--info-only`; main's `git status` rewrote `.git/index` whenever an
+#      entry was stat-dirty, under the index lock a concurrent `git commit` needs. Here a source
+#      file is touched without changing (stat-dirty), another is edited, and one is untracked.
+#      Index bytes: RED on main. Objects: RED-CAPABLE under "drop `--info-only`".
+r=$(qgp_repo qgp-noindexwrite); echo two > "$r/b.txt"; qgp_commit "$r" b
+touch -t 202601010000 "$r/src.txt"; echo more >> "$r/b.txt"; echo new > "$r/c.txt"
+i1=$(cksum < "$r/.git/index"); o1=$( cd "$r" && git count-objects -v | sed -n 's/^count: //p' )
+run_qg "$r" >/dev/null
+i2=$(cksum < "$r/.git/index"); o2=$( cd "$r" && git count-objects -v | sed -n 's/^count: //p' )
+[ "$i1" = "$i2" ] && c1=ok || c1=no
+[ "$o1" = "$o2" ] && c2=ok || c2=no
+[ "$c1$c2" = okok ] && report "the quality gate leaves the index unmodified and writes no git object" ok \
+  || report "the quality gate leaves the index unmodified and writes no git object" no "index=$c1 objects=$c2 ($o1 -> $o2)"
+
+# 256. #297 AC8 — the record is per worktree: a linked worktree of a checkout that passed has no
+#      record of its own, so its first turn end runs, and writes its record under its own git
+#      directory without touching the main checkout's. RED on main, which keeps no record.
+r=$(qgp_repo qgp-worktree); run_qg "$r" >/dev/null; rec1=$(cat "$r/.git/gate-sdd/quality-pass" 2>/dev/null)
+( cd "$r" && git worktree add -q -b wt2 "$TMP/qgp-worktree-wt" ) >/dev/null 2>&1
+run_qg "$TMP/qgp-worktree-wt" >/dev/null; n=$(qgp_runs "$TMP/qgp-worktree-wt")
+[ -n "$rec1" ] && c1=ok || c1=no
+[ "$n" = 1 ] && c2=ok || c2=no
+[ -s "$r/.git/worktrees/qgp-worktree-wt/gate-sdd/quality-pass" ] && c3=ok || c3=no
+[ "$(cat "$r/.git/gate-sdd/quality-pass" 2>/dev/null)" = "$rec1" ] && c4=ok || c4=no
+[ "$c1$c2$c3$c4" = okokokok ] && report "a linked worktree runs once and keeps its own pass record" ok \
+  || report "a linked worktree runs once and keeps its own pass record" no "main-record=$c1 wt-ran=$c2 wt-record=$c3 main-untouched=$c4"
+
 # --- both gates: the library they block through ----------------------------------------
 #
 # Every case above runs these gates with a whole gate-lib.sh. The three states below are the
