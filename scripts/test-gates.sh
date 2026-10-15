@@ -1872,12 +1872,20 @@ qg_repo() { # $1 = name
   echo "$r"
 }
 run_qg() { ( cd "$1" && sh hooks/quality-gate.sh 2>"$TMP/qerr"; echo "exit=$?" ) }
+# Since #297 the gate skips only a tree whose source matches the last PASSING run, and a fresh
+# fixture has none, so a case that asserts silence records one first: the validator is red only
+# while `red.flag` exists — untracked, and not source — so it runs green once, and then any run
+# at all would block. `exit=0` after this can only be the skip.
+qg_seed() { # $1 = repo, $2 = Source globs (default *.txt)
+  printf -- '- Validators: sh -c "test ! -f red.flag || { echo RAN >&2; exit 1; }"\n- Source globs: %s\n' "${2:-*.txt}" > "$1/.steering/tech.md"
+  run_qg "$1" >/dev/null; : > "$1/red.flag"
+}
 
-r=$(qg_repo qg-clean); out=$(run_qg "$r")
+r=$(qg_repo qg-clean); qg_seed "$r"; out=$(run_qg "$r")
 case "$out" in *"exit=0"*) report "quality gate silent when nothing changed" ok ;;
                         *) report "quality gate silent when nothing changed" no "$out" ;; esac
 
-r=$(qg_repo qg-docs); echo more >> "$r/NOTES.md"; out=$(run_qg "$r")
+r=$(qg_repo qg-docs); qg_seed "$r"; echo more >> "$r/NOTES.md"; out=$(run_qg "$r")
 case "$out" in *"exit=0"*) report "quality gate silent on a docs-only change" ok ;;
                         *) report "quality gate silent on a docs-only change" no "$out" ;; esac
 
@@ -1908,8 +1916,7 @@ case "$out" in *"exit=2"*) report "quoted globs still match (no fail-open)" ok ;
 #
 #      RED-CAPABLE under "quote the substitution" — `"$(printf ...)"`. Measured in the spec's
 #      mutation record.
-r=$(qg_repo qg-multiglob)
-printf -- '- Validators: sh -c "echo RAN >&2; exit 1"\n- Source globs: :(glob)docs/*.md :(glob)*.txt\n' > "$r/.steering/tech.md"
+r=$(qg_repo qg-multiglob); qg_seed "$r" ':(glob)docs/*.md :(glob)*.txt'
 echo more >> "$r/NOTES.md"; out=$(run_qg "$r")
 case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
 echo more >> "$r/src.txt"; out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
@@ -1934,7 +1941,7 @@ cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
 printf -- '- Validators: sh -c "echo RAN >&2; exit 1"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
 ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
   && echo one > a.txt && echo two > sub/b.txt && echo doc > NOTES.md && git add -A && git commit -qm init ) >/dev/null 2>&1
-echo more >> "$r/NOTES.md"; out=$(run_qg "$r")
+qg_seed "$r"; echo more >> "$r/NOTES.md"; out=$(run_qg "$r")
 case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
 echo more >> "$r/sub/b.txt"; out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
 case "$out" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
@@ -2000,6 +2007,72 @@ elif [ -n "$splits" ]; then
 else
   report "no shipped shell splits a Source globs value outside set -f" ok
 fi
+
+# --- quality gate: source changed since the last pass, committed or not (#297) ---------
+#
+# `implement` commits every task, and until #297 the skip asked `git status`, which sees only
+# uncommitted change: a red task committed during the turn ended it with `{}` and no validator
+# run. Every case above leaves its change uncommitted, which is how that went unseen. These drive
+# commits through the gate. The validator logs each run to `ran.log` — untracked, and not a
+# `*.txt`, so not source — and fails only while `src.txt` holds RED, so a case can tell a skip
+# from a pass and a pass from a block.
+qgp_repo() { # $1 = name — the :1866 fixture with a validator that is red only on a marker
+  r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+  printf -- '- Validators: sh -c "echo x >> ran.log; ! grep -q RED src.txt || { echo RAN-RED >&2; exit 1; }"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && printf 'ran.log\n' > .git/info/exclude && echo one > src.txt && echo doc > NOTES.md \
+    && git add -A && git commit -qm init ) >/dev/null 2>&1
+  echo "$r"
+}
+qgp_runs() { [ -f "$1/ran.log" ] && wc -l < "$1/ran.log" | tr -d ' ' || echo 0; }
+qgp_commit() { ( cd "$1" && git add -A && git commit -qm "$2" ) >/dev/null 2>&1; }
+
+# 239. #297 AC1, AC4 — a red change committed before the gate's first run blocks. There is no
+#      recorded pass, so the gate runs; seeding a record from HEAD instead was measured to pass
+#      this exact tree, which is why no record means run. RED on main: exit 0, no run.
+r=$(qgp_repo qgp-first); echo RED >> "$r/src.txt"; qgp_commit "$r" red
+out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *RAN-RED*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = okok ] && report "a red task committed before the quality gate's first run blocks" ok \
+  || report "a red task committed before the quality gate's first run blocks" no "$out ran=$c2"
+
+# 240. #297 AC1 — the issue's reproduction: a turn passes, the next task is committed red, and
+#      the turn ends. RED on main: the second run is `{}` exit 0 with no validator run.
+r=$(qgp_repo qgp-commit); echo two >> "$r/src.txt"; out1=$(run_qg "$r")
+echo RED >> "$r/src.txt"; qgp_commit "$r" 'task 1'; out2=$(run_qg "$r"); err=$(cat "$TMP/qerr")
+case "$out1" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out2" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *RAN-RED*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = okokok ] && report "a red task committed during the turn blocks at the turn's end" ok \
+  || report "a red task committed during the turn blocks at the turn's end" no "pass=$c1 blocks=$c2 ran=$c3"
+
+# 241. #297 AC3 — a red commit, then a turn that only commits the work log. The red is not fixed,
+#      so the turn is not clean. RED on main: both runs are `{}` exit 0.
+r=$(qgp_repo qgp-docs-after); echo RED >> "$r/src.txt"; qgp_commit "$r" red; run_qg "$r" >/dev/null
+echo log >> "$r/NOTES.md"; qgp_commit "$r" worklog; out=$(run_qg "$r")
+case "$out" in *"exit=2"*) report "a docs-only turn after a red commit still blocks" ok ;;
+                        *) report "a docs-only turn after a red commit still blocks" no "$out" ;; esac
+
+# 242. #297 AC1 — the same on a feature branch cut from main, which is where `implement` works.
+#      RED on main: exit 0.
+r=$(qgp_repo qgp-branch); ( cd "$r" && git checkout -qb 1-feature ) >/dev/null 2>&1
+echo RED >> "$r/src.txt"; qgp_commit "$r" red; out=$(run_qg "$r")
+case "$out" in *"exit=2"*) report "a red task committed on a feature branch blocks" ok ;;
+                        *) report "a red task committed on a feature branch blocks" no "$out" ;; esac
+
+# 243. #297 AC2 — the cost #15 bought back stays bought: a change that passed while uncommitted
+#      is then committed, and a turn after that changes nothing. Neither runs the validators,
+#      because committing content that passed is not a change. Green on main too, which skips
+#      both for the wrong reason. RED-CAPABLE under "never read the record" (`elif false`),
+#      which also turns the four silence cases above red: measured.
+r=$(qgp_repo qgp-commit-passed); echo two >> "$r/src.txt"; run_qg "$r" >/dev/null; n1=$(qgp_runs "$r")
+qgp_commit "$r" 'task 1'; out1=$(run_qg "$r"); out2=$(run_qg "$r"); n2=$(qgp_runs "$r")
+case "$out1$out2" in *"exit=0"*"exit=0"*) c1=ok ;; *) c1=no ;; esac
+[ "$n1:$n2" = "1:1" ] && c2=ok || c2=no
+[ "$c1$c2" = okok ] && report "committing content that already passed, and an idle turn after, run no validator" ok \
+  || report "committing content that already passed, and an idle turn after, run no validator" no "silent=$c1 runs=$n1:$n2"
 
 # --- both gates: the library they block through ----------------------------------------
 #
