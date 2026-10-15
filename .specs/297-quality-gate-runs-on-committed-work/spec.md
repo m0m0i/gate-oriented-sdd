@@ -1,5 +1,5 @@
 # Spec: the quality gate skips a turn whose source change was committed before the turn ended
-- Slug: 297-quality-gate-runs-on-committed-work   Issue: 297   Type: bug   Status: approved
+- Slug: 297-quality-gate-runs-on-committed-work   Issue: 297   Type: bug   Status: done
 - Author: m0m0i   Date: 2026-10-15
 
 ## 1. Requirements (WHAT / WHY)
