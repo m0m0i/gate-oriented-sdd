@@ -82,8 +82,8 @@ jobs:
         run: ./scripts/check-contract-path.py
 
       # The document set is the one validator the turn-end gate structurally cannot cover:
-      # quality-gate.sh runs the `- Validators:` line only when a path matching
-      # `- Source globs:` changed, and a document is never source — the two sets are disjoint
+      # quality-gate.sh runs the `- Validators:` line only when the source matching
+      # `- Source globs:` has changed since it last passed, and a document is never source — the two sets are disjoint
       # by construction, because one line points at documents and the other at code. So the
       # guard ran on every turn where nothing it checks could have changed, and was absent on
       # the turns where something did. CI is where that window closes.

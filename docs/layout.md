@@ -99,6 +99,8 @@ A **milestone** (or Linear cycle, or Jira sprint) is an optional grouping label 
 
 `docs/` holds decisions — slow-moving, argued over, occasionally refined. `.specs/` and `.work_logs/` hold the record of work — fast-moving, append-only, archived when done. `.steering/` is the bridge: a summary of the decisions, in the form the skills and gates actually read.
 
+One piece of harness state lives outside all of these, and outside the tree above: the quality gate's record of the last source state at which every validator passed, at `$(git rev-parse --git-path gate-sdd/quality-pass)` — `.git/gate-sdd/quality-pass` in a main checkout, `.git/worktrees/<name>/gate-sdd/quality-pass` in a linked one. It is per worktree, never tracked, written only by `quality-gate.sh` after a full pass and read by nothing else; deleting it costs one validator run (#297).
+
 ## The harness repository
 
 ```

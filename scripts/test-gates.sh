@@ -1863,7 +1863,7 @@ else
        "exit=$c1 json=$c2 msg=$c3 names-file=$c4"
 fi
 
-# --- quality gate: only pays when something matching Source globs changed ---------------
+# --- quality gate: only pays when the source changed since the last pass ----------------
 qg_repo() { # $1 = name
   r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
   cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
@@ -1911,8 +1911,8 @@ case "$out" in *"exit=2"*) report "quoted globs still match (no fail-open)" ok ;
 # 164. #207 — the quality gate's own word-split, `set -- $(...)` in quality-gate.sh, which
 #      shellcheck reports as SC2046 and the issue did not count: the same expansion, one hook
 #      over, for the same reason. Quoted, `set --` receives the whole line as ONE pathspec,
-#      `git status` matches nothing, `grep -q .` fails, and the gate passes having run no
-#      validator. The `qg-src` case above cannot see that: its line holds one glob.
+#      which matches nothing, so the fingerprint is of nothing, equals the seeded record, and
+#      the gate passes having run no validator. The `qg-src` case above cannot see that: its line holds one glob.
 #
 #      Two patterns, the dirty file matching only the second. The docs-only half is the control
 #      here for the opposite reason to case 160's: an EMPTY read of the line runs every validator
@@ -5094,9 +5094,10 @@ case "$err" in *PRD.md*) c6=no ;; *) c6=ok ;; esac
 # #127. `init` writes `- Mode:` and `- Docs: docs/`, copies this checker into the project and
 # adds it to `- Validators:` — and creates no `docs/` and none of PRD/DESIGN/BACKLOG, which the
 # checker required in BOTH modes. So every first install armed its own gate red. CAP-4's
-# falsifier stated literally, and DORMANT: quality-gate.sh runs the Validators line only when a
-# `- Source globs:` path changed, and a document is never source, so it fired on the user's
-# first real edit with the cause a day behind them.
+# falsifier stated literally, and DORMANT: quality-gate.sh then ran the Validators line only when
+# a `- Source globs:` path had changed, and a document is never source, so it fired on the user's
+# first real edit with the cause a day behind them. Since #297 a first turn end with no recorded
+# pass runs the line, so the same install would block at once.
 #
 # The fixture is built from what step 3 writes rather than by deleting from docset_repo, and
 # that is the point of it: it is a model of the installer's output, so it goes red again the
