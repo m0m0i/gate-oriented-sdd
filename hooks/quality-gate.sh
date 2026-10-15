@@ -89,19 +89,74 @@ validators=$(gate_steering_read .steering/tech.md Validators); rc=$?
 [ "$rc" -eq 2 ] && gate_block "Quality gate: .steering/tech.md exists and cannot be read, so this gate cannot find out which validators it is supposed to run. Fix the file's permissions rather than treating this as a pass — a gate that could not look is not a gate that found nothing."
 [ -n "$validators" ] || gate_pass
 
-# Skip when nothing this gate is about has changed.
+# Skip when the source has not changed since the validators last passed.
 #
-# Without this the gate pays full price on every turn end, including the many that touch
+# Without a skip the gate pays full price on every turn end, including the many that touch
 # only docs, specs, or the work log. That is how a gate earns the reputation that gets it
 # switched off — and the comment above about keeping it fast is worth nothing if the script
 # itself ignores it.
 #
+# The question is "has the source changed since the last pass?", not "is any source
+# uncommitted?". Until #297 the skip asked the second, with `git status`, and `implement`
+# commits every task — so a red task committed during the turn ended it with `{}` and no
+# validator run, and stayed invisible to every turn end after it. The answer is a fingerprint
+# of the source's CONTENT (below), compared with a record written only when every validator
+# passed. Committing content that already passed does not change it; anything else does.
+#
 # `Source globs` is the same line the review gate reads to decide what counts as reviewable
 # source, so a project states "what is code here" once and both gates obey it. When the line
-# is absent the gate runs: for a guarantee, failing toward MORE checking is the right
-# direction.
+# is absent, outside a work tree, with no record yet, or when any step below fails, the gate
+# runs: for a guarantee, failing toward MORE checking is the right direction.
+
+# The fingerprint of the source the pathspecs match, in $fp; on any failure $fp is empty and
+# $qg_step names what failed. Built in a COPY of the index so the real one is never touched,
+# and every git call is checked on its own — never through a pipeline, whose status would be
+# its last command's, which is how `| grep -q .` read git's 128 on a rejected pathspec as
+# "nothing changed".
+#
+#   - `cp -p`, not `cp`: git decides an entry is racily clean by comparing it with the index
+#     FILE's mtime, and a copy stamped "now" lets a same-size edit made in the same second as
+#     the last index write match on stat alone and keep its old blob id — a red tree passing.
+#   - `ls-files -c -o --exclude-standard` lists tracked and untracked-not-ignored files whatever
+#     `status.showUntrackedFiles` says, and `update-index --add --remove --info-only` re-hashes
+#     them into the copy without writing an object.
+#   - Hashed in with the listing: a format tag; the Validators and Source globs lines, so adding
+#     a validator runs it; the plugin-root variables, so a pass in one of #264's two
+#     environments is not trusted by the other; and this gate's own files, so an upgrade by
+#     re-copy runs once.
+#   - GIT_INDEX_FILE prefixes git itself only. On a shell function, macOS sh keeps the
+#     assignment and exports it to every validator after it.
+qg_fingerprint() {  # <pathspec>...
+  fp=""
+  qg_tmp=$(mktemp "${TMPDIR:-/tmp}/gate-sdd-qg.XXXXXX") || { qg_step="mktemp"; return 1; }
+  qg_idx=$(git rev-parse --git-path index) || { qg_step="git rev-parse --git-path index"; return 1; }
+  if [ -f "$qg_idx" ]; then
+    cp -p "$qg_idx" "$qg_tmp.idx" || { qg_step="copying the index"; return 1; }
+  fi
+  git ls-files -z -c -o --exclude-standard -- "$@" > "$qg_tmp.list" || { qg_step="git ls-files"; return 1; }
+  GIT_INDEX_FILE="$qg_tmp.idx" git update-index -z --add --remove --info-only --stdin < "$qg_tmp.list" \
+    || { qg_step="git update-index"; return 1; }
+  { printf 'gate-sdd quality-pass 1\n%s\n%s\n%s\n%s\n' "$validators" "$globs" "${CLAUDE_PLUGIN_ROOT-}" "${GATE_SDD_PLUGIN_ROOT-}" \
+    && git hash-object --no-filters -- "$DIR/quality-gate.sh" "$DIR/gate-lib.sh" \
+    && GIT_INDEX_FILE="$qg_tmp.idx" git ls-files -s -- "$@"; } > "$qg_tmp.fp" || { qg_step="listing the source"; return 1; }
+  fp=$(git hash-object --stdin < "$qg_tmp.fp") || { fp=""; qg_step="git hash-object"; return 1; }
+}
+qg_tmp=""
+trap '[ -z "$qg_tmp" ] || rm -f "$qg_tmp" "$qg_tmp.idx" "$qg_tmp.idx.lock" "$qg_tmp.list" "$qg_tmp.fp"' EXIT
+trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
+
+fp=""; qg_step=""; qg_record=""
+# The record is per worktree — git keeps a name it does not know under the worktree's own git
+# directory — never tracked, and relative, which is safe because the gate is at the toplevel. It
+# is resolved whatever the globs line says, because the removal below must happen on every run:
+# a turn that failed with the line absent once left an older pass behind (#297's review, case 257).
+qg_tree=""
+if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true ]; then
+  qg_tree=yes
+  qg_record=$(git rev-parse --git-path gate-sdd/quality-pass) || { qg_record=""; qg_step="git rev-parse --git-path"; }
+fi
 globs=$(gate_steering_value .steering/tech.md 'Source globs')
-if [ -n "$globs" ] && git rev-parse --git-dir >/dev/null 2>&1; then
+if [ -n "$globs" ] && [ -n "$qg_tree" ]; then
   # Unquoted on purpose: the line holds several space-separated globs and each has to reach
   # git as its own pathspec. Quotes inside a variable are NOT removed on expansion, so a
   # line written '*.py' would hand git a literal quote and match nothing — the same
@@ -112,13 +167,29 @@ if [ -n "$globs" ] && git rev-parse --git-dir >/dev/null 2>&1; then
   # with one unchanged `.py` at the root handed git that file's name, git found it clean, and
   # the gate passed having run nothing for every change below the root (#254). The library's
   # three copies of this split sit inside `set -f`, and so does this one now. The two lines
-  # are whole lines of their own, because case 203 recognises the region by them, and
+  # are whole lines of their own, because case 204 recognises the region by them, and
   # expansion is back on before the validator loop, where an `ls *.log` has to work.
   set -f
   # shellcheck disable=SC2046  # deliberate word-split: one pathspec per glob (#1); quoted, case 164 goes red
   set -- $(printf '%s' "$globs" | tr -d '\042\047')   # \042 = " and \047 = ', stripped so git sees bare globs
   set +f
-  git status --porcelain -- "$@" 2>/dev/null | grep -q . || gate_pass
+  if [ -n "$qg_record" ] && qg_fingerprint "$@"; then
+    if [ -e "$qg_record" ] && ! [ -r "$qg_record" ]; then
+      qg_step="reading $qg_record"
+    elif [ -r "$qg_record" ] && [ "$(cat "$qg_record")" = "$fp" ]; then
+      gate_pass
+    fi
+  fi
+fi
+# Q2 of #297's spec: a step that failed runs the validators and says so, whatever they find — a
+# project paying for a full run on every turn should be able to find out why.
+[ -z "$qg_step" ] || printf 'Quality gate: could not tell whether source changed since the validators last passed (%s failed), so they ran.\n' "$qg_step" >&2
+# The validators are about to run, so the last pass stops counting until they pass again —
+# whatever the globs line says. Kept through a failure, the record matched source put back to a
+# state that passed EARLIER, and the gate skipped a tree still red from an input outside the
+# globs (cases 248, 257). A run cut off by the hook timeout leaves no pass behind either.
+if [ -n "$qg_record" ] && [ -e "$qg_record" ] && ! rm -f "$qg_record"; then
+  printf 'Quality gate: could not remove the last pass record at %s; the validators run anyway.\n' "$qg_record" >&2
 fi
 
 failed=""
@@ -139,6 +210,18 @@ $(printf '%s' "$out" | tail -20)"
   IFS=,
 done
 IFS=$old_ifs
+
+# Record the pass — the fingerprint taken BEFORE the first validator ran, so an edit made during
+# the run is not recorded as passed — through a temp file and `mv` in the same directory, so a
+# reader never sees half a value. A record that cannot be written costs the next turn a run,
+# never a pass, and says so.
+if [ -z "$failed" ] && [ -n "$fp" ] && [ -n "$qg_record" ]; then
+  if ! { mkdir -p "${qg_record%/*}" && qg_new=$(mktemp "${qg_record%/*}/quality-pass.XXXXXX") \
+         && printf '%s\n' "$fp" > "$qg_new" && mv -f "$qg_new" "$qg_record"; }; then
+    [ -z "${qg_new-}" ] || rm -f "$qg_new"
+    printf 'Quality gate: the validators passed, and the pass could not be recorded at %s, so the next turn end runs them again.\n' "$qg_record" >&2
+  fi
+fi
 
 [ -z "$failed" ] && gate_pass
 
