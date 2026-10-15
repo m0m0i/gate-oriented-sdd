@@ -44,20 +44,21 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# TWENTY-THREE sites. The first cut converted ten and said seven; the recount that caught that
-# said twelve and nine, in the paragraph whose subject is not counting. Two of the three the
+# TWENTY-FIVE sites, twenty-three until #297 added two. The first cut converted ten and said
+# seven; the recount that caught that said twelve and nine, in the paragraph whose subject is not counting. Two of the three the
 # first cut missed were worse than any half: they called `report ... ok` on the skip path,
 # manufacturing a pass and incrementing the counter. Those two are whole cases and now report
 # nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
 #
-# How to get twenty-three: count the GUARDS, not the `chmod 000` lines. There are nineteen of
-# those and EIGHTEEN guards among them, because case 14 has no self-disabling branch — under
+# How to get twenty-five: count the GUARDS, not the `chmod 000` lines. There are twenty of
+# those and NINETEEN guards among them, because case 14 has no self-disabling branch — under
 # root it goes red rather than skipping, which is the safe direction and deliberately left
 # alone. Do not "fix" that asymmetry: `docs/BACKLOG.md` row 1 asked for it and was corrected
 # rather than obeyed, on #39's branch. The last five guards are not permission-based at all —
 # `bootstrap/symlinked-slug` and `bootstrap/dangling-symlink` self-disable when `ln -s` fails,
 # the shallow-clone guard when the fixture cannot be shallowed, and #191's two blobless-clone
-# guards when the clone comes back with every blob in it. 18 + 5 = 23.
+# guards when the clone comes back with every blob in it. And one is permission-based without
+# a `chmod 000`: #297's read-only record directory, `chmod 555`. 19 + 1 + 5 = 25.
 #
 # The old figure was 13, by a formula that omitted the shallow-clone guard, so it was already
 # short by one on `main` against fourteen sites, before #39 added six, #194 one and #191 two. Counted by command and
@@ -2073,6 +2074,61 @@ case "$out1$out2" in *"exit=0"*"exit=0"*) c1=ok ;; *) c1=no ;; esac
 [ "$n1:$n2" = "1:1" ] && c2=ok || c2=no
 [ "$c1$c2" = okok ] && report "committing content that already passed, and an idle turn after, run no validator" ok \
   || report "committing content that already passed, and an idle turn after, run no validator" no "silent=$c1 runs=$n1:$n2"
+
+# 244. #297 AC5 — a step that decides whether source changed fails, and the gate runs rather
+#      than reading the failure as "nothing changed". `:(globs)` is one letter off `:(glob)`; git
+#      exits 128, and on main `| grep -q .` turned that into `gate_pass` — `{}`, exit 0, a red
+#      change unseen. Q2 of the spec: the stderr names the step, whatever the validators find.
+#      RED on main: exit 0.
+r=$(qgp_repo qgp-badspec)
+printf -- '- Validators: sh -c "echo x >> ran.log; ! grep -q RED src.txt || { echo RAN-RED >&2; exit 1; }"\n- Source globs: :(globs)*.txt\n' > "$r/.steering/tech.md"
+echo RED >> "$r/src.txt"; out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"could not tell whether source changed"*"git ls-files failed"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = okok ] && report "a Source globs value git rejects runs the validators and names the failed step" ok \
+  || report "a Source globs value git rejects runs the validators and names the failed step" no "blocks=$c1 names-step=$c2"
+
+# 245. #297 AC5 — an untracked source file counts when `status.showUntrackedFiles=no` hides it from
+#      `git status`, which is what the skip asked on main. RED on main: exit 0.
+r=$(qgp_repo qgp-hideuntracked); ( cd "$r" && git config status.showUntrackedFiles no )
+printf -- '- Validators: sh -c "echo x >> ran.log; ! grep -q RED *.txt || { echo RAN-RED >&2; exit 1; }"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+echo RED > "$r/new.txt"; out=$(run_qg "$r")
+case "$out" in *"exit=2"*) report "an untracked source file counts under status.showUntrackedFiles=no" ok ;;
+                        *) report "an untracked source file counts under status.showUntrackedFiles=no" no "$out" ;; esac
+
+# 246. #297 AC5 — a record that exists and cannot be read is not a record that matched: the gate
+#      runs, and says it could not read it. RED on main, which has no record and skips a clean tree.
+r=$(qgp_repo qgp-unreadrec); run_qg "$r" >/dev/null; rec="$r/.git/gate-sdd/quality-pass"
+chmod 000 "$rec" 2>/dev/null
+if cat "$rec" >/dev/null 2>&1; then
+  chmod 644 "$rec" 2>/dev/null
+  note_skip "qg/unreadable-record" "permissions not enforced here (running as root?)"
+else
+  out=$(run_qg "$r"); err=$(cat "$TMP/qerr"); n=$(qgp_runs "$r")
+  chmod 644 "$rec" 2>/dev/null
+  case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+  [ "$n" = 2 ] && c2=ok || c2=no
+  case "$err" in *"reading .git/gate-sdd/quality-pass failed"*) c3=ok ;; *) c3=no ;; esac
+  [ "$c1$c2$c3" = okokok ] && report "an unreadable pass record runs the validators and says so" ok \
+    || report "an unreadable pass record runs the validators and says so" no "pass=$c1 runs=$n names=$c3"
+fi
+
+# 247. #297 AC5 — a pass that cannot be recorded costs the next turn a run, never a pass, and says
+#      so. The record's directory is read-only; both turns run, both pass. RED on main, which
+#      prints nothing and runs nothing on a clean tree.
+r=$(qgp_repo qgp-unwritable); mkdir -p "$r/.git/gate-sdd"; chmod 555 "$r/.git/gate-sdd" 2>/dev/null
+if ( : > "$r/.git/gate-sdd/probe" ) 2>/dev/null; then
+  rm -f "$r/.git/gate-sdd/probe"; chmod 755 "$r/.git/gate-sdd" 2>/dev/null
+  note_skip "qg/unwritable-record" "permissions not enforced here (running as root?)"
+else
+  out1=$(run_qg "$r"); err=$(cat "$TMP/qerr"); out2=$(run_qg "$r"); n=$(qgp_runs "$r")
+  chmod 755 "$r/.git/gate-sdd" 2>/dev/null
+  case "$out1$out2" in *"exit=0"*"exit=0"*) c1=ok ;; *) c1=no ;; esac
+  [ "$n" = 2 ] && c2=ok || c2=no
+  case "$err" in *"could not be recorded"*) c3=ok ;; *) c3=no ;; esac
+  [ "$c1$c2$c3" = okokok ] && report "a pass that cannot be recorded runs again next turn and says so" ok \
+    || report "a pass that cannot be recorded runs again next turn and says so" no "pass=$c1 runs=$n names=$c3"
+fi
 
 # --- both gates: the library they block through ----------------------------------------
 #
