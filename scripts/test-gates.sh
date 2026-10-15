@@ -1890,14 +1890,19 @@ r=$(qg_repo qg-docs); qg_seed "$r"; echo more >> "$r/NOTES.md"; out=$(run_qg "$r
 case "$out" in *"exit=0"*) report "quality gate silent on a docs-only change" ok ;;
                         *) report "quality gate silent on a docs-only change" no "$out" ;; esac
 
-r=$(qg_repo qg-src); echo more >> "$r/src.txt"; out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
+# Seeded too (#297), so the block below comes from the skip seeing the change rather than from
+# a fresh fixture with no record. RED-CAPABLE under "drop the `update-index` step", which leaves
+# the copy at the committed content and the change unseen.
+r=$(qg_repo qg-src); qg_seed "$r"; echo more >> "$r/src.txt"; out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
 case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
 case "$err" in *"Quality gate"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "quality gate fires on a source change" ok \
   || report "quality gate fires on a source change" no "exit=$c1 msg=$c2"
 
-r=$(qg_repo qg-quoted)
-printf -- '- Validators: sh -c "exit 1"\n- Source globs: %s\n' "'*.txt'" > "$r/.steering/tech.md"
+# Seeded too (#297): unseeded, a fresh fixture runs whatever the globs match, and this case
+# would no longer pin the quote strip. RED-CAPABLE under "drop the `tr -d`": `'*.txt'` reaches git
+# with its quotes, matches nothing, and nothing equals the seeded nothing.
+r=$(qg_repo qg-quoted); qg_seed "$r" "'*.txt'"
 echo more >> "$r/src.txt"; out=$(run_qg "$r")
 case "$out" in *"exit=2"*) report "quoted globs still match (no fail-open)" ok ;;
                         *) report "quoted globs still match (no fail-open)" no "$out" ;; esac
@@ -2129,6 +2134,74 @@ else
   [ "$c1$c2$c3" = okokok ] && report "a pass that cannot be recorded runs again next turn and says so" ok \
     || report "a pass that cannot be recorded runs again next turn and says so" no "pass=$c1 runs=$n names=$c3"
 fi
+
+# 248. #297 AC3 — a failed run leaves no pass behind. The validator here is also red while
+#      `bad.cfg` exists, a file outside the globs. A turn passes; the next adds bad.cfg and edits
+#      source, and blocks; then the source edit is reverted and bad.cfg stays. The source is back
+#      to the state that passed, so a record kept through the failure matched it and the gate
+#      skipped a tree that is still red — measured on #297's T2 commit, exit 0. RED-CAPABLE
+#      under "keep the record on failure" (drop the removal before the validators run).
+r=$(qgp_repo qgp-revert)
+printf -- '- Validators: sh -c "echo x >> ran.log; test ! -f bad.cfg && ! grep -q RED src.txt"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+run_qg "$r" >/dev/null
+: > "$r/bad.cfg"; echo more >> "$r/src.txt"; ( cd "$r" && git commit -qm edit src.txt ) >/dev/null 2>&1
+out1=$(run_qg "$r")
+( cd "$r" && git revert --no-edit HEAD ) >/dev/null 2>&1; out2=$(run_qg "$r")
+case "$(cat "$r/src.txt")" in one) c0=ok ;; *) c0=no ;; esac   # the revert happened, or the case proves nothing
+case "$out1" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out2" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+[ "$c0$c1$c2" = okokok ] && report "restoring source that passed before a failure does not skip a run that is still red" ok \
+  || report "restoring source that passed before a failure does not skip a run that is still red" no "reverted=$c0 first-blocks=$c1 after-revert-blocks=$c2"
+
+# 249. #297 AC2 — a dirty tree that passed is not re-run on every turn end. Main re-ran it each
+#      time while the source stayed uncommitted, and staging it changed nothing it could see.
+#      A pass with `src.txt` modified, then an idle turn, then a turn that only `git add`s it:
+#      one run in all. RED on main: three runs.
+r=$(qgp_repo qgp-dirty-passed); echo two >> "$r/src.txt"; run_qg "$r" >/dev/null
+out1=$(run_qg "$r"); ( cd "$r" && git add src.txt ); out2=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out1$out2" in *"exit=0"*"exit=0"*) c1=ok ;; *) c1=no ;; esac
+[ "$c1" = ok ] && [ "$n" = 1 ] && report "an uncommitted state that passed, idle and then staged, runs no validator again" ok \
+  || report "an uncommitted state that passed, idle and then staged, runs no validator again" no "silent=$c1 runs=$n"
+
+# 250. #297 AC6 — a pass is recorded for the source the validators ran against, not for the tree
+#      after them. The validator edits `src.txt` during its run, as a formatter would, and passes;
+#      the next turn end runs again, because the edit is one no validator saw. RED-CAPABLE under
+#      "record the fingerprint computed after the run": one run, then a skip.
+r=$(qgp_repo qgp-midrun)
+printf -- '- Validators: sh -c "echo x >> ran.log; grep -q fmt src.txt || echo fmt >> src.txt"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+run_qg "$r" >/dev/null; run_qg "$r" >/dev/null; n=$(qgp_runs "$r")
+[ "$n" = 2 ] && report "a source edit made while the validators run is not recorded as passed" ok \
+  || report "a source edit made while the validators run is not recorded as passed" no "runs=$n"
+
+# 251. #297 AC6 — the index copy keeps git's racy-entry check. git trusts an entry's stat data only
+#      when the entry is older than the index FILE; one stamped at the index's own mtime is
+#      re-read. A copy made with plain `cp` is stamped "now", so a same-size red edit carrying that
+#      same mtime matched on stat alone and kept its old blob id — a red tree passing. Made
+#      deterministic with `core.trustctime=false` and `touch -t`, which fake what a same-second
+#      edit does on its own. RED-CAPABLE under "`cp` without `-p`": measured.
+r=$(qgp_repo qgp-racy); t=202601010000
+( cd "$r" && git config core.trustctime false && touch -t $t src.txt && git add src.txt && touch -t $t .git/index ) >/dev/null 2>&1
+run_qg "$r" >/dev/null
+printf 'RED\n' > "$r/src.txt"; touch -t $t "$r/src.txt"; out=$(run_qg "$r")
+case "$out" in *"exit=2"*) report "a same-size red edit at the index's own mtime is still seen" ok ;;
+                        *) report "a same-size red edit at the index's own mtime is still seen" no "$out" ;; esac
+
+# 252. #297 AC7 — what decides the verdict besides the source is part of the record. Each half
+#      passes once on an unchanged tree, then changes one input and runs again: the Validators
+#      line, the Source globs line (to a value that matches the same files), the gate's own code,
+#      and the plugin-root environment, which is #264's two environments — a by-hand run in the
+#      session's shell and the turn-end run must not vouch for each other. RED on main, which
+#      skips an unchanged clean tree every time.
+r=$(qgp_repo qgp-keys); run_qg "$r" >/dev/null
+sed 's/^- Validators: \(.*\)$/- Validators: \1, true/' "$r/.steering/tech.md" > "$r/t" && mv "$r/t" "$r/.steering/tech.md"
+run_qg "$r" >/dev/null; n1=$(qgp_runs "$r")
+sed 's/^- Source globs: .*/- Source globs: :(glob)*.txt/' "$r/.steering/tech.md" > "$r/t" && mv "$r/t" "$r/.steering/tech.md"
+run_qg "$r" >/dev/null; n2=$(qgp_runs "$r")
+echo '# changed' >> "$r/hooks/quality-gate.sh"; run_qg "$r" >/dev/null; n3=$(qgp_runs "$r")
+( cd "$r" && CLAUDE_PLUGIN_ROOT=/a sh hooks/quality-gate.sh ) >/dev/null 2>&1
+( cd "$r" && CLAUDE_PLUGIN_ROOT=/b sh hooks/quality-gate.sh ) >/dev/null 2>&1; n4=$(qgp_runs "$r")
+[ "$n1:$n2:$n3:$n4" = "2:3:4:6" ] && report "a changed Validators line, globs line, gate or plugin root runs the validators again" ok \
+  || report "a changed Validators line, globs line, gate or plugin root runs the validators again" no "runs=$n1:$n2:$n3:$n4 (want 2:3:4:6)"
 
 # --- both gates: the library they block through ----------------------------------------
 #

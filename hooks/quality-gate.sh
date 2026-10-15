@@ -178,6 +178,13 @@ if [ -n "$globs" ] && [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = t
   # Q2 of #297's spec: a step that failed runs the validators and says so, whatever they find —
   # a project paying for a full run on every turn should be able to find out why.
   [ -z "$qg_step" ] || printf 'Quality gate: could not tell whether source changed since the validators last passed (%s failed), so they ran.\n' "$qg_step" >&2
+  # The validators are about to run, so the last pass stops counting until they pass again. Kept
+  # through a failure, the record matched source put back to a state that passed EARLIER, and the
+  # gate skipped a tree still red from an input outside the globs (case 248). A run cut off by
+  # the hook timeout leaves no pass behind either.
+  if [ -n "$qg_record" ] && [ -e "$qg_record" ] && ! rm -f "$qg_record"; then
+    printf 'Quality gate: could not remove the last pass record at %s; the validators run anyway.\n' "$qg_record" >&2
+  fi
 fi
 
 failed=""
