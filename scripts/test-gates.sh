@@ -44,21 +44,21 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# TWENTY-FIVE sites, twenty-three until #297 added two. The first cut converted ten and said
+# TWENTY-SEVEN sites, twenty-three until #297 added four. The first cut converted ten and said
 # seven; the recount that caught that said twelve and nine, in the paragraph whose subject is not counting. Two of the three the
 # first cut missed were worse than any half: they called `report ... ok` on the skip path,
 # manufacturing a pass and incrementing the counter. Those two are whole cases and now report
 # nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
 #
-# How to get twenty-five: count the GUARDS, not the `chmod 000` lines. There are twenty of
-# those and NINETEEN guards among them, because case 14 has no self-disabling branch — under
+# How to get twenty-seven: count the GUARDS, not the `chmod 000` lines. There are twenty-one of
+# those and TWENTY guards among them, because case 14 has no self-disabling branch — under
 # root it goes red rather than skipping, which is the safe direction and deliberately left
 # alone. Do not "fix" that asymmetry: `docs/BACKLOG.md` row 1 asked for it and was corrected
 # rather than obeyed, on #39's branch. The last five guards are not permission-based at all —
 # `bootstrap/symlinked-slug` and `bootstrap/dangling-symlink` self-disable when `ln -s` fails,
 # the shallow-clone guard when the fixture cannot be shallowed, and #191's two blobless-clone
-# guards when the clone comes back with every blob in it. And one is permission-based without
-# a `chmod 000`: #297's read-only record directory, `chmod 555`. 19 + 1 + 5 = 25.
+# guards when the clone comes back with every blob in it. And two are permission-based without
+# a `chmod 000`: #297's read-only record directory, `chmod 555`, twice. 20 + 2 + 5 = 27.
 #
 # The old figure was 13, by a formula that omitted the shallow-clone guard, so it was already
 # short by one on `main` against fourteen sites, before #39 added six, #194 one and #191 two. Counted by command and
@@ -2093,11 +2093,14 @@ case "$err" in *"could not tell whether source changed"*"git ls-files failed"*) 
 [ "$c1$c2" = okok ] && report "a Source globs value git rejects runs the validators and names the failed step" ok \
   || report "a Source globs value git rejects runs the validators and names the failed step" no "blocks=$c1 names-step=$c2"
 
-# 245. #297 AC5 — an untracked source file counts when `status.showUntrackedFiles=no` hides it from
-#      `git status`, which is what the skip asked on main. RED on main: exit 0.
+# 245. #297 AC1 — an untracked source file is a source change, also when
+#      `status.showUntrackedFiles=no` hides it from `git status`, which is what the skip asked on
+#      main. A pass is recorded first, so the run below can only come from the file being seen:
+#      unseeded, the gate ran on AC4 alone and the case could not fail for its own reason (#297's
+#      review, HIGH). RED on main: exit 0. RED-CAPABLE under "drop `-o` from `git ls-files`".
 r=$(qgp_repo qgp-hideuntracked); ( cd "$r" && git config status.showUntrackedFiles no )
 printf -- '- Validators: sh -c "echo x >> ran.log; ! grep -q RED *.txt || { echo RAN-RED >&2; exit 1; }"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
-echo RED > "$r/new.txt"; out=$(run_qg "$r")
+run_qg "$r" >/dev/null; echo RED > "$r/new.txt"; out=$(run_qg "$r")
 case "$out" in *"exit=2"*) report "an untracked source file counts under status.showUntrackedFiles=no" ok ;;
                         *) report "an untracked source file counts under status.showUntrackedFiles=no" no "$out" ;; esac
 
@@ -2133,6 +2136,36 @@ else
   case "$err" in *"could not be recorded"*) c3=ok ;; *) c3=no ;; esac
   [ "$c1$c2$c3" = okokok ] && report "a pass that cannot be recorded runs again next turn and says so" ok \
     || report "a pass that cannot be recorded runs again next turn and says so" no "pass=$c1 runs=$n names=$c3"
+fi
+
+# 258. #297 AC5 — the two failure paths cases 244-247 do not reach. A record that cannot be
+#      REMOVED — its directory made read-only after a pass, then a source edit — still runs, and
+#      says so; an index that cannot be read leaves the copy unmade, and runs, naming that step.
+#      RED on main, which keeps no record and reads `git status` rather than copying the index.
+r=$(qgp_repo qgp-unremovable); run_qg "$r" >/dev/null; chmod 555 "$r/.git/gate-sdd" 2>/dev/null
+if ( : > "$r/.git/gate-sdd/probe" ) 2>/dev/null; then
+  rm -f "$r/.git/gate-sdd/probe"; chmod 755 "$r/.git/gate-sdd" 2>/dev/null
+  note_skip "qg/unremovable-record" "permissions not enforced here (running as root?)"
+else
+  echo two >> "$r/src.txt"; run_qg "$r" >/dev/null; err=$(cat "$TMP/qerr"); n=$(qgp_runs "$r")
+  chmod 755 "$r/.git/gate-sdd" 2>/dev/null
+  case "$err" in *"could not remove the last pass record"*) c1=ok ;; *) c1=no ;; esac
+  [ "$n" = 2 ] && c2=ok || c2=no
+  [ "$c1$c2" = okok ] && report "a pass record that cannot be removed runs the validators and says so" ok \
+    || report "a pass record that cannot be removed runs the validators and says so" no "names=$c1 runs=$n"
+fi
+r=$(qgp_repo qgp-unreadindex); run_qg "$r" >/dev/null; echo two >> "$r/src.txt"
+chmod 000 "$r/.git/index" 2>/dev/null
+if cat "$r/.git/index" >/dev/null 2>&1; then
+  chmod 644 "$r/.git/index" 2>/dev/null
+  note_skip "qg/unreadable-index" "permissions not enforced here (running as root?)"
+else
+  run_qg "$r" >/dev/null; err=$(cat "$TMP/qerr"); n=$(qgp_runs "$r")
+  chmod 644 "$r/.git/index" 2>/dev/null
+  case "$err" in *"could not tell whether source changed"*"failed"*) c1=ok ;; *) c1=no ;; esac
+  [ "$n" = 2 ] && c2=ok || c2=no
+  [ "$c1$c2" = okok ] && report "an unreadable index runs the validators and names the failed step" ok \
+    || report "an unreadable index runs the validators and names the failed step" no "names=$c1 runs=$n"
 fi
 
 # 248. #297 AC3 — a failed run leaves no pass behind. The validator here is also red while
@@ -2200,8 +2233,32 @@ run_qg "$r" >/dev/null; n2=$(qgp_runs "$r")
 echo '# changed' >> "$r/hooks/quality-gate.sh"; run_qg "$r" >/dev/null; n3=$(qgp_runs "$r")
 ( cd "$r" && CLAUDE_PLUGIN_ROOT=/a sh hooks/quality-gate.sh ) >/dev/null 2>&1
 ( cd "$r" && CLAUDE_PLUGIN_ROOT=/b sh hooks/quality-gate.sh ) >/dev/null 2>&1; n4=$(qgp_runs "$r")
-[ "$n1:$n2:$n3:$n4" = "2:3:4:6" ] && report "a changed Validators line, globs line, gate or plugin root runs the validators again" ok \
-  || report "a changed Validators line, globs line, gate or plugin root runs the validators again" no "runs=$n1:$n2:$n3:$n4 (want 2:3:4:6)"
+#      The other two keys, each changed alone and then held: GATE_SDD_PLUGIN_ROOT, the session
+#      shell's half of #264, and the library's hash. Then the same inputs again, which skips.
+( cd "$r" && CLAUDE_PLUGIN_ROOT=/b GATE_SDD_PLUGIN_ROOT=/g sh hooks/quality-gate.sh ) >/dev/null 2>&1; n5=$(qgp_runs "$r")
+echo '# changed' >> "$r/hooks/gate-lib.sh"
+( cd "$r" && CLAUDE_PLUGIN_ROOT=/b GATE_SDD_PLUGIN_ROOT=/g sh hooks/quality-gate.sh ) >/dev/null 2>&1; n6=$(qgp_runs "$r")
+( cd "$r" && CLAUDE_PLUGIN_ROOT=/b GATE_SDD_PLUGIN_ROOT=/g sh hooks/quality-gate.sh ) >/dev/null 2>&1; n7=$(qgp_runs "$r")
+[ "$n1:$n2:$n3:$n4:$n5:$n6:$n7" = "2:3:4:6:7:8:8" ] && report "a changed Validators line, globs line, gate, library or plugin root runs the validators again" ok \
+  || report "a changed Validators line, globs line, gate, library or plugin root runs the validators again" no "runs=$n1:$n2:$n3:$n4:$n5:$n6:$n7 (want 2:3:4:6:7:8:8)"
+
+# 257. #297 AC3 — a turn that fails with no `- Source globs:` line leaves no pass behind either.
+#      The record was removed only inside the globs branch, so: a turn passes with the line; the
+#      line is dropped (a branch whose tech.md lacks it) and `bad.cfg` makes the next turn fail;
+#      the line comes back with the source unchanged, and the old pass matched a tree still red
+#      (#297's review, HIGH: measured exit 0). RED-CAPABLE under "remove the record inside the
+#      globs branch only".
+r=$(qgp_repo qgp-noglobs-fail)
+printf -- '- Validators: sh -c "echo x >> ran.log; test ! -f bad.cfg"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+run_qg "$r" >/dev/null
+printf -- '- Validators: sh -c "echo x >> ran.log; test ! -f bad.cfg"\n' > "$r/.steering/tech.md"; : > "$r/bad.cfg"
+out1=$(run_qg "$r")
+printf -- '- Validators: sh -c "echo x >> ran.log; test ! -f bad.cfg"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+out2=$(run_qg "$r")
+case "$out1" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out2" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = okok ] && report "a turn that fails with no Source globs line leaves no pass behind" ok \
+  || report "a turn that fails with no Source globs line leaves no pass behind" no "fails=$c1 restored-blocks=$c2"
 
 # 253. #297 AC8, unchanged — with no `- Source globs:` line the gate runs on every turn end, as it
 #      always has: a project that has not said what source is gets no skip. RED-CAPABLE under

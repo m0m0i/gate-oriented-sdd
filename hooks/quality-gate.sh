@@ -146,8 +146,17 @@ trap '[ -z "$qg_tmp" ] || rm -f "$qg_tmp" "$qg_tmp.idx" "$qg_tmp.idx.lock" "$qg_
 trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
 
 fp=""; qg_step=""; qg_record=""
+# The record is per worktree — git keeps a name it does not know under the worktree's own git
+# directory — never tracked, and relative, which is safe because the gate is at the toplevel. It
+# is resolved whatever the globs line says, because the removal below must happen on every run:
+# a turn that failed with the line absent once left an older pass behind (#297's review, case 257).
+qg_tree=""
+if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true ]; then
+  qg_tree=yes
+  qg_record=$(git rev-parse --git-path gate-sdd/quality-pass) || { qg_record=""; qg_step="git rev-parse --git-path"; }
+fi
 globs=$(gate_steering_value .steering/tech.md 'Source globs')
-if [ -n "$globs" ] && [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true ]; then
+if [ -n "$globs" ] && [ -n "$qg_tree" ]; then
   # Unquoted on purpose: the line holds several space-separated globs and each has to reach
   # git as its own pathspec. Quotes inside a variable are NOT removed on expansion, so a
   # line written '*.py' would hand git a literal quote and match nothing — the same
@@ -164,27 +173,23 @@ if [ -n "$globs" ] && [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = t
   # shellcheck disable=SC2046  # deliberate word-split: one pathspec per glob (#1); quoted, case 164 goes red
   set -- $(printf '%s' "$globs" | tr -d '\042\047')   # \042 = " and \047 = ', stripped so git sees bare globs
   set +f
-  # The record is per worktree — git keeps a name it does not know under the worktree's own git
-  # directory — never tracked, and relative, which is safe because the gate is at the toplevel.
-  if ! qg_record=$(git rev-parse --git-path gate-sdd/quality-pass); then
-    qg_record=""; qg_step="git rev-parse --git-path"
-  elif qg_fingerprint "$@"; then
+  if [ -n "$qg_record" ] && qg_fingerprint "$@"; then
     if [ -e "$qg_record" ] && ! [ -r "$qg_record" ]; then
       qg_step="reading $qg_record"
     elif [ -r "$qg_record" ] && [ "$(cat "$qg_record")" = "$fp" ]; then
       gate_pass
     fi
   fi
-  # Q2 of #297's spec: a step that failed runs the validators and says so, whatever they find —
-  # a project paying for a full run on every turn should be able to find out why.
-  [ -z "$qg_step" ] || printf 'Quality gate: could not tell whether source changed since the validators last passed (%s failed), so they ran.\n' "$qg_step" >&2
-  # The validators are about to run, so the last pass stops counting until they pass again. Kept
-  # through a failure, the record matched source put back to a state that passed EARLIER, and the
-  # gate skipped a tree still red from an input outside the globs (case 248). A run cut off by
-  # the hook timeout leaves no pass behind either.
-  if [ -n "$qg_record" ] && [ -e "$qg_record" ] && ! rm -f "$qg_record"; then
-    printf 'Quality gate: could not remove the last pass record at %s; the validators run anyway.\n' "$qg_record" >&2
-  fi
+fi
+# Q2 of #297's spec: a step that failed runs the validators and says so, whatever they find — a
+# project paying for a full run on every turn should be able to find out why.
+[ -z "$qg_step" ] || printf 'Quality gate: could not tell whether source changed since the validators last passed (%s failed), so they ran.\n' "$qg_step" >&2
+# The validators are about to run, so the last pass stops counting until they pass again —
+# whatever the globs line says. Kept through a failure, the record matched source put back to a
+# state that passed EARLIER, and the gate skipped a tree still red from an input outside the
+# globs (cases 248, 257). A run cut off by the hook timeout leaves no pass behind either.
+if [ -n "$qg_record" ] && [ -e "$qg_record" ] && ! rm -f "$qg_record"; then
+  printf 'Quality gate: could not remove the last pass record at %s; the validators run anyway.\n' "$qg_record" >&2
 fi
 
 failed=""
