@@ -343,4 +343,4 @@ Decided in Design rather than asked, because the repository answers them: the li
     - no hook file passes (mutation: fail when no hook file exists) (AC10).
 
   Then the six timeouts, `check-manifests.py`'s reader and comparison, and the anchor check's additions with its header.
-- [ ] T6: the `check-skill-contracts.py` pin for the template sentence, red until `skills/init/SKILL.md` carries it. Then the `init` bullets, every statement listed under Docs and Steering line wiring, and `docs/BACKLOG.md`: #304 moves from row 1's `Item` cell to its `Why here`, which gains the #320 citation and the scan-cost finding, and the `SessionStart` contradiction goes to the claim-drifts row.
+- [x] T6: the `check-skill-contracts.py` pin for the template sentence, red until `skills/init/SKILL.md` carries it. Then the `init` bullets, every statement listed under Docs and Steering line wiring, and `docs/BACKLOG.md`: #304 moves from row 1's `Item` cell to its `Why here`, which gains the #320 citation and the scan-cost finding, and the `SessionStart` contradiction goes to the claim-drifts row.

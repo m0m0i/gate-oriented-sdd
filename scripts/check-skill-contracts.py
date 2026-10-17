@@ -14,12 +14,13 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Thirty today. A thirty-first needs an argument, in the spec that proposes it, for why review cannot
+Thirty-seven today. A thirty-eighth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
 with it, #26 the twenty-fourth, #79 the twenty-fifth, #256 the twenty-sixth without moving it, #263 the
-twenty-seventh and twenty-eighth, #262 the twenty-ninth, and #166 the thirtieth; a cap that is not moved with the entry reads as already exceeded, and the next author
-cannot tell whether the list is at its limit or the sentence is stale — which is how this said twenty-five over twenty-six.
+twenty-seventh and twenty-eighth, #262 the twenty-ninth, #166 the thirtieth, #84 the thirty-first to thirty-fourth
+and #239 the thirty-fifth and thirty-sixth, both without moving it, and #304 the thirty-seventh; a cap that is not moved with the entry reads as already exceeded, and the next author
+cannot tell whether the list is at its limit or the sentence is stale — which is how this said twenty-five over twenty-six, and thirty over thirty-six.
 """
 
 import pathlib
@@ -131,6 +132,19 @@ CONTRACTS = (
         "into product.md or into prose resolves to nothing, and the checker falls back to the "
         "generic message having never seen it. Silent discard is the failure the line exists "
         "to close, reached by deleting the statement of where it lives. #141 AC7.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "- Validator budget: <whole seconds the quality gate gives the validators before it blocks, 1 to 590; omit it unless they need more than the default 170",
+        "This line is the only place an install learns the quality gate's budget exists. Since "
+        "#304 a suite that outruns it blocks every turn end until the line is written, and the "
+        "block names the line; without the template entry the first a project hears of it is "
+        "that block, at the moment it stops them, and Claude Code stops honouring a Stop block "
+        "after eight in a row with no tool call. The 'omit it' half matters as much: absent is "
+        "the path most projects take, and a line written by default pins a number nobody "
+        "measured. Review cannot defend it: the entry reads as one more "
+        "optional line in a template of optional lines, and its deletion leaves every install "
+        "working until its suite grows past 170 s. #304 AC13; #320 will time the suite.",
     ),
     (
         "skills/init/SKILL.md",

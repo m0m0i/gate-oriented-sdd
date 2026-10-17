@@ -45,12 +45,12 @@ The rulebook is the source for every Judgment row and holds each rule's rational
 | id | Rule | Tier | Severity | Enforced by |
 | :-- | :-- | :-- | :-- | :-- |
 | M-1 | No private context in the tree | Mechanical | — | `check-leakage.sh` |
-| M-2 | Both manifests agree, the hook shapes are right, the plugin root holds no `agents/` or `CLAUDE.md`, and each shipped reviewer's frontmatter names it | Mechanical | — | `check-manifests.py`, also after every Write/Edit via `PostToolUse` |
+| M-2 | Both manifests agree, the hook shapes are right, each gate's `Stop` timeout in the plugin's hooks file, the Antigravity template and this repository's `.claude/settings.json` is the ceiling `hooks/gate-lib.sh` states, the plugin root holds no `agents/` or `CLAUDE.md`, and each shipped reviewer's frontmatter names it | Mechanical | — | `check-manifests.py`, also after every Write/Edit via `PostToolUse` |
 | M-3 | A ` ```markdown ` fence does not hand-wrap what it quotes | Mechanical | — | `check-markdown-fences.py` |
 | M-4 | The receipt schema agrees across its copies | Mechanical | — | `check-receipt-schema.py` |
 | M-5 | Skills keep their load-bearing sentences | Mechanical | — | `check-skill-contracts.py` |
 | M-6 | No spec template splits a red step from its green step | Mechanical | — | `check-templates.py` |
-| M-7 | Steering's machine-read lines parse | Mechanical | — | `check-steering-anchors.sh` |
+| M-7 | Steering's machine-read lines parse; `- Validator budget:` holds a value the quality gate accepts and no project hook file's `timeout` would lower; and each project hook file the check finds parses and gives every gate it runs a `timeout` above the gates' 10 s margin | Mechanical | — | `check-steering-anchors.sh` |
 | M-8 | Shipped rulebooks match their locks, and every Judgment id in this table is defined in the reviewer's rulebook | Mechanical | — | `check-locks.py` |
 | M-9 | The gates behave, on every path the suite pins | Mechanical | — | `test-gates.sh` |
 | M-10 | Guards do not rely on `assert` | Mechanical | — | the `test-gates.sh` case that runs them under `python3 -O` |
