@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-10-12 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity CLI rows below reflect the 2026-10-11 verification run (A1–A14). Antigravity IDE has been discontinued and is removed from the active target matrix.
+Last **updated**: 2026-10-17 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity CLI rows below reflect the 2026-10-11 verification run (A1–A14). Antigravity IDE has been discontinued and is removed from the active target matrix.
 
 The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The Antigravity CLI row carries the date it was verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
@@ -10,7 +10,7 @@ The version table below carries a date beside each row. Claude Code's row was re
 
 | Component | Version |
 | :-- | :-- |
-| Claude Code | 2.1.296 — the #239 section of 2026-10-12. 2.1.294 — the #274 section of 2026-10-10: the terminal CLI, started from a desktop-app session whose own copy was 2.1.295; its F3 ran on the maintainer's second machine, the app's copy 2.1.295 and its terminal CLI 2.1.296. 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
+| Claude Code | 2.1.300 — the #304 section of 2026-10-16. 2.1.296 — the #239 section of 2026-10-12. 2.1.294 — the #274 section of 2026-10-10: the terminal CLI, started from a desktop-app session whose own copy was 2.1.295; its F3 ran on the maintainer's second machine, the app's copy 2.1.295 and its terminal CLI 2.1.296. 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
 | Antigravity CLI (`agy`) | 1.3.3 — the #239 section of 2026-10-12, and verified 2026-10-11 (A1–A14 run sheet from 2026-10-11 deep review, headless `agy -p` in trusted scratch fixture). 1.2.16 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
 | Antigravity IDE | Discontinued; removed from active target matrix. (Historical: 2.3.1 verified 2026-08-21) |
 | Platform | macOS (darwin, arm64) |
@@ -457,6 +457,23 @@ Antigravity expands no import, follows no prose pointer, and reads no project `A
 
 **What these runs do not support:** that an `init` run writes either form. The skill now says to, and `check-skill-contracts.py` pins both sentences, but no `init` has run since. Nor do they show that agy's answers involved no tool call: the prompt forbade tools, but no tool-disabling flag was used.
 
+## A `Stop` hook past its timeout, on Claude Code (#304)
+
+**Run on 2026-10-16, Claude Code 2.1.300**, for #304's spec, as four headless probes of a scratch plugin's `Stop` hook. The issue had measured the same question on 2026-10-15 with settings hooks; these use a plugin hook, the form the gates have shipped in since 0.23.0. Beside A5 below, which is Antigravity's answer, this is Claude Code's. The spec's Reproduction and its second clarification are where the probes were first written down.
+
+- **H1 — the kill.** With `"timeout": 2`, the hook got SIGTERM at +2 s and SIGKILL about 1.5 s later, and both reached its whole process group: a grandchild with its descriptors on `/dev/null` died too. The debug log reads `timed out after 2000ms` and then `Hook Stop (Stop) cancelled`, and the result was `success` with `num_turns` 1.
+- **H2 — a block written as it is killed.** A block written from a `TERM` trap at that moment, as stderr text, `{"decision":"block"}` and exit 2, is captured in the debug log and discarded, and the turn still passes. The hooks documentation says `"onFailure": "block"` has no effect on `Stop`, so no setting turns the timeout into a block.
+- **H3 — the hook is not told its timeout.** Its stdin carries no timeout field, so a gate cannot learn its deadline from the harness, and reads it from the hook files itself.
+- **H4 — a longer timeout is honoured.** A plugin `Stop` hook ran 615 s under a larger `timeout`, past the 600 s that is Claude Code's default for a command hook.
+
+So on Claude Code, as on Antigravity, a gate that has no verdict by its `timeout` ends the turn as a pass, and a block it writes once the harness has begun the kill is lost. #304 gives each gate a deadline of its own, never later than 10 s before the shortest `timeout` it can see, and `scripts/test-gates.sh` asserts the elapsed time of each cut-off rather than reproducing the harness's kill.
+
+### What this run does not support
+
+- **Antigravity above A5.** Only a kill at a 1 s `timeout` is run there. Whether a `timeout` of 120 s, 180 s or 600 s is honoured, whether its SIGKILL reaches the hook's process group, and whether its continuation cap (A4) resets after a tool call are not exercised; each needs a trusted-folder fixture.
+- **What an interactive session shows** for a timed-out `Stop` hook. The probes were headless, where the timeout appeared only in the debug log.
+- **Other platforms.** macOS only.
+
 ## Antigravity CLI 1.3.3 verification — A1–A14 run sheet (2026-10-11)
 
 **Run on 2026-10-11, Antigravity CLI 1.3.3**, executing the run sheet from [`docs/reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md). All headless turns ran as `agy -p` with `--dangerously-skip-permissions` inside an isolated scratch git fixture outside this checkout (`~/agent-work-dir/gate-sdd-agy-fixture`), explicitly trusted, with `ANTIGRAVITY_*` calling environment variables stripped so nothing was inherited from the outer agent session. The scratch fixture layout reproduced `init`'s Antigravity layout (`.agents/hooks.json` rendered from `hooks/templates/antigravity.hooks.json`, hook scripts copied into `.agents/hooks/`). Plugin tests (A10, A11, A12) ran via temporary local plugin installation and were verified and uninstalled back to baseline. Note: Antigravity IDE has been discontinued and was excluded from the target matrix per maintainer guidance; all checks target the CLI (`agy`).
@@ -469,7 +486,7 @@ Antigravity expands no import, follows no prose pointer, and reads no project `A
 
 **A4 — The Stop continuation cap. Observed (matches review).** A `Stop` hook returning `{"decision": "continue", "reason": "still blocked <n>"}` on every turn was driven in the fixture. Exactly 10 continuation turns (`executionNum` 0 through 9) were executed. On the 10th attempt, `agy` stopped re-entering the loop and terminated the turn with `status: SUCCESS`. The continuation ceiling is 10 by default (`max_stop_hook_continuations`); once hit, the gate fails open.
 
-**A5 — Hook timeout behavior. Observed (matches review).** Configured a `Stop` hook with `sleep 10; printf '{"decision":"continue","reason":"late"}'` and `"timeout": 1`. After 1 second, the hook process was terminated via SIGKILL (`signal: killed`). In `agy.log`: `failed to call custom stop hook: ... signal: killed`. The hook output was discarded and the turn completed with `status: SUCCESS` (fails open).
+**A5 — Hook timeout behavior. Observed (matches review).** Configured a `Stop` hook with `sleep 10; printf '{"decision":"continue","reason":"late"}'` and `"timeout": 1`. After 1 second, the hook process was terminated via SIGKILL (`signal: killed`). In `agy.log`: `failed to call custom stop hook: ... signal: killed`. The hook output was discarded and the turn completed with `status: SUCCESS` (fails open). Claude Code does the same with a TERM and then a KILL, H1 to H4 in the #304 section above.
 
 **A6 — Steering digest delivery timing. Observed (matches review).** Probed `PreInvocation` input across turns. The initial turn of a session carries `invocationNum: 0`. The implementation in `hooks/steering-digest-antigravity.sh` checked `[ "$turn" != 1 ] && exit 0`, which caused it to skip initial turn 0 and deliver the steering digest only on the first continuation turn (turn 1).
 
@@ -499,6 +516,7 @@ Antigravity expands no import, follows no prose pointer, and reads no project `A
 - [x] `FORCE_AUTOUPDATE_PLUGINS=1` restoring the pass in a session the desktop app itself starts, with the line in a project's settings file — run on 2026-10-10 on the maintainer's second machine, F3 in the #274 section, with the line in the checkout's local file; from a desktop session's shell, from the process environment and from a `--settings` `env` block, F1 and F2.
 - [ ] V3's other branch through a trusted project file. #257's M2c honoured the pin from `--settings`; the trust dialog in front of a project's own declaration was not run (#256, #257).
 - [ ] A Claude Code cloud session on a project `init` migrated at 0.23.0, which the documentation says runs no gate (#260).
+- [ ] On Antigravity, a `Stop` `timeout` above A5's 1 s honoured — the template renders 600 and 120 — its SIGKILL reaching the hook's process group, and whether A4's continuation cap resets after a tool call. Each needs a trusted-folder fixture (#304).
 - [x] `PreInvocation` step injection as the `SessionStart` substitute, including a once-per-session guard (#144) — measured on 2026-10-11 (A6: `invocationNum: 0` on turn 0).
 - [x] Whether `agy plugin install` targets `~/.gemini/config/plugins/` (where the IDE's plugins live) or `~/.gemini/antigravity-cli/plugins/` (what the CLI docs describe) — verified on 2026-10-11: installs to `~/.gemini/config/plugins/`.
 - [ ] Antigravity subagent invocation contract, for the reviewer (semantics documented in `skills/implement/SKILL.md` and `docs/fidelity.md`; runtime invocation behavior pending verification).

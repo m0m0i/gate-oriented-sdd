@@ -14,7 +14,7 @@
 
 The blocking quality gate is **not** a placeholder. It ships as `quality-gate.sh` and reads its commands from the `- Validators:` line in `.steering/tech.md`, so the project configures enforcement by editing steering rather than by having `init` bake a command into a settings file. It used to be `{{QUALITY_GATE}}`, which meant every `init` invented the most important hook in the harness — and an invented one usually loses the dual-channel blocking that `gate-lib.sh` exists to provide.
 
-The plugin's own `.claude-plugin/hooks.json` is not a template and is never rendered. `scripts/check-manifests.py` holds it: the manifest must name it, its commands must name scripts the plugin ships, and its events plus the Claude Code template's must pair with the Antigravity template's. It also refuses a `hooks/hooks.json` or a root `hooks.json`, because both are places Antigravity reads, and Claude Code's nested `Stop` shape in a file Antigravity parses invalidates Antigravity's whole file.
+The plugin's own `.claude-plugin/hooks.json` is not a template and is never rendered. `scripts/check-manifests.py` holds it: the manifest must name it, its commands must name scripts the plugin ships, and its events plus the Claude Code template's must pair with the Antigravity template's. It also refuses a `hooks/hooks.json` or a root `hooks.json`, because both are places Antigravity reads, and Claude Code's nested `Stop` shape in a file Antigravity parses invalidates Antigravity's whole file. And it holds both files' `Stop` timeouts to the ceilings `hooks/gate-lib.sh` states, 600 s for the quality gate and 120 s for the review gate (#304). A timeout is the gate's ceiling, not its budget: neither harness turns a `Stop` hook it timed out into a block, so each gate blocks at a deadline of its own, never later than 10 s before the shortest `timeout` it can see, and a lower one in a rendered file only lowers that deadline. The quality gate's budget is the project's to set, with `- Validator budget:` in `.steering/tech.md`.
 
 ## Schema warning
 
@@ -23,7 +23,7 @@ The Antigravity template and the plugin's Claude Code hooks file are **not** the
 - Antigravity **tool** events (`PreToolUse`, `PostToolUse`) take the nested `{matcher, hooks: [...]}` form.
 - Antigravity **non-tool** events (`Stop`, `PreInvocation`, `PostInvocation`) take a flat `{type, command, timeout}`.
 
-Mixing them up invalidates the *entire file* with `invalid hook "<name>": command hook must specify 'command'`, which reads like a missing field rather than a wrong shape. `scripts/check-manifests.py` checks these templates agree on which events they cover so the mistake cannot ship.
+Mixing them up invalidates the *entire file* with `invalid hook "<name>": command hook must specify 'command'`, which reads like a missing field rather than a wrong shape. `scripts/check-manifests.py` checks each Antigravity entry's shape against its event, and that these templates agree on which events they cover, so the mistake cannot ship.
 
 Antigravity has no `SessionStart`; it delivers the steering digest via `PreInvocation` with turn 0 step injection (`hooks/steering-digest-antigravity.sh`). `scripts/check-manifests.py` enforces that `SessionStart` on Claude Code pairs with `PreInvocation` on Antigravity.
 

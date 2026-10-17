@@ -42,13 +42,15 @@ Run these before every commit. The `- Validators:` line in `.steering/tech.md` i
 
 ```bash
 ./scripts/check-leakage.sh          # no private context
-./scripts/check-manifests.py        # both manifests agree; hook shapes correct
+./scripts/check-manifests.py        # both manifests agree; hook shapes correct; each gate's
+                                    # Stop timeout is its ceiling in hooks/gate-lib.sh
 ./scripts/check-markdown-fences.py  # no ```markdown fence hand-wraps the Markdown it quotes
 ./scripts/check-receipt-schema.py   # the receipt schema agrees across its copies
 ./scripts/check-skill-contracts.py  # skills still carry their load-bearing instructions
 ./scripts/check-templates.py        # no spec template splits a red step from its green step,
                                     # and no live spec sequences a task after the review
-./assets/check-steering-anchors.sh  # steering's machine-read lines still parse
+./assets/check-steering-anchors.sh  # steering's machine-read lines still parse, and the
+                                    # project's hook files can honour the validator budget
 ./assets/check-locks.py             # rulebooks match their locks and define the contract's
                                     # Judgment ids (--update to re-pin)
 ./assets/check-document-set.py      # the installed document set matches the declared mode

@@ -298,6 +298,96 @@ if isinstance(a, dict) and isinstance(b, dict):
         errors.append("Antigravity hooks template is missing PreInvocation for steering digest")
 
 
+# Each gate's Stop `timeout` is its ceiling, and the ceiling is written once, in gate-lib.sh (#304,
+# AC8). Neither harness turns a timed-out Stop hook into a block, so a gate keeps a deadline of its
+# own, and it bounds that deadline by the shortest `timeout` it can see. A file shipped below the
+# ceiling therefore lowers every project's budget, and one above it hands the gate a deadline the
+# harness kills it before. The three files are the plugin's own (what Claude Code runs), the
+# template `init` renders for Antigravity, and this repository's dogfood settings, which run the
+# gates from source. The constants are read with anchored patterns and never defaulted: a ceiling
+# this cannot find is a comparison that did not run. A release payload ships no .claude/, and,
+# as with the directory contracts below, only the sources are required of it.
+GATE_LIB = PLUGIN / "hooks" / "gate-lib.sh"
+CEILING_OF = {"quality-gate.sh": "_gate_qg_ceiling", "review-gate.sh": "_gate_rg_ceiling"}
+ceilings: dict[str, int] = {}
+try:
+    lib_text = GATE_LIB.read_text()
+except (OSError, UnicodeDecodeError) as e:
+    errors.append(f"cannot read {GATE_LIB.relative_to(ROOT)}, so the gates' ceilings are unknown: {e}")
+    lib_text = None
+if lib_text is not None:
+    for gate, const in CEILING_OF.items():
+        m = re.search(rf"^{const}=([0-9]+)$", lib_text, re.M)
+        if m:
+            ceilings[gate] = int(m.group(1))
+        else:
+            errors.append(
+                f"{GATE_LIB.relative_to(ROOT)} has no `{const}=<seconds>` line, so the Stop timeout "
+                f"{gate} ships with cannot be checked"
+            )
+
+
+def stop_timeouts(stop_entries) -> dict[str, list]:
+    """Each gate's `timeout` values under one Stop event, in either shape, keyed by the gate script
+    its `command` names. A command that names a gate and carries no `timeout` yields None."""
+    found: dict[str, list] = {}
+
+    def walk(node):
+        if isinstance(node, dict):
+            cmd = node.get("command")
+            if isinstance(cmd, str):
+                for name in set(re.findall(r"[A-Za-z0-9_.-]+\.sh", cmd)) & set(CEILING_OF):
+                    found.setdefault(name, []).append(node.get("timeout"))
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+
+    walk(stop_entries)
+    return found
+
+
+dogfood_settings = ROOT / ".claude" / "settings.json"
+timeout_files = [(plugin_hooks, p_doc, ("hooks",)), (agy_hooks, b, (cc.get("name") if cc else "",))]
+if (ROOT / ".specs").is_dir():
+    n_before = len(errors)
+    s_doc = load(dogfood_settings)
+    if len(errors) == n_before:
+        if isinstance(s_doc, dict):
+            timeout_files.append((dogfood_settings, s_doc, ("hooks",)))
+        else:
+            # A comparison that could not run is not one that agreed (#39).
+            errors.append(
+                f"{dogfood_settings.relative_to(ROOT)} is valid JSON but not an object "
+                f"({type(s_doc).__name__}), so the gates' timeouts in it cannot be checked"
+            )
+if len(ceilings) == len(CEILING_OF):
+    for path, doc, envelope_keys in timeout_files:
+        rel = path.relative_to(ROOT)
+        node = doc
+        for k in envelope_keys:
+            node = node.get(k) if isinstance(node, dict) else None
+        stop = node.get("Stop") if isinstance(node, dict) else None
+        if not isinstance(stop, list):
+            # The plugin file and the template were loaded above, and their own errors already say
+            # why when they are absent; a document that is there and holds no Stop list is new.
+            if isinstance(doc, dict):
+                errors.append(f"{rel} has no Stop list, so the gates' timeouts in it cannot be checked")
+            continue
+        found = stop_timeouts(stop)
+        for gate, ceiling in sorted(ceilings.items()):
+            if gate not in found:
+                errors.append(f"{rel} Stop: no entry runs {gate}, so its timeout cannot be held to {ceiling}")
+            for t in found.get(gate, []):
+                # An integer, exactly: the gates' reader treats 600.0 or "600" as no timeout at all.
+                if type(t) is not int or t != ceiling:
+                    errors.append(
+                        f"{rel} Stop: {gate} has a \"timeout\" of {t!r}, and {GATE_LIB.relative_to(ROOT)}'s "
+                        f"{CEILING_OF[gate]} is {ceiling}; the two must agree"
+                    )
+
+
 # Antigravity plugin loader discovers rules under rules/ (rules/AGENTS.md).
 # AGENTS.md at root is canonical context for Claude Code and this repository;
 # rules/AGENTS.md must exist and remain identical to it (typically via symlink).

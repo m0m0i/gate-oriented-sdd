@@ -32,18 +32,56 @@ gate_block() {
   _msg=$1
   printf '{"decision":"continue","reason":"%s"}\n' "$(_gate_json_escape "$_msg")"
   printf '%s\n' "$_msg" >&2
+  _gate_block_exit
+}
+
+# The status each harness reads as a block once the JSON and the message are out: 0 on
+# Antigravity, which reads the JSON, and 2 on Claude Code. gate_replay asks it too, so a replayed
+# block is judged by the same test that ends one.
+_gate_block_status() {
   if [ -n "${ANTIGRAVITY_CONVERSATION_ID:-}" ] || [ -n "${ANTIGRAVITY_AGENT:-}" ]; then
-    exit 0
+    return 0
   fi
-  exit 2
+  return 2
+}
+
+# The end of every block: gate_block's, and gate_replay's when it hands a child's block on. In a
+# gate's child it first marks the verdict complete, as gate_pass does (gate_replay, below).
+_gate_block_exit() {
+  [ -z "${_gate_child_run:-}" ] || { printf '' > "$_gate_child_run/end"; } 2>/dev/null
+  _gate_block_status
+  exit "$?"
 }
 
 # Allow the turn to end. Antigravity expects a JSON object; Claude Code expects
 # exit 0 and ignores stdout here.
 gate_pass() {
   printf '{}\n'
+  [ -z "${_gate_child_run:-}" ] || { printf '' > "$_gate_child_run/end"; } 2>/dev/null
   exit 0
 }
+
+# The run directory of the gate's child, set by the child alone once it has checked the directory
+# it was handed (#304). gate_pass and _gate_block_exit write `end` there after their output and
+# before they exit, which is what tells the parent the verdict is whole. Unset here, on load, so a
+# value inherited from the environment can never mark a forged verdict complete.
+unset _gate_child_run
+
+# How long a gate may take, stated once (#304). Neither harness turns a Stop hook it timed out
+# into a block: Claude Code discards a block written after its TERM, and Antigravity's KILL
+# cannot be caught. So a gate has a verdict only if it reaches one by a deadline of its own,
+# ahead of the hook's timeout. A ceiling is the `timeout` a hook file is meant to give its gate,
+# and the gate also bounds itself by any shorter one it can see (gate_hook_timeout below). The
+# margin is what a gate keeps back from a timeout to start its watchdog, finish the kill and
+# write its block, counting the harness's own TERM-to-KILL grace as zero, because a block written
+# after TERM is discarded. Plain assignments, never environment reads, so an inherited variable
+# cannot move a deadline; and no other budget is written as a literal anywhere in hooks/.
+_gate_margin=10
+_gate_qg_ceiling=600
+_gate_rg_ceiling=120
+_gate_qg_default=170
+_gate_qg_max=$((_gate_qg_ceiling - _gate_margin))
+_gate_rg_budget=$((_gate_rg_ceiling - _gate_margin))
 
 # Read one machine-read value out of a steering file.
 #
@@ -93,6 +131,556 @@ gate_steering_read() {  # <file> <key>
 gate_steering_value() {  # <file> <key>
   gate_steering_read "$1" "$2"
   return 0
+}
+
+# The quality gate's budget, from `- Validator budget: <seconds>` in a tech.md (#304, AC7).
+#
+#   0  the line holds an integer from 1 to _gate_qg_max; stdout is it
+#   1  no such line, or no such file; stdout is _gate_qg_default. Not an error: most projects
+#      write no line. A status of its own so a caller can say which of the two set the budget
+#   2  the line is there and holds anything else, the empty value included; stdout is a
+#      sentence naming the value and the range
+#   3  the file is there and could not be read; stdout is empty. Distinct from 2, because the
+#      quality gate already blocks on an unreadable tech.md, and a caller must not report it as
+#      a malformed line
+#
+# Presence is asked on its own, with the reader's own expression: gate_steering_read returns the
+# same empty string for an absent line and an empty one, and an empty one is malformed. The value
+# is judged by `case` before any arithmetic touches it, because in macOS sh `$(( ))` reads `abc`
+# as 0, a variable's name as that variable, `010` as octal, and runs the command inside
+# `a[$(cmd)]`. Three digits at most, so the `-le` after it never meets a number it cannot hold.
+gate_validator_budget() {  # <tech.md>
+  _vb=$(gate_steering_read "$1" 'Validator budget'); _vbrc=$?
+  [ "$_vbrc" -eq 2 ] && return 3
+  if [ "$_vbrc" -eq 1 ]; then printf '%s\n' "$_gate_qg_default"; return 1; fi
+  grep -q '^ *- *Validator budget:' "$1" 2>/dev/null; _vbrc=$?
+  [ "$_vbrc" -eq 1 ] && { printf '%s\n' "$_gate_qg_default"; return 1; }
+  [ "$_vbrc" -eq 0 ] || return 3
+  # One trailing carriage return, for a tech.md saved with CRLF; then spaces and tabs, both ends.
+  _vbcr=$(printf '\r'); _vbtab=$(printf '\t')
+  _vb=${_vb%"$_vbcr"}
+  while :; do case "$_vb" in ' '*|"$_vbtab"*) _vb=${_vb#?} ;; *) break ;; esac; done
+  while :; do case "$_vb" in *' '|*"$_vbtab") _vb=${_vb%?} ;; *) break ;; esac; done
+  case "$_vb" in
+    [1-9]|[1-9][0-9]|[1-9][0-9][0-9])
+      [ "$_vb" -le "$_gate_qg_max" ] && { printf '%s\n' "$_vb"; return 0; } ;;
+  esac
+  printf "the '- Validator budget:' line in %s reads '%s', and the budget is a whole number of seconds from 1 to %s, with no unit, sign, fraction or leading zero\n" "$1" "$_vb" "$_gate_qg_max"
+  return 2
+}
+
+# The settings files a Claude Code launch read: the rule plugin-gate.sh's stand-down applies
+# (#262), and case 263 holds the two to the same set. The wrapper keeps its own copy because it
+# runs before any library is chosen. Launched below the git root, Claude Code reads the launch
+# directory's settings.json and settings.local.json and the root's settings.local.json, and not
+# the root's settings.json; that root is CLAUDE_PROJECT_DIR's. Without the variable, outside
+# Claude Code, the git root's two files, or the working directory's with no git root. Every
+# candidate is printed, there or not.
+_gate_launch_settings() {
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    _ls_root=$(git -C "$CLAUDE_PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null) || _ls_root=$CLAUDE_PROJECT_DIR
+    printf '%s\n' "$CLAUDE_PROJECT_DIR/.claude/settings.json" "$CLAUDE_PROJECT_DIR/.claude/settings.local.json" \
+      "$_ls_root/.claude/settings.local.json"
+  else
+    _ls_root=$(git rev-parse --show-toplevel 2>/dev/null) || _ls_root=$(pwd)
+    printf '%s\n' "$_ls_root/.claude/settings.json" "$_ls_root/.claude/settings.local.json"
+  fi
+}
+
+# Every project hook file that could have run the gate in <hooks dir>, one path per line, each
+# one that exists and each once (#304, AC9). Call it before any `cd`, because CLAUDE_PROJECT_DIR
+# and the working directory are the launch's:
+#
+#   - the settings this Claude Code launch read, above;
+#   - the git root's .claude/settings.json, .claude/settings.local.json and .agents/hooks.json,
+#     the working directory standing in for a root when there is none;
+#   - a gate in <X>/.agents/hooks/ or <X>/.claude/hooks/: <X>'s .agents/hooks.json, or its two
+#     settings files. <X> is taken from the path the gate was run through and from its physical
+#     path both, so an .agents/hooks that is a symlink into a plugin checkout still finds its
+#     hooks.json, and a symlinked prefix does not hide <X>.
+#
+# A superset, on purpose: a file this launch did not read can only lower the bound, never raise
+# it. Duplicates are told apart by physical path, because macOS resolves /tmp as /private/tmp and
+# git prints the second where a launch may have written the first. A path holding a newline is
+# split, which is a stated residual.
+gate_hook_files() {  # <hooks dir>
+  _hf_root=$(git rev-parse --show-toplevel 2>/dev/null) || _hf_root=$(pwd)
+  _hf_dir=$(CDPATH= cd -- "$1" 2>/dev/null && pwd) || _hf_dir=$1
+  _hf_phys=$(CDPATH= cd -- "$1" 2>/dev/null && pwd -P) || _hf_phys=$1
+  {
+    _gate_launch_settings
+    printf '%s\n' "$_hf_root/.claude/settings.json" "$_hf_root/.claude/settings.local.json" "$_hf_root/.agents/hooks.json"
+    for _hf_d in "$_hf_dir" "$_hf_phys"; do
+      case "$_hf_d" in
+        */.agents/hooks) printf '%s\n' "${_hf_d%/hooks}/hooks.json" ;;
+        */.claude/hooks) printf '%s\n' "${_hf_d%/hooks}/settings.json" "${_hf_d%/hooks}/settings.local.json" ;;
+      esac
+    done
+  } | {
+    _hf_seen=""
+    while IFS= read -r _hf_f; do
+      [ -e "$_hf_f" ] || continue
+      _hf_k=$(CDPATH= cd -- "${_hf_f%/*}" 2>/dev/null && pwd -P) && _hf_k="$_hf_k/${_hf_f##*/}" || _hf_k=$_hf_f
+      case "
+$_hf_seen" in *"
+$_hf_k
+"*) continue ;; esac
+      _hf_seen="$_hf_seen$_hf_k
+"
+      printf '%s\n' "$_hf_f"
+    done
+  }
+}
+
+# The shortest `timeout` the given hook files give the gate named <gate script>, as
+# "<seconds> <file>"; "<ceiling> ceiling" when no entry names it, which covers the plugin, whose
+# own hooks.json is in no project (#304, AC9). The caller keeps _gate_margin back from it.
+#
+# An entry names a gate when its "command" string holds the gate's file name as a whole path
+# component, so `code-review-gate.sh` is not review-gate.sh. Every entry that names it counts,
+# live or dead, and every `timeout` in that entry's object, a duplicate key included: each can
+# only lower the bound. Status 2, with a sentence naming the file and the field, when a file is
+# there and cannot be read, does not parse, or has an entry that names the gate with no integer
+# `timeout` — never a default, because the harnesses' own defaults are not something this
+# project measured — and when the shortest timeout leaves nothing once the margin is kept back.
+#
+# The scan is a string-aware tokenizer in POSIX awk, not a line or brace count: a minified file
+# is one line, a fast check's command holds `{}`, and a settings file may carry `//` and `/* */`
+# comments. Its input is folded into 512-byte records first, newlines kept as \001, and its state
+# (inside a string, an escape pending, the depth, each open object's keys) carries from one record
+# to the next. So it is linear in the file's size: a tokenizer that indexes one long line with
+# `substr` is quadratic in BWK awk, measured at 8.5 s for 749 KB, and the scan runs inside the
+# margin. LC_ALL=C on all three stages, so they count bytes: BSD tr in a UTF-8 locale stops at
+# a byte that is not UTF-8, and a hook file read as cut off there would block every turn. A
+# pipeline is safe here only because the tokenizer demands a whole top-level value: a read that
+# failed or stopped short, or an awk that printed nothing, is a file that does not parse. A
+# timeout past nine digits reads as 999999999, which no budget reaches and the shell's `-lt` can
+# hold.
+gate_hook_timeout() {  # <gate script> <ceiling> <file>...
+  _ht_gate=$1; _ht_lo=$2; _ht_src=ceiling; shift 2
+  for _ht_f in "$@"; do
+    if [ ! -f "$_ht_f" ] || [ ! -r "$_ht_f" ]; then
+      printf '%s exists and cannot be read, so the "timeout" it gives %s is unknown\n' "$_ht_f" "$_ht_gate"
+      return 2
+    fi
+    _ht_r=$(LC_ALL=C tr '\n' '\001' < "$_ht_f" | LC_ALL=C fold -b -w 512 | LC_ALL=C awk -v g="$_ht_gate" '
+      function fail(why) { if (err == "") err = why " near byte " pos }
+      function namech(c) { return c ~ /[A-Za-z0-9._-]/ }
+      function names(s,   p, off) {
+        off = 0
+        while (g != "" && (p = index(substr(s, off + 1), g)) > 0) {
+          p += off
+          if (!namech(p > 1 ? substr(s, p - 1, 1) : "") && !namech(substr(s, p + length(g), 1))) return 1
+          off = p
+        }
+        return 0
+      }
+      function value(kind, text,   sg) {
+        fresh = 0
+        if (depth == 0) { want = "end"; return }
+        want = "sep"
+        if (type[depth] != "o") return
+        if (key[depth] == "command" && kind == "s" && names(text)) named[depth] = 1
+        if (key[depth] != "timeout") return
+        if (kind != "n" || text !~ /^-?(0|[1-9][0-9]*)$/) { tbad[depth] = 1; return }
+        sg = ""; if (substr(text, 1, 1) == "-") { sg = "-"; text = substr(text, 2) }
+        if (length(text) > 9) text = "999999999"
+        text = sg text
+        if (!(depth in tmin) || text + 0 < tmin[depth] + 0) tmin[depth] = text
+      }
+      function bare_end() {
+        if (bare == "") return
+        if (bare == "true" || bare == "false" || bare == "null") value("l", bare)
+        else if (bare ~ /^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?$/) value("n", bare)
+        else fail("a bare word that is no JSON value")
+        bare = ""
+      }
+      function push(c) {
+        if (want != "value") { fail("an unexpected " c); return }
+        depth++; type[depth] = (c == "{") ? "o" : "a"; key[depth] = ""; named[depth] = 0; tbad[depth] = 0
+        delete tmin[depth]
+        want = (c == "{") ? "key" : "value"; fresh = 1
+      }
+      function pop(c) {
+        if (depth == 0 || (c == "}") != (type[depth] == "o")) { fail("an unmatched " c); return }
+        if (want != "sep" && !fresh) { fail("a " c " where a value was due"); return }
+        if (type[depth] == "o" && named[depth]) {
+          if (tbad[depth] || !(depth in tmin)) notime = 1
+          else if (best == "" || tmin[depth] + 0 < best + 0) best = tmin[depth]
+        }
+        depth--
+        value("c", "")
+      }
+      function string_end() {
+        if (iskey) { key[depth] = sbuf; want = "colon"; fresh = 0 }
+        else value("s", sbuf)
+      }
+      BEGIN { NL = sprintf("%c", 1); want = "value"; best = "" }
+      err != "" { next }
+      {
+        rec = $0; n = length(rec); i = 1
+        while (i <= n && err == "") {
+          if (instr && esc) {
+            c = substr(rec, i, 1); i++; pos++
+            if (uleft) {
+              h = index("0123456789abcdef", tolower(c))
+              if (!h) { fail("a broken \\u escape"); continue }
+              ucode = ucode * 16 + h - 1
+              if (--uleft == 0) { esc = 0; if (keep) sbuf = sbuf ((ucode > 0 && ucode < 128) ? sprintf("%c", ucode) : "?") }
+              continue
+            }
+            if (c == "u") { uleft = 4; ucode = 0; continue }
+            esc = 0
+            if (!index("\"\\/bfnrt", c)) { fail("a broken escape"); continue }
+            if (keep) sbuf = sbuf (index("bfnrt", c) ? " " : c)
+            continue
+          }
+          if (instr) {
+            rest = substr(rec, i)
+            j = index(rest, "\""); b = index(rest, "\\"); m = index(rest, NL)
+            if (b && (!j || b < j)) j = b
+            if (m && (!j || m < j)) j = m
+            if (!j) { if (keep) sbuf = sbuf rest; pos += n - i + 1; i = n + 1; continue }
+            if (keep) sbuf = sbuf substr(rest, 1, j - 1)
+            c = substr(rest, j, 1); i += j; pos += j
+            if (c == NL) fail("a line break inside a string")
+            else if (c == "\\") esc = 1
+            else { instr = 0; string_end() }
+            continue
+          }
+          if (cmt == 1) {
+            m = index(substr(rec, i), NL)
+            if (!m) { pos += n - i + 1; i = n + 1 } else { i += m; pos += m; cmt = 0 }
+            continue
+          }
+          if (cmt == 2) {
+            if (star) { star = 0; if (substr(rec, i, 1) == "/") { i++; pos++; cmt = 0; continue } }
+            m = index(substr(rec, i), "*")
+            if (!m) { pos += n - i + 1; i = n + 1 } else { i += m; pos += m; star = 1 }
+            continue
+          }
+          c = substr(rec, i, 1); i++; pos++
+          if (slash) {
+            slash = 0
+            if (c == "/") { cmt = 1; continue }
+            if (c == "*") { cmt = 2; star = 0; continue }
+            fail("a / that opens no comment"); continue
+          }
+          if (c == " " || c == "\t" || c == "\r" || c == NL) { bare_end(); continue }
+          if (c == "/") { bare_end(); slash = 1; continue }
+          if (c == "\"") {
+            bare_end()
+            if (want == "key") { iskey = 1; keep = 1 }
+            else if (want == "value") { iskey = 0; keep = (depth > 0 && type[depth] == "o" && key[depth] == "command") }
+            else { fail("an unexpected string"); continue }
+            instr = 1; sbuf = ""; continue
+          }
+          if (c == "{" || c == "[") { bare_end(); push(c); continue }
+          if (c == "}" || c == "]") { bare_end(); pop(c); continue }
+          if (c == ":") { bare_end(); if (want != "colon") fail("an unexpected :"); else want = "value"; continue }
+          if (c == ",") {
+            bare_end()
+            if (want != "sep" || depth == 0) fail("an unexpected ,")
+            else want = (type[depth] == "o") ? "key" : "value"
+            continue
+          }
+          if (bare == "" && want != "value") { fail("unexpected text"); continue }
+          bare = bare c
+        }
+      }
+      END {
+        if (err == "") bare_end()
+        if (err == "") {
+          if (instr) fail("a string never closed")
+          else if (cmt == 2) fail("a comment never closed")
+          else if (slash) fail("a / that opens no comment")
+          else if (depth > 0) fail("a { or [ never closed")
+          else if (want != "end") fail("no JSON value")
+        }
+        if (err != "") print "err " err
+        else if (notime) print "notime"
+        else print "ok" (best == "" ? "" : " " best)
+      }')
+    case "$_ht_r" in
+      ok) ;;
+      'ok '*)
+        _ht_t=${_ht_r#ok }
+        if [ "$_ht_src" = ceiling ] || [ "$_ht_t" -lt "$_ht_lo" ]; then _ht_lo=$_ht_t; _ht_src=$_ht_f; fi ;;
+      notime)
+        printf '%s has an entry whose "command" runs %s and that has no integer "timeout", so the time the harness gives it is unknown; give that entry a "timeout" in whole seconds\n' "$_ht_f" "$_ht_gate"
+        return 2 ;;
+      'err '*)
+        printf '%s does not parse as JSON (%s), so the "timeout" it gives %s is unknown\n' "$_ht_f" "${_ht_r#err }" "$_ht_gate"
+        return 2 ;;
+      *)
+        printf '%s could not be scanned for the "timeout" it gives %s: the scan printed no answer\n' "$_ht_f" "$_ht_gate"
+        return 2 ;;
+    esac
+  done
+  if [ "$_ht_src" != ceiling ] && [ "$_ht_lo" -le "$_gate_margin" ]; then
+    printf '%s gives %s a "timeout" of %s s, which leaves no time once the gate keeps its %s s margin back to write a verdict; raise that "timeout"\n' "$_ht_src" "$_ht_gate" "$_ht_lo" "$_gate_margin"
+    return 2
+  fi
+  printf '%s %s\n' "$_ht_lo" "$_ht_src"
+}
+
+# Run <command> as the gate's child, bounded by <budget> seconds, and return its status (#304).
+#
+# The bound is one watchdog, started before the child and confirmed armed before the child
+# starts. Its deadline is a `sleep`, a relative interval that setting the clock does not move,
+# where a wall-clock deadline moves with an NTP step or a VM resume. The child runs in the
+# foreground, so a validator keeps the hook's stdin and today's signal dispositions; a background
+# job would inherit SIGINT and SIGQUIT ignored, which macOS sh and dash cannot restore.
+#
+# What the child leaves in <run dir>, for gate_replay and the gate's own blocks:
+#
+#   ppid     the shell that forked the child, written first, which is the parent the watchdog
+#            looks for: $$ would name the gate, and not the subshell, when this runs in one
+#   pid      the child's pid, written next, before any gate code runs; `exec` keeps it, so it is
+#            the child's own. A child that cannot write both exits 125 without running anything,
+#            since a command with no pid on disk is one the watchdog cannot kill
+#   verdict  its stdout, which only gate_pass or a block writes: one line or nothing
+#   err      its stderr
+#   end      its verdict is whole (gate_pass and _gate_block_exit write it)
+#
+# and the watchdog: `armed` once its deadline runs, `fired` when the deadline passed, and
+# `nowalk` when it could not walk the child's tree and killed the child alone. The gate writes
+# `done`, the only thing that disarms the watchdog.
+#
+# Every marker is written with `printf ''`, never `:`. A redirection that fails on `:`, a special
+# builtin, exits a POSIX shell whatever wraps it, so a run dir a validator removed or made
+# unwritable would end the gate after its child with nothing on stdout, and end the watchdog at
+# `fired` before its kill: both a pass where a block was due. A marker that cannot be written is
+# only missing, which costs the budget's latency or a line of the block, never the block itself.
+#
+# Inside `{ …; } 2>/dev/null`, with the status captured inside the braces: without it, bash as sh
+# prints `Terminated: 15` for a killed child onto the gate's own stderr, which is Claude Code's
+# block reason. The watchdog signals the child only while `ps` lists it under the parent in
+# `ppid`, which is how a pid the gate has already reaped, and the system has reused, is never
+# signalled.
+#
+# <run dir> must be absolute, and a relative one blocks before anything starts: the child writes
+# `end` after it has cd'd to the git root, and neither the parent nor the watchdog ever cds.
+#
+# Every return path reaps the watchdog, looping while `kill -0` still reaches it because a
+# trapped signal returns `wait` early: once the deadline fired the watchdog is finishing its kill,
+# and the gate waits for that, so nothing it killed is still alive when the gate decides. A
+# watchdog that does not confirm it is armed is STOPped, its children (its sleep, which ignores
+# every catchable signal) KILLed from a snapshot, and then it is KILLed itself: all safe, because
+# it is this shell's own unreaped child and cannot reap its own while stopped. The gate then
+# blocks without running the check (AC5).
+# shellcheck disable=SC2086  # $_gb_k is a list of pids, one per word
+gate_bounded() {  # <budget> <run dir> <command>...
+  _gb_run=$2
+  case "$_gb_run" in
+    /*) ;;
+    *)
+      trap '' HUP INT QUIT TERM USR1 USR2 ALRM
+      gate_block "${_gate_name:-Gate}: the directory this check runs in, '$_gb_run', is not an absolute path, so the check had no deadline it could be held to and was not run. A check the harness kills at its timeout ends the turn as a pass, so this blocks instead. Set TMPDIR to an absolute path, or unset it." ;;
+  esac
+  _gate_watchdog "$1" "$2" </dev/null >/dev/null 2>&1 &
+  _gb_wd=$!
+  shift 2
+  if ! _gate_await "$_gb_run/armed" 100 2; then
+    { kill -s STOP "$_gb_wd"; } 2>/dev/null
+    if _gate_snapshot; then
+      _gb_k=$(printf '%s\n' "$_wd_ps" | awk -v w="$_gb_wd" '$2 == w { print $1 }')
+      [ -z "$_gb_k" ] || { kill -s KILL $_gb_k; } 2>/dev/null
+    fi
+    { kill -s KILL "$_gb_wd"; } 2>/dev/null
+    _gate_reap "$_gb_wd"
+    trap '' HUP INT QUIT TERM USR1 USR2 ALRM
+    gate_block "${_gate_name:-Gate}: the watchdog that bounds this check did not confirm it was armed (no 'armed' in $_gb_run), so the check had no deadline and was not run. A check the harness kills at its timeout ends the turn as a pass, so this blocks instead. Run again; if this repeats, check that the gate's temporary directory is writable."
+  fi
+  { sh -c 'echo $PPID >"$1/ppid" && echo $$ >"$1/pid" || exit 125; shift; exec "$@"' _ "$_gb_run" "$@" >"$_gb_run/verdict" 2>"$_gb_run/err"; _gb_rc=$?; } 2>/dev/null
+  if [ ! -e "$_gb_run/fired" ]; then
+    { printf '' > "$_gb_run/done"; } 2>/dev/null
+    { kill -s USR1 "$_gb_wd"; } 2>/dev/null
+  fi
+  _gate_reap "$_gb_wd"
+  return "$_gb_rc"
+}
+
+# Wait up to <hundredths> polls of 0.01 s for <file> to be there and not empty, or up to <seconds>
+# polls of 1 s where `sleep` takes no fraction. 1 when the polls run out. A sleep that fails is
+# taken for one that rejects a fraction, which only makes the wait coarser. Hundredths, because
+# what it waits for is written within milliseconds, and every gate run pays the first poll.
+_gate_await() {  # <file> <hundredths> <seconds>
+  _aw_n=0; _aw_max=$2; _aw_s=0.01
+  while [ ! -s "$1" ]; do
+    [ "$_aw_n" -lt "$_aw_max" ] || return 1
+    if sleep "$_aw_s" 2>/dev/null || [ "$_aw_s" = 1 ]; then
+      _aw_n=$((_aw_n + 1))
+    else
+      _aw_s=1; _aw_max=$3; _aw_n=0
+    fi
+  done
+}
+
+# Reap a background child of this shell, however many trapped signals cut `wait` short. 127 is
+# `wait` saying the pid is no child of this shell, which ends the loop rather than spin on a pid
+# the system has handed to someone else.
+_gate_reap() {  # <pid>
+  while kill -0 "$1" 2>/dev/null; do
+    { wait "$1"; } 2>/dev/null
+    [ "$?" -ne 127 ] || break
+  done
+}
+
+# Each live pid among its arguments, space-separated.
+_gate_alive() {  # <pid>...
+  for _al_p in "$@"; do kill -0 "$_al_p" 2>/dev/null && printf '%s ' "$_al_p"; done
+}
+
+# Every process as "<pid> <ppid>", in $_wd_ps; 1 when `ps` exits non-zero or prints nothing. On a
+# line of its own and never a pipeline, whose status would be its last command's: a `ps` that
+# failed would read as a table with nothing in it. The watchdog's only call to `ps`.
+_gate_snapshot() {
+  _wd_ps=$(ps -A -o pid= -o ppid= 2>/dev/null) && [ -n "$_wd_ps" ]
+}
+
+# The descendants of <pid>... in a _gate_snapshot table on stdin, one per line, each
+# once, never a root.
+_gate_descendants() {  # <pid>...
+  awk -v roots="$*" '
+    { kids[$2] = kids[$2] " " $1 }
+    END {
+      n = split(roots, q, " "); for (i = 1; i <= n; i++) seen[q[i]] = 1
+      for (h = 1; h <= n; h++) {
+        m = split(kids[q[h]], c, " ")
+        for (j = 1; j <= m; j++) if (!(c[j] in seen)) { seen[c[j]] = 1; q[++n] = c[j]; print c[j] }
+      }
+    }'
+}
+
+# gate_bounded's watchdog, run in a background subshell with its descriptors on /dev/null.
+#
+# Nothing a validator can send to its process group ends it or disarms it. It ignores HUP, INT,
+# QUIT, TERM, USR2 and ALRM, and USR1 too until its sleep is running, so the sleep is born
+# ignoring all seven; then USR1 is trapped to a no-op, which only interrupts `wait` so the
+# watchdog looks for `done`. Disarming needs that file, which only the gate writes, so a
+# validator's `kill -s USR1 0` makes it look and find nothing. It looks before each `wait` as
+# well as after, so a `done` and USR1 that land before the first `wait` are not lost; the window
+# left is two builtins wide, and missing it costs the gate the budget's latency, never its verdict.
+#
+# When the sleep ends it fires: it ignores USR1, checks `done` one last time, writes `fired`, and
+# kills the child's tree. The walk is rooted at the child, never at the gate, so the watchdog is
+# never in it and needs no pid of its own:
+#
+#   1. the child's pid from `pid`, polling up to 1 s, and its parent from `ppid`; with neither the
+#      child never ran, so there is nothing to kill. Then a `ps -A -o pid= -o ppid=` snapshot on a
+#      line of its own, never a pipeline, whose status would be awk's
+#   2. the child is signalled only while the snapshot lists it under that parent; a child listed
+#      under another parent is a pid the gate reaped and the system reused. A walk
+#      has failed when `ps` exits non-zero, prints nothing, or leaves out a child that `kill -0`
+#      still reaches: the set is then the child alone, and `nowalk` says so
+#   3. STOP the child, then walk and STOP its descendants until the set stops growing, at most
+#      five times; TERM the set, then CONT, so every member meets the TERM at once
+#   4. poll `kill -0` once a second for up to 2 s, stopping as soon as nothing is left: whole
+#      seconds, so a `sleep` without fractions changes nothing
+#   5. STOP whatever in the saved set is still alive, walk again from those pids, adding and
+#      STOPping what it finds until the set stops growing (at most five times), and KILL the
+#      union. Rooted at the saved pids, so a descendant already reparented to pid 1 is still
+#      covered, and a worker that a TERM-catching loop forked during the grace is found from it.
+# shellcheck disable=SC2086  # $_wd_set is a list of pids, one per word
+_gate_watchdog() {  # <budget> <run dir>
+  unset IFS
+  trap '' HUP INT QUIT TERM USR1 USR2 ALRM
+  (trap '' USR1; exec sleep "$1") &
+  _wd_sl=$!
+  trap ':' USR1
+  if ! { echo armed > "$2/armed"; } 2>/dev/null; then
+    kill -s KILL "$_wd_sl" 2>/dev/null; wait "$_wd_sl"; exit 1
+  fi
+  while :; do
+    if [ -e "$2/done" ]; then kill -s KILL "$_wd_sl" 2>/dev/null; wait "$_wd_sl"; exit 0; fi
+    wait "$_wd_sl"
+    kill -0 "$_wd_sl" 2>/dev/null || break
+  done
+  trap '' USR1
+  [ -e "$2/done" ] && exit 0
+  { printf '' > "$2/fired"; } 2>/dev/null
+
+  _gate_await "$2/pid" 100 1
+  _wd_c=$(cat "$2/pid" 2>/dev/null); _wd_g=$(cat "$2/ppid" 2>/dev/null)
+  case "$_wd_c:$_wd_g" in *:|:*|*[!0-9:]*) exit 0 ;; esac
+  _wd_walk=no; _wd_pp=""
+  if _gate_snapshot; then
+    _wd_pp=$(printf '%s\n' "$_wd_ps" | awk -v c="$_wd_c" '$1 == c { print $2; exit }')
+  fi
+  if [ -n "$_wd_pp" ]; then
+    [ "$_wd_pp" = "$_wd_g" ] || exit 0
+    _wd_walk=yes
+  else
+    kill -0 "$_wd_c" 2>/dev/null || exit 0
+    { printf '' > "$2/nowalk"; } 2>/dev/null
+  fi
+
+  _wd_set=$_wd_c
+  kill -s STOP $_wd_set 2>/dev/null
+  _gate_watchdog_walk "$2"
+  kill -s TERM $_wd_set 2>/dev/null
+  kill -s CONT $_wd_set 2>/dev/null
+  _wd_i=0
+  while [ "$_wd_i" -lt 2 ] && [ -n "$(_gate_alive $_wd_set)" ]; do
+    sleep 1; _wd_i=$((_wd_i + 1))
+  done
+
+  _wd_set=$(_gate_alive $_wd_set)
+  [ -n "$_wd_set" ] || exit 0
+  kill -s STOP $_wd_set 2>/dev/null
+  _gate_watchdog_walk "$2"
+  kill -s KILL $_wd_set 2>/dev/null
+  exit 0
+}
+
+# Steps 3 and 5's walk: grow $_wd_set by the descendants a fresh snapshot shows, STOPping each as
+# it is found, until a round finds nothing, at most five rounds. Only after a first walk that
+# found the child, since a `ps` that failed or lied once is not asked again.
+# shellcheck disable=SC2086  # $_wd_set and $_ww_new are lists of pids, one per word
+_gate_watchdog_walk() {  # <run dir>
+  [ "$_wd_walk" = yes ] || return 0
+  _ww_i=0
+  while [ "$_ww_i" -lt 5 ]; do
+    _ww_i=$((_ww_i + 1))
+    _gate_snapshot || { { printf '' > "$1/nowalk"; } 2>/dev/null; return 0; }
+    _ww_new=$(printf '%s\n' "$_wd_ps" | _gate_descendants $_wd_set)
+    [ -n "$_ww_new" ] || return 0
+    kill -s STOP $_ww_new 2>/dev/null
+    _wd_set="$_wd_set $_ww_new"
+  done
+}
+
+# Judge what a bounded child left in <run dir>, given the status gate_bounded returned (#304).
+# Only once the child wrote `end`: gate_pass and _gate_block_exit write it after their output, so
+# a verdict torn by a kill is never judged, whatever its bytes. And never once the gate caught a
+# signal, which it records in `signalled`.
+#
+#   - `verdict` exactly `{}` with status 0 is a pass: the child's stderr is replayed and the gate
+#     passes;
+#   - one line that opens `{"decision":"continue","reason":"` and closes `"}`, with the status the
+#     channel gives a block, is that block: both files replayed, and out through _gate_block_exit.
+#
+# Anything else returns 1 having written nothing, and the gate builds a block of its own; so does
+# a call with no status, read as `${2-}` because a gate under `set -u` must not abort with nothing
+# on stdout, which a harness reads as a pass. A
+# recognised verdict wins even beside `fired`: the child reached it within the budget and a moment.
+gate_replay() {  # <run dir> <the child's status>
+  [ -e "$1/end" ] && [ ! -e "$1/signalled" ] || return 1
+  _rp_v=$(cat -- "$1/verdict" 2>/dev/null) || return 1
+  case "$_rp_v" in *'
+'*) return 1 ;; esac
+  printf '%s\n' "$_rp_v" | cmp -s - "$1/verdict" || return 1
+  if [ "$_rp_v" = '{}' ] && [ "${2-}" = 0 ]; then
+    cat -- "$1/err" >&2 2>/dev/null
+    gate_pass
+  fi
+  case "$_rp_v" in '{"decision":"continue","reason":"'*'"}') ;; *) return 1 ;; esac
+  _gate_block_status
+  [ "${2-}" = "$?" ] || return 1
+  printf '%s\n' "$_rp_v"
+  cat -- "$1/err" >&2 2>/dev/null
+  _gate_block_exit
 }
 
 # Emit a spec's Tasks section ONLY — section 3, up to the next heading.
@@ -356,13 +944,14 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   [ -n "$_wglobs" ] || _wglobs='*'
   _wglobs=$(printf '%s' "$_wglobs" | tr -d "\"'")
 
-  # Exit status, never emptiness. `- Source globs:` is consumer-authored and nothing validates
-  # it — `check-steering-anchors.sh` says in its own header that it does not judge whether a
-  # value is any good — so a pathspec git rejects (`:(globs)` for `:(glob)`, a typo echoing the
-  # key's own name) makes this exit 128 having printed nothing. Nothing is also what a branch
-  # with no footprint prints, and reading the two as one silenced the gate on both call sites
-  # with no diagnostic anywhere. Review round 1's BLOCKER, case 140. A git that could not
-  # answer leaves the skip unfired, which is the same direction as every other guard here.
+  # Exit status, never emptiness. `- Source globs:` is consumer-authored and nothing validates it —
+  # `check-steering-anchors.sh` says in its own header that it judges only whether a value can be
+  # honoured by the hook that reads it, and for this line that is whether the reader sees it at all,
+  # never whether git accepts it — so a pathspec git rejects (`:(globs)` for `:(glob)`, a typo
+  # echoing the key's own name) makes this exit 128 having printed nothing. Nothing is also what a
+  # branch with no footprint prints, and reading the two as one silenced the gate on both call sites
+  # with no diagnostic anywhere. Review round 1's BLOCKER, case 140. A git that could not answer
+  # leaves the skip unfired, which is the same direction as every other guard here.
   # What did this branch touch? Two readings, and they are COMPLEMENTS rather than rivals —
   # each is blind to a shape the other catches, and "absent from the footprint" is read below
   # as "nothing to review", so a blind spot here is a silenced gate.

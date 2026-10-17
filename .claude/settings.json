@@ -11,12 +11,12 @@
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "[ -f hooks/quality-gate.sh ] || exit 0; sh hooks/quality-gate.sh", "timeout": 180 }
+          { "type": "command", "command": "[ -f hooks/quality-gate.sh ] || exit 0; sh hooks/quality-gate.sh", "timeout": 600 }
         ]
       },
       {
         "hooks": [
-          { "type": "command", "command": "[ -f hooks/review-gate.sh ] || exit 0; sh hooks/review-gate.sh", "timeout": 30 }
+          { "type": "command", "command": "[ -f hooks/review-gate.sh ] || exit 0; sh hooks/review-gate.sh", "timeout": 120 }
         ]
       }
     ],

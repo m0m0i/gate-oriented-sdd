@@ -17,6 +17,13 @@
 # Keep it fast. A gate that costs a minute per turn is a gate that gets switched off, and
 # a switched-off gate protects nothing. If the suite is slow, the honest fix is a faster
 # suite or a narrower validator list — not a demotion to advisory.
+#
+# The deadline is part of the guarantee, not a cost to keep down (#304). Neither harness turns
+# a Stop hook it timed out into a block: Claude Code discards a block written after its TERM,
+# and Antigravity's KILL cannot be caught, so a suite that outran the hook's timeout ended the
+# turn as a pass. So the gate runs its own body as a child, under a watchdog started first, and
+# blocks at a budget of its own, ahead of the timeout: 170 s unless `- Validator budget:` in
+# .steering/tech.md says otherwise, and never past what any hook file that runs it allows.
 set -u
 
 _gate_name='Quality gate'
@@ -62,12 +69,6 @@ fi
 command -v gate_block >/dev/null 2>&1 || _gate_bootstrap_block "$_gate_name: gate-lib.sh loaded and defines no gate_block, so it is not the library this gate blocks through — an empty or truncated copy. Re-copy the plugin's hooks/ into this project and run again rather than treating this turn as a pass."
 # --- end bootstrap guard ----------------------------------------------------------------
 
-# Anchor to the repository root so relative paths (.steering/, .specs/) resolve
-# correctly regardless of the working directory the hook was invoked from.
-if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
-  cd "$repo_root"
-fi
-
 # The validator list is read through gate_steering_read. If this hooks/ directory is a mix of
 # versions the function is undefined — and `set -u` does not catch an undefined FUNCTION, so
 # the read yields empty, the "no validators configured" branch below fires, and the gate exits
@@ -75,6 +76,252 @@ fi
 # migration has to carry the check. The asset guards itself this way; the gate is the half that
 # matters more, because its failure is silent.
 command -v gate_steering_read >/dev/null 2>&1 || gate_block "Quality gate: gate-lib.sh predates the shared steering reader, so this gate cannot read its validator list. Re-copy the plugin's hooks/ into this project and run again rather than treating this as a pass."
+
+# The deadline came with five more (#304), so a gate-lib.sh copied before them is a library older
+# than this gate. Unguarded, a missing gate_hook_files reads as no hook file and the bound as the
+# ceiling, and a missing gate_bounded or gate_replay is `command not found` with nothing on stdout,
+# which a harness reads as a pass. Case 293.
+for _qg_fn in gate_validator_budget gate_hook_files gate_hook_timeout gate_bounded gate_replay; do
+  command -v "$_qg_fn" >/dev/null 2>&1 || gate_block "Quality gate: gate-lib.sh predates $_qg_fn, which this gate holds itself to a deadline through, so it cannot finish ahead of the harness's timeout. Re-copy the plugin's hooks/ into this project and run again rather than treating this turn as a pass."
+done
+
+# The commands on the `- Validators:` line in $validators, one per line, trimmed, the empty ones
+# dropped. Comma-separated, because a validator is a whole command and commands contain spaces.
+# The child runs them in this order and numbers them from 1, and the parent's timeout block counts
+# them the same way, so the two cannot disagree about which one was cut off or never started.
+# Inside `set -f`, so a command is never matched against file names on its way to `eval`.
+qg_split() {
+  _qs_ifs=$IFS
+  IFS=,
+  set -f
+  for _qs_c in $validators; do
+    _qs_c=$(printf '%s' "$_qs_c" | sed -e 's/^ *//' -e 's/ *$//')
+    [ -z "$_qs_c" ] || printf '%s\n' "$_qs_c"
+  done
+  set +f
+  IFS=$_qs_ifs
+}
+qg_nl='
+'
+
+if [ "${1-}" != --bounded ]; then
+  # --- the parent: the budget, the watchdog, the verdict (#304) --------------------------
+  #
+  # The parent runs no validator. It works out the budget, runs this same script as its child
+  # through gate_bounded, and judges what the child left in the run dir. A verdict reaches the
+  # harness one of two ways: a pass or a block the child printed and gate_replay recognised, or a
+  # block this parent builds. Every other ending — a cut-off, a signal, a status or stdout that
+  # means neither — is the second.
+
+  # A signal to the parent, from the harness or from a validator's group-wide `kill 0`, is
+  # recorded and returns (AC5). POSIX runs the trap only once the foreground child has returned,
+  # so it cannot cut the child's tree short: the child got the same group-wide signal and ends
+  # through its own traps, or the watchdog ends it. The parent then judges, and a signal is a block.
+  run=""; qg_sig=""
+  qg_caught() {  # <signal>
+    qg_sig="${qg_sig:+$qg_sig, }SIG$1"
+    [ -z "$run" ] || { echo "$1" >> "$run/signalled"; } 2>/dev/null
+  }
+  for _qg_s in HUP INT QUIT TERM USR1 USR2 ALRM; do
+    # shellcheck disable=SC2064  # the signal's name is fixed when the trap is set, on purpose
+    trap "qg_caught $_qg_s" "$_qg_s"
+  done
+
+  # The run dir holds what the child and the watchdog leave (gate_bounded). The EXIT trap removes
+  # the files it knows by name and then the directory, whatever else is going on: unlinking a file
+  # a validator's leftover background child still holds is harmless, and a directory that cannot
+  # be removed stays where it was made, never in the work tree. That replaces a trap that removed
+  # nothing whenever its temp name was empty, and left `.out` in the project's root.
+  trap '[ -z "$run" ] || { rm -f "$run"/v.* "$run"/fp.* "$run/ppid" "$run/pid" "$run/verdict" "$run/err" "$run/end" "$run/armed" "$run/fired" "$run/nowalk" "$run/done" "$run/signalled" "$run/progress" "$run/budget-error"; rmdir "$run"; } 2>/dev/null' EXIT
+
+  # Every block the parent builds removes the last pass record first (AC3): a child cut off just
+  # after it wrote one would otherwise leave a pass the next turn end skips on. A removal that
+  # fails is named. The seven signals are ignored before anything is written, so exactly one
+  # verdict reaches stdout.
+  qg_block() {  # <message>
+    trap '' HUP INT QUIT TERM USR1 USR2 ALRM
+    _qb_m=$1
+    if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true ] \
+       && _qb_r=$(git rev-parse --git-path gate-sdd/quality-pass 2>/dev/null) && [ -e "$_qb_r" ] && ! rm -f "$_qb_r" 2>/dev/null; then
+      _qb_m="$_qb_m
+
+The last pass record at $_qb_r could not be removed, so the next turn end may skip the validators on it. Remove it by hand."
+    fi
+    gate_block "$_qb_m"
+  }
+
+  # Listed before the `cd` below, because CLAUDE_PROJECT_DIR and the working directory are the
+  # launch's (gate_hook_files).
+  qg_files=$(gate_hook_files "$DIR")
+
+  # Under TMPDIR, or under the git directory when TMPDIR cannot hold one: an inherited sandbox
+  # TMPDIR that does not exist would otherwise block every turn. Never the work tree, where a
+  # validator that asks git for untracked files would find it, and always absolute: the child
+  # cds to the git root, and a relative path would then name a directory the parent never reads.
+  qg_mkrun() {  # <directory> — a fresh run dir under it, as an absolute path, in $run
+    _mr=$(mktemp -d "$1/gate-sdd-run.XXXXXX" 2>/dev/null) || return 1
+    run=$(CDPATH= cd -- "$_mr" 2>/dev/null && pwd -P) && return 0
+    rmdir -- "$_mr" 2>/dev/null; run=""; return 1
+  }
+  qg_gitdir=$(git rev-parse --git-path gate-sdd 2>/dev/null) || qg_gitdir=""
+  if ! qg_mkrun "${TMPDIR:-/tmp}" && ! { [ -n "$qg_gitdir" ] && mkdir -p "$qg_gitdir" 2>/dev/null && qg_mkrun "$qg_gitdir"; }; then
+    qg_block "Quality gate: this gate could not make the directory its check runs in, under TMPDIR (${TMPDIR:-/tmp}) or under the git directory (${qg_gitdir:-none, outside a git repository}), so the check had no deadline it could be held to and the validators did not run. A check the harness kills at its timeout ends the turn as a pass, so this blocks instead. Point TMPDIR at a writable directory, or unset it."
+  fi
+
+  # Anchored to the repository root, as the child is below, so .steering/ resolves.
+  if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+    cd "$repo_root"
+  fi
+
+  # The budget: the `- Validator budget:` line, or the library's default. A malformed line is
+  # handed to the child, which blocks on it only when the validators are about to run, so a turn
+  # the source skip passes is not blocked by it (AC7). An unreadable tech.md hands nothing over,
+  # because the child already blocks on that file.
+  qg_budget=$(gate_validator_budget .steering/tech.md); qg_vb=$?
+  qg_from=line; qg_src="the '- Validator budget:' line in .steering/tech.md"; qg_berr=""
+  case "$qg_vb" in
+    0) ;;
+    1) qg_from=default; qg_src="the default, as .steering/tech.md has no '- Validator budget:' line" ;;
+    2) { printf '%s\n' "$qg_budget" > "$run/budget-error"; } 2>/dev/null \
+         || qg_block "Quality gate: $qg_budget, and this gate could not hand that to its check through $run. Fix the line and run again."
+       qg_berr=yes; qg_budget=$_gate_qg_default; qg_from=default; qg_src="the default, as the '- Validator budget:' line is malformed" ;;
+    *) qg_budget=$_gate_qg_default; qg_from=default; qg_src="the default" ;;
+  esac
+
+  # Never past what a hook file that runs this gate allows: the shortest "timeout" any of them
+  # gives it, less the margin the gate keeps back to write its block (AC9). A file that cannot be
+  # read or parsed, or an entry that names this gate with no "timeout", blocks at once. Split on
+  # newlines alone, so a path holding a space stays one argument.
+  _qg_ifs=$IFS; IFS=$qg_nl
+  set -f
+  # shellcheck disable=SC2086  # one hook file per line
+  set -- $qg_files
+  set +f
+  IFS=$_qg_ifs
+  qg_ht=$(gate_hook_timeout quality-gate.sh "$_gate_qg_ceiling" "$@") \
+    || qg_block "Quality gate: $qg_ht, so this gate cannot tell how long it has before the harness's timeout, and its validators did not run. A check the harness kills at its timeout ends the turn as a pass, so this blocks instead."
+  qg_t=${qg_ht%% *}; qg_tsrc=${qg_ht#* }
+  case "$qg_t" in
+    ''|*[!0-9]*) qg_block "Quality gate: the hook-timeout reader answered '$qg_ht', which is no number of seconds, so this gate cannot tell how long it has. Re-copy the plugin's hooks/ into this project and run again rather than treating this turn as a pass." ;;
+  esac
+  qg_bound=$((qg_t - _gate_margin))
+  [ "$qg_bound" -gt 0 ] || qg_block "Quality gate: $qg_tsrc gives this gate a \"timeout\" of $qg_t s, which leaves nothing once it keeps $_gate_margin s back to write its verdict, so its validators did not run. Raise that \"timeout\"."
+  # The ceiling the reader answers when no file names this gate is no file, and is never named as
+  # one; a file that ties the budget is, since raising the line would not move it.
+  if [ "$qg_tsrc" != ceiling ] && [ "$qg_bound" -le "$qg_budget" ]; then
+    qg_budget=$qg_bound; qg_from=file
+    qg_src="the \"timeout\" of $qg_t s that $qg_tsrc gives this gate, less the $_gate_margin s it keeps back to write its verdict"
+  fi
+
+  # The child is this script with --bounded and the run dir. The hook's stdin and the working
+  # directory pass to it, and through it to the validators.
+  if [ -n "$qg_berr" ]; then
+    gate_bounded "$qg_budget" "$run" sh "$DIR/quality-gate.sh" --bounded "$run" --budget-error "$run/budget-error"; qg_rc=$?
+  else
+    gate_bounded "$qg_budget" "$run" sh "$DIR/quality-gate.sh" --bounded "$run"; qg_rc=$?
+  fi
+
+  # The validator a cut-off or a signal caught running: `progress` holds `start <n> <command>`
+  # before validator n and `ok <n>` or `fail <n>` after it, so it is the last start with no end.
+  qg_open() { awk '$1 == "start" { s = $2 } ($1 == "ok" || $1 == "fail") && $2 == s { s = "" } END { print s }' "$run/progress" 2>/dev/null; }
+
+  # The timeout block (AC1, AC2), built once the watchdog has finished its kill, from what the
+  # child recorded: the validator it cut off with the tail of its v.<n>, whatever it wrote before
+  # it died; each one that failed before that, with its tail as an ordinary failure has it; and
+  # each one after the last start, which never ran. Then, where the watchdog could not walk the
+  # child's tree, that only the child was killed (AC4); and a remedy that follows from what set
+  # the budget.
+  qg_timeout_block() {
+    validators=$(gate_steering_value .steering/tech.md Validators)
+    _tb_cut=$(qg_open)
+    _tb_last=$(awk '$1 == "start" { n = $2 } END { print n + 0 }' "$run/progress" 2>/dev/null) || _tb_last=0
+    printf "Quality gate: the validators did not finish within this gate's budget of %s s, set by %s, so this turn is blocked rather than passed. A gate the harness kills at its timeout ends the turn as a pass, so this gate keeps a deadline of its own and blocks at it." "$qg_budget" "$qg_src"
+    if [ "${_tb_last:-0}" -eq 0 ]; then
+      printf ' It was cut off before its first validator started.'
+    elif [ -z "$_tb_cut" ]; then
+      printf ' Every validator it started had finished, and it was cut off before it reached a verdict.'
+    fi
+    _tb_n=0; _tb_body=""
+    while IFS= read -r _tb_c; do
+      [ -n "$_tb_c" ] || continue
+      _tb_n=$((_tb_n + 1))
+      if [ "$_tb_n" = "$_tb_cut" ]; then
+        _tb_body="$_tb_body
+--- $_tb_c (cut off at the deadline)"
+      elif [ "$_tb_n" -gt "${_tb_last:-0}" ]; then
+        _tb_body="$_tb_body
+--- $_tb_c (did not run)"; continue
+      elif grep -qx "fail $_tb_n" "$run/progress" 2>/dev/null; then
+        _tb_body="$_tb_body
+--- $_tb_c"
+      else
+        continue
+      fi
+      _tb_t=$(tail -20 "$run/v.$_tb_n" 2>/dev/null)
+      [ -z "$_tb_t" ] || _tb_body="$_tb_body
+$_tb_t"
+    done <<EOF
+$(qg_split)
+EOF
+    [ -z "$_tb_body" ] || printf '\n%s' "$_tb_body"
+    printf '%s' "$qg_nw"
+    printf '\n\n'
+    if [ "$qg_budget" -ge "$_gate_qg_max" ]; then
+      printf "%s s is the most this gate can hold: the hook's ceiling of %s s, less the %s s it keeps back to write this block. No budget holds this suite. Make it faster, or move the slow validator off the '- Validators:' line to CI and give the reason in .steering/tech.md." "$_gate_qg_max" "$_gate_qg_ceiling" "$_gate_margin"
+    elif [ "$qg_from" = file ]; then
+      printf "To give it more time, raise that \"timeout\" in %s to the %s s the plugin ships, or re-run init, which renders it. The budget is then %s s, or what '- Validator budget:' in .steering/tech.md says, up to %s." "$qg_tsrc" "$_gate_qg_ceiling" "$_gate_qg_default" "$_gate_qg_max"
+    else
+      printf "To give it more time, write '- Validator budget: <seconds>' in .steering/tech.md, a whole number up to %s, or make the suite faster. A validator that alone needs more than %s s belongs in CI rather than on the '- Validators:' line." "$_gate_qg_max" "$_gate_qg_max"
+    fi
+  }
+
+  # Judged with the seven signals ignored: a signal first, which no replay outranks; then the
+  # child's own verdict, if it marked one complete; then the deadline; and anything else is a
+  # check that ended without a verdict. On the harness's own TERM the block is discarded, which
+  # costs nothing; on a stray signal it is the right answer.
+  trap '' HUP INT QUIT TERM USR1 USR2 ALRM
+  qg_nw=""; [ ! -e "$run/nowalk" ] || qg_nw="
+
+This host's process listing did not show the check's process tree, so only the check itself was killed, and a validator's own children may still be running."
+  if [ -n "$qg_sig" ]; then
+    validators=$(gate_steering_value .steering/tech.md Validators)
+    qg_c=$(qg_open); [ -z "$qg_c" ] || qg_c=$(qg_split | sed -n "${qg_c}p")
+    qg_block "Quality gate: this gate received $qg_sig before it reached a verdict, so this turn is blocked rather than passed.${qg_c:+ It was running: $qg_c.} A validator that runs 'kill 0', or ends with the common trap 'kill 0' EXIT, sends its signal to the whole process group, this gate included. If the harness sent it at its timeout this block is discarded, which costs nothing; if it repeats, look for a validator that signals its process group.$qg_nw"
+  fi
+  gate_replay "$run" "$qg_rc"
+  [ ! -e "$run/fired" ] || qg_block "$(qg_timeout_block)"
+  qg_e=""; [ ! -s "$run/err" ] || qg_e="
+
+Its last output:
+$(tail -20 "$run/err")"
+  qg_block "Quality gate: its check ended without a verdict (status $qg_rc), so this turn is blocked rather than passed: an ending with no pass and no block reads to the harness as a pass.$qg_e"
+fi
+
+# --- the child: the body, under the parent's deadline -------------------------------------
+#
+# Run only as `quality-gate.sh --bounded <run dir>`, by the parent above. It blocks unless the run
+# dir is a directory whose `pid` holds this shell's own pid, which gate_bounded's launcher wrote
+# before any of this ran: a hook entry that wrote --bounded by hand gets a block, never an
+# unbounded body, and never a `set -u` abort with nothing on stdout, which a harness reads as a
+# pass. Only then is _gate_child_run set, which has gate_pass and gate_block mark the verdict
+# complete. Its own traps may still exit 1xx, because the parent judges that ending.
+shift
+if [ ! -d "${1-}" ] || [ "$(cat -- "$1/pid" 2>/dev/null)" != "$$" ]; then
+  gate_block "Quality gate: this gate was started with --bounded and without a run directory of its own, so it has no deadline it can be held to, and its validators did not run. --bounded is for the gate's own use; a hook runs the gate with no arguments."
+fi
+run=$1; shift
+_gate_child_run=$run
+qg_budget_error=""
+if [ "${1-}" = --budget-error ]; then
+  qg_budget_error=$(cat -- "${2-}" 2>/dev/null)
+  [ -n "$qg_budget_error" ] || qg_budget_error="the '- Validator budget:' line in .steering/tech.md is malformed, and why could not be read from ${2-}"
+fi
+
+# Anchor to the repository root so relative paths (.steering/, .specs/) resolve
+# correctly regardless of the working directory the hook was invoked from.
+if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+  cd "$repo_root"
+fi
 
 # Absent and unreadable are opposite answers, and this gate gave them the same one. `[ -f ]`
 # passes for a mode-000 file, the read came back empty, and the "no validators configured"
@@ -109,7 +356,8 @@ validators=$(gate_steering_read .steering/tech.md Validators); rc=$?
 # runs: for a guarantee, failing toward MORE checking is the right direction.
 
 # The fingerprint of the source the pathspecs match, in $fp; on any failure $fp is empty and
-# $qg_step names what failed. Built in a COPY of the index so the real one is never touched,
+# $qg_step names what failed. Its scratch files are fp.* in the run dir, which the parent removes.
+# Built in a COPY of the index so the real one is never touched,
 # and every git call is checked on its own — never through a pipeline, whose status would be
 # its last command's, which is how `| grep -q .` read git's 128 on a rejected pathspec as
 # "nothing changed".
@@ -128,7 +376,7 @@ validators=$(gate_steering_read .steering/tech.md Validators); rc=$?
 #     assignment and exports it to every validator after it.
 qg_fingerprint() {  # <pathspec>...
   fp=""
-  qg_tmp=$(mktemp "${TMPDIR:-/tmp}/gate-sdd-qg.XXXXXX") || { qg_step="mktemp"; return 1; }
+  qg_tmp="$run/fp"
   qg_idx=$(git rev-parse --git-path index) || { qg_step="git rev-parse --git-path index"; return 1; }
   if [ -f "$qg_idx" ]; then
     cp -p "$qg_idx" "$qg_tmp.idx" || { qg_step="copying the index"; return 1; }
@@ -141,8 +389,6 @@ qg_fingerprint() {  # <pathspec>...
     && GIT_INDEX_FILE="$qg_tmp.idx" git ls-files -s -- "$@"; } > "$qg_tmp.fp" || { qg_step="listing the source"; return 1; }
   fp=$(git hash-object --stdin < "$qg_tmp.fp") || { fp=""; qg_step="git hash-object"; return 1; }
 }
-qg_tmp=""
-trap '[ -z "$qg_tmp" ] || rm -f "$qg_tmp" "$qg_tmp.idx" "$qg_tmp.idx.lock" "$qg_tmp.list" "$qg_tmp.fp"' EXIT
 trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
 
 fp=""; qg_step=""; qg_record=""
@@ -181,34 +427,52 @@ if [ -n "$globs" ] && [ -n "$qg_tree" ]; then
     fi
   fi
 fi
+# A malformed `- Validator budget:` line blocks here, where the validators are about to run, and
+# not before the skip: a turn the skip passes is not blocked by it (AC7). The record is kept, as
+# the line changes nothing the last pass verified.
+[ -z "$qg_budget_error" ] || gate_block "Quality gate: $qg_budget_error. The validators did not run. Fix the line, or remove it to take the default of $_gate_qg_default s."
 # Q2 of #297's spec: a step that failed runs the validators and says so, whatever they find — a
 # project paying for a full run on every turn should be able to find out why.
 [ -z "$qg_step" ] || printf 'Quality gate: could not tell whether source changed since the validators last passed (%s failed), so they ran.\n' "$qg_step" >&2
 # The validators are about to run, so the last pass stops counting until they pass again —
 # whatever the globs line says. Kept through a failure, the record matched source put back to a
 # state that passed EARLIER, and the gate skipped a tree still red from an input outside the
-# globs (cases 248, 257). A run cut off by the hook timeout leaves no pass behind either.
+# globs (cases 248, 257). A run cut off at the deadline leaves no pass behind either: the parent
+# removes the record before it blocks, in case the child wrote one just before it was killed.
 if [ -n "$qg_record" ] && [ -e "$qg_record" ] && ! rm -f "$qg_record"; then
   printf 'Quality gate: could not remove the last pass record at %s; the validators run anyway.\n' "$qg_record" >&2
 fi
 
 failed=""
-# Comma-separated, because a validator is a whole command and commands contain spaces.
+# Each validator runs in a subshell of its own, so an `exit`, a `cd` or an assignment stays inside
+# it, in the foreground with the hook's stdin and pathname expansion (case 203). Its output goes to
+# v.<n> in the run dir, never to this shell's stdout, which carries the verdict alone and nothing
+# else; and to a file rather than a `$(...)` pipe, which a validator's leftover background child
+# held open until it exited, holding the gate with it. `progress` records each one's start and end
+# by its number, not its command, since two validators may share one: that is what the parent's
+# timeout block reads when the deadline cuts this run short.
+n=0
+cmds=$(qg_split)
 old_ifs=$IFS
-IFS=,
-for cmd in $validators; do
+IFS=$qg_nl
+set -f
+for cmd in $cmds; do
+  set +f
   IFS=$old_ifs
-  cmd=$(printf '%s' "$cmd" | sed -e 's/^ *//' -e 's/ *$//')
-  [ -n "$cmd" ] || continue
-  if ! out=$(eval "$cmd" 2>&1); then
+  n=$((n + 1))
+  printf 'start %s %s\n' "$n" "$cmd" >> "$run/progress"
+  if ( eval "$cmd" ) > "$run/v.$n" 2>&1; then
+    printf 'ok %s\n' "$n" >> "$run/progress"
+  else
+    printf 'fail %s\n' "$n" >> "$run/progress"
     # Only the tail. The model needs to know which validator failed and roughly why; a
     # full test-runner dump in a hook message buries that in its own output.
     failed="${failed}
 --- $cmd
-$(printf '%s' "$out" | tail -20)"
+$(tail -20 "$run/v.$n")"
   fi
-  IFS=,
 done
+set +f
 IFS=$old_ifs
 
 # Record the pass — the fingerprint taken BEFORE the first validator ran, so an edit made during

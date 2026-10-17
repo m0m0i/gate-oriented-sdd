@@ -8,4 +8,4 @@ Each holds `spec.md` and, once a review has run, `.review-receipt`.
 
 The review gate reads this directory. A spec whose slug does not begin with an issue number blocks the turn: work that never had an issue entered through the side door.
 
-Shipped specs move to `_archive/` in a sweep run on request — `archive` is not a step in the per-issue flow. `done` is where delivery ends, so a merged spec still sitting here is finished work awaiting bookkeeping rather than a loose end, and the review gate never sees it: it reads `.specs/<current branch>/spec.md` and nothing else.
+Shipped specs move to `_archive/` in a sweep run on request — `archive` is not a step in the per-issue flow. `done` is where delivery ends, so a merged spec still sitting here is finished work awaiting bookkeeping rather than a loose end, and the review gate never sees it: it reads `.specs/<current branch>/spec.md`, and each other local branch's spec from that branch's own tree until the branch has shipped, never a glob of this directory.
