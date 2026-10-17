@@ -6,7 +6,7 @@ _[English →](./README.md)_
 
 **レビューのゲートを、フックで強制するスペック駆動開発セットアップです。**
 
-[Claude Code](https://claude.com/claude-code) と [Google Antigravity](https://antigravity.google/) の両方にインストールできます。
+1つのプラグインディレクトリで、[Claude Code](https://claude.com/claude-code) と [Google Antigravity](https://antigravity.google/) の両方にインストールできます。
 
 ---
 
@@ -67,7 +67,7 @@ skill:     prd   design-doc   backlog  sprint   spec implement worklog
 | Skill | 任意である理由 |
 | :-- | :-- |
 | `northstar` | `init` の対話が、別ルートで同じ `- Owns:` アンカーを作ってしまう |
-| `roadmap` | 機械的に読む先が**まだ**どこにもない。これは決定ではなく、#166 で埋めるべき穴です |
+| `roadmap` | その中身を機械的に読む先はない。`full` では `check-document-cascade.py` が PRD と突き合わせ済みかどうかだけを検査する（#166） |
 | `contract` | commit もレビュー指摘も溜まらないうちに走らせると、ルールブックが「無い」のではなく「悪い」ものができあがる |
 
 **skill はどれも、常に使えます。** `init` はアクティブなハーネス（Claude Code、Google Antigravity、または両方）を検出し、`.steering/`、`.specs/`、`.work_logs/`、issue テンプレート、適切なルールポインタ（`CLAUDE.md` / `GEMINI.md`）、reviewer、そして hook を設置します。skill 本体はプラグインに同梱されているので、設置しません。Claude Code ではゲートも同梱されているので設置せず、`init` が書くのはプラグインを有効にする設定と言語ごとの高速チェックだけです。ここでの選択が決めるのは、どのドキュメントを作るか、どの skill をフローに乗せるかであって、その skill を使えるかどうかではありません。
@@ -89,6 +89,7 @@ skill:     prd   design-doc   backlog  sprint   spec implement worklog
 ```text
 northstar ──▶ prd ──▶ design-doc ──▶ roadmap ──▶ backlog ──▶ sprint
    指標       ケイパビリティ  アーキテクチャ   デモ単位     順序づけ   1項目:N Issue
+                                                            粗い粒度
         └───────────────▶ contract ◀─────────────────┘
                   コーディング規約を
                   reviewer のルールブックへ compile
@@ -108,11 +109,11 @@ archive ····· チェーンの中ではなく、その傍らに。出荷済�
               作業で、マージのたびではなく、ディレクトリが散らかってきたときに走らせる
 ```
 
-Issue、ブランチ、spec ディレクトリ、PR は同じ slug を共有し、PR が Issue を閉じます。ルールは **Issue なくして spec なし**。`spec` は Issue がなければ、黙って作ったりせずにそこで止まって尋ねます。Issue のない spec とは、誰も選んでいない作業が始まっているということだからです。ゲートはこれを機械的に検査します。slug は `<issue>-<title>` なので、Issue 番号のない spec ディレクトリはターンを止めます。
+Issue、ブランチ、spec ディレクトリ、PR は同じ slug を共有し、PR が Issue を閉じます。ルールは **Issue なくして spec なし**。`sprint` はテンプレートから種別つきの Issue を作ります。`spec` は Issue がなければ、黙って作ったりせずにそこで止まって尋ねます。Issue のない spec とは、誰も選んでいない作業が始まっているということだからです。ゲートはこれを機械的に検査します。slug は `<issue>-<title>` なので、Issue 番号のない spec ディレクトリはターンを止めます。`spec` は種別（`feature`、`bug`、`chore`）を読み、種別ごとに違う形の spec を書きます。bug を feature の枠組みに通すと、存在しないユーザーストーリーと作り話の受け入れ条件ができあがります。だから種別は飾りではなく、最初のタスクが何になるかを決めます。
 
 1つの Issue に対して、spec もブランチも PR も1つです。そしてこのチェーンの中で、多くのスペック駆動開発に欠けていると思うのが `clarify` です。スペック駆動開発でいちばん多い失敗は、構造が足りないことではありません。要件を読み違えたまま、自信を持って書かれた spec です。しかもこれはレビューでは捕まえられません。読み違えていても、いなくても、ドキュメントの見た目は同じだからです。
 
-**チェーンは PR 1本で終わります。** spec はその PR の最初のコミットであって、spec 自体の PR はありません。work log は最後のほうのコミットで、マージで終わりです。続く PR はありません。`archive` がチェーンの傍らにあるのはそのためです。`git mv` 1回のために、ブランチとレビューとマージを一式用意するほどの中身はありませんし、機械的に待っているものもありません。review gate はいま立っているブランチの外も見るようになったので、`.specs/` に残った出荷済みの spec も視界には入ります。それでも何も言わないのは、receipt がクリーンでブランチがマージ済みだからで、これは確かめたうえでの沈黙です。ただしブランチ自体が削除されている場合は、spec を読み出す先がもうありません。そちらは確かめたうえでの沈黙ではありません。掃除のコストは、マージごとではなく、散らかったディレクトリごとにかかります。
+**チェーンは PR 1本で終わります。** spec はその PR の最初のコミットであって、spec 自体の PR はありません。work log は最後のほうのコミットで、マージで終わりです。続く PR はありません。`archive` がチェーンの傍らにあるのはそのためです。`git mv` 1回のために、ブランチとレビューとマージを一式用意するほどの中身はありませんし、機械的に待っているものもありません。review gate はいま立っているブランチの外も見るようになったので、`.specs/` に残った出荷済みの spec も視界には入ります。それでも何も言わないのは、receipt の中身にかかわらずブランチがマージ済みだからで、これは確かめたうえでの沈黙です。ただしブランチ自体が削除されている場合は、spec を読み出す先がもうありません。そちらは確かめたうえでの沈黙ではありません。掃除のコストは、マージごとではなく、散らかったディレクトリごとにかかります。
 
 上流の skill は、ハーネスが機械的に使うものに行き着かないかぎり採用しません。`northstar` は reviewer が重大度の判断に読む品質のアンカーを、`contract` は reviewer のルールブックを、`backlog` → `sprint` は `spec` が消費する型付きの Issue を、`design-doc` は `.steering/structure.md` と reviewer がエスカレーション先にする ADR を生みます。文章で終わるだけのドキュメントは、このリポジトリが生成すべきものではありません。
 
@@ -230,12 +231,12 @@ agy plugin install ./gate-oriented-sdd
   done
   ```
 
-- **プラグインを更新しても届かないもの（両ハーネス共通）。** `init` がプロジェクトの scripts ディレクトリにコピーした `check-steering-anchors.sh`、`check-document-set.py`、`check-unreviewed-work.sh`、`check-locks.py`、`_shared/reviewer-contract.md` にある reviewer の契約、そして reviewer とそのルールブックです。スクリプトと reviewer の契約は、プラグインのものと比べて違うものをコピーするか、`init` をもう一度実行してください。ただし、`init` によるアップグレードはまだ検証していません。reviewer は決して上書きしないでください。プロジェクトに合わせて調整されているので、必要な変更は手で取り込み、`check-locks.py --update` でピン留めし直してください。CI でのプラグインの checkout は、ワークフローが指定する `ref` までしか進みません。Antigravity では、`init` が書き出す `.agents/hooks.json` の `timeout` も届きません。180 秒と 30 秒で書き出したプロジェクトでは、`.agents/hooks/` のスクリプトだけを更新してもその値が残り、ゲートは自分を 170 秒と 20 秒に抑えます。それより遅いチェックは、合格ではなくブロックになります（#304）。600 と 120 で書き直すには、`init` をもう一度実行してください。Claude Code ではプラグイン自身のフックファイルにあるので、更新と一緒に届きます。ただし、`.claude/settings.json` がまだ 0.23.0 より前のコピーを実行しているプロジェクトは、移行するまで自分の `timeout` を持ち続けます。
+- **プラグインを更新しても届かないもの（両ハーネス共通）。** `init` がプロジェクトの scripts ディレクトリにコピーした `check-steering-anchors.sh`、`check-document-set.py`、`check-document-cascade.py`、`check-unreviewed-work.sh`、`check-locks.py`、`_shared/reviewer-contract.md` にある reviewer の契約、そして reviewer とそのルールブックです。スクリプトと reviewer の契約は、プラグインのものと比べて違うものをコピーするか、`init` をもう一度実行してください。ただし、`init` によるアップグレードはまだ検証していません。reviewer は決して上書きしないでください。プロジェクトに合わせて調整されているので、必要な変更は手で取り込み、`check-locks.py --update` でピン留めし直してください。CI でのプラグインの checkout は、ワークフローが指定する `ref` までしか進みません。Antigravity では、`init` が書き出す `.agents/hooks.json` の `timeout` も届きません。180 秒と 30 秒で書き出したプロジェクトでは、`.agents/hooks/` のスクリプトだけを更新してもその値が残り、ゲートは自分を 170 秒と 20 秒に抑えます。それより遅いチェックは、合格ではなくブロックになります（#304）。600 と 120 で書き直すには、`init` をもう一度実行してください。Claude Code ではプラグイン自身のフックファイルにあるので、更新と一緒に届きます。ただし、`.claude/settings.json` がまだ 0.23.0 より前のコピーを実行しているプロジェクトは、移行するまで自分の `timeout` を持ち続けます。
 
   ```bash
   # P: Antigravity では上と同じ。Claude Code では ~/.claude/plugins/installed_plugins.json にある
   # gate-sdd@gate-oriented-sdd の installPath。Antigravity の契約は .agents/agents/ の下にある。
-  for f in check-steering-anchors.sh check-document-set.py check-unreviewed-work.sh check-locks.py; do
+  for f in check-steering-anchors.sh check-document-set.py check-document-cascade.py check-unreviewed-work.sh check-locks.py; do
     [ -f "scripts/$f" ] && diff -q "$P/assets/$f" "scripts/$f"
   done
   diff -q "$P/reviewers/_shared/reviewer-contract.md" .claude/agents/_shared/reviewer-contract.md
@@ -252,7 +253,7 @@ agy plugin install ./gate-oriented-sdd
 | ルール検出                      | プロジェクトのルートの `AGENTS.md`（`CLAUDE.md` の `@AGENTS.md` で読み込み。`docs/verified.md` の #239 の節で測定） | `AGENTS.md` へのシンボリックリンクにした `GEMINI.md` 経由でプロジェクトのルートの `AGENTS.md`（同じ節で測定）。加えてプラグインの `rules/AGENTS.md`（プラグインローダーが自動検出してマージ） |
 | ターン終了時の品質ゲート        | 完全（`Stop`, exit 2） | 完全（`Stop`, `{"decision":"continue"}`） |
 | review receipt のゲート         | 完全                   | 完全                                      |
-| ゲートの配布 | プラグインから（`.claude-plugin/hooks.json` がゲートを実行する。V1、V2）。修正はプラグインの更新で届く。デスクトップアプリから始めたセッションでは、`init` が書く `env` の行があるときだけ自動更新が行われる（#274）。移行済みのプロジェクトでの実セッションは検証済み（`docs/verified.md` の #263 の節）。更新が届くことの確認は未実施（#265）。この行で自動更新が戻ることはデスクトップセッションのシェルから検証（F2）、アプリ自身が始めたセッションでも検証（F3） | `init` が `.agents/hooks/` にコピー。修正はコピーの更新で届き、`init` の再実行による更新は未実施 |
+| ゲートの配布 | プラグインから（`.claude-plugin/hooks.json` がゲートを実行する。V1、V2）。修正はプラグインの更新で届く。デスクトップアプリから始めたセッションでは、`init` が書く `env` の行があるときだけ自動更新が行われる（#274）。移行済みのプロジェクトでの実セッションは検証済み（`docs/verified.md` の #263 の節）。更新が届くことの確認は未実施（#265）。この行で自動更新が戻ることはデスクトップセッションのシェルから検証（F2）、アプリ自身が始めたセッションでも検証（F3） | `init` が `.agents/hooks/` にコピー。修正はコピーの更新で届き、`.agents/hooks.json` に書き出した `timeout` は `init` の再実行でしか届かない（#304）。`init` の再実行による更新は未実施 |
 | 編集ごとの高速フィードバック    | 完全（`PostToolUse`）  | 完全（`PostToolUse`、観測のみ）           |
 | steering digest の注入          | 完全（`SessionStart`） | 完全（`PreInvocation`、ターン0のステップ注入） |
 | compaction 後の steering 再注入 | 完全（`SessionStart`） | **なし**（該当するイベントが存在しない）  |
@@ -263,7 +264,7 @@ agy plugin install ./gate-oriented-sdd
 
 **pre-release です。** 検証済みバージョンの一覧を添えた reference implementation であって、サポート付きのプロダクトではありません。[eval スイート](./evals/) は開発中です。4つのケースは書いてありますが、`claude plugin eval` は読み込み時にそれらを拒否する（`case.yaml` に `graders` が必要）ため、まだ一度も実行できていません。
 
-検証環境: Claude Code 2.1.289 / Antigravity CLI 1.3.3（2026-10-11）· macOS
+検証環境: Claude Code 2.1.300（2026-10-16）/ Antigravity CLI 1.3.3（2026-10-12）· macOS
 
 **検証できていること。** まず、ゲートとガードの挙動です。モデルを介さず、決定的にテストしています（[`scripts/test-gates.sh`](./scripts/test-gates.sh)。何通りあるかはスイートが持つ数字であって、ここで維持している数字ではありません）。Antigravity の `Stop` フックが実際にブロックすることも、ドキュメントを読んで済ませたのではなく、動かして確かめました（[`docs/verified.md`](./docs/verified.md)）。2つのプラグインマニフェスト、ルールブックのハッシュ、機密混入チェックは、CI で毎回実行しています。skill は13個すべてが、少なくとも一度は実際に動いています。inception の一連の skill と `init` はこのリポジトリ自身か、実在するプロジェクトの使い捨てクローンに対して実行し、`spec`・`clarify`・`implement`・`worklog` は #17 以降のすべての spec で使い、`archive` はこのリポジトリ自身の出荷済み spec に対して何度もスイープしています。inception と `init` の実行で見つかったことは [`docs/verified.md`](./docs/verified.md) に記録し、Issue として起票してあります。そして #17 以降のすべての spec には、`.specs/` の下に review receipt があります。3件を除いてサブエージェントとして起動した reviewer によるレビューで、その3件は inline でレビューしたことが receipt 自体に記録されています。
 

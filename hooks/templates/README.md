@@ -23,7 +23,7 @@ The Antigravity template and the plugin's Claude Code hooks file are **not** the
 - Antigravity **tool** events (`PreToolUse`, `PostToolUse`) take the nested `{matcher, hooks: [...]}` form.
 - Antigravity **non-tool** events (`Stop`, `PreInvocation`, `PostInvocation`) take a flat `{type, command, timeout}`.
 
-Mixing them up invalidates the *entire file* with `invalid hook "<name>": command hook must specify 'command'`, which reads like a missing field rather than a wrong shape. `scripts/check-manifests.py` checks these templates agree on which events they cover so the mistake cannot ship.
+Mixing them up invalidates the *entire file* with `invalid hook "<name>": command hook must specify 'command'`, which reads like a missing field rather than a wrong shape. `scripts/check-manifests.py` checks each Antigravity entry's shape against its event, and that these templates agree on which events they cover, so the mistake cannot ship.
 
 Antigravity has no `SessionStart`; it delivers the steering digest via `PreInvocation` with turn 0 step injection (`hooks/steering-digest-antigravity.sh`). `scripts/check-manifests.py` enforces that `SessionStart` on Claude Code pairs with `PreInvocation` on Antigravity.
 
