@@ -23,22 +23,22 @@
 ### Clarifications
 Asked 2026-10-17; the maintainer took the recommended answer each time.
 
-- **Q1: what value, when the run is over 85 s?** Twice the measured time, rounded up and capped at 590. That is the rule this repository's own #304 spec applies to itself, and the doubling absorbs a second session running at the same time. A fixed margin and 1.5× were rejected (AC2).
+- **Q1: what value, when the run is over 85 s?** Twice the measured time, rounded up and capped at 590. The doubling is the value rule #304's spec applies to this repository, and it absorbs a second session running at the same time. The 85 s threshold is new: #304 writes this repository's line only above 120 s, from the slower of two runs, one alone and one beside a concurrent run. Under #320's rule this repository's own init would write a line (100–103 s measured on 2026-10-17); it keeps #304's decision and writes none, and whether it should adopt the shipped rule is an open question for the maintainer, raised in the PR. A fixed margin and 1.5× were rejected (AC2).
 - **Q2: an upgrade that already has a line?** Raise only, with a diff; never lower a value someone chose. Report-only and replace-both-ways were rejected (AC3a).
 - **Q3: twice the time over 590?** Write 590 and warn, naming the gate's own remedies. Writing nothing was rejected (AC3).
 
 Decided without asking, because the repository answers them:
 - **What is timed** is the by-hand run of the `- Validators:` line in step 4.1, not the quality gate's run. On an upgrade the gate can skip on a recorded pass and time nothing, while the by-hand run always runs the whole line.
-- **The value is also held below what a project hook file allows (AC4).** `init` renders the shipped 600 s itself, so the bound is normally the 590 maximum. A hook file the project keeps with a lower `"timeout"` caps it at that file's `timeout` less 10 s, and `init` names the file, because a line above it fails the anchor check and the gate would lower it anyway.
+- **The value is also held below what a project hook file allows (AC4).** The bound is normally the 590 maximum: Claude Code's rendered settings carry no quality-gate entry, so the gate falls back to its 600 s ceiling, and on Antigravity `init` renders 600 itself. A hook file the project keeps with a lower `"timeout"` caps it at that file's `timeout` less 10 s, and `init` names the file, because a line above it fails the anchor check and the gate would lower it anyway. When that bound is below twice the time, `init` gives AC3's warning with the gate's own remedy for a file-set bound: raise that `"timeout"` to 600, or re-run `init`.
 
 ## 2. Design (HOW)
 - **Approach: prose in `init` step 4.1, pinned.** `init` already runs every gating validator by hand before it arms the gate. That run becomes the measurement:
-  - start and end with `date +%s` around the by-hand run of the whole `- Validators:` line, in the session's own shell, so the seconds are the ones a turn end will see;
+  - start and end with `date +%s` around the by-hand run of the whole `- Validators:` line, in the session's own shell, so the seconds are the ones a turn end will see. The timing and the line come **before the quality gate's first run** in step 4.1: a suite over 170 s would otherwise be blocked at the default before any line exists, and a first run that passes records a pass the later run then skips on, since `.steering/tech.md` is outside `- Source globs:`;
   - report the time;
   - apply AC2, AC3 and AC3a. The value is `min(2 × t, 590, the hook-file bound)`, where `t` is in whole seconds and the hook-file bound is the shortest `"timeout"` any project hook file gives `quality-gate.sh`, less 10 s;
-  - when a line is written or raised, re-run `check-steering-anchors.sh` and the quality gate. The by-hand run came before the line existed, and step 4 arms the gate only on a tree that is green with it.
+  - when a line is written or raised, re-run `check-steering-anchors.sh`, because the by-hand run checked a tree without it; the quality gate then runs once, on the tree that holds it, and step 4 arms the gate only when that is green.
 - **The template comment** in step 3 keeps its pinned text, `... omit it unless they need more than the default 170`, and gains `; step 4 measures the suite and writes it when they do`, so the pin #304 added stays a substring.
-- **One new pin** in `scripts/check-skill-contracts.py`, the thirty-eighth, on the sentence that states the rule: what is timed, the 85 s threshold, twice the time, the 590 cap, and raise only. The docstring's count moves with it, as its own paragraph demands. The argument it asks for:
+- **One new pin** in `scripts/check-skill-contracts.py`, the thirty-eighth, on the contiguous run of sentences that carries AC1–AC4: what is timed and the report, the 85 s threshold, twice the time and the reason, the 590 cap with its warning and remedies, raise only, and the hook-file bound with its own warning and remedy. The docstring's count moves with it, as its own paragraph demands. The argument it asks for:
   - review cannot defend the sentence, because it is prose a model executes;
   - deleting it leaves every install working, with no line and no complaint, until a slow suite is blocked at every turn end. That is the failure #304 made loud and this issue exists to pre-empt;
   - #304's pin comment ("#320 will time the suite") is updated to name the new pin.
