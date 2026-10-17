@@ -137,7 +137,7 @@ Decided in Design rather than asked, because the repository answers them: the li
     That is about 4 s, leaving about 6 s of slack. `ps` measured 10 ms for about 900 processes.
 - **Library functions** (`hooks/gate-lib.sh`):
   - **`gate_validator_budget <tech.md>`** reads the line through `gate_steering_read` with the literal key `'Validator budget'`, the form test-gates case 30 extracts.
-    - `gate_steering_read` returns the same empty string for an absent line and an empty one (`hooks/gate-lib.sh:72`). So presence is tested on its own, with `grep -q '^ *- *Validator budget:'`, the same expression `gate_steering_read` uses. Absent (no such line, or rc 1 for no `tech.md`) prints 170. A line that is present and empty is malformed.
+    - `gate_steering_read` returns the same empty string for an absent line and an empty one (`hooks/gate-lib.sh:72`). So presence is tested on its own, with `grep -q '^ *- *Validator budget:'`, the same expression `gate_steering_read` uses. Absent (no such line, or rc 1 for no `tech.md`) prints 170 and returns 1, so the timeout block and the anchor check can tell the default from a written line. A valid line returns 0. A line that is present and empty is malformed.
     - An unreadable `tech.md` returns 3, not 2, so a caller can tell it from a malformed line. The parent then hands nothing to the child, and the child blocks on the unreadable file at `quality-gate.sh:89` as today.
     - Otherwise it strips one trailing `\r`, and spaces and tabs at both ends. It accepts only `[1-9]`, `[1-9][0-9]` or `[1-9][0-9][0-9]` by `case`, then `-le` the maximum. Anything else, the empty value included, prints a sentence naming the value and the range, and returns 2.
     - No arithmetic touches a value before the `case` check: in macOS `sh`, `abc` evaluates to 0, a variable name to that variable, `010` to octal, and `a[$(cmd)]` runs the command.
@@ -147,7 +147,7 @@ Decided in Design rather than asked, because the repository answers them: the li
     - The tokenizer honours `\"` and other escapes, ignores braces inside strings, skips `//` and `/* */` comments outside strings, and does not depend on line breaks or on the order of keys. It uses only POSIX awk. It is tested under the macOS awk and CI's awk. busybox awk is unverified, and `docs/fidelity.md` says so.
     - For every object whose `"command"` string names the gate (AC9's path-component rule), it reads every `"timeout"` key in that object, a duplicate included, and keeps the smallest.
     - **The output:** the shortest timeout, with its file as the source. When nothing names the gate, it prints the ceiling, with `ceiling` as the source.
-    - **Return 2, with a sentence naming the file and the field**, when a file exists and cannot be read, a file does not parse, or a matching object has no integer `timeout`. A missing `timeout` is never given a default, because the harnesses' defaults (600 s on Claude Code, 30 s on Antigravity) are not something this project measured.
+    - **Return 2, with a sentence naming the file and the field**, when a file exists and cannot be read, a file does not parse, a matching object has no integer `timeout`, or the shortest timeout leaves nothing after the margin. A missing `timeout` is never given a default, because the harnesses' defaults (600 s on Claude Code, 30 s on Antigravity) are not something this project measured.
     - **Every entry that names the gate counts, live or dead,** and so does an entry in a file this launch did not read. Either can only lower the bound. That is a stated residual, and it never causes a pass.
   - **`gate_bounded <budget> <run dir> <command...>`** starts the watchdog, then runs the command in the foreground.
     - **The child.** It is launched as `sh -c 'echo $$ >"$1/pid"; shift; exec "$@"' _ "$run" "$@"`. So its pid is on disk before any gate code runs, and the pid is the child's own, because `exec` keeps it.
@@ -299,7 +299,7 @@ Decided in Design rather than asked, because the repository answers them: the li
   - `gate_replay` for `{}`, a block line, a torn line, a complete line with no `end`, empty output, status 1 with `{}`, and a `signalled` file.
 
   Each case names its mutation; those not named above are: kill the root only; decide by status; skip the KILL step; let TERM disarm the watchdog. Red: the functions do not exist. Green: both functions and `_gate_block_exit`.
-- [ ] T3: quality gate, cases 259 and up after `:2310` (`qgp_repo`, `qgp_runs`, the second `run_qg`):
+- [ ] T3: quality gate, cases 270 and up (T1 took 259–269) after `:2310` (`qgp_repo`, `qgp_runs`, the second `run_qg`):
   - a 20 s validator after a fast one at budget 3, which prints a line before it sleeps: that line is in the block (mutation: read the tail from the verdict file);
   - a 20 s validator after a failing one at budget 3;
   - one validator alone at budget 2, on the Claude Code channel (stderr begins with the gate's own sentence) and on the Antigravity channel (parsed JSON);
