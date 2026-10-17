@@ -815,7 +815,8 @@ case "$err" in *awk:*|*"newline in string"*) c3=no ;; *) c3=ok ;; esac
 #      Review round 1's BLOCKER. `git diff` exiting 128 prints nothing, and nothing is exactly
 #      what a branch with no footprint prints, so emptiness cannot carry both meanings. The
 #      value is consumer-authored and nothing validates it — assets/check-steering-anchors.sh
-#      says in its own header that it does not judge whether a value is any good — so
+#      says in its own header that it judges only whether a hook can honour a value, which for
+#      this line is whether the reader sees it, never whether git accepts it — so
 #      `:(globs)` for `:(glob)`, a typo that echoes the key's own name, silenced the gate on
 #      both call sites with no diagnostic anywhere. That is the fail-open this whole change
 #      exists to close, reintroduced one git call below the one T3 caught.
@@ -4944,6 +4945,152 @@ for chk in anc uw; do
     || report "$name finds the library from the session's shell by GATE_SDD_PLUGIN_ROOT, last" no "found=$a copy-wins=$b hooks-wins=$c set-wrong=$d names-value=$d2 nowhere=$e names-new=$e2 names-hooks=$e3 terminal-remedy=$f"
 done
 
+# --- assets: whether the hook files can honour `- Validator budget:` (#304, AC10) ---------------
+#
+# The quality gate bounds itself by the shortest `timeout` it can see (AC9), so a line above what a
+# hook file allows is lowered at run time without a word. A check on the `- Validators:` line
+# cannot report that from inside the gate run it is meant to protect, so the anchor check says it,
+# in CI and by hand, through the gates' own two functions. Its file set is every tracked
+# `.claude/settings.json`, `.claude/settings.local.json` and `.agents/hooks.json` in the tree, plus
+# the git root's untracked local file, wherever the library came from. So these fixtures are under
+# `git init`, and a hook file counts once `git add` has run.
+anc_git() { # anc_git <name> [<extra tech.md line>] — anchor_repo under `git init`, nothing tracked yet
+  _r=$(anchor_repo "$1" '- Owns: x')
+  [ -n "${2:-}" ] && printf '%s\n' "$2" >> "$_r/.steering/tech.md"
+  git -C "$_r" init -q >/dev/null 2>&1
+  echo "$_r"
+}
+agy_stop() { # agy_stop <quality timeout> <review timeout> — an .agents/hooks.json in the shape `init` renders
+  printf '{"gate-sdd":{"enabled":true,"Stop":[{"type":"command","command":"sh .agents/hooks/quality-gate.sh","timeout":%s},{"type":"command","command":"sh .agents/hooks/review-gate.sh","timeout":%s}]}}\n' "$1" "$2"
+}
+
+# 327. #304 AC10 — a `- Validator budget:` line holding a value AC7 rejects fails, naming the value
+#      and the range: a unit, and one past the maximum. The loop above judges presence only, and
+#      both lines have a value, so on `main` each passed. RED-CAPABLE under "leave the line to the
+#      loop's empty-value test".
+bad=""
+for v in 12s 591; do
+  r=$(anc_git "anc-vb-$v" "- Validator budget: $v"); git -C "$r" add -A
+  out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+  [ "$out" = 1 ] || bad="$bad[$v: exit=$out] "
+  case "$err" in *"reads '$v'"*"from 1 to 590"*) ;; *) bad="$bad[$v: no value or range: $(printf '%s' "$err" | head -c 200)] " ;; esac
+done
+[ -z "$bad" ] && report "the anchor check fails a budget line the gate rejects, naming the value and the range" ok \
+  || report "the anchor check fails a budget line the gate rejects, naming the value and the range" no "$bad"
+
+# 328. #304 AC10 — a line of 300 against a tracked `.agents/hooks.json` that gives the quality gate
+#      180: the gate would bound itself to 170 and say nothing, so the check fails, naming the file,
+#      its timeout and the line. It still fails with GATE_SDD_HOOKS pointing at a plugin checkout
+#      with no hook file of its own, and the fixture's copy removed, which is CI's shape. RED-CAPABLE
+#      under "take the file set from the library's directory".
+r=$(anc_git anc-vb-agy '- Validator budget: 300'); mkdir -p "$r/.agents"; agy_stop 180 30 > "$r/.agents/hooks.json"; git -C "$r" add -A
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+[ "$out" = 1 ] && a=ok || a="no(exit=$out)"
+case "$err" in *".agents/hooks.json"*'"timeout" of 180'*"300"*) a2=ok ;; *) a2="no($(printf '%s' "$err" | head -c 300))" ;; esac
+rm -f "$r/hooks/gate-lib.sh"
+out=$( cd "$r" && GATE_SDD_HOOKS="$L/hooks" sh assets/check-steering-anchors.sh >/dev/null 2>"$TMP/aerr"; printf '%s' "$?" ); err=$(cat "$TMP/aerr")
+[ "$out" = 1 ] && b=ok || b="no(exit=$out)"
+case "$err" in *".agents/hooks.json"*) b2=ok ;; *) b2="no($(printf '%s' "$err" | head -c 200))" ;; esac
+[ "$a$a2$b$b2" = "okokokok" ] && report "the anchor check fails a budget line above a tracked .agents/hooks.json, wherever its library is" ok \
+  || report "the anchor check fails a budget line above a tracked .agents/hooks.json, wherever its library is" no "fails=$a names=$a2 hooks-env=$b hooks-env-names=$b2"
+
+# 329. #304 AC10 — the same against a tracked `sub/.claude/settings.json` at 100, a stand-down launched
+#      below the root: AC9 reads it when Claude Code is launched there, so the check reads it at any
+#      depth. And the root's `.claude/settings.local.json`, which is untracked by design, at 100 with
+#      no tracked file at all. RED-CAPABLE under "read the root's files only" and under "read tracked
+#      files only".
+r=$(anc_git anc-vb-sub '- Validator budget: 300'); mkdir -p "$r/sub/.claude"; ht_stop 100 30 > "$r/sub/.claude/settings.json"; git -C "$r" add -A
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+[ "$out" = 1 ] && a=ok || a="no(exit=$out)"
+case "$err" in *"sub/.claude/settings.json"*'"timeout" of 100'*) a2=ok ;; *) a2="no($(printf '%s' "$err" | head -c 300))" ;; esac
+r=$(anc_git anc-vb-local '- Validator budget: 300'); git -C "$r" add -A; mkdir -p "$r/.claude"; ht_stop 100 30 > "$r/.claude/settings.local.json"
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+[ "$out" = 1 ] && b=ok || b="no(exit=$out)"
+case "$err" in *".claude/settings.local.json"*) b2=ok ;; *) b2="no($(printf '%s' "$err" | head -c 300))" ;; esac
+[ "$a$a2$b$b2" = "okokokok" ] && report "the anchor check reads a tracked hook file at any depth, and the root's untracked local file" ok \
+  || report "the anchor check reads a tracked hook file at any depth, and the root's untracked local file" no "sub=$a sub-names=$a2 local=$b local-names=$b2"
+
+# 337. #304 AC10 — the root's `.claude/settings.json` and `.agents/hooks.json` are read whether or not
+#      git tracks them, as the gate reads them: a project that gitignores `.claude/` or `.agents/`,
+#      or has not committed since `init`. Each at 180 against a line of 300, untracked, fails naming
+#      the file. And a tracked file whose path git would quote (`q"d/.claude/settings.json`) is read,
+#      not skipped. RED-CAPABLE under "read tracked files only" and under "list them without -z".
+bad=""
+for f in .claude/settings.json .agents/hooks.json; do
+  r=$(anc_git "anc-untracked-${f%%/*}" '- Validator budget: 300'); git -C "$r" add -A; mkdir -p "$r/${f%/*}"
+  case "$f" in .agents/*) agy_stop 180 30 ;; *) ht_stop 180 30 ;; esac > "$r/$f"
+  out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+  case "$out:$err" in "1:"*"$f"*'"timeout" of 180'*) ;; *) bad="$bad[untracked $f: exit=$out $(printf '%s' "$err" | head -c 200)] " ;; esac
+done
+r=$(anc_git anc-quoted '- Validator budget: 300'); mkdir -p "$r/q\"d/.claude"; ht_stop 100 30 > "$r/q\"d/.claude/settings.json"; git -C "$r" add -A
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in "1:"*'q"d/.claude/settings.json'*) ;; *) bad="$bad[quoted path: exit=$out $(printf '%s' "$err" | head -c 200)] " ;; esac
+[ -z "$bad" ] && report "the anchor check reads the root's hook files tracked or not, and a path git would quote" ok \
+  || report "the anchor check reads the root's hook files tracked or not, and a path git would quote" no "$bad"
+
+# 330. #304 AC10 — a hook file the gate would block on fails here too, with no budget line at all:
+#      one that does not parse, an entry naming the quality gate with no `timeout`, and a review
+#      gate `timeout` of 10, which leaves it no time once the margin is kept back. RED-CAPABLE under
+#      "skip a file that does not parse" and under "ask for the quality gate only".
+bad=""
+for k in parse notime review; do
+  r=$(anc_git "anc-hf-$k"); mkdir -p "$r/.agents"
+  case $k in
+    parse) printf '{"gate-sdd":{"Stop":[\n' > "$r/.agents/hooks.json"; want="does not parse" ;;
+    notime) printf '%s\n' '{"gate-sdd":{"Stop":[{"type":"command","command":"sh .agents/hooks/quality-gate.sh"}]}}' > "$r/.agents/hooks.json"; want='no integer "timeout"' ;;
+    review) agy_stop 600 10 > "$r/.agents/hooks.json"; want='review-gate.sh a "timeout" of 10' ;;
+  esac
+  git -C "$r" add -A
+  out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+  [ "$out" = 1 ] || bad="$bad[$k: exit=$out] "
+  case "$err" in *".agents/hooks.json"*"$want"*) ;; *) bad="$bad[$k: $(printf '%s' "$err" | head -c 200)] " ;; esac
+done
+[ -z "$bad" ] && report "the anchor check fails a hook file the gates would block on" ok \
+  || report "the anchor check fails a hook file the gates would block on" no "$bad"
+
+# 331. #304 AC10 — a library that predates either function the check now calls fails with that
+#      diagnosis, naming the function, and does not report a correctly written budget line as
+#      broken. The library is the fixture's own, with the definition renamed away. RED-CAPABLE under
+#      "check gate_steering_read alone", where the call fails as an unknown command.
+bad=""
+for fn in gate_validator_budget gate_hook_timeout; do
+  r=$(anc_git "anc-stale-$fn" '- Validator budget: 300'); git -C "$r" add -A
+  python3 - "$r/hooks/gate-lib.sh" "$fn" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]); fn = sys.argv[2]
+src = p.read_text(); assert f"\n{fn}() {{" in src
+p.write_text(src.replace(f"\n{fn}() {{", f"\n_gone_{fn}() {{"))
+PYEOF
+  out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+  [ "$out" = 1 ] || bad="$bad[$fn: exit=$out] "
+  case "$err" in *"no $fn"*"predates"*) ;; *) bad="$bad[$fn: $(printf '%s' "$err" | head -c 200)] " ;; esac
+  case "$err" in *"Validator budget"*"cannot parse"*|*"reads '300'"*) bad="$bad[$fn: blames the line] " ;; esac
+done
+[ -z "$bad" ] && report "a library predating the budget readers fails the anchor check with that diagnosis" ok \
+  || report "a library predating the budget readers fails the anchor check with that diagnosis" no "$bad"
+
+# 332. #304 AC10 — a stand-down `.claude/settings.json` at the shipped 600/120 with a line of 300
+#      passes: the file allows 590. RED-CAPABLE under "compare against the default, not the file",
+#      which reads 300 as over 170.
+r=$(anc_git anc-vb-600 '- Validator budget: 300'); mkdir -p "$r/.claude"; ht_stop 600 120 > "$r/.claude/settings.json"; git -C "$r" add -A
+out=$(run_anchors "$r")
+[ "$out" = 0 ] && report "the anchor check passes a budget line a 600 s hook file can honour" ok \
+  || report "the anchor check passes a budget line a 600 s hook file can honour" no "exit=$out: $(head -c 300 "$TMP/aerr")"
+
+# 333. #304 AC10 — no hook file passes, with a line of 300: the gates then run from the plugin, at
+#      their ceilings. The same outside any git repository, where the working directory stands in
+#      for the root (AC9): with nothing there it passes, and an `.agents/hooks.json` at 180 there
+#      fails. RED-CAPABLE under "fail when no hook file exists" and under "read nothing outside git".
+r=$(anc_git anc-vb-none '- Validator budget: 300'); git -C "$r" add -A
+out=$(run_anchors "$r"); [ "$out" = 0 ] && a=ok || a="no(exit=$out: $(head -c 200 "$TMP/aerr"))"
+r=$(anchor_repo anc-vb-nogit '- Owns: x'); printf -- '- Validator budget: 300\n' >> "$r/.steering/tech.md"
+out=$(run_anchors "$r"); [ "$out" = 0 ] && b=ok || b="no(exit=$out: $(head -c 200 "$TMP/aerr"))"
+mkdir -p "$r/.agents"; agy_stop 180 30 > "$r/.agents/hooks.json"
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in 1:*".agents/hooks.json"*) c=ok ;; *) c="no(exit=$out: $(printf '%s' "$err" | head -c 200))" ;; esac
+[ "$a$b$c" = "okokok" ] && report "the anchor check passes with no hook file, and reads the working directory's outside git" ok \
+  || report "the anchor check passes with no hook file, and reads the working directory's outside git" no "none=$a nogit-none=$b nogit-agy=$c"
+
 # 219. #264 — the reproduction, end to end: one tree, one verdict. A Claude Code project migrated
 #      to the plugin — no hooks directory at all — whose `- Validators:` line runs the copied
 #      anchor check. At turn end the plugin's wrapper runs the quality gate with
@@ -8632,6 +8779,8 @@ manifest_repo() {
   # rewrite what they test.
   [ -f "$ROOT/.claude-plugin/hooks.json" ] && cp "$ROOT/.claude-plugin/hooks.json" "$r/.claude-plugin/"
   for f in "$ROOT"/hooks/*.sh; do cp "$f" "$r/hooks/"; done
+  # #304 AC8: this repository's own Stop timeouts, held to gate-lib.sh's ceilings with the plugin's.
+  mkdir -p "$r/.claude" && cp "$ROOT/.claude/settings.json" "$r/.claude/"
   printf '# AGENTS\n' > "$r/AGENTS.md"
   ln -s ../AGENTS.md "$r/rules/AGENTS.md" 2>/dev/null || cp "$r/AGENTS.md" "$r/rules/AGENTS.md"
   cp -R "$ROOT/reviewers" "$r/reviewers"
@@ -9004,6 +9153,87 @@ out=$(run_manifest "$r"); err=$(cat "$TMP/mferr"); [ "$out" = "1" ] && e=ok || e
 case "$err" in *"plugin-gate.sh"*) e2=ok ;; *) e2=no ;; esac
 [ "$a$a2$b$b2$c$c2$d$d2$e$e2" = "okokokokokokokokokok" ] && report "check-manifests pairs the plugin's hook events, and the gates under them, with Antigravity's template" ok \
   || report "check-manifests pairs the plugin's hook events, and the gates under them, with Antigravity's template" no "no-stop=$a differ=$a2 no-start=$b named=$b2 one-gate=$c names-gate=$c2 agy-one-gate=$d agy-names=$d2 no-wrapper=$e names-wrapper=$e2"
+
+# 334–336. #304 AC8 — every shipped Stop `timeout` is its gate's ceiling, read from gate-lib.sh. A
+#      gate bounds itself by the shortest timeout it can see, so a file shipped below the ceiling
+#      lowers every project's budget, and one above it gives a deadline the harness does not honour.
+#      The control is case 210, which is the tree as shipped. RED on `main`, whose check read no
+#      timeout and exited 0 on every fixture below.
+mf_timeout() { # mf_timeout <file> <gate script> <seconds> — set that gate's Stop timeout, in either shape
+  python3 - "$@" <<'PYX'
+import json, sys
+p, gate, t = sys.argv[1], sys.argv[2], int(sys.argv[3]); d = json.load(open(p))
+def walk(n):
+    if isinstance(n, dict):
+        if gate in str(n.get("command", "")): n["timeout"] = t
+        for v in n.values(): walk(v)
+    elif isinstance(n, list):
+        for v in n: walk(v)
+walk(d); json.dump(d, open(p, "w"), indent=2)
+PYX
+}
+
+# 334. One mismatch in each of the three files, each named with its gate and the ceiling it should
+#      carry. RED-CAPABLE under "compare the plugin's file only", and under "skip this repository's
+#      settings".
+bad=""; n=0
+while read -r f g t c; do
+  n=$((n + 1)); r=$(manifest_repo "mf-timeout-$n"); mf_timeout "$r/$f" "$g" "$t"
+  out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+  [ "$out" = 1 ] || bad="$bad[$f: exit=$out] "
+  case "$err" in *"$f"*"$g"*"$t"*"$c"*) ;; *) bad="$bad[$f: $(printf '%s' "$err" | tr '\n' ';' | head -c 240)] " ;; esac
+done <<'EOF'
+.claude-plugin/hooks.json quality-gate.sh 599 600
+hooks/templates/antigravity.hooks.json review-gate.sh 119 120
+.claude/settings.json quality-gate.sh 180 600
+EOF
+[ -z "$bad" ] && report "check-manifests fails a Stop timeout that is not its gate's ceiling, in each of the three files" ok \
+  || report "check-manifests fails a Stop timeout that is not its gate's ceiling, in each of the three files" no "$bad"
+
+# 335. This repository's `.claude/settings.json` missing fails, because this is a check on this
+#      repository; a release payload, which ships no `.specs/`, `.work_logs/` or `.claude/`, passes
+#      without it, as it passes without the directory contracts' dogfood. RED-CAPABLE under "skip a
+#      file that is not there".
+r=$(manifest_repo mf-no-settings); rm -f "$r/.claude/settings.json"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+case "$out:$err" in 1:*"missing: .claude/settings.json"*) a=ok ;; *) a="no(exit=$out: $(printf '%s' "$err" | tr '\n' ';' | head -c 200))" ;; esac
+r=$(manifest_repo mf-release-no-settings); rm -r "$r/.claude" "$r/.specs" "$r/.work_logs"
+out=$(run_manifest "$r"); [ "$out" = 0 ] && b=ok || b="no(exit=$out: $(tr '\n' ';' < "$TMP/mferr" | head -c 200))"
+[ "$a$b" = "okok" ] && report "check-manifests requires this repository's settings, and not of a release payload" ok \
+  || report "check-manifests requires this repository's settings, and not of a release payload" no "dogfood=$a release=$b"
+
+# 338. #304 AC8 — this repository's `.claude/settings.json` that is valid JSON but no object (`[]`,
+#      `null`) fails, naming the file: the timeout comparison cannot run on it, and a comparison
+#      that could not run is not one that agreed (#39). RED-CAPABLE under "skip a document that is
+#      not a dict", which exits 0 in silence.
+bad=""
+for j in '[]' 'null'; do
+  r=$(manifest_repo "mf-settings-$j"); printf '%s\n' "$j" > "$r/.claude/settings.json"
+  out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+  case "$out:$err" in "1:"*".claude/settings.json"*"not an object"*) ;; *) bad="$bad[$j: exit=$out $(printf '%s' "$err" | tr '\n' ';' | head -c 200)] " ;; esac
+done
+[ -z "$bad" ] && report "check-manifests fails this repository's settings when they hold no object" ok \
+  || report "check-manifests fails this repository's settings when they hold no object" no "$bad"
+
+# 336. A ceiling gate-lib.sh does not state fails, naming the constant; and a ceiling moved in
+#      gate-lib.sh alone fails every file that still carries the old one, which is what makes the
+#      library the one place it is written. RED-CAPABLE under "default a missing constant" and
+#      under "a literal 600 in check-manifests.py".
+bad=""
+for c in _gate_qg_ceiling _gate_rg_ceiling; do
+  r=$(manifest_repo "mf-noconst-$c"); sed "/^$c=/d" "$r/hooks/gate-lib.sh" > "$r/lib.tmp" && mv "$r/lib.tmp" "$r/hooks/gate-lib.sh"
+  out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+  case "$out:$err" in 1:*"$c"*) ;; *) bad="$bad[$c: exit=$out: $(printf '%s' "$err" | tr '\n' ';' | head -c 200)] " ;; esac
+done
+r=$(manifest_repo mf-moved-ceiling); sed 's/^_gate_qg_ceiling=600$/_gate_qg_ceiling=601/' "$r/hooks/gate-lib.sh" > "$r/lib.tmp" && mv "$r/lib.tmp" "$r/hooks/gate-lib.sh"
+grep -q '^_gate_qg_ceiling=601$' "$r/hooks/gate-lib.sh" || bad="$bad[the fixture's library has no _gate_qg_ceiling=600 to move] "
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] || bad="$bad[moved: exit=$out] "
+for f in .claude-plugin/hooks.json hooks/templates/antigravity.hooks.json .claude/settings.json; do
+  case "$err" in *"$f"*601*) ;; *) bad="$bad[moved: $f not named] " ;; esac
+done
+[ -z "$bad" ] && report "check-manifests reads each gate's ceiling from gate-lib.sh, and fails without it" ok \
+  || report "check-manifests reads each gate's ceiling from gate-lib.sh, and fails without it" no "$bad"
 
 # --- guards: scripts/check-leakage.sh ---------------------------------------
 #

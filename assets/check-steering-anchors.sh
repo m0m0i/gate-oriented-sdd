@@ -10,8 +10,12 @@
 # rather than reporting a problem (#34).
 #
 # It asks its subject's own question, by calling the same function the hooks call, so it
-# cannot drift from what a gate would see. It does NOT judge whether a value is any good —
-# that would be a steering linter, and every rule in one is a new way to false-block.
+# cannot drift from what a gate would see. It judges whether a value can be honoured by the hook
+# that reads it, which is the question it already asks — can the reader see the line — taken one
+# step further, and nothing beyond that: a steering linter would be a new way to false-block with
+# every rule. So `- Validator budget:` is held to what the quality gate accepts, and to the
+# shortest `timeout` a project hook file gives that gate, which the gate would otherwise lower it
+# to without a word (#304).
 set -u
 
 # Absent is legitimate; present-but-unparseable is not. A project may have no `Docs` line at
@@ -92,6 +96,17 @@ if ! command -v gate_steering_read >/dev/null 2>&1; then
   echo "  Re-copy the plugin's hooks/gate-lib.sh over it and run this again." >&2
   exit 1
 fi
+# The same for the two readers the budget checks below call (#304), which a library cut off after
+# gate_steering_read still lacks: without this, each call fails as an unknown command, and the
+# diagnosis lands on a budget line that is fine.
+for fn in gate_validator_budget gate_hook_timeout; do
+  if ! command -v "$fn" >/dev/null 2>&1; then
+    echo "check-steering-anchors: $lib has no $fn — it predates the gates' own deadline (#304), so this" >&2
+    echo "  check cannot ask whether the hook files can honour the '- Validator budget:' line." >&2
+    echo "  Re-copy the plugin's hooks/gate-lib.sh over it and run this again." >&2
+    exit 1
+  fi
+done
 
 failed=""
 resolved=0
@@ -175,6 +190,89 @@ for file in $files; do
   done
 done
 IFS=$old_ifs
+
+# `- Validator budget:` against the gates' own readers (#304, AC10). The quality gate reads the line
+# with gate_validator_budget and lowers it to the shortest `timeout` gate_hook_timeout finds, minus
+# its margin, so a value the gate rejects, or one a hook file cannot honour, is a line that does
+# not do what it says. A check on the `- Validators:` line cannot say so at turn end, from inside
+# the run it would be protecting, so this says it in CI and by hand.
+#
+# The file set is not the one the gate reads, and on purpose. That one is the launch's: the
+# Claude Code project directory and the gate's own place, neither of which exists here, and a
+# library found through GATE_SDD_HOOKS or the plugin says nothing about the project. So: every
+# tracked .claude/settings.json, .claude/settings.local.json and .agents/hooks.json at any depth,
+# plus the git root's three, tracked or not, as the gate reads them: a project that gitignores
+# .claude/ or .agents/, or has not committed since init, still has them. That covers every launch
+# from the root and every tracked file below it, so it can only report more; an untracked hook file
+# below the root, read only by a launch from there, is a stated residual, as is a path holding a
+# newline. Outside a git repository the working directory stands in for the root, as it does for
+# the gate. A hook file the gates would block on fails here too, with or without a line.
+vb=$(gate_validator_budget .steering/tech.md); vbrc=$?
+case "$vbrc" in
+  0|1) ;;
+  2)
+    # The loop already reported a line with an empty value, in its own words; once is enough.
+    case "$failed" in *"'Validator budget' is present"*) ;; *) failed="${failed}
+  .steering/tech.md: $vb." ;; esac ;;
+  3)
+    case "$failed" in *".steering/tech.md: exists but cannot be read"*|*".steering/: exists and cannot be searched"*) ;; *) failed="${failed}
+  .steering/tech.md: the '- Validator budget:' line could not be read, so it was not checked." ;; esac ;;
+  *) failed="${failed}
+  .steering/tech.md: gate_validator_budget exited $vbrc, so the '- Validator budget:' line was not checked." ;;
+esac
+
+# Paths are kept relative to the root, and the readers run there, so a failure names the file the
+# way the author would write it.
+hroot=$(git rev-parse --show-toplevel 2>/dev/null)
+# Listed with -z, so a path git would quote comes back as it is on disk; its status rides on the
+# last line, because a pipeline's own status would be tr's.
+hfiles=""
+if [ -n "$hroot" ]; then
+  hfiles=$( { git -C "$hroot" ls-files -z -- ':(glob)**/.claude/settings.json' \
+      ':(glob)**/.claude/settings.local.json' ':(glob)**/.agents/hooks.json'; printf '\nrc=%s' "$?"; } | tr '\000' '\n')
+  case "$hfiles" in
+    *"${NL}rc=0") hfiles=${hfiles%"${NL}rc=0"} ;;
+    *)
+      hfiles=""
+      failed="${failed}
+  git ls-files failed in $hroot, so the project's hook files were not found and not checked." ;;
+  esac
+else
+  hroot=$PWD
+fi
+hfiles="$hfiles$NL.claude/settings.json$NL.agents/hooks.json$NL.claude/settings.local.json"
+# The ones that are there, each once: a tracked file deleted from the work tree is not read, and
+# the root's three may be tracked as well as named.
+set --
+IFS=$NL
+for f in $hfiles; do
+  [ -n "$f" ] && [ -e "$hroot/$f" ] || continue
+  for seen in "$@"; do [ "$seen" = "$f" ] && continue 2; done
+  set -- "$@" "$f"
+done
+IFS=$old_ifs
+for gate in quality-gate.sh review-gate.sh; do
+  if [ "$gate" = quality-gate.sh ]; then ceiling=$_gate_qg_ceiling; else ceiling=$_gate_rg_ceiling; fi
+  ht=$(cd "$hroot" && gate_hook_timeout "$gate" "$ceiling" "$@"); htrc=$?
+  if [ "$htrc" -ne 0 ]; then
+    failed="${failed}
+  ${ht:-gate_hook_timeout exited $htrc for $gate, so the hook files were not checked}.
+      The gate blocks every turn on this; fix the file rather than treating this as a pass."
+    continue
+  fi
+  t=${ht%% *}; src=${ht#* }
+  # Only an explicit line can ask for more than a file allows. With none, the default is what the
+  # bound lowers, and that is the state the file was written for.
+  [ "$gate" = quality-gate.sh ] && [ "$vbrc" -eq 0 ] && [ "$src" != ceiling ] || continue
+  bound=$((t - _gate_margin))
+  if [ "$vb" -gt "$bound" ]; then
+    failed="${failed}
+  $src: gives $gate a \"timeout\" of $t s, which bounds the gate to $bound s,
+      below the $vb s the '- Validator budget:' line in .steering/tech.md asks for, and the gate
+      would lower the line without a word. Raise that \"timeout\" to at least $((vb + _gate_margin))
+      (the plugin ships $_gate_qg_ceiling), or lower the line to $bound or less."
+  fi
+done
 
 if [ -n "$failed" ]; then
   echo "check-steering-anchors FAILED$failed" >&2

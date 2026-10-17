@@ -944,13 +944,14 @@ gate_work_reached_base() {  # <slug> <tip sha> <base sha>
   [ -n "$_wglobs" ] || _wglobs='*'
   _wglobs=$(printf '%s' "$_wglobs" | tr -d "\"'")
 
-  # Exit status, never emptiness. `- Source globs:` is consumer-authored and nothing validates
-  # it — `check-steering-anchors.sh` says in its own header that it does not judge whether a
-  # value is any good — so a pathspec git rejects (`:(globs)` for `:(glob)`, a typo echoing the
-  # key's own name) makes this exit 128 having printed nothing. Nothing is also what a branch
-  # with no footprint prints, and reading the two as one silenced the gate on both call sites
-  # with no diagnostic anywhere. Review round 1's BLOCKER, case 140. A git that could not
-  # answer leaves the skip unfired, which is the same direction as every other guard here.
+  # Exit status, never emptiness. `- Source globs:` is consumer-authored and nothing validates it —
+  # `check-steering-anchors.sh` says in its own header that it judges only whether a value can be
+  # honoured by the hook that reads it, and for this line that is whether the reader sees it at all,
+  # never whether git accepts it — so a pathspec git rejects (`:(globs)` for `:(glob)`, a typo
+  # echoing the key's own name) makes this exit 128 having printed nothing. Nothing is also what a
+  # branch with no footprint prints, and reading the two as one silenced the gate on both call sites
+  # with no diagnostic anywhere. Review round 1's BLOCKER, case 140. A git that could not answer
+  # leaves the skip unfired, which is the same direction as every other guard here.
   # What did this branch touch? Two readings, and they are COMPLEMENTS rather than rivals —
   # each is blind to a shape the other catches, and "absent from the footprint" is read below
   # as "nothing to review", so a blind spot here is a silenced gate.

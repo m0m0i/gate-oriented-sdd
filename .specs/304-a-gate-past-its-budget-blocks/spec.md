@@ -242,6 +242,7 @@ Decided in Design rather than asked, because the repository answers them: the li
   - This repository writes no line: 70 s against 170 s needs none, and the absent path is the one most projects take. T3 records two times for the `- Validators:` line in the spec: one alone, and one beside a second concurrent run, because parallel sessions share this checkout. If either is over 120 s, the line is written at twice the slower time, capped at 590, and the reason given.
     - **Measured at T3, 2026-10-17** (macOS, the T3 tree, every command exiting 0): 92.6 s alone, and 104.4 s for each of two runs started together. Both are under 120 s, so this repository writes no line. `scripts/test-gates.sh` is 91.6 s of the 92.6, up from 71 s before T3: about 5 s is T3's own cases, and the rest is every quality-gate case paying for the parent, about 185 ms a run, most of it `gate_bounded`'s first 0.1 s wait for `armed`.
     - **Re-measured at T4, 2026-10-17:** T4 put the review gate behind the same parent, and the suite reached 110–117 s, the whole line about 121 s alone, past the 120 s rule; the T3 conclusion above no longer held. After the poll change the line is measured again in T5, once the shipped timeouts are 600/120, since a line written above 170 while `.claude/settings.json` still gives the quality gate 180 would fail AC10's anchor check. T5 writes `- Validator budget:` by the rule above if either time is still over 120 s, and records both times here either way.
+    - **Measured at T5, 2026-10-17** (macOS, the T5 tree with the shipped timeouts at 600/120, every command exiting 0): 100.3 s alone, and 108.0 s and 107.8 s for two runs started together. Both are under 120 s, so this repository still writes no line. `scripts/test-gates.sh` is 92–98 s of it, with T5's eleven cases.
 - **Docs** (AC13):
   - `README.md:43` and `README.ja.md:45` (identical claims; the user reviews the Japanese), and `:226`/`:233`, the copied checks a plugin update does not reach.
   - `AGENTS.md:51` and `CONTRIBUTING.md:59`, which say what the anchor check verifies, and `docs/CONTRACT.md` M-2 (manifests agree, timeouts now included) and M-7.
@@ -330,7 +331,7 @@ Decided in Design rather than asked, because the repository answers them: the li
   - the unbounded default prints 110 through the derivation case in T1.
 
   Then the review gate's parent and child split.
-- [ ] T5: manifest and anchor checks:
+- [x] T5: manifest and anchor checks:
   - check-manifests' section, after `:7236`: a mismatched timeout in each of the three files, a missing `.claude/settings.json`, and a missing constant each fail (AC8);
   - the anchor section, after `anchor_repo` at `:3111`, with fixtures under `git init`, since AC10 reads tracked files:
     - a malformed line fails;

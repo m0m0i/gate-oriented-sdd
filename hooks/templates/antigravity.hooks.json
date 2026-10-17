@@ -24,12 +24,12 @@
       {
         "type": "command",
         "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f {{HOOKS_DIR}}/quality-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/quality-gate.sh",
-        "timeout": 180
+        "timeout": 600
       },
       {
         "type": "command",
         "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh",
-        "timeout": 30
+        "timeout": 120
       }
     ]
   }
