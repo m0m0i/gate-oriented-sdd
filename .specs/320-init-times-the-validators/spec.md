@@ -1,5 +1,5 @@
 # Spec: init times the validators, and writes a budget line when the suite needs one
-- Slug: 320-init-times-the-validators   Issue: 320   Type: feature   Status: approved
+- Slug: 320-init-times-the-validators   Issue: 320   Type: feature   Status: done
 - Author: m0m0i   Date: 2026-10-17
 
 ## 1. Requirements (WHAT / WHY)
