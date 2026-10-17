@@ -3825,6 +3825,339 @@ case "$err" in *"budget of 3 s, set by the \"timeout\" of 13 s that "*".agents/h
   && report "a hook file that binds the budget at the line's value is named as its source" ok \
   || report "a hook file that binds the budget at the line's value is named as its source" no "exit=$e ms=$ms names-file=$m err=$(printf '%s' "$err" | head -c 300)"
 
+# --- review gate: a deadline of its own (#304) -----------------------------------------
+#
+# The review gate as a parent and a child, the quality gate's shape one gate along: the parent
+# works out the budget, runs the gate's own body as the child through gate_bounded, and judges what
+# the child left. Its budget is fixed at the ceiling less the margin, 110 s (case 261), and only a
+# hook file that runs the gate can lower it. So every timed case here runs a copy whose own hook
+# file gives it a "timeout" of 13, or a library whose ceiling is patched to 13, and slows the gate
+# with a `git` on PATH that sleeps 20 s in one call. Each case is RED on main, where the gate has no
+# deadline and no child, or under the mutation its comment names, or both.
+#
+# The timed runs go as case 294's do, through t3_run: concurrently, each the leader of a session of
+# its own, judged once all have finished. The untimed cases run while they do. Every timed case
+# asserts an elapsed bound of the budget plus 5 s beside its outcome, never the outcome alone.
+t4d="$TMP/t4"; mkdir -p "$t4d"; t4git=$(command -v git)
+t4_repo() { # t4_repo <name> — a git fixture on main, holding only src/ and the review gate in hooks/; prints its root
+  _r="$t4d/$1"; mkdir -p "$_r/hooks" "$_r/.steering" "$_r/src"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/review-gate.sh" "$_r/hooks/"
+  printf -- "- Reviewer: test-reviewer\n- Source globs: '*.txt'\n" > "$_r/.steering/tech.md"
+  ( cd "$_r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && echo one > src/main.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+  printf '%s\n' "$_r"
+}
+t4_branches() { # t4_branches <repo> <branch to stand on> — four spec branches, every task ticked and no receipt, off main
+  ( cd "$1" && for _b in 1-alpha 2-slow 3-later 9-feature; do
+      git checkout -q -b "$_b" main && mkdir -p ".specs/$_b" \
+        && printf '# Spec\n## 3. Tasks (TDD-ordered)\n- [x] T1: do the thing\n' > ".specs/$_b/spec.md" \
+        && echo "$_b" >> src/main.txt && git add -A && git commit -qm "$_b"
+    done && git checkout -q "$2" ) >/dev/null 2>&1
+}
+t4_copy() { # t4_copy <repo> <hooks dir> [<library>] — the review gate copied into <hooks dir>, with the plugin's library or the one given
+  mkdir -p "$1/$2"; cp "$ROOT/hooks/review-gate.sh" "$1/$2/"; cp "${3:-$ROOT/hooks/gate-lib.sh}" "$1/$2/gate-lib.sh"
+}
+t4_agy() { # t4_agy <repo> <timeout> — an .agents/hooks.json that runs the copy in .agents/hooks/ with that "timeout"
+  printf '{"gate-sdd":{"enabled":true,"Stop":[{"type":"command","command":"sh .agents/hooks/review-gate.sh","timeout":%s}]}}\n' "$2" > "$1/.agents/hooks.json"
+}
+t4_shim() { # t4_shim <name> <case pattern> <action> — a git in $t4d/<name>.shim that runs <action> when " <its arguments> " match, then git
+  mkdir -p "$t4d/$1.shim"
+  printf '#!/bin/sh\ncase " $* " in %s) %s ;; esac\nexec "%s" "$@"\n' "$2" "$3" "$t4git" > "$t4d/$1.shim/git"
+  chmod +x "$t4d/$1.shim/git"
+}
+t4_rg() { # t4_rg <repo> [<argument>...] — hooks/review-gate.sh in the foreground from <repo>; stdout in $t4d/out, stderr in $t4d/err; prints exit=<n>
+  _r=$1; shift
+  ( cd "$_r" && sh hooks/review-gate.sh "$@" </dev/null >"$t4d/out" 2>"$t4d/err"; echo "exit=$?" )
+}
+t4_scan='*" refs/heads/2-slow^{commit} "*'   # the scan's tip lookup for 2-slow, and nothing else
+sed 's/^_gate_rg_ceiling=120$/_gate_rg_ceiling=13/' "$ROOT/hooks/gate-lib.sh" > "$t4d/gate-lib-13.sh"
+
+# The timed fixtures, named for their cases: rg-scan for 315 and 317 (TMPDIR at a directory of its
+# own, so its `git` can write a line of the child's own into the child's stderr before it sleeps),
+# rg-scan-agy 317, rg-current 316 (a stand-down copy, run with CLAUDE_PROJECT_DIR), rg-fixed 318
+# and rg-tie 319 (the patched library), rg-kill0 320, rg-usr1 321, rg-termpid 322, rg-nowalk 323
+# (case 278's first `ps` shim), rg-rundir 324 (TMPDIR at a directory of its own). Every one but
+# rg-current stands on main and is slowed in the scan, at 2-slow, after 1-alpha has been found.
+for n in rg-scan rg-scan-agy rg-nowalk rg-rundir; do
+  r=$(t4_repo "$n"); t4_branches "$r" main; t4_copy "$r" .agents/hooks; t4_agy "$r" 13
+done
+t4_shim rg-scan "$t4_scan" 'sleep 20'
+t4_shim rg-scan-cc "$t4_scan" 'for f in "$TMPDIR"/gate-sdd-run.*/err; do echo "a line of the child'"'"'s own" >> "$f"; done; sleep 20'; mkdir -p "$t4d/scan-tmp"
+r=$(t4_repo rg-current); t4_branches "$r" 9-feature; t4_copy "$r" .claude/hooks
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/review-gate.sh","timeout":13}]}]}}' > "$r/.claude/settings.json"
+t4_shim rg-current '*" merge-base --is-ancestor HEAD "*' 'sleep 20'
+r=$(t4_repo rg-fixed); t4_branches "$r" main; t4_copy "$r" .agents/hooks "$t4d/gate-lib-13.sh"
+r=$(t4_repo rg-tie); t4_branches "$r" main; t4_copy "$r" .agents/hooks "$t4d/gate-lib-13.sh"; t4_agy "$r" 13
+for n in rg-kill0 rg-usr1 rg-termpid; do
+  r=$(t4_repo "$n"); t4_branches "$r" main; t4_copy "$r" .agents/hooks; t4_agy "$r" 13
+done
+t4_shim rg-kill0 '*" for-each-ref "*' 'kill 0'
+t4_shim rg-usr1 '*" for-each-ref "*' 'kill -s USR1 0'
+t4_shim rg-termpid '*" for-each-ref "*' "touch '$t4d/started.flag'; sleep 20"
+t4_shim rg-rundir "$t4_scan" 'chmod 500 "$TMPDIR"/gate-sdd-run.*; sleep 20'; mkdir -p "$t4d/rundir-tmp"
+# qg-ceil 326: the quality gate, its library's ceiling patched to 13, its line at that maximum of 3,
+# and no hook file naming it.
+r_qc=$(t3_repo qg-ceil "sleep 20" '- Validator budget: 3')
+sed 's/^_gate_qg_ceiling=600$/_gate_qg_ceiling=13/' "$ROOT/hooks/gate-lib.sh" > "$r_qc/hooks/gate-lib.sh"
+
+# The batch, with the suite catching TERM and USR1 as case 277's canary does: a group-wide send
+# that escaped its session shows as the named failure after case 321.
+t4_escaped=""
+trap 't4_escaped="$t4_escaped TERM"' TERM; trap 't4_escaped="$t4_escaped USR1"' USR1
+t4_jobs=""
+( PATH="$t4d/rg-scan-cc.shim:$PATH"; TMPDIR="$t4d/scan-tmp"; export PATH TMPDIR; t3_run rg-scan "$t4d/rg-scan" .agents/hooks/review-gate.sh ) & t4_jobs="$t4_jobs $!"
+( PATH="$t4d/rg-scan.shim:$PATH"; ANTIGRAVITY_AGENT=1; export PATH ANTIGRAVITY_AGENT; t3_run rg-scan-agy "$t4d/rg-scan-agy" .agents/hooks/review-gate.sh ) & t4_jobs="$t4_jobs $!"
+( PATH="$t4d/rg-current.shim:$PATH"; CLAUDE_PROJECT_DIR="$t4d/rg-current"; export PATH CLAUDE_PROJECT_DIR; t3_run rg-current "$t4d/rg-current" .claude/hooks/review-gate.sh ) & t4_jobs="$t4_jobs $!"
+( PATH="$t4d/rg-scan.shim:$PATH"; export PATH; t3_run rg-fixed "$t4d/rg-fixed" .agents/hooks/review-gate.sh ) & t4_jobs="$t4_jobs $!"
+( PATH="$t4d/rg-scan.shim:$PATH"; export PATH; t3_run rg-tie "$t4d/rg-tie" .agents/hooks/review-gate.sh ) & t4_jobs="$t4_jobs $!"
+if [ "$t2_session" = ok ]; then
+  ( PATH="$t4d/rg-kill0.shim:$PATH"; export PATH; t3_run rg-kill0 "$t4d/rg-kill0" .agents/hooks/review-gate.sh ) & t4_jobs="$t4_jobs $!"
+  ( PATH="$t4d/rg-usr1.shim:$PATH"; export PATH; t3_run rg-usr1 "$t4d/rg-usr1" .agents/hooks/review-gate.sh ) & t4_jobs="$t4_jobs $!"
+fi
+( PATH="$t4d/rg-termpid.shim:$PATH"; export PATH; t3_run rg-termpid "$t4d/rg-termpid" .agents/hooks/review-gate.sh ) & t4_jobs="$t4_jobs $!"
+( PATH="$t4d/rg-scan.shim:$t2d/shim1:$PATH"; export PATH; t3_run rg-nowalk "$t4d/rg-nowalk" .agents/hooks/review-gate.sh ) & t4_jobs="$t4_jobs $!"
+( PATH="$t4d/rg-rundir.shim:$PATH"; TMPDIR="$t4d/rundir-tmp"; export PATH TMPDIR; t3_run rg-rundir "$t4d/rg-rundir" .agents/hooks/review-gate.sh ) & t4_jobs="$t4_jobs $!"
+t3_run qg-ceil "$r_qc" hooks/quality-gate.sh & t4_jobs="$t4_jobs $!"
+( i=0; while [ ! -e "$t4d/started.flag" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+  kill -s TERM "$(t3f rg-termpid.run/gate)" 2>/dev/null ) & t4_jobs="$t4_jobs $!"
+
+# 310. #304 AC5 — a review check that ends with neither a pass nor a block: a `git` on PATH KILLs
+#      the gate's child from its first call, which no trap can catch, so there is no `end`, no
+#      `fired` and no `signalled`. The parent's last resort blocks, on both channels, naming the
+#      status. RED on main, which has no child for the `git` to KILL and passes this repository.
+#      RED-CAPABLE under "the parent's fallback passes", which hands the harness `{}`.
+r=$(t4_repo rg-noverdict)
+t4_shim rg-noverdict '*" rev-parse --git-dir "*' 'case "$(ps -o args= -p "$PPID")" in *--bounded*) kill -s KILL "$PPID" ;; esac'
+o1=$( PATH="$t4d/rg-noverdict.shim:$PATH"; export PATH; t4_rg "$r" ); err1=$(cat "$t4d/err"); out1=$(cat "$t4d/out")
+o2=$( PATH="$t4d/rg-noverdict.shim:$PATH"; ANTIGRAVITY_AGENT=1; export PATH ANTIGRAVITY_AGENT; t4_rg "$r" ); out2=$(cat "$t4d/out")
+bad=""
+case "$o1:$err1" in "exit=2:Review gate: its check ended without a verdict (status 137)"*) ;; *) bad="$bad[claude: $o1 $(printf '%s' "$err1" | head -c 200)] " ;; esac
+case "$out1" in '{"decision":"continue","reason":"Review gate: its check ended without a verdict'*) ;; *) bad="$bad[claude stdout: $(printf '%s' "$out1" | head -c 100)] " ;; esac
+case "$o2:$out2" in 'exit=0:{"decision":"continue","reason":"Review gate: its check ended without a verdict'*) ;; *) bad="$bad[antigravity: $o2 $(printf '%s' "$out2" | head -c 100)] " ;; esac
+[ -z "$bad" ] && report "a review check that ends with no verdict at all blocks" ok \
+  || report "a review check that ends with no verdict at all blocks" no "$bad"
+
+# 311. #304 AC5 — the run dir, as case 290 asks it of the quality gate. With TMPDIR naming a
+#      directory that does not exist, it is made under the git directory instead and the gate
+#      still decides, leaving nothing there; with that place blocked too (a file where its directory
+#      goes), the gate blocks, naming both. RED-CAPABLE under "block when the first mktemp fails".
+r=$(t4_repo rg-notmp)
+o1=$( TMPDIR="$t4d/no-such-dir"; export TMPDIR; t4_rg "$r" ); out1=$(cat "$t4d/out")
+left=no; for f in "$r/.git/gate-sdd"/gate-sdd-run.*; do [ -e "$f" ] && left=yes; done
+r2=$(t4_repo rg-notmp2); : > "$r2/.git/gate-sdd"
+o2=$( TMPDIR="$t4d/no-such-dir"; export TMPDIR; t4_rg "$r2" ); err2=$(cat "$t4d/err")
+case "$err2" in "Review gate: "*"$t4d/no-such-dir"*".git/gate-sdd"*) m=ok ;; *) m=no ;; esac
+[ "$o1" = exit=0 ] && [ "$out1" = '{}' ] && [ -d "$r/.git/gate-sdd" ] && [ "$left" = no ] && [ "$o2" = exit=2 ] && [ "$m" = ok ] \
+  && report "a review run dir TMPDIR cannot hold is made under the git directory, and with neither the gate blocks" ok \
+  || report "a review run dir TMPDIR cannot hold is made under the git directory, and with neither the gate blocks" no "fallback=[$o1 $out1] made=$([ -d "$r/.git/gate-sdd" ] && echo yes || echo no) left=$left neither=$o2 names-both=$m err=$(printf '%s' "$err2" | head -c 200)"
+
+# 312. #304 AC5 — `--bounded` written by hand, with no run dir or with one whose `pid` is not the
+#      gate's own, blocks on both channels: a hook entry cannot reach the body without its
+#      deadline. On a repository whose other branch holds unreviewed work, so the body's own block
+#      is a different sentence. RED-CAPABLE under "the child takes --bounded at its word".
+r=$(t4_repo rg-handbounded); t4_branches "$r" main
+o1=$(t4_rg "$r" --bounded); out1=$(cat "$t4d/out"); err1=$(cat "$t4d/err")
+d=$(mktemp -d "$t4d/fake.XXXXXX"); echo 1 > "$d/pid"
+o2=$(t4_rg "$r" --bounded "$d"); err2=$(cat "$t4d/err")
+o3=$( ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; t4_rg "$r" --bounded ); out3=$(cat "$t4d/out")
+case "$out1|$out3|$err1|$err2" in '{"decision":"continue","reason":"Review gate: this gate was started with --bounded'*'|{"decision":"continue","reason":"Review gate: this gate was started with --bounded'*'|Review gate: this gate was started with --bounded'*'|Review gate: this gate was started with --bounded'*) j=ok ;; *) j=no ;; esac
+[ "$o1$o2$o3" = exit=2exit=2exit=0 ] && [ "$j" = ok ] \
+  && report "a hand-written --bounded on the review gate blocks and checks nothing" ok \
+  || report "a hand-written --bounded on the review gate blocks and checks nothing" no "no-dir=$o1 foreign-dir=$o2 antigravity=$o3 says-so=$j err=$(printf '%s' "$err1" | head -c 120)"
+
+# 313. #304 AC5 — the review gate puts no file in the work tree, while it runs or after, with TMPDIR
+#      unusable, so its run dir falls back. Its `git` records the work tree's status from inside
+#      the check, since the run dir is gone by the time the gate exits. RED-CAPABLE under "the
+#      second run dir is the working directory".
+r=$(t4_repo rg-cleantree)
+t4_shim rg-cleantree '*" for-each-ref "*' "\"$t4git\" status --porcelain --untracked-files=all --ignored >> '$t4d/cleantree.status'"
+o=$( PATH="$t4d/rg-cleantree.shim:$PATH"; TMPDIR="$t4d/no-such-dir"; export PATH TMPDIR; t4_rg "$r" ); st=$(cd "$r" && git status --porcelain --untracked-files=all --ignored)
+[ "$o" = exit=0 ] && [ -e "$t4d/cleantree.status" ] && [ ! -s "$t4d/cleantree.status" ] && [ -z "$st" ] \
+  && report "the review gate puts no file in the work tree" ok \
+  || report "the review gate puts no file in the work tree" no "$o during=[$(cat "$t4d/cleantree.status" 2>/dev/null || echo 'not recorded')] after=[$st] err=$(head -c 200 "$t4d/err")"
+
+# 314. #304 — every library function the bounded review gate calls is on its predates check. A
+#      gate-lib.sh cut off before any one of them blocks, naming it, on a repository the gate would
+#      otherwise pass. RED-CAPABLE under "drop a function from the check": without gate_hook_files
+#      the bound reads as the ceiling and the gate passes.
+bad=""
+for fn in gate_hook_files gate_hook_timeout gate_bounded gate_replay; do
+  r=$(t4_repo "rg-stale-$fn")
+  python3 - "$r/hooks/gate-lib.sh" "$fn" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]); src = p.read_text()
+i = src.index("\n" + sys.argv[2] + "() {") + 1
+p.write_text(src[:i] + src[src.index("\n}\n", i) + 3:])
+PYEOF
+  o=$(t4_rg "$r"); err=$(cat "$t4d/err")
+  case "$o|$err" in "exit=2|"*"predates $fn"*) ;; *) bad="$bad[$fn: $o $(printf '%s' "$err" | head -c 120)] " ;; esac
+done
+[ -z "$bad" ] && report "a gate-lib.sh without a function the bounded review gate calls blocks, naming it" ok \
+  || report "a gate-lib.sh without a function the bounded review gate calls blocks, naming it" no "$bad"
+
+for p in $t4_jobs; do while kill -0 "$p" 2>/dev/null; do wait "$p"; done; done
+trap - TERM USR1
+
+# 315. #304 AC6 — the scan cut off: a copy under .agents/hooks/ whose hooks.json gives it 13 s, so
+#      a budget of 3, and a `git` that sleeps 20 s on 2-slow's tip. The gate blocks within 8 s,
+#      giving the budget and the file that set it, the branch it was checking, the unreviewed work
+#      it had already found on 1-alpha with its sentence, and each branch it did not check; and
+#      the remedy for a budget a hook file set, that file's "timeout", the 120 s the plugin ships
+#      and init, with the commit-graph, never fewer branches. RED on main, which waits out the
+#      20 s. RED-CAPABLE under "list only the branches found", and under "give the scan's remedy
+#      for every budget", which sends a project bounded by its own file to delete branches.
+e=$(t3f rg-scan.run/exit); ms=$(t3f rg-scan.run/ms); err=$(t3f rg-scan.run/err); bad=""
+case "$err" in "Review gate: its check did not finish within this gate's budget of 3 s, set by the \"timeout\" of 13 s that "*".agents/hooks.json gives this gate"*) ;; *) bad="$bad deadline-wording" ;; esac
+case "$err" in *"was checking 2-slow at the deadline"*) ;; *) bad="$bad checking" ;; esac
+case "$err" in *"already found"*"
+  1-alpha — every task is ticked and no reviewer receipt exists"*) ;; *) bad="$bad found" ;; esac
+case "$err" in *"did not check:
+  2-slow
+  3-later
+  9-feature"*) ;; *) bad="$bad not-checked" ;; esac
+case "$err" in *"raise that \"timeout\" in "*".agents/hooks.json to the 120 s the plugin ships, or re-run init"*"git commit-graph write --reachable"*) ;; *) bad="$bad file-remedy" ;; esac
+case "$err" in *"ewer live branches"*|*"elete them"*) bad="$bad fewer-branches" ;; esac
+case "$(t3f rg-scan.run/out)" in '{"decision":"continue","reason":"Review gate: its check did not finish'*) ;; *) bad="$bad json" ;; esac
+[ "$e" = 2 ] && [ "${ms:-99999}" -le 8000 ] && [ -z "$bad" ] \
+  && report "a review scan past the budget blocks, naming what it found and what it did not check" ok \
+  || report "a review scan past the budget blocks, naming what it found and what it did not check" no "exit=$e ms=$ms missing:$bad err=$(printf '%s' "$err" | head -c 400)"
+
+# 316. #304 AC6/AC9 — the current branch cut off: a stand-down copy under .claude/hooks/, launched
+#      with CLAUDE_PROJECT_DIR, whose settings.json gives it 13 s, and a `git` that sleeps in the
+#      current branch's merge-base. The gate blocks within 8 s, saying it was still checking the
+#      current branch, 9-feature, naming .claude/settings.json and every other branch as not
+#      checked. RED-CAPABLE under "name the scan's state whatever the phase", and under "list the
+#      refs only when the scan starts", which leaves nothing to name as not checked.
+e=$(t3f rg-current.run/exit); ms=$(t3f rg-current.run/ms); err=$(t3f rg-current.run/err); bad=""
+case "$err" in *"budget of 3 s, set by the \"timeout\" of 13 s that "*".claude/settings.json gives this gate"*) ;; *) bad="$bad names-file" ;; esac
+case "$err" in *"still checking the current branch, 9-feature"*) ;; *) bad="$bad phase" ;; esac
+case "$err" in *"did not check:
+  1-alpha
+  2-slow
+  3-later
+  main"*) ;; *) bad="$bad not-checked" ;; esac
+case "$err" in *"already found"*|*"was checking 2-slow"*) bad="$bad scan-state" ;; esac
+case "$err" in *"raise that \"timeout\" in "*".claude/settings.json to the 120 s"*"git commit-graph write --reachable"*) ;; *) bad="$bad remedy" ;; esac
+[ "$e" = 2 ] && [ "${ms:-99999}" -le 8000 ] && [ -z "$bad" ] \
+  && report "a review gate cut off on the current branch says so, and names every branch it did not check" ok \
+  || report "a review gate cut off on the current branch says so, and names every branch it did not check" no "exit=$e ms=$ms missing:$bad err=$(printf '%s' "$err" | head -c 400)"
+
+# 317. #304 AC6 — the scan cut off, on both channels. On Claude Code, exit 2 and stderr begins with
+#      the gate's own sentence, though the child wrote a line of its own to its stderr first; on
+#      Antigravity, exit 0 and one JSON object whose decision is continue. RED-CAPABLE under
+#      "replay the child's stderr ahead of the timeout block", which puts the child's line first.
+e1=$(t3f rg-scan.run/exit); l1=$(t3f rg-scan.run/err | head -1)
+e2=$(t3f rg-scan-agy.run/exit); ms2=$(t3f rg-scan-agy.run/ms)
+j=$(python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); print(d.get("decision"), "did not finish within" in d.get("reason", ""))' "$t3d/rg-scan-agy.run/out" 2>&1)
+case "$l1" in "Review gate: its check did not finish within this gate's budget of 3 s"*) m=ok ;; *) m=no ;; esac
+[ "$e1" = 2 ] && [ "$m" = ok ] && [ "$e2" = 0 ] && [ "$j" = "continue True" ] && [ "${ms2:-99999}" -le 8000 ] \
+  && report "a review cut-off blocks on both channels" ok \
+  || report "a review cut-off blocks on both channels" no "claude=[exit=$e1 first line: $l1] antigravity=[exit=$e2 ms=$ms2 json: $j]"
+
+# 318. #304 AC6 — the fixed budget: a library whose ceiling is patched to 13, so the budget derived
+#      from it is 3, and no hook file. The block names the gate's own ceiling as what set it, never
+#      a file, and gives the remedy for a budget at its most: fewer live branches, since the scan was
+#      cut off, and the commit-graph, never a "timeout" to raise. RED-CAPABLE under "credit the
+#      ceiling as a hook file", which says a file called `ceiling` set it, and under "give the
+#      file's remedy for every budget".
+e=$(t3f rg-fixed.run/exit); ms=$(t3f rg-fixed.run/ms); err=$(t3f rg-fixed.run/err); bad=""
+case "$err" in *"budget of 3 s, set by its own ceiling of 13 s, less the 10 s"*) ;; *) bad="$bad source" ;; esac
+case "$err" in *"3 s is the most this gate can hold"*"ewer live branches"*"git commit-graph write --reachable"*) ;; *) bad="$bad max-remedy" ;; esac
+case "$err" in *"raise that \"timeout\""*|*"that ceiling gives"*) bad="$bad file-wording" ;; esac
+[ "$e" = 2 ] && [ "${ms:-99999}" -le 8000 ] && [ -z "$bad" ] \
+  && report "a review budget no hook file lowered is named as the gate's own, with the scan's remedy" ok \
+  || report "a review budget no hook file lowered is named as the gate's own, with the scan's remedy" no "exit=$e ms=$ms missing:$bad err=$(printf '%s' "$err" | head -c 400)"
+
+# 319. #304 AC6/AC9 — a hook file whose "timeout" binds the budget at exactly the gate's own (13 s
+#      less the margin, against the patched ceiling's 3): the block names the file as what set it.
+#      That is the shipped state, a 120 s "timeout" against the 110 s budget. RED-CAPABLE under
+#      "credit the file only when it is strictly lower".
+e=$(t3f rg-tie.run/exit); ms=$(t3f rg-tie.run/ms); err=$(t3f rg-tie.run/err)
+case "$err" in *"budget of 3 s, set by the \"timeout\" of 13 s that "*".agents/hooks.json gives this gate"*) m=ok ;; *) m=no ;; esac
+[ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] \
+  && report "a hook file that binds the review budget at the gate's own is named as its source" ok \
+  || report "a hook file that binds the review budget at the gate's own is named as its source" no "exit=$e ms=$ms names-file=$m err=$(printf '%s' "$err" | head -c 300)"
+
+# 320. #304 AC5 — in the session helper, a `git` that runs `kill 0` from the gate's child: the TERM
+#      reaches the gate, which blocks naming it, on stdout as well. RED on main, where the TERM ends
+#      the gate with nothing on stdout. RED-CAPABLE under "the parent exits on TERM".
+# 321. #304 AC5 — the same with `kill -s USR1 0`. RED-CAPABLE under "the parent traps HUP, INT and
+#      TERM alone", where USR1 kills it unhandled.
+for c in "rg-kill0|SIGTERM|320|a group-wide TERM from inside the review check blocks, naming the signal" \
+         "rg-usr1|SIGUSR1|321|a group-wide USR1 from inside the review check blocks, naming the signal"; do
+  n=${c%%|*}; c=${c#*|}; sig=${c%%|*}; c=${c#*|}; num=${c%%|*}; name=${c#*|}
+  if [ "$t2_session" != ok ]; then report "$name" no "not run: case 270's session helper failed"; continue; fi
+  e=$(t3f "$n.run/exit"); ms=$(t3f "$n.run/ms"); err=$(t3f "$n.run/err")
+  case "$(t3f "$n.run/out")|$err" in '{"decision":"continue","reason":"Review gate: '*"|"*"$sig"*) m=ok ;; *) m=no ;; esac
+  [ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] && report "$name" ok \
+    || report "$name" no "case $num: exit=$e ms=$ms names-signal=$m out=$(t3f "$n.run/out" | head -c 100) err=$(printf '%s' "$err" | head -c 200)"
+done
+# The canary for 320 and 321: a send that escaped its session reached this suite, which caught it.
+[ -z "$t4_escaped" ] && report "no group-wide signal from cases 320-321 reached this suite" ok \
+  || report "no group-wide signal from cases 320-321 reached this suite" no "caught:$t4_escaped"
+
+# 322. #304 AC5 — a TERM sent to the review gate's pid alone while a `git` sleeps 20 s: the trap runs
+#      once the child has returned, at the deadline, and the gate blocks naming the signal within
+#      8 s. RED-CAPABLE under "the parent's trap exits", which blocks nothing.
+e=$(t3f rg-termpid.run/exit); ms=$(t3f rg-termpid.run/ms); err=$(t3f rg-termpid.run/err)
+case "$err" in "Review gate: "*SIGTERM*) m=ok ;; *) m=no ;; esac
+[ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] \
+  && report "a TERM to the review gate alone blocks, naming it, within the budget" ok \
+  || report "a TERM to the review gate alone blocks, naming it, within the budget" no "exit=$e ms=$ms names-signal=$m started=$([ -e "$t4d/started.flag" ] && echo yes || echo no) err=$(printf '%s' "$err" | head -c 200)"
+
+# 323. #304 AC4 — on a host whose process walk fails, the watchdog kills the review gate's child
+#      alone, and the timeout block says so. RED-CAPABLE under "leave the walk's failure out of the
+#      review gate's block".
+e=$(t3f rg-nowalk.run/exit); ms=$(t3f rg-nowalk.run/ms); err=$(t3f rg-nowalk.run/err)
+case "$err" in "Review gate: its check did not finish within"*"only the check itself was killed"*) m=ok ;; *) m=no ;; esac
+[ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] \
+  && report "a review cut-off whose process walk failed says only the check was killed" ok \
+  || report "a review cut-off whose process walk failed says only the check was killed" no "exit=$e ms=$ms says-so=$m err=$(printf '%s' "$err" | head -c 300)"
+
+# 324. #304 AC5 — a `git` that makes the run dir unwritable and then sleeps 20 s: the watchdog
+#      cannot write `fired` and the gate cannot write `done`, and still the deadline holds and the
+#      gate blocks within 8 s, with the block on stdout. RED-CAPABLE under case 307's "write the
+#      markers with `:`": the watchdog's failed redirection exits it before its kill, and the gate
+#      waits out the 20 s.
+e=$(t3f rg-rundir.run/exit); ms=$(t3f rg-rundir.run/ms)
+case "$(t3f rg-rundir.run/out)" in '{"decision":"continue","reason":"Review gate: '*) m=ok ;; *) m=no ;; esac
+chmod -R u+rwx "$t4d/rundir-tmp" 2>/dev/null
+[ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] \
+  && report "a review run dir made unwritable mid-check still holds the deadline and blocks" ok \
+  || report "a review run dir made unwritable mid-check still holds the deadline and blocks" no "exit=$e ms=$ms json=$m out=$(t3f rg-rundir.run/out | head -c 100) err=$(t3f rg-rundir.run/err | head -c 200)"
+
+# 325. #304 AC4/AC5 — nothing a timed review gate run started outlives it, asked of each run's own
+#      process group as case 306 asks it. The nowalk run (323) is excepted, AC4's stated residual.
+#      Every group that shows anything is killed once this is asked, so a mutation that leaves
+#      processes behind fails here and does not leave them on the machine. RED-CAPABLE under "the
+#      watchdog kills the child alone", which leaves the `git` shim's sleep running in the group.
+bad=""
+t4_groups=$("$t2ps" -A -o pgid= -o pid= -o stat=)
+for n in rg-scan rg-scan-agy rg-current rg-fixed rg-tie rg-kill0 rg-usr1 rg-termpid rg-nowalk rg-rundir qg-ceil; do
+  case "$n" in rg-kill0|rg-usr1) [ "$t2_session" = ok ] || continue ;; esac
+  g=$(t3f "$n.run/gate"); [ -n "$g" ] || { bad="$bad[$n: no gate pid recorded] "; continue; }
+  a=$(printf '%s\n' "$t4_groups" | awk -v g="$g" '$1 == g && $3 !~ /Z/ { printf "%s ", $2 }')
+  [ -n "$a" ] || continue
+  [ "$n" = rg-nowalk ] || bad="$bad[$n: alive in its group: $a] "
+  python3 -c 'import os, signal, sys; os.killpg(int(sys.argv[1]), signal.SIGKILL)' "$g" 2>/dev/null
+done
+[ -z "$bad" ] && report "nothing a timed review gate run started outlives it" ok \
+  || report "nothing a timed review gate run started outlives it" no "$bad"
+
+# 326. #304 AC1 — the quality gate's line at the most the gate can hold, and no hook file naming
+#      the gate: the reader answers the gate's own ceiling, which ties the line, and is no file. The
+#      block names the line as what set the budget, never a file called `ceiling`, and gives the
+#      remedy for a budget at its most: a faster suite, or the slow validator moved to CI. Its
+#      library's ceiling is patched to 13, so that most is 3 s. RED-CAPABLE under "credit the ceiling
+#      as a hook file", and under "leave the maximum's remedy out".
+e=$(t3f qg-ceil.run/exit); ms=$(t3f qg-ceil.run/ms); err=$(t3f qg-ceil.run/err); bad=""
+case "$err" in *"budget of 3 s, set by the '- Validator budget:' line in .steering/tech.md"*) ;; *) bad="$bad source" ;; esac
+case "$err" in *"3 s is the most this gate can hold"*"move the slow validator off the '- Validators:' line to CI"*) ;; *) bad="$bad max-remedy" ;; esac
+case "$err" in *"that ceiling gives"*) bad="$bad file-wording" ;; esac
+[ "$e" = 2 ] && [ "${ms:-99999}" -le 8000 ] && [ -z "$bad" ] \
+  && report "a quality budget at its most, with no hook file, is named as the line's, with the maximum's remedy" ok \
+  || report "a quality budget at its most, with no hook file, is named as the line's, with the maximum's remedy" no "exit=$e ms=$ms missing:$bad err=$(printf '%s' "$err" | head -c 400)"
+
 # --- guards: assets/check-locks.py -------------------------------------------------
 #
 # The lock guard answers "has a rulebook drifted from what was agreed". It can also answer

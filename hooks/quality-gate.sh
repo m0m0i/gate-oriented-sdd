@@ -206,7 +206,9 @@ The last pass record at $_qb_r could not be removed, so the next turn end may sk
   esac
   qg_bound=$((qg_t - _gate_margin))
   [ "$qg_bound" -gt 0 ] || qg_block "Quality gate: $qg_tsrc gives this gate a \"timeout\" of $qg_t s, which leaves nothing once it keeps $_gate_margin s back to write its verdict, so its validators did not run. Raise that \"timeout\"."
-  if [ "$qg_bound" -le "$qg_budget" ]; then
+  # The ceiling the reader answers when no file names this gate is no file, and is never named as
+  # one; a file that ties the budget is, since raising the line would not move it.
+  if [ "$qg_tsrc" != ceiling ] && [ "$qg_bound" -le "$qg_budget" ]; then
     qg_budget=$qg_bound; qg_from=file
     qg_src="the \"timeout\" of $qg_t s that $qg_tsrc gives this gate, less the $_gate_margin s it keeps back to write its verdict"
   fi

@@ -481,7 +481,7 @@ gate_bounded() {  # <budget> <run dir> <command>...
   _gate_watchdog "$1" "$2" </dev/null >/dev/null 2>&1 &
   _gb_wd=$!
   shift 2
-  if ! _gate_await "$_gb_run/armed" 10 2; then
+  if ! _gate_await "$_gb_run/armed" 100 2; then
     { kill -s STOP "$_gb_wd"; } 2>/dev/null
     if _gate_snapshot; then
       _gb_k=$(printf '%s\n' "$_wd_ps" | awk -v w="$_gb_wd" '$2 == w { print $1 }')
@@ -501,11 +501,12 @@ gate_bounded() {  # <budget> <run dir> <command>...
   return "$_gb_rc"
 }
 
-# Wait up to <tenths> polls of 0.1 s for <file> to be there and not empty, or up to <seconds>
+# Wait up to <hundredths> polls of 0.01 s for <file> to be there and not empty, or up to <seconds>
 # polls of 1 s where `sleep` takes no fraction. 1 when the polls run out. A sleep that fails is
-# taken for one that rejects a fraction, which only makes the wait coarser.
-_gate_await() {  # <file> <tenths> <seconds>
-  _aw_n=0; _aw_max=$2; _aw_s=0.1
+# taken for one that rejects a fraction, which only makes the wait coarser. Hundredths, because
+# what it waits for is written within milliseconds, and every gate run pays the first poll.
+_gate_await() {  # <file> <hundredths> <seconds>
+  _aw_n=0; _aw_max=$2; _aw_s=0.01
   while [ ! -s "$1" ]; do
     [ "$_aw_n" -lt "$_aw_max" ] || return 1
     if sleep "$_aw_s" 2>/dev/null || [ "$_aw_s" = 1 ]; then
@@ -600,7 +601,7 @@ _gate_watchdog() {  # <budget> <run dir>
   [ -e "$2/done" ] && exit 0
   { printf '' > "$2/fired"; } 2>/dev/null
 
-  _gate_await "$2/pid" 10 1
+  _gate_await "$2/pid" 100 1
   _wd_c=$(cat "$2/pid" 2>/dev/null); _wd_g=$(cat "$2/ppid" 2>/dev/null)
   case "$_wd_c:$_wd_g" in *:|:*|*[!0-9:]*) exit 0 ;; esac
   _wd_walk=no; _wd_pp=""

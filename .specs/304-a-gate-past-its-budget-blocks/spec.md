@@ -322,7 +322,7 @@ Decided in Design rather than asked, because the repository answers them: the li
   - no file left in the work tree, with no `- Source globs:` line (mutation: the run dir falls back to `.`).
 
   The timing cases run concurrently (AC12). Cases 16, 17, 159, 203 and 239–258 stay green. Then the parent and child split. Record the `- Validators:` line's two measured times in the spec (Steering line wiring).
-- [ ] T4: review gate:
+- [x] T4: review gate:
   - a copied-gate fixture whose own hook file has review `"timeout": 13`;
   - a `git` shim on `PATH` that sleeps 20 s in `rev-parse --verify` for one branch, and one that sleeps in the current branch's `merge-base`;
   - each blocks within budget + 5 and names what it was checking, the branches not checked and the ones found;
