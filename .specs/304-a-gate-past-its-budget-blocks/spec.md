@@ -1,5 +1,5 @@
 # Spec: a gate that outlives its hook timeout ends the turn as a pass
-- Slug: 304-a-gate-past-its-budget-blocks   Issue: 304   Type: bug   Status: draft
+- Slug: 304-a-gate-past-its-budget-blocks   Issue: 304   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-10-16
 
 ## 1. Requirements (WHAT / WHY)
