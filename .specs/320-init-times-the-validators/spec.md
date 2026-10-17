@@ -33,7 +33,7 @@ Decided without asking, because the repository answers them:
 
 ## 2. Design (HOW)
 - **Approach: prose in `init` step 4.1, pinned.** `init` already runs every gating validator by hand before it arms the gate. That run becomes the measurement:
-  - start and end with `date +%s` around the by-hand run of the whole `- Validators:` line, in the session's own shell, so the seconds are the ones a turn end will see. The timing and the line come **before the quality gate's first run** in step 4.1: a suite over 170 s would otherwise be blocked at the default before any line exists, and a first run that passes records a pass the later run then skips on, since `.steering/tech.md` is outside `- Source globs:`;
+  - start and end with `date +%s` around the by-hand run of the whole `- Validators:` line, in the session's own shell, so the seconds are the ones a turn end will see. The timing and the line come **before the quality gate's first run** in step 4.1: a suite over 170 s would otherwise be blocked at the default before any line exists, and a first run that passes records a pass the later run then skips on, because the record does not hold the budget line;
   - report the time;
   - apply AC2, AC3 and AC3a. The value is `min(2 × t, 590, the hook-file bound)`, where `t` is in whole seconds and the hook-file bound is the shortest `"timeout"` any project hook file gives `quality-gate.sh`, less 10 s;
   - when a line is written or raised, re-run `check-steering-anchors.sh`, because the by-hand run checked a tree without it; the quality gate then runs once, on the tree that holds it, and step 4 arms the gate only when that is green.
