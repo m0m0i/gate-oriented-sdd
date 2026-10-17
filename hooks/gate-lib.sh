@@ -48,7 +48,7 @@ _gate_block_status() {
 # The end of every block: gate_block's, and gate_replay's when it hands a child's block on. In a
 # gate's child it first marks the verdict complete, as gate_pass does (gate_replay, below).
 _gate_block_exit() {
-  [ -z "${_gate_child_run:-}" ] || { : > "$_gate_child_run/end"; } 2>/dev/null
+  [ -z "${_gate_child_run:-}" ] || { printf '' > "$_gate_child_run/end"; } 2>/dev/null
   _gate_block_status
   exit "$?"
 }
@@ -57,7 +57,7 @@ _gate_block_exit() {
 # exit 0 and ignores stdout here.
 gate_pass() {
   printf '{}\n'
-  [ -z "${_gate_child_run:-}" ] || { : > "$_gate_child_run/end"; } 2>/dev/null
+  [ -z "${_gate_child_run:-}" ] || { printf '' > "$_gate_child_run/end"; } 2>/dev/null
   exit 0
 }
 
@@ -447,6 +447,12 @@ gate_hook_timeout() {  # <gate script> <ceiling> <file>...
 # `nowalk` when it could not walk the child's tree and killed the child alone. The gate writes
 # `done`, the only thing that disarms the watchdog.
 #
+# Every marker is written with `printf ''`, never `:`. A redirection that fails on `:`, a special
+# builtin, exits a POSIX shell whatever wraps it, so a run dir a validator removed or made
+# unwritable would end the gate after its child with nothing on stdout, and end the watchdog at
+# `fired` before its kill: both a pass where a block was due. A marker that cannot be written is
+# only missing, which costs the budget's latency or a line of the block, never the block itself.
+#
 # Inside `{ …; } 2>/dev/null`, with the status captured inside the braces: without it, bash as sh
 # prints `Terminated: 15` for a killed child onto the gate's own stderr, which is Claude Code's
 # block reason. The watchdog signals the child only while `ps` lists it under the parent in
@@ -488,7 +494,7 @@ gate_bounded() {  # <budget> <run dir> <command>...
   fi
   { sh -c 'echo $PPID >"$1/ppid" && echo $$ >"$1/pid" || exit 125; shift; exec "$@"' _ "$_gb_run" "$@" >"$_gb_run/verdict" 2>"$_gb_run/err"; _gb_rc=$?; } 2>/dev/null
   if [ ! -e "$_gb_run/fired" ]; then
-    { : > "$_gb_run/done"; } 2>/dev/null
+    { printf '' > "$_gb_run/done"; } 2>/dev/null
     { kill -s USR1 "$_gb_wd"; } 2>/dev/null
   fi
   _gate_reap "$_gb_wd"
@@ -592,7 +598,7 @@ _gate_watchdog() {  # <budget> <run dir>
   done
   trap '' USR1
   [ -e "$2/done" ] && exit 0
-  : > "$2/fired"
+  { printf '' > "$2/fired"; } 2>/dev/null
 
   _gate_await "$2/pid" 10 1
   _wd_c=$(cat "$2/pid" 2>/dev/null); _wd_g=$(cat "$2/ppid" 2>/dev/null)
@@ -606,7 +612,7 @@ _gate_watchdog() {  # <budget> <run dir>
     _wd_walk=yes
   else
     kill -0 "$_wd_c" 2>/dev/null || exit 0
-    : > "$2/nowalk"
+    { printf '' > "$2/nowalk"; } 2>/dev/null
   fi
 
   _wd_set=$_wd_c
@@ -636,7 +642,7 @@ _gate_watchdog_walk() {  # <run dir>
   _ww_i=0
   while [ "$_ww_i" -lt 5 ]; do
     _ww_i=$((_ww_i + 1))
-    _gate_snapshot || { : > "$1/nowalk"; return 0; }
+    _gate_snapshot || { { printf '' > "$1/nowalk"; } 2>/dev/null; return 0; }
     _ww_new=$(printf '%s\n' "$_wd_ps" | _gate_descendants $_wd_set)
     [ -n "$_ww_new" ] || return 0
     kill -s STOP $_ww_new 2>/dev/null

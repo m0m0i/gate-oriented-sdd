@@ -3471,6 +3471,360 @@ case "$e:$o" in '0:{"decision":"continue","reason":"'*) ;; *) bad="$bad[antigrav
 [ -z "$bad" ] && report "a relative run dir blocks before the check starts" ok \
   || report "a relative run dir blocks before the check starts" no "$bad"
 
+# --- quality gate: a deadline of its own (#304) ---------------------------------------
+#
+# The quality gate as a parent and a child: the parent works out the budget, runs its own body as
+# the child through gate_bounded, and judges what the child left; the child is the body every
+# quality-gate case above drives. Here the budget runs out, the gate is signalled, its run dir
+# cannot be made, and a validator writes where the verdict goes. Each case is RED on main, where
+# the gate has no deadline and no child, or under the mutation its comment names, or both.
+#
+# The timed runs go as case 270's do: concurrently, each the leader of a session of its own,
+# writing to its own directory, judged once all have finished, so together they cost about the
+# slowest. The untimed cases run while they do. Every slow validator sleeps 20 s, and every timed
+# case asserts an elapsed bound of the budget plus 5 s beside its outcome, never the outcome alone.
+t3d="$TMP/t3"; mkdir -p "$t3d"
+t3_repo() { # t3_repo <name> <validators> [<tech.md line>...] — a git fixture with the quality gate in hooks/; prints its root
+  _r="$t3d/$1"; _v=$2; shift 2; mkdir -p "$_r/hooks" "$_r/.steering"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$_r/hooks/"
+  { printf -- '- Validators: %s\n' "$_v"; for _l in "$@"; do printf '%s\n' "$_l"; done; } > "$_r/.steering/tech.md"
+  ( cd "$_r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && printf 'ran.log\n*.flag\n' > .git/info/exclude && echo one > src.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+  printf '%s\n' "$_r"
+}
+t3_run() { # t3_run <name> <dir> <gate> — `sh <gate>` from <dir> as the leader of a session of its own, in $t3d/<name>.run/: out, err, exit, ms, and gate, its pid and so its group
+  _o="$t3d/$1.run"; mkdir -p "$_o"; _t0=$(ms_now)
+  ( cd "$2" && in_session sh -c 'echo $$ > "$1/gate"; exec sh "$2"' _ "$_o" "$3" </dev/null >"$_o/out" 2>"$_o/err" )
+  echo "$?" > "$_o/exit"; echo $(( $(ms_now) - _t0 )) > "$_o/ms"
+}
+t3f() { cat "$t3d/$1" 2>/dev/null; }
+t3_qg() { # t3_qg <repo> [<argument>...] — the gate in the foreground from <repo>; stdout in $t3d/out, stderr in $t3d/err; prints exit=<n>
+  _r=$1; shift
+  ( cd "$_r" && sh hooks/quality-gate.sh "$@" </dev/null >"$t3d/out" 2>"$t3d/err"; echo "exit=$?" )
+}
+
+# The timed fixtures. Each name is its case's: cutoff for 294 and 297, failfirst 295, alone-cc and
+# alone-agy 296, record 298 (its `mv` is a shim that moves the record into place and then hangs),
+# leftover 299, agents 300, standdown 301, kill0 302, usr1 303, termpid 304, nowalk 305 (run with
+# case 278's first `ps` shim, which exits 1), rundir 307 (run with TMPDIR at a directory of its own),
+# tie 309.
+r_cut=$(t3_repo cutoff "true, sh -c 'echo said before the sleep; exec sleep 20', touch never-ran.flag" '- Validator budget: 3')
+r_fail=$(t3_repo failfirst "sh -c 'echo failed early >&2; exit 1', sleep 20" '- Validator budget: 3')
+r_cc=$(t3_repo alone-cc "sleep 20" '- Validator budget: 2' '- Source globs: :(globs)*.txt')
+r_agy=$(t3_repo alone-agy "sleep 20" '- Validator budget: 2' '- Source globs: :(globs)*.txt')
+r_rec=$(t3_repo record "sh -c 'echo x >> ran.log'" '- Source globs: *.txt' '- Validator budget: 3')
+mkdir -p "$t3d/mvshim"; printf '#!/bin/sh\n"%s" "$@" || exit\nexec sleep 20\n' "$(command -v mv)" > "$t3d/mvshim/mv"; chmod +x "$t3d/mvshim/mv"
+r_bg=$(t3_repo leftover "(sleep 20; echo late) &" '- Validator budget: 3')
+r_ag=$(t3_repo agents "sleep 20"); mkdir -p "$r_ag/.agents/hooks"; cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r_ag/.agents/hooks/"
+printf '%s\n' '{"gate-sdd":{"enabled":true,"Stop":[{"type":"command","command":"cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f .agents/hooks/quality-gate.sh ] || exit 0; sh .agents/hooks/quality-gate.sh","timeout":13}]}}' > "$r_ag/.agents/hooks.json"
+r_sd=$(t3_repo standdown "sleep 20"); mkdir -p "$r_sd/sub/.claude/hooks" "$r_sd/.claude"; cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r_sd/sub/.claude/hooks/"
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-gate.sh","timeout":13}]}]}}' > "$r_sd/sub/.claude/settings.json"
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh","timeout":600}]}]}}' > "$r_sd/.claude/settings.json"
+r_k0=$(t3_repo kill0 "kill 0" '- Validator budget: 3')
+r_u1=$(t3_repo usr1 "kill -s USR1 0" '- Validator budget: 3')
+r_tp=$(t3_repo termpid "sh -c 'touch started.flag; exec sleep 20'" '- Validator budget: 3')
+r_nw=$(t3_repo nowalk "sleep 20" '- Validator budget: 2')
+r_rd=$(t3_repo rundir 'chmod 500 "$TMPDIR"/gate-sdd-run.*; sleep 20' '- Validator budget: 3'); mkdir -p "$t3d/rundir-tmp"
+r_tie=$(t3_repo tie "sleep 20" '- Validator budget: 3'); mkdir -p "$r_tie/.agents/hooks"; cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r_tie/.agents/hooks/"
+printf '%s\n' '{"gate-sdd":{"enabled":true,"Stop":[{"type":"command","command":"sh .agents/hooks/quality-gate.sh","timeout":13}]}}' > "$r_tie/.agents/hooks.json"
+
+# The batch, with the suite catching TERM and USR1 as case 277's canary does: a group-wide send
+# that escaped its session shows as the named failure after case 303.
+t3_escaped=""
+trap 't3_escaped="$t3_escaped TERM"' TERM; trap 't3_escaped="$t3_escaped USR1"' USR1
+t3_jobs=""
+t3_run cutoff "$r_cut" hooks/quality-gate.sh & t3_jobs="$t3_jobs $!"
+t3_run failfirst "$r_fail" hooks/quality-gate.sh & t3_jobs="$t3_jobs $!"
+t3_run alone-cc "$r_cc" hooks/quality-gate.sh & t3_jobs="$t3_jobs $!"
+( ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; t3_run alone-agy "$r_agy" hooks/quality-gate.sh ) & t3_jobs="$t3_jobs $!"
+( PATH="$t3d/mvshim:$PATH"; export PATH; t3_run record "$r_rec" hooks/quality-gate.sh ) & t3_jobs="$t3_jobs $!"
+t3_run leftover "$r_bg" hooks/quality-gate.sh & t3_jobs="$t3_jobs $!"
+t3_run agents "$r_ag" .agents/hooks/quality-gate.sh & t3_jobs="$t3_jobs $!"
+( CLAUDE_PROJECT_DIR="$r_sd/sub"; export CLAUDE_PROJECT_DIR; t3_run standdown "$r_sd/sub" .claude/hooks/quality-gate.sh ) & t3_jobs="$t3_jobs $!"
+if [ "$t2_session" = ok ]; then
+  t3_run kill0 "$r_k0" hooks/quality-gate.sh & t3_jobs="$t3_jobs $!"
+  t3_run usr1 "$r_u1" hooks/quality-gate.sh & t3_jobs="$t3_jobs $!"
+fi
+t3_run termpid "$r_tp" hooks/quality-gate.sh & t3_jobs="$t3_jobs $!"
+( PATH="$t2d/shim1:$PATH"; export PATH; t3_run nowalk "$r_nw" hooks/quality-gate.sh ) & t3_jobs="$t3_jobs $!"
+( TMPDIR="$t3d/rundir-tmp"; export TMPDIR; t3_run rundir "$r_rd" hooks/quality-gate.sh ) & t3_jobs="$t3_jobs $!"
+t3_run tie "$r_tie" .agents/hooks/quality-gate.sh & t3_jobs="$t3_jobs $!"
+( i=0; while [ ! -e "$r_tp/started.flag" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+  kill -s TERM "$(t3f termpid.run/gate)" 2>/dev/null ) & t3_jobs="$t3_jobs $!"
+
+# 287. #304 AC1 — a passing validator that writes to stdout and stderr: the run passes, and on the
+#      Antigravity channel stdout is exactly `{}`. Each validator writes to a file of its own, so the
+#      child's stdout carries the verdict alone. RED-CAPABLE under "validators write to the child's
+#      stdout", where the verdict is not one line and the gate blocks a clean run.
+r=$(t3_repo chatty "sh -c 'echo to stdout; echo to stderr >&2'")
+o1=$(t3_qg "$r"); out1=$(cat "$t3d/out")
+o2=$( ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; t3_qg "$r" ); out2=$(cat "$t3d/out")
+[ "$o1$o2" = exit=0exit=0 ] && [ "$out1" = '{}' ] && [ "$out2" = '{}' ] \
+  && report "a chatty passing validator still passes, with {} alone on stdout" ok \
+  || report "a chatty passing validator still passes, with {} alone on stdout" no "claude=[$o1 $out1] antigravity=[$o2 $out2] err=$(head -c 200 "$t3d/err")"
+
+# 288. #304 AC11 — a validator still runs in a subshell of its own: its `cd` does not reach the
+#      next one, which looks for a file only the root holds. RED-CAPABLE under "run the validator
+#      in the child's own shell", where the second validator runs in sub/ and fails.
+r=$(t3_repo cdiso "cd sub, test -f at-root.flag"); mkdir -p "$r/sub"; : > "$r/at-root.flag"
+o=$(t3_qg "$r")
+[ "$o" = exit=0 ] && report "a validator's cd does not reach the next validator" ok \
+  || report "a validator's cd does not reach the next validator" no "$o $(head -c 200 "$t3d/err")"
+
+# 289. #304 AC7 — a malformed `- Validator budget:` line blocks only when the validators are about
+#      to run. A turn the source skip passes still passes; once the source changes, the block names
+#      the line, its value and the accepted range, and no validator ran. RED-CAPABLE under "block on
+#      the line in the parent", which blocks the skipped turn too.
+r=$(t3_repo badline "sh -c 'echo x >> ran.log'" '- Source globs: *.txt')
+t3_qg "$r" >/dev/null; n0=$(qgp_runs "$r")
+printf -- '- Validator budget: 12s\n' >> "$r/.steering/tech.md"
+o1=$(t3_qg "$r"); n1=$(qgp_runs "$r")
+echo two >> "$r/src.txt"; o2=$(t3_qg "$r"); err=$(cat "$t3d/err"); n2=$(qgp_runs "$r")
+case "$err" in *"Validator budget:' line"*"reads '12s'"*"from 1 to 590"*) m=ok ;; *) m=no ;; esac
+[ "$o1$o2" = exit=0exit=2 ] && [ "$m" = ok ] && [ "$n0$n1$n2" = 111 ] \
+  && report "a malformed budget line blocks only when the validators are about to run" ok \
+  || report "a malformed budget line blocks only when the validators are about to run" no "skipped=$o1 changed=$o2 names-line=$m runs=$n0$n1$n2 err=$(printf '%s' "$err" | head -c 200)"
+
+# 290. #304 AC5 — the run dir. With TMPDIR naming a directory that does not exist, it is made under
+#      the git directory instead and the gate still decides: the pass is recorded and nothing is
+#      left there. With that place blocked too (a file where its directory goes), the gate blocks,
+#      naming both. RED-CAPABLE under "block when the first mktemp fails", which blocks the first.
+r=$(t3_repo notmp "true" '- Source globs: *.txt')
+o1=$( TMPDIR="$t3d/no-such-dir"; export TMPDIR; t3_qg "$r" ); out1=$(cat "$t3d/out")
+left=no; for f in "$r/.git/gate-sdd"/gate-sdd-run.*; do [ -e "$f" ] && left=yes; done
+r2=$(t3_repo notmp2 "true"); : > "$r2/.git/gate-sdd"
+o2=$( TMPDIR="$t3d/no-such-dir"; export TMPDIR; t3_qg "$r2" ); err2=$(cat "$t3d/err")
+case "$err2" in *"$t3d/no-such-dir"*".git/gate-sdd"*) m=ok ;; *) m=no ;; esac
+[ "$o1" = exit=0 ] && [ "$out1" = '{}' ] && [ -s "$r/.git/gate-sdd/quality-pass" ] && [ "$left" = no ] && [ "$o2" = exit=2 ] && [ "$m" = ok ] \
+  && report "a run dir TMPDIR cannot hold is made under the git directory, and with neither the gate blocks" ok \
+  || report "a run dir TMPDIR cannot hold is made under the git directory, and with neither the gate blocks" no "fallback=[$o1 $out1] recorded=$([ -s "$r/.git/gate-sdd/quality-pass" ] && echo yes || echo no) left=$left neither=$o2 names-both=$m err=$(printf '%s' "$err2" | head -c 200)"
+
+# 291. #304 AC5 — `--bounded` written by hand, with no run dir or with one whose `pid` is not the
+#      gate's own, blocks on both channels and runs nothing: a hook entry cannot reach the body
+#      without its deadline. RED-CAPABLE under "the child takes --bounded at its word", which runs
+#      the validator unbounded.
+r=$(t3_repo handbounded "touch ran.flag")
+o1=$(t3_qg "$r" --bounded); out1=$(cat "$t3d/out")
+d=$(mktemp -d "$t3d/fake.XXXXXX"); echo 1 > "$d/pid"
+o2=$(t3_qg "$r" --bounded "$d")
+o3=$( ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; t3_qg "$r" --bounded ); out3=$(cat "$t3d/out")
+case "$out1|$out3" in '{"decision":"continue","reason":"'*'|{"decision":"continue","reason":"'*) j=ok ;; *) j=no ;; esac
+[ "$o1$o2$o3" = exit=2exit=2exit=0 ] && [ "$j" = ok ] && [ ! -e "$r/ran.flag" ] \
+  && report "a hand-written --bounded blocks and runs nothing" ok \
+  || report "a hand-written --bounded blocks and runs nothing" no "no-dir=$o1 foreign-dir=$o2 antigravity=$o3 json=$j ran=$([ -e "$r/ran.flag" ] && echo yes || echo no)"
+
+# 292. #304 AC5 — the gate leaves no file in the work tree, with no `- Source globs:` line and with
+#      TMPDIR unusable, the run that once left `.out` in the project's root. The validator itself
+#      asks git for untracked files, so a file the gate put there while it ran is a failure too.
+#      RED-CAPABLE under "the second run dir is the working directory", not the git directory.
+r=$(t3_repo cleantree 'test -z "$(git status --porcelain --untracked-files=all)"')
+o=$( TMPDIR="$t3d/no-such-dir"; export TMPDIR; t3_qg "$r" ); st=$(cd "$r" && git status --porcelain --untracked-files=all --ignored)
+[ "$o" = exit=0 ] && [ -z "$st" ] && report "the quality gate leaves no file in the work tree" ok \
+  || report "the quality gate leaves no file in the work tree" no "$o left=[$st] err=$(head -c 200 "$t3d/err")"
+
+# 293. #304 — every library function the bounded gate calls is on its predates check. A gate-lib.sh
+#      cut off before any one of them blocks, naming it, and runs nothing. RED-CAPABLE under "drop a
+#      function from the check": without gate_hook_files the bound reads as the ceiling, and the
+#      validator runs and passes.
+bad=""
+for fn in gate_validator_budget gate_hook_files gate_hook_timeout gate_bounded gate_replay; do
+  r=$(t3_repo "stale-$fn" "touch ran.flag")
+  python3 - "$r/hooks/gate-lib.sh" "$fn" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]); src = p.read_text()
+i = src.index("\n" + sys.argv[2] + "() {") + 1
+p.write_text(src[:i] + src[src.index("\n}\n", i) + 3:])
+PYEOF
+  o=$(t3_qg "$r"); err=$(cat "$t3d/err")
+  case "$o|$err" in "exit=2|"*"predates $fn"*) ;; *) bad="$bad[$fn: $o $(printf '%s' "$err" | head -c 120)] " ;; esac
+  [ ! -e "$r/ran.flag" ] || bad="$bad[$fn: the validator ran] "
+done
+[ -z "$bad" ] && report "a gate-lib.sh without a function the bounded gate calls blocks, naming it" ok \
+  || report "a gate-lib.sh without a function the bounded gate calls blocks, naming it" no "$bad"
+
+for p in $t3_jobs; do while kill -0 "$p" 2>/dev/null; do wait "$p"; done; done
+trap - TERM USR1
+
+# 294. #304 AC1 — a 20 s validator after a fast one, at budget 3: the gate blocks within 8 s, and
+#      the block gives the budget and what set it, names the validator it cut off, and carries the
+#      line that validator printed before it slept, and the remedy for a budget the line set.
+#      RED on main, which waits out the 20 s and passes. RED-CAPABLE under "read the cut-off tail
+#      from the verdict file", which holds nothing, and under "leave the remedy out".
+e=$(t3f cutoff.run/exit); ms=$(t3f cutoff.run/ms); err=$(t3f cutoff.run/err); bad=""
+case "$err" in *"To give it more time, write '- Validator budget: <seconds>' in .steering/tech.md, a whole number up to 590"*) ;; *) bad="$bad line-remedy" ;; esac
+case "$err" in *"did not finish within this gate's budget of 3 s, set by the '- Validator budget:' line"*) ;; *) bad="$bad deadline-wording" ;; esac
+case "$err" in *"exec sleep 20' (cut off at the deadline)
+said before the sleep"*) ;; *) bad="$bad cut-off-tail" ;; esac
+case "$(t3f cutoff.run/out)" in '{"decision":"continue","reason":"Quality gate: the validators did not finish'*) ;; *) bad="$bad json" ;; esac
+[ "$e" = 2 ] && [ "${ms:-99999}" -le 8000 ] && [ -z "$bad" ] \
+  && report "a validator past the budget is cut off, and its output reaches the block" ok \
+  || report "a validator past the budget is cut off, and its output reaches the block" no "exit=$e ms=$ms missing:$bad err=$(printf '%s' "$err" | head -c 300)"
+
+# 295. #304 AC2 — a validator that failed before the budget ran out is carried in the same block,
+#      with its tail as today, beside the one that was cut off. RED-CAPABLE under "the timeout block
+#      lists the cut-off validator alone".
+e=$(t3f failfirst.run/exit); ms=$(t3f failfirst.run/ms); err=$(t3f failfirst.run/err)
+case "$err" in *"did not finish within"*"--- sh -c 'echo failed early >&2; exit 1'
+failed early"*"--- sleep 20 (cut off at the deadline)"*) m=ok ;; *) m=no ;; esac
+[ "$e" = 2 ] && [ "${ms:-99999}" -le 8000 ] && [ "$m" = ok ] \
+  && report "an earlier failure is carried in the block that cuts a later validator off" ok \
+  || report "an earlier failure is carried in the block that cuts a later validator off" no "exit=$e ms=$ms carried=$m err=$(printf '%s' "$err" | head -c 300)"
+
+# 296. #304 AC1 — one validator alone at budget 2, on both channels. On Claude Code, exit 2 and
+#      stderr begins with the gate's own sentence; on Antigravity, exit 0 and one JSON object whose
+#      decision is continue. The child writes a line of its own to stderr first (its Source globs
+#      value is case 244's, which git rejects), and that line is not the block's. RED-CAPABLE under
+#      "replay the child's stderr ahead of the timeout block", which puts the child's line first.
+e1=$(t3f alone-cc.run/exit); ms1=$(t3f alone-cc.run/ms); l1=$(t3f alone-cc.run/err | head -1)
+e2=$(t3f alone-agy.run/exit); ms2=$(t3f alone-agy.run/ms)
+j=$(python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); print(d.get("decision"), "did not finish within" in d.get("reason", ""))' "$t3d/alone-agy.run/out" 2>&1)
+case "$l1" in "Quality gate: the validators did not finish within this gate's budget of 2 s"*) m=ok ;; *) m=no ;; esac
+[ "$e1" = 2 ] && [ "$m" = ok ] && [ "${ms1:-99999}" -le 7000 ] && [ "$e2" = 0 ] && [ "$j" = "continue True" ] && [ "${ms2:-99999}" -le 7000 ] \
+  && report "a cut-off blocks on both channels" ok \
+  || report "a cut-off blocks on both channels" no "claude=[exit=$e1 ms=$ms1 first line: $l1] antigravity=[exit=$e2 ms=$ms2 json: $j]"
+
+# 297. #304 AC1 — each validator that never started is named as not run, and did not run.
+#      RED-CAPABLE under "leave out the validators after the cut-off".
+err=$(t3f cutoff.run/err)
+case "$err" in *"--- touch never-ran.flag (did not run)"*) m=ok ;; *) m=no ;; esac
+[ "$m" = ok ] && [ ! -e "$r_cut/never-ran.flag" ] \
+  && report "a cut-off names each validator that did not run" ok \
+  || report "a cut-off names each validator that did not run" no "named=$m ran=$([ -e "$r_cut/never-ran.flag" ] && echo yes || echo no)"
+
+# 298. #304 AC3 — a run cut off just after its pass was recorded leaves no record, so the next turn
+#      end runs the validators again. The fixture's `mv` moves the record into place and then hangs,
+#      so the child is killed holding a written pass. RED-CAPABLE under "the parent leaves the
+#      record when it builds the block": the next run skips on it.
+e=$(t3f record.run/exit); ms=$(t3f record.run/ms); err=$(t3f record.run/err)
+[ -e "$r_rec/.git/gate-sdd/quality-pass" ] && rec=yes || rec=no
+n1=$(qgp_runs "$r_rec"); t3_qg "$r_rec" >/dev/null; n2=$(qgp_runs "$r_rec")
+case "$err" in *"did not finish within"*) m=ok ;; *) m=no ;; esac
+[ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] && [ "$rec" = no ] && [ "$n1$n2" = 12 ] \
+  && report "a cut-off run leaves no pass record, and the next turn end runs the validators" ok \
+  || report "a cut-off run leaves no pass record, and the next turn end runs the validators" no "exit=$e ms=$ms blocked=$m record=$rec runs=$n1$n2 err=$(printf '%s' "$err" | head -c 200)"
+
+# 299. #304 — a validator that leaves `(sleep 20; echo late) &` behind and exits 0 passes in under
+#      5 s at budget 3: its output goes to a file, which the gate neither waits on nor judges.
+#      RED-CAPABLE under "keep the $(...) capture", whose pipe holds the gate until the deadline.
+e=$(t3f leftover.run/exit); ms=$(t3f leftover.run/ms)
+[ "$e" = 0 ] && [ "$(t3f leftover.run/out)" = '{}' ] && [ "${ms:-99999}" -le 5000 ] \
+  && report "a validator's leftover background child does not hold the gate" ok \
+  || report "a validator's leftover background child does not hold the gate" no "exit=$e ms=$ms out=$(t3f leftover.run/out) err=$(t3f leftover.run/err | head -c 200)"
+
+# 300. #304 AC9 — a copied gate under .agents/hooks/, no budget line, its hooks.json giving it a
+#      "timeout" of 13: the budget is 3 s, the gate blocks within 8 s, and the block names the
+#      file and the remedy for it, that file's "timeout". RED-CAPABLE under "bound only by the
+#      line", which takes the 170 s default, and under "give the line's remedy for every budget".
+e=$(t3f agents.run/exit); ms=$(t3f agents.run/ms); err=$(t3f agents.run/err)
+case "$err" in *"budget of 3 s, set by"*".agents/hooks.json"*"To give it more time, raise that \"timeout\" in "*".agents/hooks.json to the 600 s the plugin ships"*) m=ok ;; *) m=no ;; esac
+[ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] \
+  && report "a copied gate is bounded by its own hooks.json timeout" ok \
+  || report "a copied gate is bounded by its own hooks.json timeout" no "exit=$e ms=$ms names-file=$m err=$(printf '%s' "$err" | head -c 300)"
+
+# 301. #304 AC9 — a stand-down copy under sub/.claude/hooks/, launched with CLAUDE_PROJECT_DIR=sub,
+#      whose sub/.claude/settings.json gives it 13 while the root's settings.json gives 600: it
+#      blocks at 3 s and names sub/.claude/settings.json. RED-CAPABLE under "read the root's files
+#      only", which bounds it at 590 and the default 170.
+e=$(t3f standdown.run/exit); ms=$(t3f standdown.run/ms); err=$(t3f standdown.run/err)
+case "$err" in *"budget of 3 s, set by"*"sub/.claude/settings.json"*) m=ok ;; *) m=no ;; esac
+[ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] \
+  && report "a copy launched below the root is bounded by the settings that launch read" ok \
+  || report "a copy launched below the root is bounded by the settings that launch read" no "exit=$e ms=$ms names-file=$m err=$(printf '%s' "$err" | head -c 300)"
+
+# 302. #304 AC5 — in the session helper, a validator running `kill 0`: the TERM reaches the gate,
+#      which blocks naming it, on stdout as well. RED on main, whose trap exits 143 with nothing on
+#      stdout, a non-blocking error on Claude Code. RED-CAPABLE under "the parent exits on TERM".
+# 303. #304 AC5 — the same with `kill -s USR1 0`, which no trap on main caught. RED-CAPABLE under
+#      "the parent traps HUP, INT and TERM alone", where USR1 kills it unhandled.
+for c in "kill0|SIGTERM|302|a validator's kill 0 blocks, naming the signal" \
+         "usr1|SIGUSR1|303|a validator's group-wide USR1 blocks, naming the signal"; do
+  n=${c%%|*}; c=${c#*|}; sig=${c%%|*}; c=${c#*|}; num=${c%%|*}; name=${c#*|}
+  if [ "$t2_session" != ok ]; then report "$name" no "not run: case 270's session helper failed"; continue; fi
+  e=$(t3f "$n.run/exit"); ms=$(t3f "$n.run/ms"); err=$(t3f "$n.run/err")
+  case "$(t3f "$n.run/out")|$err" in '{"decision":"continue","reason":"'*"|"*"$sig"*) m=ok ;; *) m=no ;; esac
+  [ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] && report "$name" ok \
+    || report "$name" no "case $num: exit=$e ms=$ms names-signal=$m out=$(t3f "$n.run/out" | head -c 100) err=$(printf '%s' "$err" | head -c 200)"
+done
+# The canary for 302 and 303: a send that escaped its session reached this suite, which caught it.
+[ -z "$t3_escaped" ] && report "no group-wide signal from cases 302-303 reached this suite" ok \
+  || report "no group-wide signal from cases 302-303 reached this suite" no "caught:$t3_escaped"
+
+# 304. #304 AC5 — a TERM sent to the gate's pid alone while a 20 s validator runs: the trap runs
+#      once the child has returned, at the deadline, and the gate blocks naming the signal within
+#      8 s. RED-CAPABLE under "the parent's trap exits", which blocks nothing.
+e=$(t3f termpid.run/exit); ms=$(t3f termpid.run/ms); err=$(t3f termpid.run/err)
+case "$err" in *SIGTERM*) m=ok ;; *) m=no ;; esac
+[ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] \
+  && report "a TERM to the gate alone blocks, naming it, within the budget" ok \
+  || report "a TERM to the gate alone blocks, naming it, within the budget" no "exit=$e ms=$ms names-signal=$m started=$([ -e "$r_tp/started.flag" ] && echo yes || echo no) err=$(printf '%s' "$err" | head -c 200)"
+
+# 305. #304 AC4 — on a host whose process walk fails, the watchdog kills the gate's child alone,
+#      and the timeout block says so. RED-CAPABLE under "leave the walk's failure out of the block".
+e=$(t3f nowalk.run/exit); ms=$(t3f nowalk.run/ms); err=$(t3f nowalk.run/err)
+case "$err" in *"did not finish within"*"only the check itself was killed"*) m=ok ;; *) m=no ;; esac
+[ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 7000 ] \
+  && report "a cut-off whose process walk failed says only the check was killed" ok \
+  || report "a cut-off whose process walk failed says only the check was killed" no "exit=$e ms=$ms says-so=$m err=$(printf '%s' "$err" | head -c 300)"
+
+# 306. #304 AC4/AC5 — nothing a timed gate run started outlives it: each run's gate is its session
+#      leader, so whatever it started and did not move out of its process group carries the gate's
+#      pid as its group, and none may be left. Asked of each run's own group, never of a command
+#      line. Two runs are excepted by design: the leftover run (299), whose validator left its sleep
+#      behind on purpose, and the nowalk run (305), where only the child could be killed, AC4's
+#      stated residual. Their groups are killed here once this is asked, with every other group that
+#      shows anything, so a mutation that leaves processes behind fails this case and does not
+#      leave them on the machine. RED-CAPABLE under "the watchdog kills the child alone", which
+#      leaves the validators' sleeps running in the group.
+bad=""
+t3_groups=$("$t2ps" -A -o pgid= -o pid= -o stat=)
+for n in cutoff failfirst alone-cc alone-agy record agents standdown kill0 usr1 termpid nowalk rundir tie leftover; do
+  case "$n" in kill0|usr1) [ "$t2_session" = ok ] || continue ;; esac
+  g=$(t3f "$n.run/gate"); [ -n "$g" ] || { bad="$bad[$n: no gate pid recorded] "; continue; }
+  a=$(printf '%s\n' "$t3_groups" | awk -v g="$g" '$1 == g && $3 !~ /Z/ { printf "%s ", $2 }')
+  [ -n "$a" ] || continue
+  case "$n" in leftover|nowalk) ;; *) bad="$bad[$n: alive in its group: $a] " ;; esac
+  python3 -c 'import os, signal, sys; os.killpg(int(sys.argv[1]), signal.SIGKILL)' "$g" 2>/dev/null
+done
+[ -z "$bad" ] && report "nothing a timed quality gate run started outlives it" ok \
+  || report "nothing a timed quality gate run started outlives it" no "$bad"
+
+# 307. #304 AC5 — a validator that makes the run dir unwritable and then sleeps 20 s, at budget 3:
+#      the watchdog cannot write `fired` and the gate cannot write `done`, and still the deadline
+#      holds and the gate blocks within 8 s, with the block on stdout. RED-CAPABLE under "write
+#      the markers with `:`", a special builtin whose failed redirection exits the shell: the
+#      watchdog dies before its kill, and the gate after the child, with nothing on stdout.
+e=$(t3f rundir.run/exit); ms=$(t3f rundir.run/ms)
+case "$(t3f rundir.run/out)" in '{"decision":"continue","reason":"Quality gate: '*) m=ok ;; *) m=no ;; esac
+chmod -R u+rwx "$t3d/rundir-tmp" 2>/dev/null
+[ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] \
+  && report "a run dir made unwritable mid-check still holds the deadline and blocks" ok \
+  || report "a run dir made unwritable mid-check still holds the deadline and blocks" no "exit=$e ms=$ms json=$m out=$(t3f rundir.run/out | head -c 100) err=$(t3f rundir.run/err | head -c 200)"
+
+# 308. #304 AC5 — a check that ends with neither a pass nor a block: the validator KILLs the gate's
+#      child, which no trap can catch, so there is no `end`, no `fired` and no `signalled`. The
+#      parent's last resort blocks, on both channels, naming the status. RED-CAPABLE under "the
+#      parent's fallback passes", which hands the harness `{}`.
+r=$(t3_repo noverdict 'kill -s KILL $$')
+o1=$(t3_qg "$r"); err1=$(cat "$t3d/err"); out1=$(cat "$t3d/out")
+o2=$( ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; t3_qg "$r" ); out2=$(cat "$t3d/out")
+bad=""
+case "$o1:$err1" in "exit=2:Quality gate: its check ended without a verdict (status 137)"*) ;; *) bad="$bad[claude: $o1 $(printf '%s' "$err1" | head -c 200)] " ;; esac
+case "$out1" in '{"decision":"continue","reason":"Quality gate: its check ended without a verdict'*) ;; *) bad="$bad[claude stdout: $(printf '%s' "$out1" | head -c 100)] " ;; esac
+case "$o2:$out2" in 'exit=0:{"decision":"continue","reason":"Quality gate: its check ended without a verdict'*) ;; *) bad="$bad[antigravity: $o2 $(printf '%s' "$out2" | head -c 100)] " ;; esac
+[ -z "$bad" ] && report "a check that ends with no verdict at all blocks" ok \
+  || report "a check that ends with no verdict at all blocks" no "$bad"
+
+# 309. #304 AC1/AC9 — a hook file whose "timeout" binds the budget at exactly what the line asks
+#      (13 s less the margin, and '- Validator budget: 3'): the block names the file as what set
+#      it, and its remedy is that file's "timeout", since raising the line alone changes nothing.
+#      The tie is today's normal state, a 180 s "timeout" against the 170 s default. RED-CAPABLE
+#      under "credit the file only when it is strictly lower".
+e=$(t3f tie.run/exit); ms=$(t3f tie.run/ms); err=$(t3f tie.run/err)
+case "$err" in *"budget of 3 s, set by the \"timeout\" of 13 s that "*".agents/hooks.json"*"raise that \"timeout\" in "*) m=ok ;; *) m=no ;; esac
+[ "$e" = 2 ] && [ "$m" = ok ] && [ "${ms:-99999}" -le 8000 ] \
+  && report "a hook file that binds the budget at the line's value is named as its source" ok \
+  || report "a hook file that binds the budget at the line's value is named as its source" no "exit=$e ms=$ms names-file=$m err=$(printf '%s' "$err" | head -c 300)"
+
 # --- guards: assets/check-locks.py -------------------------------------------------
 #
 # The lock guard answers "has a rulebook drifted from what was agreed". It can also answer

@@ -240,6 +240,7 @@ Decided in Design rather than asked, because the repository answers them: the li
   - `CONTRIBUTING.md:43` lists the line. `docs/DESIGN.md:17` and `:30` count it ("seven" becomes "eight"), and the Seams table gains a row: budget against timeout, guarded by `check-manifests.py` and the anchor check.
   - The key lists at `assets/check-document-set.py:189-190` and `scripts/test-gates.sh:5082` stay as they are. They list the keys `gate_steering_value` reads, and this line has its own parser.
   - This repository writes no line: 70 s against 170 s needs none, and the absent path is the one most projects take. T3 records two times for the `- Validators:` line in the spec: one alone, and one beside a second concurrent run, because parallel sessions share this checkout. If either is over 120 s, the line is written at twice the slower time, capped at 590, and the reason given.
+    - **Measured at T3, 2026-10-17** (macOS, the T3 tree, every command exiting 0): 92.6 s alone, and 104.4 s for each of two runs started together. Both are under 120 s, so this repository writes no line. `scripts/test-gates.sh` is 91.6 s of the 92.6, up from 71 s before T3: about 5 s is T3's own cases, and the rest is every quality-gate case paying for the parent, about 185 ms a run, most of it `gate_bounded`'s first 0.1 s wait for `armed`.
 - **Docs** (AC13):
   - `README.md:43` and `README.ja.md:45` (identical claims; the user reviews the Japanese), and `:226`/`:233`, the copied checks a plugin update does not reach.
   - `AGENTS.md:51` and `CONTRIBUTING.md:59`, which say what the anchor check verifies, and `docs/CONTRACT.md` M-2 (manifests agree, timeouts now included) and M-7.
@@ -301,7 +302,7 @@ Decided in Design rather than asked, because the repository answers them: the li
   - `gate_bounded` called from a subshell still cuts off a 20 s command at budget 2; a child that cannot write its `pid` never runs; a relative run dir blocks; a watchdog stuck before `armed` leaves no sleep behind.
 
   Each case names its mutation; those not named above are: kill the root only; decide by status; skip the KILL step; let TERM disarm the watchdog. Red: the functions do not exist. Green: both functions and `_gate_block_exit`.
-- [ ] T3: quality gate, cases 287 and up (T1 took 259–269, T2 270–286) after `:2310` (`qgp_repo`, `qgp_runs`, the second `run_qg`):
+- [x] T3: quality gate, cases 287 and up (T1 took 259–269, T2 270–286) after `:2310` (`qgp_repo`, `qgp_runs`, the second `run_qg`):
   - a 20 s validator after a fast one at budget 3, which prints a line before it sleeps: that line is in the block (mutation: read the tail from the verdict file);
   - a 20 s validator after a failing one at budget 3;
   - one validator alone at budget 2, on the Claude Code channel (stderr begins with the gate's own sentence) and on the Antigravity channel (parsed JSON);
