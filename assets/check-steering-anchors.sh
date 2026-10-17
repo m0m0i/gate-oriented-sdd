@@ -242,15 +242,20 @@ else
 fi
 hfiles="$hfiles$NL.claude/settings.json$NL.agents/hooks.json$NL.claude/settings.local.json"
 # The ones that are there, each once: a tracked file deleted from the work tree is not read, and
-# the root's three may be tracked as well as named.
+# the root's three may be tracked as well as named. Split on newlines with globbing off, so a path
+# holding `*`, `?` or `[` is read as itself and not as whatever it matches.
 set --
 IFS=$NL
+set -f
 for f in $hfiles; do
   [ -n "$f" ] && [ -e "$hroot/$f" ] || continue
   for seen in "$@"; do [ "$seen" = "$f" ] && continue 2; done
   set -- "$@" "$f"
 done
+set +f
 IFS=$old_ifs
+# The ceilings and the margin come from the gate-lib.sh sourced above, which shellcheck cannot follow.
+# shellcheck disable=SC2154
 for gate in quality-gate.sh review-gate.sh; do
   if [ "$gate" = quality-gate.sh ]; then ceiling=$_gate_qg_ceiling; else ceiling=$_gate_rg_ceiling; fi
   ht=$(cd "$hroot" && gate_hook_timeout "$gate" "$ceiling" "$@"); htrc=$?

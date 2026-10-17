@@ -5028,6 +5028,17 @@ case "$out:$err" in "1:"*'q"d/.claude/settings.json'*) ;; *) bad="$bad[quoted pa
 [ -z "$bad" ] && report "the anchor check reads the root's hook files tracked or not, and a path git would quote" ok \
   || report "the anchor check reads the root's hook files tracked or not, and a path git would quote" no "$bad"
 
+# 339. #304 AC10 — a tracked hook-file path holding a glob character is read as itself: with
+#      `g[x]/.claude/settings.json` at 100 beside `gx/.claude/settings.json` at 600, a split with
+#      globbing on turns the first into the second, and the 100 s file goes unchecked. RED-CAPABLE
+#      under "split the file list without set -f", which passes a line of 300.
+r=$(anc_git anc-glob '- Validator budget: 300'); mkdir -p "$r/g[x]/.claude" "$r/gx/.claude"
+ht_stop 100 30 > "$r/g[x]/.claude/settings.json"; ht_stop 600 120 > "$r/gx/.claude/settings.json"; git -C "$r" add -A
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in "1:"*'g[x]/.claude/settings.json'*'"timeout" of 100'*) a=ok ;; *) a="no(exit=$out: $(printf '%s' "$err" | head -c 200))" ;; esac
+[ "$a" = ok ] && report "the anchor check reads a tracked hook-file path holding a glob character as itself" ok \
+  || report "the anchor check reads a tracked hook-file path holding a glob character as itself" no "$a"
+
 # 330. #304 AC10 — a hook file the gate would block on fails here too, with no budget line at all:
 #      one that does not parse, an entry naming the quality gate with no `timeout`, and a review
 #      gate `timeout` of 10, which leaves it no time once the margin is kept back. RED-CAPABLE under
