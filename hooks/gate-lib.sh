@@ -32,18 +32,40 @@ gate_block() {
   _msg=$1
   printf '{"decision":"continue","reason":"%s"}\n' "$(_gate_json_escape "$_msg")"
   printf '%s\n' "$_msg" >&2
+  _gate_block_exit
+}
+
+# The status each harness reads as a block once the JSON and the message are out: 0 on
+# Antigravity, which reads the JSON, and 2 on Claude Code. gate_replay asks it too, so a replayed
+# block is judged by the same test that ends one.
+_gate_block_status() {
   if [ -n "${ANTIGRAVITY_CONVERSATION_ID:-}" ] || [ -n "${ANTIGRAVITY_AGENT:-}" ]; then
-    exit 0
+    return 0
   fi
-  exit 2
+  return 2
+}
+
+# The end of every block: gate_block's, and gate_replay's when it hands a child's block on. In a
+# gate's child it first marks the verdict complete, as gate_pass does (gate_replay, below).
+_gate_block_exit() {
+  [ -z "${_gate_child_run:-}" ] || { : > "$_gate_child_run/end"; } 2>/dev/null
+  _gate_block_status
+  exit "$?"
 }
 
 # Allow the turn to end. Antigravity expects a JSON object; Claude Code expects
 # exit 0 and ignores stdout here.
 gate_pass() {
   printf '{}\n'
+  [ -z "${_gate_child_run:-}" ] || { : > "$_gate_child_run/end"; } 2>/dev/null
   exit 0
 }
+
+# The run directory of the gate's child, set by the child alone once it has checked the directory
+# it was handed (#304). gate_pass and _gate_block_exit write `end` there after their output and
+# before they exit, which is what tells the parent the verdict is whole. Unset here, on load, so a
+# value inherited from the environment can never mark a forged verdict complete.
+unset _gate_child_run
 
 # How long a gate may take, stated once (#304). Neither harness turns a Stop hook it timed out
 # into a block: Claude Code discards a block written after its TERM, and Antigravity's KILL
@@ -400,6 +422,258 @@ gate_hook_timeout() {  # <gate script> <ceiling> <file>...
     return 2
   fi
   printf '%s %s\n' "$_ht_lo" "$_ht_src"
+}
+
+# Run <command> as the gate's child, bounded by <budget> seconds, and return its status (#304).
+#
+# The bound is one watchdog, started before the child and confirmed armed before the child
+# starts. Its deadline is a `sleep`, a relative interval that setting the clock does not move,
+# where a wall-clock deadline moves with an NTP step or a VM resume. The child runs in the
+# foreground, so a validator keeps the hook's stdin and today's signal dispositions; a background
+# job would inherit SIGINT and SIGQUIT ignored, which macOS sh and dash cannot restore.
+#
+# What the child leaves in <run dir>, for gate_replay and the gate's own blocks:
+#
+#   ppid     the shell that forked the child, written first, which is the parent the watchdog
+#            looks for: $$ would name the gate, and not the subshell, when this runs in one
+#   pid      the child's pid, written next, before any gate code runs; `exec` keeps it, so it is
+#            the child's own. A child that cannot write both exits 125 without running anything,
+#            since a command with no pid on disk is one the watchdog cannot kill
+#   verdict  its stdout, which only gate_pass or a block writes: one line or nothing
+#   err      its stderr
+#   end      its verdict is whole (gate_pass and _gate_block_exit write it)
+#
+# and the watchdog: `armed` once its deadline runs, `fired` when the deadline passed, and
+# `nowalk` when it could not walk the child's tree and killed the child alone. The gate writes
+# `done`, the only thing that disarms the watchdog.
+#
+# Inside `{ …; } 2>/dev/null`, with the status captured inside the braces: without it, bash as sh
+# prints `Terminated: 15` for a killed child onto the gate's own stderr, which is Claude Code's
+# block reason. The watchdog signals the child only while `ps` lists it under the parent in
+# `ppid`, which is how a pid the gate has already reaped, and the system has reused, is never
+# signalled.
+#
+# <run dir> must be absolute, and a relative one blocks before anything starts: the child writes
+# `end` after it has cd'd to the git root, and neither the parent nor the watchdog ever cds.
+#
+# Every return path reaps the watchdog, looping while `kill -0` still reaches it because a
+# trapped signal returns `wait` early: once the deadline fired the watchdog is finishing its kill,
+# and the gate waits for that, so nothing it killed is still alive when the gate decides. A
+# watchdog that does not confirm it is armed is STOPped, its children (its sleep, which ignores
+# every catchable signal) KILLed from a snapshot, and then it is KILLed itself: all safe, because
+# it is this shell's own unreaped child and cannot reap its own while stopped. The gate then
+# blocks without running the check (AC5).
+# shellcheck disable=SC2086  # $_gb_k is a list of pids, one per word
+gate_bounded() {  # <budget> <run dir> <command>...
+  _gb_run=$2
+  case "$_gb_run" in
+    /*) ;;
+    *)
+      trap '' HUP INT QUIT TERM USR1 USR2 ALRM
+      gate_block "${_gate_name:-Gate}: the directory this check runs in, '$_gb_run', is not an absolute path, so the check had no deadline it could be held to and was not run. A check the harness kills at its timeout ends the turn as a pass, so this blocks instead. Set TMPDIR to an absolute path, or unset it." ;;
+  esac
+  _gate_watchdog "$1" "$2" </dev/null >/dev/null 2>&1 &
+  _gb_wd=$!
+  shift 2
+  if ! _gate_await "$_gb_run/armed" 10 2; then
+    { kill -s STOP "$_gb_wd"; } 2>/dev/null
+    if _gate_snapshot; then
+      _gb_k=$(printf '%s\n' "$_wd_ps" | awk -v w="$_gb_wd" '$2 == w { print $1 }')
+      [ -z "$_gb_k" ] || { kill -s KILL $_gb_k; } 2>/dev/null
+    fi
+    { kill -s KILL "$_gb_wd"; } 2>/dev/null
+    _gate_reap "$_gb_wd"
+    trap '' HUP INT QUIT TERM USR1 USR2 ALRM
+    gate_block "${_gate_name:-Gate}: the watchdog that bounds this check did not confirm it was armed (no 'armed' in $_gb_run), so the check had no deadline and was not run. A check the harness kills at its timeout ends the turn as a pass, so this blocks instead. Run again; if this repeats, check that the gate's temporary directory is writable."
+  fi
+  { sh -c 'echo $PPID >"$1/ppid" && echo $$ >"$1/pid" || exit 125; shift; exec "$@"' _ "$_gb_run" "$@" >"$_gb_run/verdict" 2>"$_gb_run/err"; _gb_rc=$?; } 2>/dev/null
+  if [ ! -e "$_gb_run/fired" ]; then
+    { : > "$_gb_run/done"; } 2>/dev/null
+    { kill -s USR1 "$_gb_wd"; } 2>/dev/null
+  fi
+  _gate_reap "$_gb_wd"
+  return "$_gb_rc"
+}
+
+# Wait up to <tenths> polls of 0.1 s for <file> to be there and not empty, or up to <seconds>
+# polls of 1 s where `sleep` takes no fraction. 1 when the polls run out. A sleep that fails is
+# taken for one that rejects a fraction, which only makes the wait coarser.
+_gate_await() {  # <file> <tenths> <seconds>
+  _aw_n=0; _aw_max=$2; _aw_s=0.1
+  while [ ! -s "$1" ]; do
+    [ "$_aw_n" -lt "$_aw_max" ] || return 1
+    if sleep "$_aw_s" 2>/dev/null || [ "$_aw_s" = 1 ]; then
+      _aw_n=$((_aw_n + 1))
+    else
+      _aw_s=1; _aw_max=$3; _aw_n=0
+    fi
+  done
+}
+
+# Reap a background child of this shell, however many trapped signals cut `wait` short. 127 is
+# `wait` saying the pid is no child of this shell, which ends the loop rather than spin on a pid
+# the system has handed to someone else.
+_gate_reap() {  # <pid>
+  while kill -0 "$1" 2>/dev/null; do
+    { wait "$1"; } 2>/dev/null
+    [ "$?" -ne 127 ] || break
+  done
+}
+
+# Each live pid among its arguments, space-separated.
+_gate_alive() {  # <pid>...
+  for _al_p in "$@"; do kill -0 "$_al_p" 2>/dev/null && printf '%s ' "$_al_p"; done
+}
+
+# Every process as "<pid> <ppid>", in $_wd_ps; 1 when `ps` exits non-zero or prints nothing. On a
+# line of its own and never a pipeline, whose status would be its last command's: a `ps` that
+# failed would read as a table with nothing in it. The watchdog's only call to `ps`.
+_gate_snapshot() {
+  _wd_ps=$(ps -A -o pid= -o ppid= 2>/dev/null) && [ -n "$_wd_ps" ]
+}
+
+# The descendants of <pid>... in a _gate_snapshot table on stdin, one per line, each
+# once, never a root.
+_gate_descendants() {  # <pid>...
+  awk -v roots="$*" '
+    { kids[$2] = kids[$2] " " $1 }
+    END {
+      n = split(roots, q, " "); for (i = 1; i <= n; i++) seen[q[i]] = 1
+      for (h = 1; h <= n; h++) {
+        m = split(kids[q[h]], c, " ")
+        for (j = 1; j <= m; j++) if (!(c[j] in seen)) { seen[c[j]] = 1; q[++n] = c[j]; print c[j] }
+      }
+    }'
+}
+
+# gate_bounded's watchdog, run in a background subshell with its descriptors on /dev/null.
+#
+# Nothing a validator can send to its process group ends it or disarms it. It ignores HUP, INT,
+# QUIT, TERM, USR2 and ALRM, and USR1 too until its sleep is running, so the sleep is born
+# ignoring all seven; then USR1 is trapped to a no-op, which only interrupts `wait` so the
+# watchdog looks for `done`. Disarming needs that file, which only the gate writes, so a
+# validator's `kill -s USR1 0` makes it look and find nothing. It looks before each `wait` as
+# well as after, so a `done` and USR1 that land before the first `wait` are not lost; the window
+# left is two builtins wide, and missing it costs the gate the budget's latency, never its verdict.
+#
+# When the sleep ends it fires: it ignores USR1, checks `done` one last time, writes `fired`, and
+# kills the child's tree. The walk is rooted at the child, never at the gate, so the watchdog is
+# never in it and needs no pid of its own:
+#
+#   1. the child's pid from `pid`, polling up to 1 s, and its parent from `ppid`; with neither the
+#      child never ran, so there is nothing to kill. Then a `ps -A -o pid= -o ppid=` snapshot on a
+#      line of its own, never a pipeline, whose status would be awk's
+#   2. the child is signalled only while the snapshot lists it under that parent; a child listed
+#      under another parent is a pid the gate reaped and the system reused. A walk
+#      has failed when `ps` exits non-zero, prints nothing, or leaves out a child that `kill -0`
+#      still reaches: the set is then the child alone, and `nowalk` says so
+#   3. STOP the child, then walk and STOP its descendants until the set stops growing, at most
+#      five times; TERM the set, then CONT, so every member meets the TERM at once
+#   4. poll `kill -0` once a second for up to 2 s, stopping as soon as nothing is left: whole
+#      seconds, so a `sleep` without fractions changes nothing
+#   5. STOP whatever in the saved set is still alive, walk again from those pids, adding and
+#      STOPping what it finds until the set stops growing (at most five times), and KILL the
+#      union. Rooted at the saved pids, so a descendant already reparented to pid 1 is still
+#      covered, and a worker that a TERM-catching loop forked during the grace is found from it.
+# shellcheck disable=SC2086  # $_wd_set is a list of pids, one per word
+_gate_watchdog() {  # <budget> <run dir>
+  unset IFS
+  trap '' HUP INT QUIT TERM USR1 USR2 ALRM
+  (trap '' USR1; exec sleep "$1") &
+  _wd_sl=$!
+  trap ':' USR1
+  if ! { echo armed > "$2/armed"; } 2>/dev/null; then
+    kill -s KILL "$_wd_sl" 2>/dev/null; wait "$_wd_sl"; exit 1
+  fi
+  while :; do
+    if [ -e "$2/done" ]; then kill -s KILL "$_wd_sl" 2>/dev/null; wait "$_wd_sl"; exit 0; fi
+    wait "$_wd_sl"
+    kill -0 "$_wd_sl" 2>/dev/null || break
+  done
+  trap '' USR1
+  [ -e "$2/done" ] && exit 0
+  : > "$2/fired"
+
+  _gate_await "$2/pid" 10 1
+  _wd_c=$(cat "$2/pid" 2>/dev/null); _wd_g=$(cat "$2/ppid" 2>/dev/null)
+  case "$_wd_c:$_wd_g" in *:|:*|*[!0-9:]*) exit 0 ;; esac
+  _wd_walk=no; _wd_pp=""
+  if _gate_snapshot; then
+    _wd_pp=$(printf '%s\n' "$_wd_ps" | awk -v c="$_wd_c" '$1 == c { print $2; exit }')
+  fi
+  if [ -n "$_wd_pp" ]; then
+    [ "$_wd_pp" = "$_wd_g" ] || exit 0
+    _wd_walk=yes
+  else
+    kill -0 "$_wd_c" 2>/dev/null || exit 0
+    : > "$2/nowalk"
+  fi
+
+  _wd_set=$_wd_c
+  kill -s STOP $_wd_set 2>/dev/null
+  _gate_watchdog_walk "$2"
+  kill -s TERM $_wd_set 2>/dev/null
+  kill -s CONT $_wd_set 2>/dev/null
+  _wd_i=0
+  while [ "$_wd_i" -lt 2 ] && [ -n "$(_gate_alive $_wd_set)" ]; do
+    sleep 1; _wd_i=$((_wd_i + 1))
+  done
+
+  _wd_set=$(_gate_alive $_wd_set)
+  [ -n "$_wd_set" ] || exit 0
+  kill -s STOP $_wd_set 2>/dev/null
+  _gate_watchdog_walk "$2"
+  kill -s KILL $_wd_set 2>/dev/null
+  exit 0
+}
+
+# Steps 3 and 5's walk: grow $_wd_set by the descendants a fresh snapshot shows, STOPping each as
+# it is found, until a round finds nothing, at most five rounds. Only after a first walk that
+# found the child, since a `ps` that failed or lied once is not asked again.
+# shellcheck disable=SC2086  # $_wd_set and $_ww_new are lists of pids, one per word
+_gate_watchdog_walk() {  # <run dir>
+  [ "$_wd_walk" = yes ] || return 0
+  _ww_i=0
+  while [ "$_ww_i" -lt 5 ]; do
+    _ww_i=$((_ww_i + 1))
+    _gate_snapshot || { : > "$1/nowalk"; return 0; }
+    _ww_new=$(printf '%s\n' "$_wd_ps" | _gate_descendants $_wd_set)
+    [ -n "$_ww_new" ] || return 0
+    kill -s STOP $_ww_new 2>/dev/null
+    _wd_set="$_wd_set $_ww_new"
+  done
+}
+
+# Judge what a bounded child left in <run dir>, given the status gate_bounded returned (#304).
+# Only once the child wrote `end`: gate_pass and _gate_block_exit write it after their output, so
+# a verdict torn by a kill is never judged, whatever its bytes. And never once the gate caught a
+# signal, which it records in `signalled`.
+#
+#   - `verdict` exactly `{}` with status 0 is a pass: the child's stderr is replayed and the gate
+#     passes;
+#   - one line that opens `{"decision":"continue","reason":"` and closes `"}`, with the status the
+#     channel gives a block, is that block: both files replayed, and out through _gate_block_exit.
+#
+# Anything else returns 1 having written nothing, and the gate builds a block of its own; so does
+# a call with no status, read as `${2-}` because a gate under `set -u` must not abort with nothing
+# on stdout, which a harness reads as a pass. A
+# recognised verdict wins even beside `fired`: the child reached it within the budget and a moment.
+gate_replay() {  # <run dir> <the child's status>
+  [ -e "$1/end" ] && [ ! -e "$1/signalled" ] || return 1
+  _rp_v=$(cat -- "$1/verdict" 2>/dev/null) || return 1
+  case "$_rp_v" in *'
+'*) return 1 ;; esac
+  printf '%s\n' "$_rp_v" | cmp -s - "$1/verdict" || return 1
+  if [ "$_rp_v" = '{}' ] && [ "${2-}" = 0 ]; then
+    cat -- "$1/err" >&2 2>/dev/null
+    gate_pass
+  fi
+  case "$_rp_v" in '{"decision":"continue","reason":"'*'"}') ;; *) return 1 ;; esac
+  _gate_block_status
+  [ "${2-}" = "$?" ] || return 1
+  printf '%s\n' "$_rp_v"
+  cat -- "$1/err" >&2 2>/dev/null
+  _gate_block_exit
 }
 
 # Emit a spec's Tasks section ONLY — section 3, up to the next heading.

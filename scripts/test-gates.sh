@@ -3096,6 +3096,381 @@ t0=$(ms_now); o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/big.json"); t1=
   && report "a 1 MB minified hook file is scanned in under a second" ok \
   || report "a 1 MB minified hook file is scanned in under a second" no "bytes=$sz answer=[$o] ms=$el"
 
+# --- shared library: the bounded child (#304) ----------------------------------------
+#
+# A gate's body runs as a child of the gate, under one watchdog started before it. gate_bounded
+# runs the child and gate_replay judges what it left; both are pinned here before either gate is
+# split into a parent and a child, driven by a small script that sources the library the way a
+# gate does and traps the seven signals the way the gate's parent will.
+#
+# The suite has no harness kill, so a deadline that never fires still finishes, just late. Every
+# timing case therefore makes its slow step sleep at least 20 s and asserts an elapsed time beside
+# the outcome, never the outcome alone. The timed runs go concurrently, each in the background
+# writing to its own directory, and are reported once all have finished, so together they cost
+# about the slowest one. Every timed run is the leader of a session of its own, through
+# in_session; the two whose command signals its process group need that, because `kill 0`
+# otherwise reaches this suite and, in this repository, the quality gate running it.
+#
+# Every case is RED on main, where neither function exists, and each names the mutation it also
+# goes red under.
+t2d="$TMP/t2"; mkdir -p "$t2d"; t2lib="$ROOT/hooks/gate-lib.sh"; t2sh=sh; t2ps=$(command -v ps)
+
+# 270. #304 AC12 — the session helper. A command it runs is the leader of a session that is not
+#      this suite's, and its status comes back, 128 plus the signal for a killed one. macOS has no
+#      setsid(1) and dash refuses `set -m` without a tty, so it is python3's fork, os.setsid() and
+#      exec; the dispositions a background job inherits ignored, and the two python ignores, are
+#      put back first. Cases 276 and 277 do not run unless this holds, so a broken helper is this
+#      named failure rather than a suite killed by its own `kill 0`. It is also the suite's one
+#      backstop: a session still running after 45 s, past every bound below, is KILLed as a group
+#      and returns 124. A watchdog that stops the child and never kills it holds the gate forever,
+#      and without this that mutation hangs the suite instead of failing a case. RED-CAPABLE
+#      under "exec without os.setsid()", which leaves the command in this suite's session.
+in_session() { # in_session <command>... — runs it as the leader of a new session, with default dispositions, and passes its status back
+  python3 -c '
+import os, signal, sys, time
+pid = os.fork()
+if pid == 0:
+    os.setsid()
+    for s in (signal.SIGINT, signal.SIGQUIT, signal.SIGPIPE, signal.SIGXFSZ):
+        signal.signal(s, signal.SIG_DFL)
+    os.execvp(sys.argv[1], sys.argv[1:])
+end = time.monotonic() + 45
+while True:
+    done, st = os.waitpid(pid, os.WNOHANG)
+    if done:
+        break
+    if time.monotonic() > end:
+        os.killpg(pid, signal.SIGKILL)
+        os.waitpid(pid, 0)
+        sys.exit(124)
+    time.sleep(0.02)
+sys.exit(128 + os.WTERMSIG(st) if os.WIFSIGNALED(st) else os.WEXITSTATUS(st))
+' "$@"
+}
+own=$(python3 -c 'import os; print(os.getsid(0))')
+o=$(in_session python3 -c 'import os; print(os.getsid(0) == os.getpid(), os.getsid(0))')
+t2_session=no; case "$o" in "True "*) [ "${o#True }" != "$own" ] && t2_session=ok ;; esac
+in_session sh -c 'exit 7'; e1=$?
+in_session sh -c 'kill -s TERM $$'; e2=$?
+[ "$t2_session$e1$e2" = "ok7143" ] && report "in_session runs a command as the leader of a session of its own, and passes its status back" ok \
+  || report "in_session runs a command as the leader of a session of its own, and passes its status back" no "suite's session=$own helper's=[$o] exit 7=$e1 TERM=$e2"
+
+# The driver: gate_bounded, then gate_replay over what the child left, with the parent's traps.
+cat > "$t2d/drv.sh" <<'EOF'
+# drv.sh <library> <out dir> <budget> <command>... — gate_bounded and gate_replay, called the way a gate calls them
+set -u
+. "$1"; out=$2; budget=$3; shift 3
+_gate_name='T2 driver'
+run="$out/run"; mkdir -p "$run"; echo $$ > "$out/drv"
+[ -z "${T2_NOARM-}" ] || ln -s "$run/missing/armed" "$run/armed"
+[ -z "${T2_FIFO-}" ] || mkfifo "$run/armed"
+[ -z "${T2_NOPID-}" ] || mkdir "$run/pid"
+for s in HUP INT QUIT TERM USR1 USR2 ALRM; do trap "echo $s >> '$run/signalled'" "$s"; done
+if [ -n "${T2_SUB-}" ]; then
+  rc=$( gate_bounded "$budget" "$run" "$@" >/dev/null; echo "$?" )
+else
+  gate_bounded "$budget" "$run" "$@"; rc=$?
+fi
+trap '' HUP INT QUIT TERM USR1 USR2 ALRM
+echo "$rc" > "$out/rc"
+gate_replay "$run" "$rc"
+echo "returned=$?"
+EOF
+# The child's first step: the gate's watchdog and that watchdog's sleep, from a snapshot taken
+# while both must be alive, so case 280 can ask afterwards whether either survived.
+cat > "$t2d/rec.sh" <<'EOF'
+# rec.sh <ps> <out dir> <command>... — records the gate's watchdog and its sleep, then becomes the command
+ps=$1; o=$2; shift 2
+snap=$("$ps" -A -o pid= -o ppid=)
+wd=$(printf '%s\n' "$snap" | awk -v g="$PPID" -v me="$$" '$2 == g && $1 != me { print $1 }')
+sl=$(printf '%s\n' "$snap" | awk -v w="$wd" '$2 == w { print $1 }')
+echo $wd $sl > "$o/procs"
+exec "$@"
+EOF
+cat > "$t2d/grandchild.sh" <<'EOF'
+(trap '' TERM; exec sleep 30) & echo $! > "$1/kids"
+exec sleep 20
+EOF
+# Twice round and done, 20 s with no TERM: a fixture that never ends would hang the suite under the
+# very mutation it exists to catch, since nothing here kills a run the deadline missed.
+cat > "$t2d/loop.sh" <<'EOF'
+echo $$ >> "$1/kids"
+trap 'sleep 30 & echo $! >> "$1/kids"' TERM
+for i in 1 2; do sleep 10 & echo $! >> "$1/kids"; wait; done
+EOF
+cat > "$t2d/child.sh" <<'EOF'
+# child.sh <library> <run dir> pass|block <message> — a gate's child: chatter on stderr, then a verdict
+. "$1"; _gate_child_run=$2
+printf 'child chatter\n' >&2
+case "$3" in pass) gate_pass ;; *) gate_block "$4" ;; esac
+EOF
+for n in 1 2 3; do mkdir -p "$t2d/shim$n"; done
+printf '#!/bin/sh\n"%s" "$@"\nexit 1\n' "$t2ps" > "$t2d/shim1/ps"
+printf '#!/bin/sh\nexit 0\n' > "$t2d/shim2/ps"
+printf '#!/bin/sh\n"%s" "$@" | awk -v c="$(cat "%s" 2>/dev/null)" '"'"'$1 != c'"'"'\n' "$t2ps" "$t2d/ps3/run/pid" > "$t2d/shim3/ps"
+chmod +x "$t2d/shim1/ps" "$t2d/shim2/ps" "$t2d/shim3/ps"
+t2_run() { # t2_run <name> <budget> <command>... — the driver in a session of its own, in $t2d/<name>/: out, err, exit, ms
+  _o="$t2d/$1"; _b=$2; shift 2; mkdir -p "$_o"
+  _t0=$(ms_now)
+  in_session "$t2sh" "$t2d/drv.sh" "$t2lib" "$_o" "$_b" sh "$t2d/rec.sh" "$t2ps" "$_o" "$@" >"$_o/out" 2>"$_o/err"
+  echo "$?" > "$_o/exit"; echo $(( $(ms_now) - _t0 )) > "$_o/ms"
+}
+t2f() { cat "$t2d/$1" 2>/dev/null; }
+t2_alive() { # t2_alive <pid>... — each one still running, a zombie counting as gone
+  for _p in "$@"; do
+    _st=$("$t2ps" -o stat= -p "$_p" 2>/dev/null) || continue
+    case "$_st" in ''|*Z*) ;; *) printf '%s ' "$_p" ;; esac
+  done
+}
+t2_gone() { # t2_gone <name> — ok when the case's child and every pid in its kids file was recorded and is gone
+  _c=$(t2f "$1/run/pid"); [ -n "$_c" ] || { printf 'no child pid recorded'; return; }
+  # shellcheck disable=SC2046  # one pid per word
+  _a=$(t2_alive "$_c" $(t2f "$1/kids")); [ -z "$_a" ] && printf ok || printf 'alive: %s' "$_a"
+}
+
+# The batch. This suite catches TERM and USR1 while it runs, so a group-wide send that escaped its
+# session shows as the named failure after case 277 instead of a suite that stopped early. A trap
+# that catches is reset in every child, so no case inherits it.
+t2_escaped=""
+trap 't2_escaped="$t2_escaped TERM"' TERM; trap 't2_escaped="$t2_escaped USR1"' USR1
+t2_jobs=""
+t2_run slow 2 sleep 20 & t2_jobs="$t2_jobs $!"
+t2_run fast 20 sh -c 'exit 7' & t2_jobs="$t2_jobs $!"
+t2_run e143 20 sh -c 'exit 143' & t2_jobs="$t2_jobs $!"
+t2_run grandchild 2 sh "$t2d/grandchild.sh" "$t2d/grandchild" & t2_jobs="$t2_jobs $!"
+t2_run loop 2 sh "$t2d/loop.sh" "$t2d/loop" & t2_jobs="$t2_jobs $!"
+if [ "$t2_session" = ok ]; then
+  t2_run kill0 2 sh -c 'trap "" TERM; kill 0; exec sleep 20' & t2_jobs="$t2_jobs $!"
+  t2_run usr1 2 sh -c 'trap "" USR1; kill -s USR1 0; exec sleep 20' & t2_jobs="$t2_jobs $!"
+fi
+for n in 1 2 3; do ( PATH="$t2d/shim$n:$PATH"; export PATH; t2_run "ps$n" 2 sleep 20 ) & t2_jobs="$t2_jobs $!"; done
+( T2_NOARM=1; export T2_NOARM; t2_run armed 20 touch "$t2d/armed/ran" ) & t2_jobs="$t2_jobs $!"
+( T2_FIFO=1; export T2_FIFO; t2_run fifo 40 touch "$t2d/fifo/ran" ) & t2_jobs="$t2_jobs $!"
+( T2_SUB=1; export T2_SUB; t2_run sub 2 sleep 20 ) & t2_jobs="$t2_jobs $!"
+( T2_NOPID=1; export T2_NOPID; t2_run nopid 20 sh -c 'touch "$1"; exec sleep 20' _ "$t2d/nopid/ran" ) & t2_jobs="$t2_jobs $!"
+t2_run e2e-pass 20 sh "$t2d/child.sh" "$t2lib" "$t2d/e2e-pass/run" pass & t2_jobs="$t2_jobs $!"
+t2_run e2e-block 20 sh "$t2d/child.sh" "$t2lib" "$t2d/e2e-block/run" block 'T2 driver: a "quoted" verdict' & t2_jobs="$t2_jobs $!"
+( ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT
+  t2_run e2e-agy 20 sh "$t2d/child.sh" "$t2lib" "$t2d/e2e-agy/run" block 'T2 driver: a "quoted" verdict' ) & t2_jobs="$t2_jobs $!"
+for p in $t2_jobs; do while kill -0 "$p" 2>/dev/null; do wait "$p"; done; done
+trap - TERM USR1
+
+# 271. #304 AC1/AC4 — a 20 s command at budget 2: the watchdog fires, writes `fired`, and the
+#      child is gone within budget + 5. RED-CAPABLE under "the watchdog writes fired and signals
+#      nothing", which waits out the 20 s.
+ms=$(t2f slow/ms); g=$(t2_gone slow)
+[ -e "$t2d/slow/run/fired" ] && [ "${ms:-99999}" -le 7000 ] && [ "$g" = ok ] \
+  && report "a command past its budget is cut off at the deadline, and fired is written" ok \
+  || report "a command past its budget is cut off at the deadline, and fired is written" no "fired=$([ -e "$t2d/slow/run/fired" ] && echo yes || echo no) ms=$ms child=$g exit=$(t2f slow/exit) err=$(t2f slow/err | head -3)"
+
+# 272. #304 AC4 — a fast command at budget 20: its status comes back, nothing fires, and the
+#      watchdog is disarmed at once. RED-CAPABLE under "the watchdog's sleep in the foreground",
+#      whose USR1 trap runs only once the 20 s are out.
+ms=$(t2f fast/ms); rc=$(t2f fast/rc)
+[ "$rc" = 7 ] && [ ! -e "$t2d/fast/run/fired" ] && [ "${ms:-99999}" -le 1000 ] \
+  && report "a command inside its budget keeps its status, and the watchdog is disarmed at once" ok \
+  || report "a command inside its budget keeps its status, and the watchdog is disarmed at once" no "status=$rc fired=$([ -e "$t2d/fast/run/fired" ] && echo yes || echo no) ms=$ms err=$(t2f fast/err | head -3)"
+
+# 273. #304 AC4 — a command that exits 143 by itself is that status and not a cut-off: no `fired`.
+#      RED-CAPABLE under "decide by status", which takes 143 for the watchdog's TERM.
+rc=$(t2f e143/rc)
+[ "$rc" = 143 ] && [ ! -e "$t2d/e143/run/fired" ] \
+  && report "a command that exits 143 by itself is not a cut-off" ok \
+  || report "a command that exits 143 by itself is not a cut-off" no "status=$rc fired=$([ -e "$t2d/e143/run/fired" ] && echo yes || echo no) err=$(t2f e143/err | head -3)"
+
+# 274. #304 AC4 — a grandchild that ignores TERM is dead once gate_bounded returns, within
+#      budget + 5. RED-CAPABLE under "kill the root only" and "skip the KILL step".
+ms=$(t2f grandchild/ms); g=$(t2_gone grandchild)
+[ -e "$t2d/grandchild/run/fired" ] && [ "${ms:-99999}" -le 7000 ] && [ "$g" = ok ] && [ -s "$t2d/grandchild/kids" ] \
+  && report "a descendant that ignores TERM does not survive the deadline" ok \
+  || report "a descendant that ignores TERM does not survive the deadline" no "ms=$ms descendants=$g kids=[$(t2f grandchild/kids)] err=$(t2f grandchild/err | head -3)"
+
+# 275. #304 AC4 — a TERM-catching loop that forks a fresh `sleep` on each TERM: nothing it created
+#      is alive once gate_bounded returns, the sleeps it forked during the grace included (at least
+#      three pids recorded: the loop, its first sleep, one forked after TERM). RED-CAPABLE under
+#      "KILL the saved set without the re-walk", which leaves the late sleeps behind.
+ms=$(t2f loop/ms); g=$(t2_gone loop); nk=$(grep -c . "$t2d/loop/kids" 2>/dev/null)
+[ -e "$t2d/loop/run/fired" ] && [ "${ms:-99999}" -le 7000 ] && [ "$g" = ok ] && [ "${nk:-0}" -ge 3 ] \
+  && report "a loop that forks a replacement on each TERM leaves nothing alive" ok \
+  || report "a loop that forks a replacement on each TERM leaves nothing alive" no "ms=$ms descendants=$g recorded=${nk:-0} err=$(t2f loop/err | head -3)"
+
+# 276. #304 AC5 — in the session helper, a command that runs `kill 0` and then sleeps 20 s with
+#      TERM ignored: the TERM reaches the gate (its trap records it), and the watchdog stays
+#      armed and fires at the budget. RED-CAPABLE under "let TERM disarm the watchdog".
+# 277. #304 AC5 — the same with `kill -s USR1 0`. USR1 only makes the watchdog look for `done`.
+#      RED-CAPABLE under "disarm on USR1 alone".
+for c in "kill0|TERM|276|a group-wide kill 0 leaves the watchdog armed, and it fires at the budget" \
+         "usr1|USR1|277|a group-wide USR1 leaves the watchdog armed, and it fires at the budget"; do
+  n=${c%%|*}; c=${c#*|}; sig=${c%%|*}; c=${c#*|}; num=${c%%|*}; name=${c#*|}
+  if [ "$t2_session" != ok ]; then report "$name" no "not run: case 270's session helper failed"; continue; fi
+  ms=$(t2f "$n/ms")
+  [ -e "$t2d/$n/run/fired" ] && [ "${ms:-99999}" -le 7000 ] && grep -qx "$sig" "$t2d/$n/run/signalled" 2>/dev/null \
+    && report "$name" ok \
+    || report "$name" no "case $num: fired=$([ -e "$t2d/$n/run/fired" ] && echo yes || echo no) ms=$ms signalled=[$(t2f "$n/run/signalled" | tr '\n' ' ')] err=$(t2f "$n/err" | head -3)"
+done
+# The canary for 276 and 277: a send that escaped its session reached this suite, which caught it.
+[ -z "$t2_escaped" ] && report "no group-wide signal from cases 276-277 reached this suite" ok \
+  || report "no group-wide signal from cases 276-277 reached this suite" no "caught:$t2_escaped"
+
+# 278. #304 AC4 — a process walk that fails: a `ps` on PATH that exits 1 over a true table, one
+#      that exits 0 and prints nothing, and one whose table leaves the child out. In each the child
+#      is still killed, `nowalk` is written, and it is all over within budget + 5. RED-CAPABLE under
+#      "judge the snapshot by a pipeline's status" and "detect a walk that cannot run by `command
+#      -v ps`" (the first shim), and under "a child missing from the table is already gone" (the
+#      third).
+bad=""
+for n in 1 2 3; do
+  ms=$(t2f "ps$n/ms"); g=$(t2_gone "ps$n")
+  [ -e "$t2d/ps$n/run/nowalk" ] && [ -e "$t2d/ps$n/run/fired" ] && [ "${ms:-99999}" -le 7000 ] && [ "$g" = ok ] \
+    || bad="$bad[shim $n: nowalk=$([ -e "$t2d/ps$n/run/nowalk" ] && echo yes || echo no) ms=$ms child=$g] "
+done
+[ -z "$bad" ] && report "a process walk that fails still kills the child, and says so" ok \
+  || report "a process walk that fails still kills the child, and says so" no "$bad"
+
+# 279. #304 AC5 — a watchdog that never writes `armed` is a block before the command ever starts:
+#      one that cannot (the name is a dangling symlink), and one stuck after it forked its sleep
+#      (the name is a FIFO nobody reads, so its write never returns). Case 280 then asks that the
+#      stuck one's sleep is gone. RED-CAPABLE under "start the child without waiting for armed",
+#      where the command runs, and, through case 280, under "KILL the watchdog alone".
+bad=""
+for n in armed fifo; do
+  ms=$(t2f $n/ms); e=$(t2f $n/exit)
+  case "$(t2f $n/out)" in '{"decision":"continue","reason":"'*armed*) j=ok ;; *) j=no ;; esac
+  case "$(t2f $n/err)" in *armed*) s=ok ;; *) s=no ;; esac
+  [ "$e" = 2 ] && [ "$j$s" = okok ] && [ ! -e "$t2d/$n/ran" ] && [ "${ms:-99999}" -le 4000 ] \
+    || bad="$bad[$n: exit=$e json=$j stderr=$s ran=$([ -e "$t2d/$n/ran" ] && echo yes || echo no) ms=$ms out=[$(t2f $n/out)] err=[$(t2f $n/err)]] "
+done
+[ -z "$bad" ] && report "a watchdog that does not confirm it is armed blocks before the check starts" ok \
+  || report "a watchdog that does not confirm it is armed blocks before the check starts" no "$bad"
+
+# 280. #304 AC4/AC5 — nothing from any run above is alive afterwards, the signal cases and the
+#      armed failure included. Each run's session leader is the driver, so whatever the run
+#      started and did not move out of its process group carries the driver's pid as its group,
+#      and none may be left; each run that reached its command also recorded its watchdog and that
+#      watchdog's sleep, and neither may be either. Asked of each run's own group, never of a
+#      command line, so a concurrent run elsewhere cannot answer for it. RED-CAPABLE under "disarm
+#      by exiting without killing the sleep" and, for the armed case, under "the watchdog leaves
+#      its sleep when it cannot write armed".
+bad=""
+t2_groups=$("$t2ps" -A -o pgid= -o pid= -o stat=)
+for n in slow fast e143 grandchild loop kill0 usr1 ps1 ps2 ps3 armed fifo sub nopid e2e-pass e2e-block e2e-agy; do
+  case "$n" in kill0|usr1) [ "$t2_session" = ok ] || continue ;; esac
+  d=$(t2f "$n/drv"); [ -n "$d" ] || { bad="$bad[$n: no driver pid recorded] "; continue; }
+  a=$(printf '%s\n' "$t2_groups" | awk -v g="$d" '$1 == g && $3 !~ /Z/ { printf "%s ", $2 }')
+  [ -z "$a" ] || bad="$bad[$n: alive in its group: $a] "
+  case "$n" in armed|fifo|nopid) continue ;; esac
+  [ -s "$t2d/$n/procs" ] && read -r wd sl x < "$t2d/$n/procs" || { bad="$bad[$n: nothing recorded] "; continue; }
+  [ -n "${sl:-}" ] && [ -z "${x:-}" ] || { bad="$bad[$n: recorded '$wd ${sl:-} ${x:-}', not one watchdog and its sleep] "; continue; }
+  a=$(t2_alive "$wd" "$sl"); [ -z "$a" ] || bad="$bad[$n: alive $a] "
+done
+[ -z "$bad" ] && report "nothing a bounded run started outlives it, its watchdog and sleep included" ok \
+  || report "nothing a bounded run started outlives it, its watchdog and sleep included" no "$bad"
+
+# 281. #304 AC5 — gate_replay judges what the child left, and only once the child marked it complete
+#      with `end`. `{}` with status 0 is a pass, and the child's stderr is replayed; one block line
+#      with the status its channel gives a block is that block, replayed on both channels; a
+#      recognised verdict wins over `fired`. Anything else returns 1 and writes nothing: a torn
+#      line, a complete one with no `end`, empty output, status 1 with `{}`, a block with the other
+#      channel's status, two lines, a `signalled` file, and no status at all under `set -u`, which
+#      must return 1 and not abort the gate with nothing on stdout. RED-CAPABLE under "decide by
+#      status" (empty output with status 0), "judge without end", "ignore signalled", and "read the
+#      status as a bare $2".
+blk='{"decision":"continue","reason":"Gate: a validator failed"}'
+rp() { # rp <status> <verdict, as a printf format> [<file>...] — gate_replay over a fresh run dir, as "<stdout>|<stderr>|exit=<n>"
+  _d=$(mktemp -d "$TMP/rp.XXXXXX"); _s=$1; printf "$2" > "$_d/verdict"; printf 'child said this\n' > "$_d/err"; shift 2
+  for _f in "$@"; do : > "$_d/$_f"; done
+  ( . "$t2lib"; gate_replay "$_d" "$_s"; printf 'returned=%s' "$?" ) > "$_d/out" 2> "$_d/rerr"; _e=$?
+  printf '%s|%s|exit=%s' "$(cat "$_d/out")" "$(cat "$_d/rerr")" "$_e"
+}
+bad=""
+o=$(rp 0 '{}\n' end); [ "$o" = "{}|child said this|exit=0" ] || bad="$bad[pass: $o] "
+o=$(rp 0 '{}\n' end fired); [ "$o" = "{}|child said this|exit=0" ] || bad="$bad[pass beside fired: $o] "
+o=$(rp 2 "$blk\n" end); [ "$o" = "$blk|child said this|exit=2" ] || bad="$bad[block: $o] "
+o=$( ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; rp 0 "$blk\n" end ); [ "$o" = "$blk|child said this|exit=0" ] || bad="$bad[antigravity block: $o] "
+o=$( ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; rp 2 "$blk\n" end ); [ "$o" = "returned=1||exit=0" ] || bad="$bad[antigravity block, status 2: $o] "
+o=$(rp 0 "$blk\n" end); [ "$o" = "returned=1||exit=0" ] || bad="$bad[block, status 0: $o] "
+o=$(rp 2 '{"decision":"continue","reason":"Gate: a valid' end); [ "$o" = "returned=1||exit=0" ] || bad="$bad[torn: $o] "
+o=$(rp 2 "$blk\n"); [ "$o" = "returned=1||exit=0" ] || bad="$bad[no end: $o] "
+o=$(rp 0 '' end); [ "$o" = "returned=1||exit=0" ] || bad="$bad[empty: $o] "
+o=$(rp 1 '{}\n' end); [ "$o" = "returned=1||exit=0" ] || bad="$bad[status 1: $o] "
+o=$(rp 0 '{}\n{}\n' end); [ "$o" = "returned=1||exit=0" ] || bad="$bad[two lines: $o] "
+o=$(rp 2 "$blk\n$blk\n" end); [ "$o" = "returned=1||exit=0" ] || bad="$bad[two blocks: $o] "
+o=$(rp 0 '{}\n' end signalled); [ "$o" = "returned=1||exit=0" ] || bad="$bad[signalled: $o] "
+_d=$(mktemp -d "$TMP/rp.XXXXXX"); printf '{}\n' > "$_d/verdict"; : > "$_d/err"; : > "$_d/end"
+o=$("$t2sh" -c 'set -u; . "$1"; gate_replay "$2"; printf "returned=%s" "$?"' _ "$t2lib" "$_d" 2>&1); [ "$o" = "returned=1" ] || bad="$bad[no status, under set -u: $o] "
+[ -z "$bad" ] && report "gate_replay replays only a complete pass or block, and judges nothing else" ok \
+  || report "gate_replay replays only a complete pass or block, and judges nothing else" no "$bad"
+
+# 282. #304 AC5 — the child marks its verdict complete: gate_pass and gate_block write `end` in
+#      the child's run dir, once their output is out, on both channels. Only the child sets that
+#      dir, and the library unsets it on load, so one inherited from the environment writes
+#      nothing. RED-CAPABLE under "the variable kept from the environment".
+bad=""
+em=$(mktemp -d "$TMP/em.XXXXXX")
+( _gate_child_run=$em; export _gate_child_run; . "$t2lib"; gate_pass ) >/dev/null 2>&1
+[ -e "$em/end" ] && bad="$bad[an inherited run dir marked a pass] "
+( _gate_child_run=$em; export _gate_child_run; . "$t2lib"; gate_block x ) >/dev/null 2>&1
+[ -e "$em/end" ] && bad="$bad[an inherited run dir marked a block] "
+em=$(mktemp -d "$TMP/em.XXXXXX")
+( . "$t2lib"; _gate_child_run=$em; gate_pass ) > "$em/verdict"; e=$?
+[ "$e" = 0 ] && [ -e "$em/end" ] && [ "$(cat "$em/verdict")" = '{}' ] || bad="$bad[pass: exit=$e end=$([ -e "$em/end" ] && echo yes || echo no)] "
+em=$(mktemp -d "$TMP/em.XXXXXX")
+( . "$t2lib"; _gate_child_run=$em; gate_block x ) > "$em/verdict" 2>/dev/null; e=$?
+[ "$e" = 2 ] && [ -e "$em/end" ] || bad="$bad[block: exit=$e end=$([ -e "$em/end" ] && echo yes || echo no)] "
+em=$(mktemp -d "$TMP/em.XXXXXX")
+( ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; . "$t2lib"; _gate_child_run=$em; gate_block x ) > "$em/verdict" 2>/dev/null; e=$?
+[ "$e" = 0 ] && [ -e "$em/end" ] || bad="$bad[antigravity block: exit=$e end=$([ -e "$em/end" ] && echo yes || echo no)] "
+[ -z "$bad" ] && report "a child's verdict is marked complete, and only by the child" ok \
+  || report "a child's verdict is marked complete, and only by the child" no "$bad"
+
+# 283. #304 AC5 — end to end: a child that passes, or blocks, through gate_bounded reaches the
+#      harness exactly as it would have unbounded, its stderr chatter replayed ahead of the
+#      verdict's. Compared byte for byte with gate_pass and gate_block called directly, on both
+#      channels. RED-CAPABLE under "the child's stdout replayed without its stderr".
+( . "$t2lib"; gate_block 'T2 driver: a "quoted" verdict' ) > "$t2d/direct-out" 2> "$t2d/direct-err"
+{ printf 'child chatter\n'; cat "$t2d/direct-err"; } > "$t2d/direct-err2"
+bad=""
+[ "$(t2f e2e-pass/exit)" = 0 ] && [ "$(t2f e2e-pass/out)" = '{}' ] && [ "$(t2f e2e-pass/err)" = 'child chatter' ] \
+  || bad="$bad[pass: exit=$(t2f e2e-pass/exit) out=[$(t2f e2e-pass/out)] err=[$(t2f e2e-pass/err)]] "
+[ "$(t2f e2e-block/exit)" = 2 ] && cmp -s "$t2d/direct-out" "$t2d/e2e-block/out" && cmp -s "$t2d/direct-err2" "$t2d/e2e-block/err" \
+  || bad="$bad[block: exit=$(t2f e2e-block/exit) out=[$(t2f e2e-block/out)] err=[$(t2f e2e-block/err)]] "
+[ "$(t2f e2e-agy/exit)" = 0 ] && cmp -s "$t2d/direct-out" "$t2d/e2e-agy/out" && cmp -s "$t2d/direct-err2" "$t2d/e2e-agy/err" \
+  || bad="$bad[antigravity block: exit=$(t2f e2e-agy/exit) out=[$(t2f e2e-agy/out)]] "
+[ -z "$bad" ] && report "a bounded child's pass and block reach the harness unchanged" ok \
+  || report "a bounded child's pass and block reach the harness unchanged" no "$bad"
+
+# 284. #304 AC4 — gate_bounded called from a subshell, `rc=$( gate_bounded … )`, still cuts off a
+#      20 s command at budget 2. There `$$` names the gate and not the child's parent, so the
+#      watchdog compares the parent the child wrote to `ppid`. RED-CAPABLE under "compare the
+#      child's parent with the gate's $$", which reads the child as a reused pid and kills nothing.
+ms=$(t2f sub/ms); g=$(t2_gone sub)
+[ -e "$t2d/sub/run/fired" ] && [ "${ms:-99999}" -le 7000 ] && [ "$g" = ok ] \
+  && report "gate_bounded called from a subshell still cuts the command off at the deadline" ok \
+  || report "gate_bounded called from a subshell still cuts the command off at the deadline" no "fired=$([ -e "$t2d/sub/run/fired" ] && echo yes || echo no) ms=$ms child=$g err=$(t2f sub/err | head -3)"
+
+# 285. #304 AC4/AC5 — a child that cannot write its `pid` (here a directory holds the name) never
+#      runs its command: it exits at once, leaves no `end`, and gate_replay hands the gate back
+#      its block to build. RED-CAPABLE under "run the command whether or not the pid was
+#      written", which runs a 20 s command the watchdog has no pid to kill.
+ms=$(t2f nopid/ms); rc=$(t2f nopid/rc)
+[ ! -e "$t2d/nopid/ran" ] && [ "${rc:-0}" != 0 ] && [ ! -e "$t2d/nopid/run/end" ] && [ "$(t2f nopid/out)" = returned=1 ] && [ "${ms:-99999}" -le 3000 ] \
+  && report "a child that cannot record its pid never runs its command" ok \
+  || report "a child that cannot record its pid never runs its command" no "ran=$([ -e "$t2d/nopid/ran" ] && echo yes || echo no) status=$rc ms=$ms out=[$(t2f nopid/out)] err=$(t2f nopid/err | head -3)"
+
+# 286. #304 AC5 — a run dir that is not an absolute path blocks before anything starts, on both
+#      channels: the child writes `end` after it has cd'd to the git root, where a relative path
+#      no longer names the directory the parent reads. RED-CAPABLE under "take the run dir as
+#      given", where the command runs.
+bad=""
+rel=$(mktemp -d "$TMP/rel.XXXXXX"); mkdir "$rel/run"
+o=$(cd "$rel" && "$t2sh" -c '. "$1"; _gate_name="T2 driver"; gate_bounded 20 run touch ran' _ "$t2lib" 2>"$rel/err"); e=$?
+case "$o" in '{"decision":"continue","reason":"'*absolute*) ;; *) bad="$bad[out: $o] " ;; esac
+[ "$e" = 2 ] && [ ! -e "$rel/ran" ] && [ ! -e "$rel/run/armed" ] || bad="$bad[exit=$e ran=$([ -e "$rel/ran" ] && echo yes || echo no) armed=$([ -e "$rel/run/armed" ] && echo yes || echo no) err=$(head -c 200 "$rel/err")] "
+o=$(cd "$rel" && ANTIGRAVITY_AGENT=1 "$t2sh" -c '. "$1"; gate_bounded 20 run touch ran' _ "$t2lib" 2>/dev/null); e=$?
+case "$e:$o" in '0:{"decision":"continue","reason":"'*) ;; *) bad="$bad[antigravity: exit=$e out=$o] " ;; esac
+[ -z "$bad" ] && report "a relative run dir blocks before the check starts" ok \
+  || report "a relative run dir blocks before the check starts" no "$bad"
+
 # --- guards: assets/check-locks.py -------------------------------------------------
 #
 # The lock guard answers "has a rulebook drifted from what was agreed". It can also answer

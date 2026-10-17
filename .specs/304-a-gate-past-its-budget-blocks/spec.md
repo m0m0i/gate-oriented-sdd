@@ -286,7 +286,7 @@ Decided in Design rather than asked, because the repository answers them: the li
   - the derived constants (AC8's library half).
 
   Red: the functions do not exist. Green: the constants, the three functions, and the `ANCHORS` row. Case 30 stays green.
-- [ ] T2: `gate_bounded` and `gate_replay`, driven by a small script under `$TMP` that sources the library. First the AC12 session helper, defined before every case that uses it. Cases:
+- [x] T2: `gate_bounded` and `gate_replay`, driven by a small script under `$TMP` that sources the library. First the AC12 session helper, defined before every case that uses it. Cases:
   - a 20 s command at budget 2: `fired` is written and the elapsed time is ≤ 7;
   - a fast command at budget 20: status passed through, no `fired`, elapsed ≤ 1 (mutation: a foreground `sleep`, whose trap waits out the budget);
   - a command that exits 143 by itself: no `fired`;
