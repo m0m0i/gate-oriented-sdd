@@ -148,16 +148,18 @@ CONTRACTS = (
     ),
     (
         "skills/init/SKILL.md",
-        "at 85 s or less write no `- Validator budget:` line, over 85 s write twice the measured time and never more than 590, and where the line already exists propose only a raise, as a diff, never lowering a value someone chose",
+        "Read `date +%s` before and after the whole `- Validators:` line, in that same shell, and report the whole seconds to the user whatever they are. The rule: at 85 s or less write no `- Validator budget:` line, over 85 s write twice the measured time and never more than 590, and where the line already exists propose only a raise, as a diff, never lowering a value someone chose. Say why whenever you write or raise it. When twice the time is over 590, write 590 and say plainly that the suite may still be cut off; the remedies are the ones the gate's own block names, a faster suite or the slow validator moved off the `- Validators:` line to CI. The value also stays at or below the shortest `\"timeout\"` a project hook file gives the quality gate, less the 10 s the gate keeps back. That is normally the 590 maximum: Claude Code's rendered settings carry no quality-gate entry, so the gate falls back to its 600 s ceiling, and on Antigravity step 3 renders 600. When a hook file the project keeps holds it lower, write that bound and name the file, because the anchor check fails a line above it; when that bound is below twice the time, give the same warning, with the gate's remedy for it: raise that `\"timeout\"` to 600, or re-run `init`, which renders it.",
         "The template entry above says when a project needs the line; this is the only place "
         "anything finds out whether it does. init already runs the whole '- Validators:' line by "
         "hand, so timing that run is the one measurement an install gets for free, and without "
         "the rule the number is reported, or not, and nothing is written. Review cannot defend "
-        "it: the sentence is prose a model executes, and deleting it leaves every install "
+        "it: it is prose a model executes, and deleting it leaves every install "
         "working, with no line and no complaint, until a slow suite is blocked at every turn "
-        "end — the failure #304 made loud and this pre-empts. The raise-only half matters as "
-        "much: a re-run of init on an upgrade that lowered a value someone chose would "
-        "reintroduce that block. #320 AC1–AC3a.",
+        "end — the failure #304 made loud and this pre-empts. The pin spans the whole run, "
+        "because each sentence fails alone: without the measurement the rule compares 85 s "
+        "against a number nobody took; without the warnings a capped line reads as enough; "
+        "and a re-run of init that lowered a value someone chose would reintroduce the "
+        "block. #320 AC1–AC4, AC3a.",
     ),
     (
         "skills/init/SKILL.md",
