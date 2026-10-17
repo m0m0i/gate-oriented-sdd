@@ -14,12 +14,12 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Thirty-seven today. A thirty-eighth needs an argument, in the spec that proposes it, for why review cannot
+Thirty-eight today. A thirty-ninth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
 with it, #26 the twenty-fourth, #79 the twenty-fifth, #256 the twenty-sixth without moving it, #263 the
 twenty-seventh and twenty-eighth, #262 the twenty-ninth, #166 the thirtieth, #84 the thirty-first to thirty-fourth
-and #239 the thirty-fifth and thirty-sixth, both without moving it, and #304 the thirty-seventh; a cap that is not moved with the entry reads as already exceeded, and the next author
+and #239 the thirty-fifth and thirty-sixth, both without moving it, #304 the thirty-seventh and #320 the thirty-eighth; a cap that is not moved with the entry reads as already exceeded, and the next author
 cannot tell whether the list is at its limit or the sentence is stale — which is how this said twenty-five over twenty-six, and thirty over thirty-six.
 """
 
@@ -144,7 +144,20 @@ CONTRACTS = (
         "the path most projects take, and a line written by default pins a number nobody "
         "measured. Review cannot defend it: the entry reads as one more "
         "optional line in a template of optional lines, and its deletion leaves every install "
-        "working until its suite grows past 170 s. #304 AC13; #320 will time the suite.",
+        "working until its suite grows past 170 s. #304 AC13; the entry below makes init measure it.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "at 85 s or less write no `- Validator budget:` line, over 85 s write twice the measured time and never more than 590, and where the line already exists propose only a raise, as a diff, never lowering a value someone chose",
+        "The template entry above says when a project needs the line; this is the only place "
+        "anything finds out whether it does. init already runs the whole '- Validators:' line by "
+        "hand, so timing that run is the one measurement an install gets for free, and without "
+        "the rule the number is reported, or not, and nothing is written. Review cannot defend "
+        "it: the sentence is prose a model executes, and deleting it leaves every install "
+        "working, with no line and no complaint, until a slow suite is blocked at every turn "
+        "end — the failure #304 made loud and this pre-empts. The raise-only half matters as "
+        "much: a re-run of init on an upgrade that lowered a value someone chose would "
+        "reintroduce that block. #320 AC1–AC3a.",
     ),
     (
         "skills/init/SKILL.md",
