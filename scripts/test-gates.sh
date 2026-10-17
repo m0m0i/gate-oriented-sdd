@@ -44,21 +44,21 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# TWENTY-SEVEN sites, twenty-three until #297 added four. The first cut converted ten and said
+# TWENTY-NINE sites: twenty-three until #297 added four, and twenty-seven until #304 added two. The first cut converted ten and said
 # seven; the recount that caught that said twelve and nine, in the paragraph whose subject is not counting. Two of the three the
 # first cut missed were worse than any half: they called `report ... ok` on the skip path,
 # manufacturing a pass and incrementing the counter. Those two are whole cases and now report
 # nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
 #
-# How to get twenty-seven: count the GUARDS, not the `chmod 000` lines. There are twenty-one of
-# those and TWENTY guards among them, because case 14 has no self-disabling branch — under
+# How to get twenty-nine: count the GUARDS, not the `chmod 000` lines. There are twenty-three of
+# those and TWENTY-TWO guards among them, because case 14 has no self-disabling branch — under
 # root it goes red rather than skipping, which is the safe direction and deliberately left
 # alone. Do not "fix" that asymmetry: `docs/BACKLOG.md` row 1 asked for it and was corrected
 # rather than obeyed, on #39's branch. The last five guards are not permission-based at all —
 # `bootstrap/symlinked-slug` and `bootstrap/dangling-symlink` self-disable when `ln -s` fails,
 # the shallow-clone guard when the fixture cannot be shallowed, and #191's two blobless-clone
 # guards when the clone comes back with every blob in it. And two are permission-based without
-# a `chmod 000`: #297's read-only record directory, `chmod 555`, twice. 20 + 2 + 5 = 27.
+# a `chmod 000`: #297's read-only record directory, `chmod 555`, twice. 22 + 2 + 5 = 29.
 #
 # The old figure was 13, by a formula that omitted the shallow-clone guard, so it was already
 # short by one on `main` against fourteen sites, before #39 added six, #194 one and #191 two. Counted by command and
@@ -2749,6 +2749,352 @@ out=$( cd "$q/project" && CLAUDE_PROJECT_DIR="$p/project" CLAUDE_PLUGIN_ROOT="$p
 case "$out" in *"exit=2"*) h=ok ;; *) h="no($out)" ;; esac
 [ "$a$b$c$d$e$f$g$h" = "okokokokokokokok" ] && report "plugin-gate reads the settings a launch below the git root reads, and resolves from where it was launched" ok \
   || report "plugin-gate reads the settings a launch below the git root reads, and resolves from where it was launched" no "root-settings=$a root-local-variable=$b root-local-variable-copy-at-root=$c root-local-relative=$d sub-settings=$e unset=$f moved-cwd=$g other-repository=$h"
+
+# --- gate-lib.sh: what bounds a gate's deadline (#304) ----------------------------------
+#
+# Neither harness turns a Stop hook it timed out into a block, so a gate has a verdict only if
+# it reaches one by a deadline of its own, ahead of the harness's. Three readers feed that
+# deadline, and they are pinned here before any gate calls them: the `- Validator budget:` line,
+# the project hook files that could have run the gate, and the shortest `timeout` those files
+# give it. Every case is RED on main, where none of the functions exists, and each names the
+# mutation it also goes red under. The section sits after the plugin-gate cases because two of
+# them use that section's fixtures: case 221's pd_spellings, and the stand-down block in
+# plugin-gate.sh that gate_hook_files has to agree with.
+hl() { # hl <function> <arg>... — a gate-lib.sh function's stdout and status, as "<stdout>|rc=<n>"
+  _hlo=$( . "$ROOT/hooks/gate-lib.sh"; "$@" 2>"$TMP/hlerr" ); printf '%s|rc=%s' "$_hlo" "$?"
+}
+
+# 259. #304 AC7 — the budget line. An integer from 1 to 590 takes effect, status 0; an absent
+#      line, or no tech.md at all, is the default with status 1, so a caller can say which of the
+#      two set the budget; anything else is malformed, status 2, with a sentence naming the value
+#      and the range. An empty value is malformed and not absent, although the reader returns the
+#      same empty string for both. RED-CAPABLE under:
+#        - "range by `[ -ge 1 ] && [ -le max ]` instead of the case": `010` and `+5` are accepted;
+#        - "presence from the value": the empty, space-only and tab-only lines read as absent;
+#        - "no `\r` strip": a CRLF tech.md's `300` is rejected;
+#        - "the maximum written as the ceiling": 591 is accepted;
+#        - "arithmetic before the case": `$(( v ))` runs the command inside `a[$(touch …)]`.
+vbd="$TMP/vb"; mkdir -p "$vbd"; tab=$(printf '\t'); cr=$(printf '\r')
+vb_at() { # vb_at <text after the colon> — gate_validator_budget over a tech.md carrying it
+  printf -- '- Validators: true\n- Validator budget:%s\n' "$1" > "$vbd/tech.md"; hl gate_validator_budget "$vbd/tech.md"
+}
+bad=""
+for v in 1 590; do o=$(vb_at " $v"); [ "$o" = "$v|rc=0" ] || bad="$bad[$v: $o] "; done
+o=$(vb_at " 300$cr"); [ "$o" = "300|rc=0" ] || bad="$bad[300 CR: $o] "
+o=$(vb_at "$tab 42 $tab"); [ "$o" = "42|rc=0" ] || bad="$bad[42 between tabs: $o] "
+for v in 591 0 010 -5 +5 abc 12s 1.5; do
+  o=$(vb_at " $v")
+  case "$o" in *"'$v'"*"1 to 590"*"|rc=2") ;; *) bad="$bad[$v: $o] " ;; esac
+done
+for v in "" "   " " $tab"; do
+  o=$(vb_at "$v")
+  case "$o" in *"''"*"1 to 590"*"|rc=2") ;; *) bad="$bad[empty '$v': $o] " ;; esac
+done
+o=$(vb_at " a[\$(touch $vbd/pwned)]")
+case "$o" in *"|rc=2") ;; *) bad="$bad[subscript: $o] " ;; esac
+[ -e "$vbd/pwned" ] && bad="$bad[subscript: the command ran] "
+printf -- '- Validators: true\n' > "$vbd/tech.md"; o=$(hl gate_validator_budget "$vbd/tech.md")
+[ "$o" = "170|rc=1" ] || bad="$bad[absent: $o] "
+o=$(hl gate_validator_budget "$vbd/none.md"); [ "$o" = "170|rc=1" ] || bad="$bad[no tech.md: $o] "
+[ -z "$bad" ] && report "the Validator budget line takes 1 to 590, defaults to 170 when absent, and names any other value" ok \
+  || report "the Validator budget line takes 1 to 590, defaults to 170 when absent, and names any other value" no "$bad"
+
+# 260. #304 AC7 — a tech.md that is there and cannot be read is status 3 with nothing printed, so a
+#      caller can tell it from a malformed line; the quality gate's child already blocks on the
+#      file itself. RED-CAPABLE under "unreadable reads as absent", which prints 170, status 1.
+printf -- '- Validators: true\n- Validator budget: 300\n' > "$vbd/tech.md"; chmod 000 "$vbd/tech.md" 2>/dev/null
+if cat "$vbd/tech.md" >/dev/null 2>&1; then
+  chmod 644 "$vbd/tech.md" 2>/dev/null
+  note_skip "budget/unreadable-tech-md" "permissions not enforced here (running as root?)"
+else
+  o=$(hl gate_validator_budget "$vbd/tech.md"); chmod 644 "$vbd/tech.md" 2>/dev/null
+  [ "$o" = "|rc=3" ] && report "an unreadable tech.md is status 3 to the budget reader, not a malformed line" ok \
+    || report "an unreadable tech.md is status 3 to the budget reader, not a malformed line" no "$o"
+fi
+
+# 261. #304 AC8, the library's half — each ceiling is written once and every budget is derived
+#      from it. Read as sourced; then from a copy whose ceilings are moved, which the derived
+#      values must follow; then with every name already in the environment, which must move
+#      nothing; then hooks/ is searched, comments aside, for a budget or ceiling written as a
+#      literal anywhere but its own assignment. The review gate's budget read here, 110, is the
+#      one T4's unbounded default uses. RED-CAPABLE under "`_gate_qg_max=590`" (the moved copy
+#      keeps 590), "`: \"${_gate_qg_ceiling:=600}\"`" (the environment's 5 wins), and a 590
+#      written into a gate.
+c1=$( . "$ROOT/hooks/gate-lib.sh"; echo "$_gate_margin $_gate_qg_ceiling $_gate_rg_ceiling $_gate_qg_default $_gate_qg_max $_gate_rg_budget" )
+sed -e 's/^_gate_qg_ceiling=600$/_gate_qg_ceiling=700/' -e 's/^_gate_rg_ceiling=120$/_gate_rg_ceiling=200/' "$ROOT/hooks/gate-lib.sh" > "$TMP/gl-moved.sh"
+c2=$( . "$TMP/gl-moved.sh"; echo "$_gate_qg_max $_gate_rg_budget" )
+c3=$( _gate_margin=1; _gate_qg_ceiling=5; _gate_rg_ceiling=5; _gate_qg_default=5; _gate_qg_max=5; _gate_rg_budget=5
+      export _gate_margin _gate_qg_ceiling _gate_rg_ceiling _gate_qg_default _gate_qg_max _gate_rg_budget
+      . "$ROOT/hooks/gate-lib.sh"; echo "$_gate_margin $_gate_qg_ceiling $_gate_rg_ceiling $_gate_qg_default $_gate_qg_max $_gate_rg_budget" )
+lit=$(sed 's/#.*//' "$ROOT"/hooks/*.sh | grep -vE '^_gate_(margin|qg_ceiling|rg_ceiling|qg_default|qg_max|rg_budget)=[^;]*$' | grep -E '(^|[^0-9])(590|110|170|600|120)([^0-9]|$)' || true)
+[ "$c1" = "10 600 120 170 590 110" ] && [ "$c2" = "690 190" ] && [ "$c3" = "$c1" ] && [ -z "$lit" ] \
+  && report "gate-lib.sh states each gate's ceiling once and derives every budget from it" ok \
+  || report "gate-lib.sh states each gate's ceiling once and derives every budget from it" no "sourced=[$c1] moved=[$c2] inherited=[$c3] literals=[$lit]"
+
+# 262. #304 AC9 — the hook files that could have run a gate: each one that exists, once. Seven
+#      layouts, the first four from docs/verified.md L2:
+#      (a) launched at the root, the copy under .claude/hooks/: the root's three files;
+#      (b) launched below it, the copy under sub/.claude/hooks/: sub's two settings files, the
+#          root's settings.local.json that launch read, and the root's three;
+#      (c) launched below it, the copy under sub/.agents/hooks/: (b)'s set and sub's hooks.json;
+#      (d) no CLAUDE_PROJECT_DIR, the gate in a plugin's hooks/: the root's three;
+#      (e) no git root: the working directory stands in for it, and a file not there is skipped;
+#      (f) sub/.agents/hooks a symlink into another tree: sub's hooks.json, by the path the gate
+#          was run through;
+#      (g) the gate run through a symlinked prefix outside the root that ends in sub/.agents: the
+#          root's three and sub's hooks.json, by the physical path.
+#      Sorted and not de-duplicated, so a file printed twice shows. RED-CAPABLE under "read the
+#      git root's files only" (b, c), "the <X> half from `pwd -P` alone" (f), "the <X> half from the logical path alone" (g), and "no
+#      de-duplication" (a, where the copy's own settings are the root's).
+hf_rel() { # hf_rel <fixture> — each path on stdin, made physical and relative to the fixture, sorted
+  _hfp=$(cd "$1" && pwd -P)
+  while IFS= read -r _p; do
+    _d=$(cd "${_p%/*}" 2>/dev/null && pwd -P) || _d="?${_p%/*}"
+    _p="$_d/${_p##*/}"; printf '%s\n' "${_p#"$_hfp"/}"
+  done | sort | tr '\n' ' '
+}
+hf_repo() { # hf_repo <name> — a git root holding every hook file AC9 names, at the root and in sub/
+  _h="$TMP/$1"; mkdir -p "$_h/.claude/hooks" "$_h/.agents/hooks" "$_h/sub/.claude/hooks" "$_h/sub/.agents/hooks"
+  for _f in .claude/settings.json .claude/settings.local.json .agents/hooks.json \
+            sub/.claude/settings.json sub/.claude/settings.local.json sub/.agents/hooks.json; do
+    printf '{}\n' > "$_h/$_f"
+  done
+  ( cd "$_h" && git init -q -b main ) >/dev/null 2>&1
+  echo "$_h"
+}
+hf() { # hf <fixture> <launch dir> <hooks dir> [<CLAUDE_PROJECT_DIR>] — gate_hook_files, as hf_rel prints it
+  ( cd "$2" && { [ -z "${4-}" ] || CLAUDE_PROJECT_DIR=$4; }; . "$ROOT/hooks/gate-lib.sh"; gate_hook_files "$3" ) | hf_rel "$1"
+}
+root3=".agents/hooks.json .claude/settings.json .claude/settings.local.json "
+h=$(hf_repo hf-layouts); mkdir -p "$TMP/hf-plugin/hooks"
+a=$(hf "$h" "$h" "$h/.claude/hooks" "$h"); [ "$a" = "$root3" ] && a=ok || a="no($a)"
+b=$(hf "$h" "$h/sub" "$h/sub/.claude/hooks" "$h/sub")
+[ "$b" = "${root3}sub/.claude/settings.json sub/.claude/settings.local.json " ] && b=ok || b="no($b)"
+c=$(hf "$h" "$h/sub" "$h/sub/.agents/hooks" "$h/sub")
+[ "$c" = "${root3}sub/.agents/hooks.json sub/.claude/settings.json sub/.claude/settings.local.json " ] && c=ok || c="no($c)"
+d=$(hf "$h" "$h" "$TMP/hf-plugin/hooks"); [ "$d" = "$root3" ] && d=ok || d="no($d)"
+n="$TMP/hf-nogit"; mkdir -p "$n/.claude" "$n/.agents"; printf '{}\n' > "$n/.claude/settings.json"
+e=$( ( cd "$n" && GIT_CEILING_DIRECTORIES=$TMP; export GIT_CEILING_DIRECTORIES; . "$ROOT/hooks/gate-lib.sh"; gate_hook_files "$TMP/hf-plugin/hooks" ) | hf_rel "$n" )
+[ "$e" = ".claude/settings.json " ] && e=ok || e="no($e)"
+l="$TMP/hf-link"; mkdir -p "$l/sub/.agents" "$TMP/hf-elsewhere/hooks"; printf '{}\n' > "$l/sub/.agents/hooks.json"
+ln -s "$TMP/hf-elsewhere/hooks" "$l/sub/.agents/hooks"; ( cd "$l" && git init -q -b main ) >/dev/null 2>&1
+f=$(hf "$l" "$l" "$l/sub/.agents/hooks"); [ "$f" = "sub/.agents/hooks.json " ] && f=ok || f="no($f)"
+ln -s "$h/sub/.agents" "$TMP/hf-alias"
+g=$(hf "$h" "$h" "$TMP/hf-alias/hooks"); [ "$g" = "${root3}sub/.agents/hooks.json " ] && g=ok || g="no($g)"
+[ "$a$b$c$d$e$f$g" = "okokokokokokok" ] && report "gate_hook_files lists every hook file that could have run the gate, once" ok \
+  || report "gate_hook_files lists every hook file that could have run the gate, once" no "root=$a below-claude=$b below-agents=$c no-project-dir=$d no-git=$e symlinked=$f aliased=$g"
+
+# 263. #304 AC9 — the Claude Code half of gate_hook_files is the set plugin-gate.sh's stand-down
+#      reads (#262): both answer "which settings did this launch read". The wrapper keeps its own
+#      copy, because it runs before any library is chosen, so the two are compared rather than
+#      shared. The wrapper's block is extracted, run from the wrapper's own working directory, and
+#      its files compared with the library's in each L2 layout: launched at the root, below it,
+#      and with no CLAUDE_PROJECT_DIR. A block that cannot be found is a failure, not agreement.
+#      RED-CAPABLE under "the library reads the root's settings.json below the root", and under
+#      "plugin-gate.sh reads the root's two files" (#262's regression).
+pg_block=$(sed -n '/^_pd=\${CLAUDE_PROJECT_DIR:-}$/,/^fi$/p' "$ROOT/hooks/plugin-gate.sh")
+cc_sets() { # cc_sets <fixture> <launch dir> [<CLAUDE_PROJECT_DIR>] — "<wrapper's set>=<library's set>"
+  _fx=$1   # the block's own `set --` replaces the positional parameters
+  _w=$( cd "$2" && { [ -z "${3-}" ] || CLAUDE_PROJECT_DIR=$3; }
+        _r=$(git rev-parse --show-toplevel 2>/dev/null) && cd "$_r"
+        set --; eval "$pg_block"; printf '%s\n' "$@" | hf_rel "$_fx" | tr ' ' '\n' | sort -u | tr '\n' ' ' )
+  _l=$( cd "$2" && { [ -z "${3-}" ] || CLAUDE_PROJECT_DIR=$3; }; . "$ROOT/hooks/gate-lib.sh"
+        _gate_launch_settings | hf_rel "$1" | tr ' ' '\n' | sort -u | tr '\n' ' ' )
+  printf '%s=%s' "$_w" "$_l"
+}
+h=$(hf_repo hf-cc)
+case "$pg_block" in *'set --'*) c0=ok ;; *) c0="no(no stand-down block found in plugin-gate.sh)" ;; esac
+at=".claude/settings.json .claude/settings.local.json "
+below=".claude/settings.local.json sub/.claude/settings.json sub/.claude/settings.local.json "
+a=$(cc_sets "$h" "$h" "$h"); [ "$a" = "$at=$at" ] && a=ok || a="no($a)"
+b=$(cc_sets "$h" "$h/sub" "$h/sub"); [ "$b" = "$below=$below" ] && b=ok || b="no($b)"
+c=$(cc_sets "$h" "$h"); [ "$c" = "$at=$at" ] && c=ok || c="no($c)"
+[ "$c0$a$b$c" = "okokokok" ] && report "gate_hook_files' Claude Code half reads the settings plugin-gate.sh reads, in every launch layout" ok \
+  || report "gate_hook_files' Claude Code half reads the settings plugin-gate.sh reads, in every launch layout" no "block=$c0 root=$a below=$b no-project-dir=$c"
+
+# 264. #304 AC9 — the shortest timeout among the entries that name the gate, with its file. Nothing
+#      named is the ceiling, with `ceiling` as the source: no file at all, and a settings file
+#      whose only mention of the gate is a permission rule, beside a Stop entry for something
+#      else (case 207's (f)). An Antigravity file rendered before the ceilings rose gives 180 and
+#      30, with a fast check holding `{}` ahead of its Stop entries. Of two files the lower wins,
+#      in either order. RED-CAPABLE under "the last file read wins" and "the first file wins".
+htd="$TMP/ht"; mkdir -p "$htd"
+ht_stop() { # ht_stop <quality timeout> <review timeout> — a settings file, in Claude Code's shape
+  printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh","timeout":%s}]},{"hooks":[{"type":"command","command":"sh .claude/hooks/review-gate.sh","timeout":%s}]}]}}\n' "$1" "$2"
+}
+cat > "$htd/agy.json" <<'EOF'
+{
+  "gate-sdd": {
+    "enabled": true,
+    "PreInvocation": [
+      { "type": "command", "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f .agents/hooks/steering-digest-antigravity.sh ] || exit 0; sh .agents/hooks/steering-digest-antigravity.sh", "timeout": 15 }
+    ],
+    "PostToolUse": [
+      { "matcher": ".*", "hooks": [ { "type": "command", "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && find . -name '*.sh' -exec sh -n {} +", "timeout": 60 } ] }
+    ],
+    "Stop": [
+      { "type": "command", "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f .agents/hooks/quality-gate.sh ] || exit 0; sh .agents/hooks/quality-gate.sh", "timeout": 180 },
+      { "type": "command", "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f .agents/hooks/review-gate.sh ] || exit 0; sh .agents/hooks/review-gate.sh", "timeout": 30 }
+    ]
+  }
+}
+EOF
+printf '%s\n' '{"permissions":{"allow":["Bash(sh .claude/hooks/quality-gate.sh:*)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"osascript -e \"display notification\""}]}]}}' > "$htd/perm.json"
+ht_stop 180 30 > "$htd/a.json"; ht_stop 13 25 > "$htd/b.json"
+bad=""
+o=$(hl gate_hook_timeout quality-gate.sh 600); [ "$o" = "600 ceiling|rc=0" ] || bad="$bad[no file: $o] "
+o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/perm.json"); [ "$o" = "600 ceiling|rc=0" ] || bad="$bad[permission rule: $o] "
+o=$(hl gate_hook_timeout review-gate.sh 120 "$htd/perm.json"); [ "$o" = "120 ceiling|rc=0" ] || bad="$bad[review, nothing named: $o] "
+o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/agy.json"); [ "$o" = "180 $htd/agy.json|rc=0" ] || bad="$bad[antigravity quality: $o] "
+o=$(hl gate_hook_timeout review-gate.sh 120 "$htd/agy.json"); [ "$o" = "30 $htd/agy.json|rc=0" ] || bad="$bad[antigravity review: $o] "
+o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/a.json" "$htd/b.json"); [ "$o" = "13 $htd/b.json|rc=0" ] || bad="$bad[lower second: $o] "
+o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/b.json" "$htd/a.json"); [ "$o" = "13 $htd/b.json|rc=0" ] || bad="$bad[lower first: $o] "
+o=$(hl gate_hook_timeout review-gate.sh 120 "$htd/a.json" "$htd/b.json"); [ "$o" = "25 $htd/b.json|rc=0" ] || bad="$bad[review lower second: $o] "
+[ -z "$bad" ] && report "gate_hook_timeout gives the shortest timeout that names the gate, or the ceiling when none does" ok \
+  || report "gate_hook_timeout gives the shortest timeout that names the gate, or the ceiling when none does" no "$bad"
+
+# 265. #304 AC9 — an entry names a gate when its "command" holds the gate's file name as a whole
+#      path component. Every spelling in case 221's pd_spellings names the quality gate, and so do
+#      a bare `sh quality-gate.sh`, a single-quoted path and the name as the whole command. A
+#      project's own `code-review-gate.sh` does not name the review gate, nor does a
+#      `quality-gate.sh.orig` or a `myquality-gate.sh` name the quality gate. RED-CAPABLE under
+#      "the name anywhere in the command" (code-review-gate.sh) and "the name only after a `/`"
+#      (the bare spelling).
+printf '%s\n' "$pd_spellings" > "$htd/spellings"
+printf '%s\n' 'sh quality-gate.sh' "sh 'hooks/quality-gate.sh'" 'quality-gate.sh' >> "$htd/spellings"
+bad=""
+[ "$(grep -c . "$htd/spellings")" -ge 9 ] || bad="[pd_spellings is not in scope here] "
+while IFS= read -r s; do
+  printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"%s","timeout":42}]}]}}\n' "$s" > "$htd/sp.json"
+  o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/sp.json"); [ "$o" = "42 $htd/sp.json|rc=0" ] || bad="$bad[$s: $o] "
+done < "$htd/spellings"
+for s in 'sh .claude/hooks/code-review-gate.sh|review-gate.sh|120' 'sh .claude/hooks/quality-gate.sh.orig|quality-gate.sh|600' 'sh .claude/hooks/myquality-gate.sh|quality-gate.sh|600'; do
+  cmd=${s%%|*}; g=${s#*|}; g=${g%|*}; ceil=${s##*|}
+  printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"%s","timeout":5}]}]}}\n' "$cmd" > "$htd/sp.json"
+  o=$(hl gate_hook_timeout "$g" "$ceil" "$htd/sp.json"); [ "$o" = "$ceil ceiling|rc=0" ] || bad="$bad[$cmd names $g: $o] "
+done
+[ -z "$bad" ] && report "a hook entry names a gate only by its whole file name, in every documented spelling" ok \
+  || report "a hook entry names a gate only by its whole file name, in every documented spelling" no "$bad"
+
+# 266. #304 AC9 — the scan is a JSON tokenizer and not a line or brace count. It does not depend on
+#      line breaks (a minified file) or on the order of keys (`timeout` before `command`); a
+#      duplicate `timeout` counts, the smaller in either order; `//` and `/* */` comments are
+#      skipped, a commented-out entry included; a `{` or `}` inside a string is text; `\\` ends in
+#      a closed string, and a `\u002d` escape is a `-`. And because the input is folded
+#      into 512-byte records first, four files put a token across byte 512: the gate's name, a
+#      `\"`, a timeout's digits and a `/*`. Each file is checked to straddle where it says, and the
+#      escape's file to hold its escape. RED-CAPABLE under "a `}` closes an object even inside a
+#      string", as a brace count does; "a backslash escapes nothing"; "escapes kept as written"
+#      (the escaped name reads as nothing named, so the ceiling: a fail-open); and "each folded
+#      record parsed afresh" (the four straddles). A string holding a byte that is not UTF-8 is
+#      still a string: RED-CAPABLE on macOS under "tr in the caller's locale", where BSD tr stops
+#      at the byte with "Illegal byte sequence" and the scan reads a string never closed.
+bad=""
+python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1])), separators=(",", ":")))' "$htd/agy.json" > "$htd/min.json"
+o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/min.json"); [ "$o" = "180 $htd/min.json|rc=0" ] || bad="$bad[minified: $o] "
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"timeout":17,"type":"command","command":"sh .claude/hooks/quality-gate.sh"}]}]}}' > "$htd/k.json"
+o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/k.json"); [ "$o" = "17 $htd/k.json|rc=0" ] || bad="$bad[timeout first: $o] "
+for pair in '50 20' '20 50'; do
+  printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","timeout":%s,"command":"sh .claude/hooks/quality-gate.sh","timeout":%s}]}]}}\n' ${pair} > "$htd/k.json"
+  o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/k.json"); [ "$o" = "20 $htd/k.json|rc=0" ] || bad="$bad[duplicate $pair: $o] "
+done
+cat > "$htd/k.json" <<'EOF'
+// the old entry, {"hooks":[{"command":"sh .claude/hooks/quality-gate.sh","timeout":11}]} — commented out
+{
+  /* a block comment holding a "quote", a } brace and a // */
+  "hooks": { "Stop": [ { "hooks": [ { "type": "command", // a trailing comment
+    "command": "sh .claude/hooks/quality-gate.sh", "timeout": 33 /* inline */ } ] } ] }
+}
+EOF
+o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/k.json"); [ "$o" = "33 $htd/k.json|rc=0" ] || bad="$bad[comments: $o] "
+cat > "$htd/k.json" <<'EOF'
+{"hooks":{"Stop":[{"hooks":[{"type":"command","matcher":"}}]","command":"sh -c 'f() { :; }; f' && sh .agents/hooks/quality-gate.sh","timeout":44}]}]}}
+EOF
+o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/k.json"); [ "$o" = "44 $htd/k.json|rc=0" ] || bad="$bad[braces in a string: $o] "
+cat > "$htd/k.json" <<'EOF'
+{"hooks":{"Stop":[{"hooks":[{"note":"ends in a backslash \\","type":"command","command":"sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-gate.sh","timeout":46}]}]}}
+EOF
+o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/k.json"); [ "$o" = "46 $htd/k.json|rc=0" ] || bad="$bad[escaped backslash: $o] "
+printf '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude\134/hooks\134/quality\134u002dgate.sh","timeout":49}]}]}}\n' > "$htd/k.json"
+case "$(cat "$htd/k.json")" in *"quality$(printf '\134')u002dgate"*) ;; *) bad="$bad[the escape's fixture holds no escape] " ;; esac
+o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/k.json"); [ "$o" = "49 $htd/k.json|rc=0" ] || bad="$bad[unicode escape: $o] "
+spaces() { awk -v n="$1" 'BEGIN { while (n-- > 0) printf "%s", " " }'; }
+fill() { awk -v n="$1" 'BEGIN { while (n-- > 0) printf "%s", "a" }'; }
+straddle() { # straddle <file> <bytes 512-513> <timeout> — check the fixture, then the scan
+  _s=$(head -c 513 "$1" | tail -c 2)
+  [ "$_s" = "$2" ] || { bad="$bad[$1 has '$_s' at 512, not '$2'] "; return; }
+  o=$(hl gate_hook_timeout quality-gate.sh 600 "$1"); [ "$o" = "$3 $1|rc=0" ] || bad="$bad[across byte 512 at '$2': $o] "
+}
+p='{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh'
+{ printf '%s' "$p"; spaces $((505 - ${#p})); printf '%s\n' 'quality-gate.sh","timeout":47}]}]}}'; } > "$htd/s1.json"
+straddle "$htd/s1.json" 'y-' 47
+p='{"hooks":{"Stop":[{"hooks":[{"note":"'
+{ printf '%s' "$p"; fill $((511 - ${#p})); printf '%s\n' '\"","type":"command","command":"sh quality-gate.sh","timeout":48}]}]}}'; } > "$htd/s2.json"
+straddle "$htd/s2.json" '\"' 48
+p='{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh quality-gate.sh","timeout":'
+{ printf '%s' "$p"; spaces $((510 - ${#p})); printf '%s\n' '180}]}]}}'; } > "$htd/s3.json"
+straddle "$htd/s3.json" '80' 180
+{ printf '{'; spaces 510; printf '%s\n' '/* c */ "hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh quality-gate.sh","timeout":50}]}]}}'; } > "$htd/s4.json"
+straddle "$htd/s4.json" '/*' 50
+printf '{"permissions":{"allow":["Bash(echo caf\351)"]},"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh","timeout":13}]}]}}\n' > "$htd/k.json"
+o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/k.json" 2>&1); [ "$o" = "13 $htd/k.json|rc=0" ] || bad="$bad[a byte that is not UTF-8: $o] "
+[ -z "$bad" ] && report "the hook-file scan tokenizes JSON, whatever its layout, comments, escapes or record breaks" ok \
+  || report "the hook-file scan tokenizes JSON, whatever its layout, comments, escapes or record breaks" no "$bad"
+
+# 267. #304 AC9 — no answer is ever guessed. Status 2, with a sentence naming the file and the
+#      field, for: an entry that names the gate with no `timeout`, or with one that is not an
+#      integer; a timeout of 10, which leaves no time once the margin is kept back (11 is the
+#      smallest that does); and a file that does not parse, in six ways. Each is checked behind a
+#      file that answers cleanly, so the first good file cannot carry the run. RED-CAPABLE under
+#      "a missing timeout is given the harness's default", "a file that does not parse is
+#      skipped" and "a bound of 0 passes".
+bad=""
+ht_stop 180 30 > "$htd/good.json"
+ht_err() { # ht_err <name> <what the sentence must hold> — gate_hook_timeout over good.json, then bad.json
+  o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/good.json" "$htd/bad.json")
+  case "$o" in *"$htd/bad.json"*"$2"*"|rc=2") ;; *) bad="$bad[$1: $o] " ;; esac
+}
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh"}]}]}}' > "$htd/bad.json"; ht_err "no timeout" '"timeout"'
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh","timeout":"30"}]}]}}' > "$htd/bad.json"; ht_err "a string timeout" '"timeout"'
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh","timeout":30.5}]}]}}' > "$htd/bad.json"; ht_err "a fractional timeout" '"timeout"'
+ht_stop 10 30 > "$htd/bad.json"; ht_err "a timeout of 10" '"timeout"'
+ht_stop 11 30 > "$htd/eleven.json"; o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/eleven.json")
+[ "$o" = "11 $htd/eleven.json|rc=0" ] || bad="$bad[a timeout of 11: $o] "
+for broken in '{"hooks":{"Stop":[' 'not json' '{} x' '' '{"a" 1}' '[1,]'; do
+  printf '%s\n' "$broken" > "$htd/bad.json"; ht_err "unparseable '$broken'" 'parse'
+done
+[ -z "$bad" ] && report "gate_hook_timeout names the file and the field rather than guess a timeout" ok \
+  || report "gate_hook_timeout names the file and the field rather than guess a timeout" no "$bad"
+
+# 268. #304 AC9 — a hook file that is there and cannot be read is status 2, naming it, never a file
+#      that names nothing. RED-CAPABLE under "skip a file `[ -r ]` rejects".
+ht_stop 13 25 > "$htd/unreadable.json"; chmod 000 "$htd/unreadable.json" 2>/dev/null
+if cat "$htd/unreadable.json" >/dev/null 2>&1; then
+  chmod 644 "$htd/unreadable.json" 2>/dev/null
+  note_skip "hook-timeout/unreadable" "permissions not enforced here (running as root?)"
+else
+  o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/unreadable.json"); chmod 644 "$htd/unreadable.json" 2>/dev/null
+  case "$o" in *"$htd/unreadable.json"*"|rc=2") report "an unreadable hook file blocks the timeout reader, naming it" ok ;;
+                                             *) report "an unreadable hook file blocks the timeout reader, naming it" no "$o" ;; esac
+fi
+
+# 269. #304 AC9 and the margin — the scan runs before the watchdog starts, inside the gate's 10 s
+#      margin, so it must be linear in the file's size. A stand-down settings.local.json grows with
+#      every "don't ask again", and a tokenizer indexing one long line with `substr` measured 8.5 s
+#      at 749 KB under BWK awk. A minified file of at least 1 MB, mostly permission strings
+#      carrying braces and escapes, with the gate's entry last, answers in under a second.
+#      RED-CAPABLE under "drop the fold", which hands awk the whole file as one record.
+awk 'BEGIN {
+  printf "%s", "{\"permissions\":{\"allow\":["
+  for (i = 0; i < 24000; i++) printf "%s\"Bash(npm run task-%d -- {x} \\\"q\\\" \\\\ :*)\"", (i ? "," : ""), i
+  printf "%s\n", "]},\"hooks\":{\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"sh .claude/hooks/quality-gate.sh\",\"timeout\":180}]}]}}"
+}' > "$htd/big.json"
+sz=$(wc -c < "$htd/big.json" | tr -d ' ')
+ms_now() { python3 -c 'import time; print(int(time.time() * 1000))'; }
+t0=$(ms_now); o=$(hl gate_hook_timeout quality-gate.sh 600 "$htd/big.json"); t1=$(ms_now); el=$((t1 - t0))
+[ "$sz" -ge 1000000 ] && [ "$o" = "180 $htd/big.json|rc=0" ] && [ "$el" -lt 1000 ] \
+  && report "a 1 MB minified hook file is scanned in under a second" ok \
+  || report "a 1 MB minified hook file is scanned in under a second" no "bytes=$sz answer=[$o] ms=$el"
 
 # --- guards: assets/check-locks.py -------------------------------------------------
 #

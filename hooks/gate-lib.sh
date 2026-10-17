@@ -45,6 +45,22 @@ gate_pass() {
   exit 0
 }
 
+# How long a gate may take, stated once (#304). Neither harness turns a Stop hook it timed out
+# into a block: Claude Code discards a block written after its TERM, and Antigravity's KILL
+# cannot be caught. So a gate has a verdict only if it reaches one by a deadline of its own,
+# ahead of the hook's timeout. A ceiling is the `timeout` a hook file is meant to give its gate,
+# and the gate also bounds itself by any shorter one it can see (gate_hook_timeout below). The
+# margin is what a gate keeps back from a timeout to start its watchdog, finish the kill and
+# write its block, counting the harness's own TERM-to-KILL grace as zero, because a block written
+# after TERM is discarded. Plain assignments, never environment reads, so an inherited variable
+# cannot move a deadline; and no other budget is written as a literal anywhere in hooks/.
+_gate_margin=10
+_gate_qg_ceiling=600
+_gate_rg_ceiling=120
+_gate_qg_default=170
+_gate_qg_max=$((_gate_qg_ceiling - _gate_margin))
+_gate_rg_budget=$((_gate_rg_ceiling - _gate_margin))
+
 # Read one machine-read value out of a steering file.
 #
 # THE definition of how a steering anchor is read. Five call sites across the three hooks
@@ -93,6 +109,297 @@ gate_steering_read() {  # <file> <key>
 gate_steering_value() {  # <file> <key>
   gate_steering_read "$1" "$2"
   return 0
+}
+
+# The quality gate's budget, from `- Validator budget: <seconds>` in a tech.md (#304, AC7).
+#
+#   0  the line holds an integer from 1 to _gate_qg_max; stdout is it
+#   1  no such line, or no such file; stdout is _gate_qg_default. Not an error: most projects
+#      write no line. A status of its own so a caller can say which of the two set the budget
+#   2  the line is there and holds anything else, the empty value included; stdout is a
+#      sentence naming the value and the range
+#   3  the file is there and could not be read; stdout is empty. Distinct from 2, because the
+#      quality gate already blocks on an unreadable tech.md, and a caller must not report it as
+#      a malformed line
+#
+# Presence is asked on its own, with the reader's own expression: gate_steering_read returns the
+# same empty string for an absent line and an empty one, and an empty one is malformed. The value
+# is judged by `case` before any arithmetic touches it, because in macOS sh `$(( ))` reads `abc`
+# as 0, a variable's name as that variable, `010` as octal, and runs the command inside
+# `a[$(cmd)]`. Three digits at most, so the `-le` after it never meets a number it cannot hold.
+gate_validator_budget() {  # <tech.md>
+  _vb=$(gate_steering_read "$1" 'Validator budget'); _vbrc=$?
+  [ "$_vbrc" -eq 2 ] && return 3
+  if [ "$_vbrc" -eq 1 ]; then printf '%s\n' "$_gate_qg_default"; return 1; fi
+  grep -q '^ *- *Validator budget:' "$1" 2>/dev/null; _vbrc=$?
+  [ "$_vbrc" -eq 1 ] && { printf '%s\n' "$_gate_qg_default"; return 1; }
+  [ "$_vbrc" -eq 0 ] || return 3
+  # One trailing carriage return, for a tech.md saved with CRLF; then spaces and tabs, both ends.
+  _vbcr=$(printf '\r'); _vbtab=$(printf '\t')
+  _vb=${_vb%"$_vbcr"}
+  while :; do case "$_vb" in ' '*|"$_vbtab"*) _vb=${_vb#?} ;; *) break ;; esac; done
+  while :; do case "$_vb" in *' '|*"$_vbtab") _vb=${_vb%?} ;; *) break ;; esac; done
+  case "$_vb" in
+    [1-9]|[1-9][0-9]|[1-9][0-9][0-9])
+      [ "$_vb" -le "$_gate_qg_max" ] && { printf '%s\n' "$_vb"; return 0; } ;;
+  esac
+  printf "the '- Validator budget:' line in %s reads '%s', and the budget is a whole number of seconds from 1 to %s, with no unit, sign, fraction or leading zero\n" "$1" "$_vb" "$_gate_qg_max"
+  return 2
+}
+
+# The settings files a Claude Code launch read: the rule plugin-gate.sh's stand-down applies
+# (#262), and case 263 holds the two to the same set. The wrapper keeps its own copy because it
+# runs before any library is chosen. Launched below the git root, Claude Code reads the launch
+# directory's settings.json and settings.local.json and the root's settings.local.json, and not
+# the root's settings.json; that root is CLAUDE_PROJECT_DIR's. Without the variable, outside
+# Claude Code, the git root's two files, or the working directory's with no git root. Every
+# candidate is printed, there or not.
+_gate_launch_settings() {
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    _ls_root=$(git -C "$CLAUDE_PROJECT_DIR" rev-parse --show-toplevel 2>/dev/null) || _ls_root=$CLAUDE_PROJECT_DIR
+    printf '%s\n' "$CLAUDE_PROJECT_DIR/.claude/settings.json" "$CLAUDE_PROJECT_DIR/.claude/settings.local.json" \
+      "$_ls_root/.claude/settings.local.json"
+  else
+    _ls_root=$(git rev-parse --show-toplevel 2>/dev/null) || _ls_root=$(pwd)
+    printf '%s\n' "$_ls_root/.claude/settings.json" "$_ls_root/.claude/settings.local.json"
+  fi
+}
+
+# Every project hook file that could have run the gate in <hooks dir>, one path per line, each
+# one that exists and each once (#304, AC9). Call it before any `cd`, because CLAUDE_PROJECT_DIR
+# and the working directory are the launch's:
+#
+#   - the settings this Claude Code launch read, above;
+#   - the git root's .claude/settings.json, .claude/settings.local.json and .agents/hooks.json,
+#     the working directory standing in for a root when there is none;
+#   - a gate in <X>/.agents/hooks/ or <X>/.claude/hooks/: <X>'s .agents/hooks.json, or its two
+#     settings files. <X> is taken from the path the gate was run through and from its physical
+#     path both, so an .agents/hooks that is a symlink into a plugin checkout still finds its
+#     hooks.json, and a symlinked prefix does not hide <X>.
+#
+# A superset, on purpose: a file this launch did not read can only lower the bound, never raise
+# it. Duplicates are told apart by physical path, because macOS resolves /tmp as /private/tmp and
+# git prints the second where a launch may have written the first. A path holding a newline is
+# split, which is a stated residual.
+gate_hook_files() {  # <hooks dir>
+  _hf_root=$(git rev-parse --show-toplevel 2>/dev/null) || _hf_root=$(pwd)
+  _hf_dir=$(CDPATH= cd -- "$1" 2>/dev/null && pwd) || _hf_dir=$1
+  _hf_phys=$(CDPATH= cd -- "$1" 2>/dev/null && pwd -P) || _hf_phys=$1
+  {
+    _gate_launch_settings
+    printf '%s\n' "$_hf_root/.claude/settings.json" "$_hf_root/.claude/settings.local.json" "$_hf_root/.agents/hooks.json"
+    for _hf_d in "$_hf_dir" "$_hf_phys"; do
+      case "$_hf_d" in
+        */.agents/hooks) printf '%s\n' "${_hf_d%/hooks}/hooks.json" ;;
+        */.claude/hooks) printf '%s\n' "${_hf_d%/hooks}/settings.json" "${_hf_d%/hooks}/settings.local.json" ;;
+      esac
+    done
+  } | {
+    _hf_seen=""
+    while IFS= read -r _hf_f; do
+      [ -e "$_hf_f" ] || continue
+      _hf_k=$(CDPATH= cd -- "${_hf_f%/*}" 2>/dev/null && pwd -P) && _hf_k="$_hf_k/${_hf_f##*/}" || _hf_k=$_hf_f
+      case "
+$_hf_seen" in *"
+$_hf_k
+"*) continue ;; esac
+      _hf_seen="$_hf_seen$_hf_k
+"
+      printf '%s\n' "$_hf_f"
+    done
+  }
+}
+
+# The shortest `timeout` the given hook files give the gate named <gate script>, as
+# "<seconds> <file>"; "<ceiling> ceiling" when no entry names it, which covers the plugin, whose
+# own hooks.json is in no project (#304, AC9). The caller keeps _gate_margin back from it.
+#
+# An entry names a gate when its "command" string holds the gate's file name as a whole path
+# component, so `code-review-gate.sh` is not review-gate.sh. Every entry that names it counts,
+# live or dead, and every `timeout` in that entry's object, a duplicate key included: each can
+# only lower the bound. Status 2, with a sentence naming the file and the field, when a file is
+# there and cannot be read, does not parse, or has an entry that names the gate with no integer
+# `timeout` — never a default, because the harnesses' own defaults are not something this
+# project measured — and when the shortest timeout leaves nothing once the margin is kept back.
+#
+# The scan is a string-aware tokenizer in POSIX awk, not a line or brace count: a minified file
+# is one line, a fast check's command holds `{}`, and a settings file may carry `//` and `/* */`
+# comments. Its input is folded into 512-byte records first, newlines kept as \001, and its state
+# (inside a string, an escape pending, the depth, each open object's keys) carries from one record
+# to the next. So it is linear in the file's size: a tokenizer that indexes one long line with
+# `substr` is quadratic in BWK awk, measured at 8.5 s for 749 KB, and the scan runs inside the
+# margin. LC_ALL=C on all three stages, so they count bytes: BSD tr in a UTF-8 locale stops at
+# a byte that is not UTF-8, and a hook file read as cut off there would block every turn. A
+# pipeline is safe here only because the tokenizer demands a whole top-level value: a read that
+# failed or stopped short, or an awk that printed nothing, is a file that does not parse. A
+# timeout past nine digits reads as 999999999, which no budget reaches and the shell's `-lt` can
+# hold.
+gate_hook_timeout() {  # <gate script> <ceiling> <file>...
+  _ht_gate=$1; _ht_lo=$2; _ht_src=ceiling; shift 2
+  for _ht_f in "$@"; do
+    if [ ! -f "$_ht_f" ] || [ ! -r "$_ht_f" ]; then
+      printf '%s exists and cannot be read, so the "timeout" it gives %s is unknown\n' "$_ht_f" "$_ht_gate"
+      return 2
+    fi
+    _ht_r=$(LC_ALL=C tr '\n' '\001' < "$_ht_f" | LC_ALL=C fold -b -w 512 | LC_ALL=C awk -v g="$_ht_gate" '
+      function fail(why) { if (err == "") err = why " near byte " pos }
+      function namech(c) { return c ~ /[A-Za-z0-9._-]/ }
+      function names(s,   p, off) {
+        off = 0
+        while (g != "" && (p = index(substr(s, off + 1), g)) > 0) {
+          p += off
+          if (!namech(p > 1 ? substr(s, p - 1, 1) : "") && !namech(substr(s, p + length(g), 1))) return 1
+          off = p
+        }
+        return 0
+      }
+      function value(kind, text,   sg) {
+        fresh = 0
+        if (depth == 0) { want = "end"; return }
+        want = "sep"
+        if (type[depth] != "o") return
+        if (key[depth] == "command" && kind == "s" && names(text)) named[depth] = 1
+        if (key[depth] != "timeout") return
+        if (kind != "n" || text !~ /^-?(0|[1-9][0-9]*)$/) { tbad[depth] = 1; return }
+        sg = ""; if (substr(text, 1, 1) == "-") { sg = "-"; text = substr(text, 2) }
+        if (length(text) > 9) text = "999999999"
+        text = sg text
+        if (!(depth in tmin) || text + 0 < tmin[depth] + 0) tmin[depth] = text
+      }
+      function bare_end() {
+        if (bare == "") return
+        if (bare == "true" || bare == "false" || bare == "null") value("l", bare)
+        else if (bare ~ /^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][-+]?[0-9]+)?$/) value("n", bare)
+        else fail("a bare word that is no JSON value")
+        bare = ""
+      }
+      function push(c) {
+        if (want != "value") { fail("an unexpected " c); return }
+        depth++; type[depth] = (c == "{") ? "o" : "a"; key[depth] = ""; named[depth] = 0; tbad[depth] = 0
+        delete tmin[depth]
+        want = (c == "{") ? "key" : "value"; fresh = 1
+      }
+      function pop(c) {
+        if (depth == 0 || (c == "}") != (type[depth] == "o")) { fail("an unmatched " c); return }
+        if (want != "sep" && !fresh) { fail("a " c " where a value was due"); return }
+        if (type[depth] == "o" && named[depth]) {
+          if (tbad[depth] || !(depth in tmin)) notime = 1
+          else if (best == "" || tmin[depth] + 0 < best + 0) best = tmin[depth]
+        }
+        depth--
+        value("c", "")
+      }
+      function string_end() {
+        if (iskey) { key[depth] = sbuf; want = "colon"; fresh = 0 }
+        else value("s", sbuf)
+      }
+      BEGIN { NL = sprintf("%c", 1); want = "value"; best = "" }
+      err != "" { next }
+      {
+        rec = $0; n = length(rec); i = 1
+        while (i <= n && err == "") {
+          if (instr && esc) {
+            c = substr(rec, i, 1); i++; pos++
+            if (uleft) {
+              h = index("0123456789abcdef", tolower(c))
+              if (!h) { fail("a broken \\u escape"); continue }
+              ucode = ucode * 16 + h - 1
+              if (--uleft == 0) { esc = 0; if (keep) sbuf = sbuf ((ucode > 0 && ucode < 128) ? sprintf("%c", ucode) : "?") }
+              continue
+            }
+            if (c == "u") { uleft = 4; ucode = 0; continue }
+            esc = 0
+            if (!index("\"\\/bfnrt", c)) { fail("a broken escape"); continue }
+            if (keep) sbuf = sbuf (index("bfnrt", c) ? " " : c)
+            continue
+          }
+          if (instr) {
+            rest = substr(rec, i)
+            j = index(rest, "\""); b = index(rest, "\\"); m = index(rest, NL)
+            if (b && (!j || b < j)) j = b
+            if (m && (!j || m < j)) j = m
+            if (!j) { if (keep) sbuf = sbuf rest; pos += n - i + 1; i = n + 1; continue }
+            if (keep) sbuf = sbuf substr(rest, 1, j - 1)
+            c = substr(rest, j, 1); i += j; pos += j
+            if (c == NL) fail("a line break inside a string")
+            else if (c == "\\") esc = 1
+            else { instr = 0; string_end() }
+            continue
+          }
+          if (cmt == 1) {
+            m = index(substr(rec, i), NL)
+            if (!m) { pos += n - i + 1; i = n + 1 } else { i += m; pos += m; cmt = 0 }
+            continue
+          }
+          if (cmt == 2) {
+            if (star) { star = 0; if (substr(rec, i, 1) == "/") { i++; pos++; cmt = 0; continue } }
+            m = index(substr(rec, i), "*")
+            if (!m) { pos += n - i + 1; i = n + 1 } else { i += m; pos += m; star = 1 }
+            continue
+          }
+          c = substr(rec, i, 1); i++; pos++
+          if (slash) {
+            slash = 0
+            if (c == "/") { cmt = 1; continue }
+            if (c == "*") { cmt = 2; star = 0; continue }
+            fail("a / that opens no comment"); continue
+          }
+          if (c == " " || c == "\t" || c == "\r" || c == NL) { bare_end(); continue }
+          if (c == "/") { bare_end(); slash = 1; continue }
+          if (c == "\"") {
+            bare_end()
+            if (want == "key") { iskey = 1; keep = 1 }
+            else if (want == "value") { iskey = 0; keep = (depth > 0 && type[depth] == "o" && key[depth] == "command") }
+            else { fail("an unexpected string"); continue }
+            instr = 1; sbuf = ""; continue
+          }
+          if (c == "{" || c == "[") { bare_end(); push(c); continue }
+          if (c == "}" || c == "]") { bare_end(); pop(c); continue }
+          if (c == ":") { bare_end(); if (want != "colon") fail("an unexpected :"); else want = "value"; continue }
+          if (c == ",") {
+            bare_end()
+            if (want != "sep" || depth == 0) fail("an unexpected ,")
+            else want = (type[depth] == "o") ? "key" : "value"
+            continue
+          }
+          if (bare == "" && want != "value") { fail("unexpected text"); continue }
+          bare = bare c
+        }
+      }
+      END {
+        if (err == "") bare_end()
+        if (err == "") {
+          if (instr) fail("a string never closed")
+          else if (cmt == 2) fail("a comment never closed")
+          else if (slash) fail("a / that opens no comment")
+          else if (depth > 0) fail("a { or [ never closed")
+          else if (want != "end") fail("no JSON value")
+        }
+        if (err != "") print "err " err
+        else if (notime) print "notime"
+        else print "ok" (best == "" ? "" : " " best)
+      }')
+    case "$_ht_r" in
+      ok) ;;
+      'ok '*)
+        _ht_t=${_ht_r#ok }
+        if [ "$_ht_src" = ceiling ] || [ "$_ht_t" -lt "$_ht_lo" ]; then _ht_lo=$_ht_t; _ht_src=$_ht_f; fi ;;
+      notime)
+        printf '%s has an entry whose "command" runs %s and that has no integer "timeout", so the time the harness gives it is unknown; give that entry a "timeout" in whole seconds\n' "$_ht_f" "$_ht_gate"
+        return 2 ;;
+      'err '*)
+        printf '%s does not parse as JSON (%s), so the "timeout" it gives %s is unknown\n' "$_ht_f" "${_ht_r#err }" "$_ht_gate"
+        return 2 ;;
+      *)
+        printf '%s could not be scanned for the "timeout" it gives %s: the scan printed no answer\n' "$_ht_f" "$_ht_gate"
+        return 2 ;;
+    esac
+  done
+  if [ "$_ht_src" != ceiling ] && [ "$_ht_lo" -le "$_gate_margin" ]; then
+    printf '%s gives %s a "timeout" of %s s, which leaves no time once the gate keeps its %s s margin back to write a verdict; raise that "timeout"\n' "$_ht_src" "$_ht_gate" "$_ht_lo" "$_gate_margin"
+    return 2
+  fi
+  printf '%s %s\n' "$_ht_lo" "$_ht_src"
 }
 
 # Emit a spec's Tasks section ONLY — section 3, up to the next heading.

@@ -279,7 +279,7 @@ Decided in Design rather than asked, because the repository answers them: the li
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: budget and hook-timeout readers. Cases in the shared-library section after `:2312`:
+- [x] T1: budget and hook-timeout readers. Cases in the shared-library section after `:2312`:
   - `gate_validator_budget` for absent, `1`, `590`, `591`, `0`, `010`, `-5`, `abc`, `12s`, `300\r`, tab-only, empty and space-only, and an unreadable `tech.md` returning 3 (AC7);
   - `gate_hook_files` for each L2 layout (launched at the root, below it with `sub/.claude/` and with `sub/.agents/`, and no `CLAUDE_PROJECT_DIR`), for no git root, and for a symlinked `.agents/hooks`. One case checks that its Claude Code half and `plugin-gate.sh:133-143` give the same set (AC9);
   - `gate_hook_timeout` for nothing named (ceiling, source `ceiling`), `.agents/hooks.json` at 180/30, two files with the lower one winning, every spelling in case 221's `pd_spellings`, `code-review-gate.sh` not naming the review gate, minified JSON, `timeout` before `command`, a duplicate `timeout` key (the smaller wins), `//` and `/* */` comments, a `{` or `}` inside a command string, `\"` escapes, a missing `timeout`, a timeout of 10 (bound not positive), an unparseable file, an unreadable file (under `note_skip`'s root guard), a fast check holding `{}` ahead of the `Stop` entries, and a 1 MB minified file parsed in under 1 s (AC9);
