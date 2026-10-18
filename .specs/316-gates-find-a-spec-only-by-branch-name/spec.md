@@ -1,5 +1,5 @@
 # Spec: the gates find a branch's spec from what the branch carries, not from its name
-- Slug: 316-gates-find-a-spec-only-by-branch-name   Issue: 316   Type: bug   Status: draft
+- Slug: 316-gates-find-a-spec-only-by-branch-name   Issue: 316   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-10-17
 
 ## 1. Requirements (WHAT / WHY)
