@@ -52,14 +52,14 @@ branch=$(gate_head_branch); [ $? -eq 1 ] && branch=HEAD
 # line cannot say "no spec" about a branch the gate blocks on. It used to read `.specs/<branch>/`
 # alone, and told a session on `feature/12-x` that it had no spec while the gate blocked on
 # `.specs/12-x/` (#316). The adds are asked under check_current_branch's rules in review-gate.sh,
-# which says why: not under a detached HEAD, on an unborn branch, or when HEAD is an ancestor of
-# the base. Read from the working tree only, as this line always has been, and a listing git could
-# not make leaves whatever the name match found, since this has no channel to block on.
+# which says why: not under a detached HEAD or on an unborn branch, and the library derives nothing
+# for a HEAD already in a base. Read from the working tree only, as this line always has been. A
+# listing git could not make is said, rather than read as "no spec": this has no channel to block
+# on, but a "none" it never established is a false fact at the start of a session.
 head=$(git rev-parse --verify -q HEAD 2>/dev/null) || head=''
-base=$(gate_default_base 2>/dev/null) || base=''
-if [ "$branch" = HEAD ] || [ -z "$head" ] || { [ -n "$base" ] && git merge-base --is-ancestor HEAD "$base" 2>/dev/null; }; then
-  base=''
-fi
+bases=$(gate_default_bases 2>/dev/null) || bases=''
+{ [ "$branch" != HEAD ] && [ -n "$head" ]; } || bases=''
+specs=$(gate_branch_specs "$bases" '' "$branch" 2>/dev/null); listed=$?
 named=''
 while IFS= read -r dir; do
   spec="$dir/spec.md"
@@ -69,6 +69,10 @@ while IFS= read -r dir; do
   echo "- The active branch $branch has spec $spec (Status: $status, $open task(s) still open)."
   named=1
 done <<EOF
-$(gate_branch_specs "$base" '' "$branch" 2>/dev/null)
+$specs
 EOF
-[ -n "$named" ] || echo "- The active branch $branch has no spec directory under .specs/."
+if [ "$listed" -ne 0 ]; then
+  echo "- The specs the active branch $branch adds could not be listed: git could not read what it needed."
+elif [ -z "$named" ]; then
+  echo "- The active branch $branch has no spec directory under .specs/."
+fi

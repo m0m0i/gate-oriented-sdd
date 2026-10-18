@@ -308,8 +308,10 @@ reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 # Both skip sites below ask two questions of this base, not one: was the COMMIT joined into its
 # history, and did the WORK reach it. The second exists because a squash merge answers no to
 # the first forever — #182, and gate_work_reached_base carries the reasoning. The candidates,
-# and why each is a full refname, are gate_default_base's.
+# and why each is a full refname, are gate_default_bases'. The skip measures against the first;
+# the specs a branch adds are measured against all of them (gate_branch_specs says why).
 base=$(gate_default_base) || base=""
+bases=$(gate_default_bases) || bases=""
 
 # Has every spec in <specs> reached the base, by the work and not the commit? Every, not any: a
 # branch carrying one shipped spec and one unshipped one is not shipped, and a skip that fires
@@ -351,17 +353,16 @@ check_current_branch() {
   #
   # The adds are asked only where there is a branch with a commit of its own to ask about. Under a
   # detached HEAD `branch` is the literal `HEAD`, and case 77's scan goes on reporting the real
-  # branches; an unborn branch has no commit to diff; and a HEAD that is an ancestor of the base —
-  # the base branch itself, or a branch with no commit beyond it — is skipped as shipped below
-  # whatever it carries, so the adds could only bring it the no-issue check. In each of those the
-  # name match alone is today's reading, unchanged.
+  # branches; an unborn branch has no commit to diff. In both the name match alone is today's
+  # reading, unchanged. A HEAD already in a base — the base branch itself, or a branch with no
+  # commit beyond it — derives nothing either, which the library decides from the merge base.
   ancestor=''
   if [ -n "$base" ] && [ -n "$head" ] && git merge-base --is-ancestor HEAD "$base" 2>/dev/null; then
     ancestor=1
   fi
-  sbase=$base
-  { [ "$branch" != HEAD ] && [ -n "$head" ] && [ -z "$ancestor" ]; } || sbase=''
-  specs=$(gate_branch_specs "$sbase" '' "$branch"); listed=$?
+  sbases=$bases
+  { [ "$branch" != HEAD ] && [ -n "$head" ]; } || sbases=''
+  specs=$(gate_branch_specs "$sbases" '' "$branch"); listed=$?
   [ "$listed" -eq 0 ] || add_block "Review gate: git could not list the specs this branch adds against the base it is measured from, so the gate cannot tell whether any of them hold finished work nobody reviewed. A damaged object store, or a partial clone that cannot reach its remote, produces that. Check the repository with git fsck, or reconnect and run git fetch, and re-run rather than treating this as a pass."
 
   # No issue, no spec. The slug is <issue-number>-<kebab-title>, so a spec directory
@@ -560,7 +561,7 @@ scan_branch() {
   if [ -n "$base" ] && git merge-base --is-ancestor "$tip" "$base" 2>/dev/null; then
     return 0                          # shipped — case 8's reasoning, one branch over
   fi
-  specs=$(gate_branch_specs "$base" "$tip" "$slug"); listed=$?
+  specs=$(gate_branch_specs "$bases" "$tip" "$slug"); listed=$?
   [ "$listed" -eq 0 ] || scan_found "git could not list the specs it adds, so the gate cannot tell whether it holds finished work nobody reviewed: a damaged object store, or a partial clone that cannot reach its remote"
   [ -n "$specs" ] || return 0
   # Shipped by the work rather than the commit, asked of every spec the branch carries (#182).

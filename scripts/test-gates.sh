@@ -505,16 +505,12 @@ case "$err" in *"no resolvable default branch"*) c3=ok ;; *) c3=no ;; esac
 #      which has no `origin/main` or `origin/master` behind it, and local `main` has merged the
 #      unreviewed branch: if `show-ref --verify` stopped following the symref, the base would fall
 #      through to `main` and the branch would read as shipped. Review round 1's LOW.
-#
-#      Since #316 the block comes from the current branch rather than the scan: local `main` is
-#      ahead of the base and carries the spec it merged, which is a spec the branch HEAD is on adds
-#      against the base. Followed or not is still exit 2 or exit 0.
 r=$(make_repo symrefbase 1); park_spec "$r" 12-parked 0
 ( cd "$r" && git checkout -q main && git update-ref refs/remotes/origin/trunk main \
   && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk && git merge -q 12-parked ) >/dev/null 2>&1
 out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
-case "$err" in *"every task in .specs/12-parked/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "the base follows origin/HEAD to a branch that is not the next candidate" ok \
   || report "the base follows origin/HEAD to a branch that is not the next candidate" no "exit=$c1 names-branch=$c2 ($out)"
 
@@ -2039,6 +2035,79 @@ case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
 case "$out" in *"carries no spec"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "check-unreviewed-work passes a head that only moves a spec the base carries" ok \
   || report "check-unreviewed-work passes a head that only moves a spec the base carries" no "exit=$c1 says-no-spec=$c2 ($out)"
+
+# 362. #316 review round 1, HIGH 1 — git's rename pairing is not a definition of "added". A branch
+#      that deletes a spec the base carries and adds a finished look-alike under another name: `-M`
+#      pairs the two at git's 50% similarity, and every spec shares the template's headings, so the
+#      diff said "renamed", `--diff-filter=A` dropped the new spec, and the gate and CI passed.
+#      c0 asserts the pairing really happens here, or the case would prove nothing.
+r=$(uw_repo lookalike 1)
+( cd "$r" && git checkout -q main && git branch -qD 9-feature && git checkout -q -b feature/40-new main && mkdir -p .specs/40-new \
+  && sed 's/9-feature/40-new/; s/- \[ \] T1/- [x] T1/' .specs/9-feature/spec.md > .specs/40-new/spec.md \
+  && git rm -rq .specs/9-feature && echo work >> src/main.txt && git add .specs src \
+  && git commit -qm "replace a shipped spec with a look-alike" ) >/dev/null 2>&1
+case "$( cd "$r" && git diff -M --name-status main HEAD -- .specs/ )" in R*) c0=ok ;; *) c0=no ;; esac
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2") c1=ok ;; *) c1=no ;; esac
+case "$err" in *"every task in .specs/40-new/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+tip=$( cd "$r" && git rev-parse HEAD )
+out=$(run_uw "$r" feature/40-new "$tip"); uerr=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1") c3=ok ;; *) c3=no ;; esac
+case "$uerr" in *".specs/40-new/spec.md: every task is ticked"*) c4=ok ;; *) c4=no ;; esac
+[ "$c0$c1$c2$c3$c4" = "okokokokok" ] && report "a new spec git would pair with a deleted look-alike is still the branch's own" ok \
+  || report "a new spec git would pair with a deleted look-alike is still the branch's own" no "paired=$c0 gate-exit=$c1 gate-names=$c2 ci-exit=$c3 ci-names=$c4 ($out)"
+
+# 363. #316 review round 1, HIGH 2 — a local `main` ahead of `origin/main`, holding two merged and
+#      reviewed specs: merges not yet pushed, or a fork whose `origin` is never synced. Measured from
+#      `origin/main` alone, both specs became `main`'s own and each receipt read stale at the merge
+#      tip, so the gate blocked on `main`, on a branch cut from it, and named `main` from elsewhere.
+#      The merge base is taken against every candidate, so all three are silent, as before #316.
+r=$(make_repo lagbase 1)
+( cd "$r" && git checkout -q main && git update-ref refs/remotes/origin/main main ) >/dev/null 2>&1
+park_spec "$r" 12-a 0 CLEAN
+# 13-b by hand, at its own file: park_spec appends the same line to src/main.txt on every branch,
+# so two of them merge to the same content, and neither receipt would read stale at the merge.
+( cd "$r" && git checkout -q -b 13-b main && mkdir -p .specs/13-b \
+  && printf '# Spec: b\n- Slug: 13-b   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' > .specs/13-b/spec.md \
+  && echo b > src/b.txt && git add .specs src && git commit -qm "13-b work" \
+  && printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(git rev-parse HEAD)" > .specs/13-b/.review-receipt \
+  && git add .specs && git commit -qm "13-b receipt" ) >/dev/null 2>&1
+( cd "$r" && git checkout -q main && git merge -q 12-a && git merge -q --no-ff -m "merge 13-b" 13-b ) >/dev/null 2>&1
+out=$(run_gate "$r"); e1=$(cat "$TMP/err")
+case "$out" in *"exit=0") c1=ok ;; *) c1=no ;; esac
+( cd "$r" && git checkout -q -b 14-c && echo more >> src/main.txt && git commit -qam "work off local main" ) >/dev/null 2>&1
+out=$(run_gate "$r"); e2=$(cat "$TMP/err")
+case "$out" in *"exit=0") c2=ok ;; *) c2=no ;; esac
+( cd "$r" && git checkout -q 9-feature ) >/dev/null 2>&1
+out=$(run_gate "$r"); e3=$(cat "$TMP/err")
+case "$out" in *"exit=0") c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "a local main ahead of origin/main with reviewed merges is not blocked" ok \
+  || report "a local main ahead of origin/main with reviewed merges is not blocked" no "on-main=$c1 cut-from-main=$c2 scan=$c3 ($e1 | $e2 | $e3)"
+
+# 364. #316 review round 1, HIGH 3 — CI with no base to measure against. A two-argument workflow in a
+#      repository whose default branch is neither `main` nor `master`, with no `origin/HEAD`, resolves
+#      no candidate; the check then printed that the head adds no spec, and exited 0, without having
+#      asked. A pull request always has a base, so it fails and names the missing argument.
+r=$(uw_repo uw-nobase 1); spec_off_name "$r" feature/12-x 12-x
+( cd "$r" && git branch -m main trunk ) >/dev/null 2>&1
+tip=$( cd "$r" && git rev-parse feature/12-x )
+out=$(run_uw "$r" feature/12-x "$tip"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1") c1=ok ;; *) c1=no ;; esac
+case "$err" in *"no base"*"base.sha"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work fails when it has no base to measure the head against" ok \
+  || report "check-unreviewed-work fails when it has no base to measure the head against" no "exit=$c1 says-why=$c2 ($out)"
+
+# 365. #316 review round 1, LOW — the digest has no channel to block on, but it must not say "no spec"
+#      when git could not list the specs. Case 344's damage.
+r=$(make_repo dg-listfail 1); spec_off_name "$r" feature/12-x 12-x
+cp "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+( cd "$r" && t=$(git rev-parse main:.specs) \
+  && rm -f ".git/objects/$(printf '%s' "$t" | cut -c1-2)/$(printf '%s' "$t" | cut -c3-)" ) >/dev/null 2>&1
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"has no spec directory"*) c1=no ;; *) c1=ok ;; esac
+case "$(cat "$TMP/dgout")" in *"could not be listed"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "the digest does not deny a spec it could not list" ok \
+  || report "the digest does not deny a spec it could not list" no "no-denial=$c1 says-why=$c2 ($(grep -F 'active branch' "$TMP/dgout"))"
 
 # 201. #191 — the class rather than the instance. `git cat-file -e <ref>:<path>` asks whether an
 #      object is here, and each of the three sites this spec changed used it to ask whether a

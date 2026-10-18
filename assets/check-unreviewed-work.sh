@@ -147,9 +147,14 @@ if ! git rev-parse --verify -q "$sha^{commit}" >/dev/null 2>&1; then
 fi
 
 # The base, from the event when it is passed, and verified like the head: a base this clone cannot
-# see would otherwise fall back to a reading the event did not ask for. Case 356. Without it, the
-# gates' own list; and with no base at all, the name match alone, which is what this check read
-# before #316.
+# see would otherwise fall back to a reading the event did not ask for. Case 356. Without it, every
+# candidate in the gates' own list that resolves.
+#
+# With no base at all this fails. The gate keeps the name match alone there, which is what every
+# reader did before #316, but a pull request always has a base, and a check that says the head
+# adds no spec, having never asked, claims a check it did not make: #16's shape. A two-argument
+# workflow in a repository whose default branch is neither `main` nor `master`, checked out with no
+# `origin/HEAD`, is that state, and the remedy is the third argument. Case 364.
 base=${3:-}
 if [ -n "$base" ]; then
   if ! git rev-parse --verify -q "$base^{commit}" >/dev/null 2>&1; then
@@ -157,9 +162,15 @@ if [ -n "$base" ]; then
     echo "  A shallow checkout hides it: check out with fetch-depth: 0." >&2
     exit 1
   fi
-  base=$(git rev-parse --verify -q "$base^{commit}")
+  bases=$(git rev-parse --verify -q "$base^{commit}")
 else
-  base=$(gate_default_base 2>/dev/null) || base=""
+  bases=$(gate_default_bases 2>/dev/null) || bases=""
+fi
+if [ -z "$bases" ]; then
+  echo "check-unreviewed-work: no base to measure '$branch' against, so the specs it adds cannot be told and nothing was checked." >&2
+  echo "  Pass the pull request's base commit as the third argument: on GitHub Actions," >&2
+  echo "  \"\${{ github.event.pull_request.base.sha }}\". By hand, pass the commit the branch will merge into." >&2
+  exit 1
 fi
 
 short=$(git rev-parse --short "$sha" 2>/dev/null || printf '%s' "$sha")
@@ -172,7 +183,7 @@ short=$(git rev-parse --short "$sha" 2>/dev/null || printf '%s' "$sha")
 #
 # A listing git could not make fails the check, and what the name match found is judged all the
 # same, so a tree git cannot read still says that its spec cannot be read (case 199).
-specs=$(gate_branch_specs "$base" "$sha" "$branch"); listed=$?
+specs=$(gate_branch_specs "$bases" "$sha" "$branch"); listed=$?
 failed=''
 receipts=''
 [ "$listed" -eq 0 ] || failed="

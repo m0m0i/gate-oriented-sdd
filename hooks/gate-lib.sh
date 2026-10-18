@@ -782,8 +782,10 @@ gate_tree_names() {  # <ref> <path from the repository root>
   [ -n "$_tn" ]
 }
 
-# The commit the gates measure a branch against: what has shipped. One list, read by the review
-# gate and by check-unreviewed-work.sh, which used to keep it inline in the gate alone (#316).
+# The commits the gates measure a branch against: what has shipped. One list, read by the review
+# gate, the digest and check-unreviewed-work.sh, which used to keep it inline in the gate alone
+# (#316). gate_default_bases prints every candidate that resolves, space-separated, for the specs
+# a branch adds; gate_default_base the first, for the shipped skip.
 #
 # The list is longer since #26 widened the scan, because an unresolvable base costs far more than
 # it used to. It used to mean one false block, while you stood on your own merged branch; now it
@@ -794,12 +796,19 @@ gate_tree_names() {  # <ref> <path from the repository root>
 # Each candidate is a full refname, resolved exactly. These used to be bare names, and git
 # resolves a bare name to a tag before a branch or a remote, so `git tag main <unreviewed tip>`
 # made that tip the base and the scan skipped its branch as shipped. #233, cases 181–183.
+gate_default_bases() {
+  _dbs=''
+  for _dbr in refs/remotes/origin/HEAD refs/remotes/origin/main refs/remotes/origin/master \
+              refs/heads/main refs/heads/master; do
+    _dbc=$(gate_ref_commit "$_dbr") && _dbs="$_dbs${_dbs:+ }$_dbc"
+  done
+  [ -n "$_dbs" ] || return 1
+  printf '%s\n' "$_dbs"
+}
+
 gate_default_base() {
-  gate_ref_commit refs/remotes/origin/HEAD \
-    || gate_ref_commit refs/remotes/origin/main \
-    || gate_ref_commit refs/remotes/origin/master \
-    || gate_ref_commit refs/heads/main \
-    || gate_ref_commit refs/heads/master
+  _db=$(gate_default_bases) || return 1
+  printf '%s\n' "${_db%% *}"
 }
 
 # Which specs a branch carries. The one place a reader turns a branch into spec directories, and a
@@ -813,10 +822,24 @@ gate_default_base() {
 #
 #   the name match   `.specs/<branch>`, unless the tree read was read and does not name its
 #                    spec.md. Today's reading, kept so that no reader checks less than it did
-#   the adds         every spec.md the branch ADDS against its merge base with <base>, under
-#                    `.specs/` or `.specs/_archive/`, with renames detected. A spec the base
-#                    already carries and the branch moved is a rename, so an `archive` sweep adds
-#                    nothing; one the branch only edited is no add either (the spec's Q1)
+#   the adds         every spec.md the branch ADDS against its merge base, under `.specs/` or
+#                    `.specs/_archive/`, except one whose slug the merge base already carries in
+#                    either place. A spec the base had and the branch moved is therefore not the
+#                    branch's, so an `archive` sweep adds nothing; one the branch only edited is
+#                    no add at all (the spec's Q1)
+#
+# The adds are asked with `--no-renames`, and the slug test does the work rename detection was
+# first asked to do. Git pairs a deleted file with an added one at 50% similarity, every spec
+# shares the template's headings, and a branch that deleted a shipped spec and added a finished
+# look-alike lost the new one to the pairing (review round 1, case 362).
+#
+# The merge base is one call against every base given: `git merge-base <tip> <base>...` is the
+# latest point where the tip meets any of them. The first candidate alone lagged whenever a local
+# `main` was ahead of its remote-tracking ref, and every spec merged in between became the
+# branch's own (case 363). Nothing is derived when that point is the tip itself: the base branch,
+# a branch with no commit of its own, or one already in a local candidate, each of which the
+# callers skip as shipped. The cost of that, said once: an unreviewed branch not named for its spec,
+# merged into a local `main` and not pushed, is silent locally, as it was before #316.
 #
 # Prints one directory per line, such as `.specs/12-x` or `.specs/_archive/12-x`.
 #
@@ -826,14 +849,14 @@ gate_default_base() {
 #
 # <tip> empty is the working tree, which #26 counts, and three lists: committed adds from the merge
 # base to HEAD, which is what #177 reads when the working tree lacks a committed spec; adds from the
-# merge base to the working tree; and untracked spec files that .gitignore does not exclude. <base>
+# merge base to the working tree; and untracked spec files that .gitignore does not exclude. <bases>
 # empty is the name match alone, which is what a caller passes for no resolvable base, a detached
 # HEAD or an unborn branch.
 #
 # No merge base at all, an orphan branch, is `git merge-base` exiting 1 having printed nothing, and
 # the adds are then read against the empty tree. Every other failure is a 2.
-gate_branch_specs() {  # <base sha, empty for none> <tip sha, empty for the working tree> <branch name>
-  _sbase=$1; _stip=$2; _sname=$3
+gate_branch_specs() {  # <base shas, space-separated, empty for none> <tip sha, empty for the working tree> <branch name>
+  _sbases=$1; _stip=$2; _sname=$3
   _sdir=".specs/$_sname"
   _slist=''; _sfail=0
   if [ -n "$_stip" ]; then
@@ -848,25 +871,33 @@ gate_branch_specs() {  # <base sha, empty for none> <tip sha, empty for the work
     fi
   fi
 
-  if [ -n "$_sbase" ] && [ -n "$_shead" ]; then
-    _smb=$(git merge-base "$_sbase" "$_shead" 2>/dev/null); _src=$?
+  if [ -n "$_sbases" ] && [ -n "$_shead" ]; then
+    # shellcheck disable=SC2086  # deliberate word-split: one commit sha per argument, and a sha holds no space or glob
+    _smb=$(git merge-base "$_shead" $_sbases 2>/dev/null); _src=$?
     if [ "$_src" -eq 1 ] && [ -z "$_smb" ]; then
       _smb=$(git hash-object -t tree /dev/null 2>/dev/null) || _sfail=2
     elif [ "$_src" -ne 0 ] || [ -z "$_smb" ]; then
       _sfail=2
     fi
-    [ "$_sfail" -ne 0 ] || _sadd=$(_gate_spec_adds git diff --no-ext-diff --no-color -M --name-only --diff-filter=A -z "$_smb" "$_shead" -- .specs/) || _sfail=2
-    [ "$_sfail" -ne 0 ] || _slist="$_slist
+    _sadds=''
+    if [ "$_sfail" -eq 0 ] && [ "$_smb" != "$_shead" ]; then
+      _sadd=$(_gate_spec_adds git diff --no-ext-diff --no-color --no-renames --name-only --diff-filter=A -z "$_smb" "$_shead" -- .specs/) || _sfail=2
+      [ "$_sfail" -ne 0 ] || _sadds=$_sadd
+      if [ -z "$_stip" ] && [ "$_sfail" -eq 0 ]; then
+        _sadd=$(_gate_spec_adds git diff --no-ext-diff --no-color --no-renames --name-only --diff-filter=A -z "$_smb" -- .specs/) || _sfail=2
+        [ "$_sfail" -ne 0 ] || _sadds="$_sadds
 $_sadd"
-    if [ -z "$_stip" ] && [ "$_sfail" -eq 0 ]; then
-      _sadd=$(_gate_spec_adds git diff --no-ext-diff --no-color -M --name-only --diff-filter=A -z "$_smb" -- .specs/) || _sfail=2
-      [ "$_sfail" -ne 0 ] || _slist="$_slist
+      fi
+      if [ -z "$_stip" ] && [ "$_sfail" -eq 0 ]; then
+        _sadd=$(_gate_spec_adds git ls-files --others --exclude-standard -z -- .specs/) || _sfail=2
+        [ "$_sfail" -ne 0 ] || _sadds="$_sadds
 $_sadd"
-    fi
-    if [ -z "$_stip" ] && [ "$_sfail" -eq 0 ]; then
-      _sadd=$(_gate_spec_adds git ls-files --others --exclude-standard -z -- .specs/) || _sfail=2
-      [ "$_sfail" -ne 0 ] || _slist="$_slist
+      fi
+      if [ "$_sfail" -eq 0 ]; then
+        _sadd=$(_gate_drop_carried "$_smb" "$_sadds") || _sfail=2
+        _slist="$_slist
 $_sadd"
+      fi
     fi
   fi
 
@@ -879,6 +910,20 @@ $_sadd"
 gate_spec_slug() {  # <spec dir, such as .specs/12-x or .specs/_archive/12-x>
   _ss=${1#.specs/}
   printf '%s\n' "${_ss#_archive/}"
+}
+
+# Of <dirs>, one per line, print those whose slug <tree> does not carry under `.specs/` or
+# `.specs/_archive/`: the adds that are the branch's own (Q1). A tree git cannot read is a failure,
+# never "carries none". #316, review round 1.
+_gate_drop_carried() {  # <tree-ish> <spec dirs, one per line>
+  while IFS= read -r _cd; do
+    [ -n "$_cd" ] || continue
+    _cs=$(gate_spec_slug "$_cd")
+    _cn=$(git ls-tree --full-tree "$1" -- ".specs/$_cs/spec.md" ".specs/_archive/$_cs/spec.md" 2>/dev/null) || return 2
+    [ -n "$_cn" ] || printf '%s\n' "$_cd"
+  done <<EOF
+$2
+EOF
 }
 
 # Run a git command that prints NUL-separated paths, and print the spec directories among them.
