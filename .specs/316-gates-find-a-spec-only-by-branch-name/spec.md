@@ -54,12 +54,14 @@ Decided without asking, because the repository answers them:
   - `gate_branch_specs <base sha> <tip sha | empty for the working tree> <branch name>` prints one spec directory per line, such as `.specs/12-x` or `.specs/_archive/12-x`. Its status:
     - 0 when it read: the list is the union of the name match (`.specs/<branch>`, when that spec is in the tree read) and the directories whose `spec.md` the diff adds;
     - 2 when git could not tell. The caller blocks.
-  - The diff is `git diff --no-ext-diff --no-color -M --name-status --diff-filter=A -z <merge base> [<tip>] -- .specs/`, with untracked specs added for the working tree. It is limited to `.specs/`, so rename detection compares spec files only, and the cost is one small diff per branch.
+  - The diff is `git diff --no-ext-diff --no-color -M --name-only --diff-filter=A -z <merge base> <tip> -- .specs/`. `--name-only` rather than `--name-status`: the filter already says every entry is an add, and a list of paths alone cannot fall out of step the way status-and-path pairs can. It is limited to `.specs/`, so rename detection compares spec files only, and the cost is one small diff per branch.
+  - For the working tree, three lists: the committed adds from the merge base to HEAD, the adds from the merge base to the working tree, and untracked `spec.md` files. The first is what #177 reads when the working tree lacks a committed spec, and the second is what #26 counts.
+  - The current branch derives nothing when HEAD is an ancestor of the base, which is the base branch itself and any branch with no commit of its own. Both are skipped as shipped already, so derivation could only add the "No issue, no spec" check to them (AC5).
   - The merge base comes from `git merge-base <base> <tip>`, with exit 1 and no output read as the empty tree.
 - **`hooks/review-gate.sh`**
   - `check_current_branch` loops over the listed specs. Per spec it keeps today's working-tree-then-own-tree choice (#177), the `note` and `cause` sentences, and the state messages, with `$spec` and `$receipt` naming the listed directory.
   - Several blocking specs become one `gate_block` holding each one's message.
-  - "No issue, no spec" judges `${dir##*/}`, for working-tree specs only, as today.
+  - "No issue, no spec" judges the slug: the directory under `.specs/`, with `_archive/` stripped. Not `${dir##*/}`, which reads `sub` for the slashed slug `12-feat/sub` that case 179 pins. For working-tree specs only, as today.
   - `scan_branch` keeps the ancestry check first, which is cheap and exact, then lists the branch's specs. It skips on none, or on `gate_work_reached_base` holding for every slug, and otherwise joins `found` with one line per spec holding finished, unreviewed work.
 - **`assets/check-unreviewed-work.sh`**
   - Takes an optional third argument, the base sha, verified like the head sha. Without it, `gate_default_base`.
@@ -77,6 +79,7 @@ Decided without asking, because the repository answers them:
   - Every message that named `.specs/<branch>/` now names the directory found, so the existing cases asserting those messages are re-read in T1.
   - The silence cases must stay silent: 77, 83, 144, 148, 171, 172, 175, and the #182 shipped-skip cases 134 and 139–143.
   - The scan gains one diff per branch that is not an ancestor of the base. That is a second cost beside the `rev-list` the backlog row records, and T2 measures it on the existing timing fixture.
+  - A branch stacked on another unmerged spec branch carries that spec too, and is judged on it. The lower spec's receipt reads stale at the upper tip, so the upper branch blocks until it is rebased onto a base the lower spec has reached. The flow branches from the default branch (`implement`'s preconditions), so stacking is off the flow, and the block is the safe direction. Excluding specs the base carries would remove it, and would also silence a squash-merged `feature/12-x` that carried on, which is case 134's fail-open (Q1).
   - Antigravity projects copy `gate-lib.sh` beside the gates and re-copy all five together, so a mixed pair is the existing failure that the README's migration note covers. The copied CI check gets its own guard.
 - **Why this cannot recur:**
   - No reader composes a spec path from a branch name except through `gate_branch_specs`. A `test-gates.sh` case reads the shipped shell for `.specs/$branch` or `.specs/$slug` outside that function, the shape check case 204 uses for globs, and goes red if one returns.
