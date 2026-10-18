@@ -110,10 +110,11 @@ jobs:
       # the same question where neither move is available. PR-only: it reads the event's head
       # branch and head commit, because actions/checkout leaves a pull request on a detached
       # merge ref and a checker reading HEAD would be asking about a commit that exists nowhere
-      # else. On a push to main the work has already merged.
+      # else, and the event's base commit, which the head's specs are measured against (#316).
+      # On a push to main the work has already merged.
       - name: No pull request carries unreviewed work
         if: github.event_name == 'pull_request'
-        run: ./assets/check-unreviewed-work.sh "${{ github.event.pull_request.head.ref }}" "${{ github.event.pull_request.head.sha }}"
+        run: ./assets/check-unreviewed-work.sh "${{ github.event.pull_request.head.ref }}" "${{ github.event.pull_request.head.sha }}" "${{ github.event.pull_request.base.sha }}"
 
       # The ordered list restates two facts the tracker also holds — which issues exist for an
       # item, and which are still live — and nothing compared them, so it was false by

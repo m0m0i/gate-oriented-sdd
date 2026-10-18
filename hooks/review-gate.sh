@@ -551,7 +551,7 @@ The gate asks what this repository contains, not which branch HEAD points at, so
 # can be named `HEAD` (git refuses), so under a detached HEAD the skip below never fires.
 #
 # `slug` is the branch's name, and since #316 it is only the name match: the specs are the ones
-# gate_branch_specs lists, judged one at a time. A spec named for its branch is reported as it
+# gate_branch_specs lists, judged one at a time. A spec at `.specs/<branch>/` is reported as it
 # always was; any other carries its path, because the branch's name no longer says which spec it is.
 scan_branch() {
   [ "$slug" = "$branch" ] && return 0
@@ -572,7 +572,7 @@ scan_branch() {
     state=$(gate_spec_review_state "$dir" "$tip" "$ref")
     [ -n "$state" ] || continue
     sentence=$(gate_review_state_sentence "$state")
-    if [ "$(gate_spec_slug "$dir")" = "$slug" ]; then
+    if [ "${dir#.specs/}" = "$slug" ]; then
       scan_found "$sentence"
     else
       scan_found "$dir/spec.md: $sentence"

@@ -1455,7 +1455,7 @@ case "$err" in *".specs/12-parked/spec.md cannot be read from this branch's own 
 spec_off_name() {  # <repo> <branch> <spec dir under .specs/>
   ( cd "$1" && git checkout -q -b "$2" main && mkdir -p ".specs/$3" \
     && printf '# Spec: off name\n- Slug: %s   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' "$3" > ".specs/$3/spec.md" \
-    && echo work >> src/main.txt && git add -A && git commit -qm "work off the name" ) >/dev/null 2>&1
+    && echo work >> src/main.txt && git add .specs src && git commit -qm "work off the name" ) >/dev/null 2>&1
 }
 
 # 340. #316 AC1 — the first reproduction shape. A branch carrying a prefix, `feature/12-x`, with its
@@ -1951,6 +1951,94 @@ rd=$( cd "$r" && . hooks/gate-lib.sh && _gate_read HEAD .specs/9-feature/spec.md
 [ "$rd" = 2 ] && c4=ok || c4=no
 [ "$c1$c2$c3$c4" = "okokokok" ] && report "check-unreviewed-work names a gate-lib.sh that predates the tree reader" ok \
   || report "check-unreviewed-work names a gate-lib.sh that predates the tree reader" no "exit=$c1 names-fn=$c2 says-recopy=$c3 read-status=$c4 ($rd)"
+
+# 354. #316 AC3 — the three reproduction shapes, under the check CI runs. Each pull request's head
+#      is passed the way the event passes it, two arguments, with HEAD parked on `main`. The check
+#      read `.specs/<head ref>/spec.md`, printed "carries no spec … nothing else examined", and
+#      exited 0 on all three.
+c=''
+for shape in "feature/12-x 12-x .specs/12-x" "12-xx 12-x .specs/12-x" "12-x 12-x .specs/_archive/12-x"; do
+  set -- $shape
+  r=$(uw_repo "uw-off-$(printf '%s' "$1" | tr '/' '-')" 1); spec_off_name "$r" "$1" "$2"
+  [ "$3" = .specs/12-x ] || ( cd "$r" && mkdir -p .specs/_archive && git mv .specs/12-x .specs/_archive/12-x \
+    && git commit -qm "archived on its own branch" ) >/dev/null 2>&1
+  tip=$( cd "$r" && git rev-parse "refs/heads/$1" ); ( cd "$r" && git checkout -q main ) >/dev/null 2>&1
+  out=$(run_uw "$r" "$1" "$tip"); err=$(cat "$TMP/uwerr")
+  case "$out" in *"exit=1") c="$c ok" ;; *) c="$c no:$1:exit" ;; esac
+  case "$err" in *"  $1 — $3/spec.md: every task is ticked and no reviewer receipt exists"*"$3/.review-receipt"*) c="$c ok" ;; *) c="$c no:$1:names" ;; esac
+done
+case "$c" in *no*) report "check-unreviewed-work fails each reproduction shape of a spec not named for its branch" no "$c ($out)" ;;
+               *) report "check-unreviewed-work fails each reproduction shape of a spec not named for its branch" ok ;; esac
+
+# 355. #316 AC3 — the third argument, the event's `pull_request.base.sha`. The merge base is taken
+#      against it rather than against the candidate list: here local `main` has merged the spec
+#      branch, so the list would answer with a base that already holds the spec and the head would
+#      add nothing against it. The base the pull request names does not.
+r=$(uw_repo uw-off-base 1); spec_off_name "$r" feature/12-x 12-x
+( cd "$r" && git checkout -q main && git tag prbase main && git merge -q feature/12-x ) >/dev/null 2>&1
+tip=$( cd "$r" && git rev-parse feature/12-x ); pb=$( cd "$r" && git rev-parse prbase )
+out=$(run_uw "$r" feature/12-x "$tip"); c1=$out
+out=$(run_uw "$r" feature/12-x "$tip" "$pb"); err=$(cat "$TMP/uwerr")
+case "$c1" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *"exit=1") c2=ok ;; *) c2=no ;; esac
+case "$err" in *"  feature/12-x — .specs/12-x/spec.md: every task is ticked"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "check-unreviewed-work measures the head against the base the pull request names" ok \
+  || report "check-unreviewed-work measures the head against the base the pull request names" no "two-args-against-merged-main=$c1 three-args-exit=$c2 names=$c3 ($out)"
+
+# 356. #316 — the base argument is an assertion about a repository this process has not checked, as
+#      the head commit is (case 95), and a base it cannot resolve fails rather than falling back to
+#      a reading the event did not ask for.
+r=$(uw_repo uw-off-nobase 1)
+( cd "$r" && git checkout -q -b bookkeeping ) >/dev/null 2>&1
+tip=$( cd "$r" && git rev-parse bookkeeping )
+out=$(run_uw "$r" bookkeeping "$tip" deadbeefdeadbeefdeadbeefdeadbeefdeadbeef); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1") c1=ok ;; *) c1=no ;; esac
+case "$err" in *"cannot resolve base commit"*"fetch-depth"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work fails on a base commit it cannot see" ok \
+  || report "check-unreviewed-work fails on a base commit it cannot see" no "exit=$c1 says-why=$c2 ($out)"
+
+# 357. #316 AC6, CI — a head whose specs git cannot list fails, saying so. Case 344's damage.
+r=$(uw_repo uw-off-listfail 1); spec_off_name "$r" feature/12-x 12-x
+( cd "$r" && git checkout -q main && t=$(git rev-parse main:.specs) \
+  && rm -f ".git/objects/$(printf '%s' "$t" | cut -c1-2)/$(printf '%s' "$t" | cut -c3-)" \
+  && ! git cat-file -e "$t" ) >/dev/null 2>&1 && c0=ok || c0=no
+tip=$( cd "$r" && git rev-parse feature/12-x )
+out=$(run_uw "$r" feature/12-x "$tip"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1") c1=ok ;; *) c1=no ;; esac
+case "$err" in *"could not list the specs"*) c2=ok ;; *) c2=no ;; esac
+[ "$c0$c1$c2" = "okokok" ] && report "check-unreviewed-work fails a head whose specs git cannot list" ok \
+  || report "check-unreviewed-work fails a head whose specs git cannot list" no "fixture=$c0 exit=$c1 says-why=$c2 ($out)"
+
+# 358. #316 — a gate-lib.sh without gate_branch_specs, under this checker: case 200's guard for the
+#      reader this spec added. Against an older library the call is a command not found, the list
+#      comes back empty, and a head carrying a spec not named for it goes on to "carries no spec".
+r=$(uw_repo uw-off-oldlib 1); spec_off_name "$r" feature/12-x 12-x
+python3 - "$r" gate_branch_specs <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "hooks", "gate-lib.sh")
+src = p.read_text()
+i = src.index(sys.argv[2] + "() {")
+j = src.index("\n}\n", i) + 3
+p.write_text(src[:i] + src[j:])
+PYEOF
+out=$(run_uw "$r"); err=$(cat "$TMP/uwerr")
+case "$out" in *"exit=1") c1=ok ;; *) c1=no ;; esac
+case "$err" in *"gate_branch_specs"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"re-copy"*|*"Re-copy"*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "check-unreviewed-work names a gate-lib.sh that predates gate_branch_specs" ok \
+  || report "check-unreviewed-work names a gate-lib.sh that predates gate_branch_specs" no "exit=$c1 names-fn=$c2 says-recopy=$c3 ($out)"
+
+# 359. #316 AC5, CI — a head that moves a spec the base carries adds none, and passes saying what it
+#      examined: case 87's sentence, not a success it did not earn.
+r=$(uw_repo uw-off-sweep 1)
+( cd "$r" && git checkout -q -b sweep main && mkdir -p .specs/_archive && git mv .specs/9-feature .specs/_archive/9-feature \
+  && echo sweepwork >> src/main.txt && git commit -qam "archive, and some source" && git checkout -q main ) >/dev/null 2>&1
+tip=$( cd "$r" && git rev-parse sweep )
+out=$(run_uw "$r" sweep "$tip")
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *"carries no spec"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "check-unreviewed-work passes a head that only moves a spec the base carries" ok \
+  || report "check-unreviewed-work passes a head that only moves a spec the base carries" no "exit=$c1 says-no-spec=$c2 ($out)"
 
 # 201. #191 — the class rather than the instance. `git cat-file -e <ref>:<path>` asks whether an
 #      object is here, and each of the three sites this spec changed used it to ask whether a
