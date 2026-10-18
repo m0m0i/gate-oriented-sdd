@@ -18,7 +18,9 @@ DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # silent either. Without this, a stale library omits Owns, Validators and Reviewer and prints
 # "not found" to stderr, which is #34's exact symptom reintroduced by #34's fix. The branch
 # line below reads through gate_head_branch, so a library predating that is the same skew. #233.
-command -v gate_steering_value >/dev/null 2>&1 && command -v gate_head_branch >/dev/null 2>&1 || {
+# And through gate_branch_specs, which #316 added, for the same reason.
+command -v gate_steering_value >/dev/null 2>&1 && command -v gate_head_branch >/dev/null 2>&1 \
+  && command -v gate_branch_specs >/dev/null 2>&1 || {
   echo "## Repo facts"
   echo "- (steering digest degraded: hooks/gate-lib.sh predates the shared reader — re-copy the plugin's hooks/)"
   exit 0
@@ -44,11 +46,29 @@ echo "- A Stop hook enforces the quality gate and the freshness of the review re
 # literal `HEAD` as it always was; an unborn branch is named, where `rev-parse` used to print
 # `HEAD` for it too. #233.
 branch=$(gate_head_branch); [ $? -eq 1 ] && branch=HEAD
-spec=".specs/$branch/spec.md"
-if [ -n "$branch" ] && [ -f "$spec" ]; then
+[ -n "$branch" ] || exit 0
+
+# Which specs are the branch's: the ones the review gate judges, through gate_branch_specs, so this
+# line cannot say "no spec" about a branch the gate blocks on. It used to read `.specs/<branch>/`
+# alone, and told a session on `feature/12-x` that it had no spec while the gate blocked on
+# `.specs/12-x/` (#316). The adds are asked under check_current_branch's rules in review-gate.sh,
+# which says why: not under a detached HEAD, on an unborn branch, or when HEAD is an ancestor of
+# the base. Read from the working tree only, as this line always has been, and a listing git could
+# not make leaves whatever the name match found, since this has no channel to block on.
+head=$(git rev-parse --verify -q HEAD 2>/dev/null) || head=''
+base=$(gate_default_base 2>/dev/null) || base=''
+if [ "$branch" = HEAD ] || [ -z "$head" ] || { [ -n "$base" ] && git merge-base --is-ancestor HEAD "$base" 2>/dev/null; }; then
+  base=''
+fi
+named=''
+while IFS= read -r dir; do
+  spec="$dir/spec.md"
+  [ -n "$dir" ] && [ -f "$spec" ] || continue
   status=$(sed -n 's/.*Status: *\([A-Za-z]*\).*/\1/p' "$spec" | head -1)
   open=$(awk '/^#+ *3\./{f=1;next} /^#+ /{f=0} f' "$spec" | grep -c '^ *- \[ \]')
   echo "- The active branch $branch has spec $spec (Status: $status, $open task(s) still open)."
-elif [ -n "$branch" ]; then
-  echo "- The active branch $branch has no spec directory under .specs/."
-fi
+  named=1
+done <<EOF
+$(gate_branch_specs "$base" '' "$branch" 2>/dev/null)
+EOF
+[ -n "$named" ] || echo "- The active branch $branch has no spec directory under .specs/."

@@ -721,7 +721,8 @@ gate_total_tasks_text() {
 gate_open_tasks()     { gate_open_tasks_text     "$(cat -- "$1" 2>/dev/null)"; }
 gate_total_tasks()    { gate_total_tasks_text    "$(cat -- "$1" 2>/dev/null)"; }
 
-# Which branch HEAD is on, by its own name: the slug that names its spec directory.
+# Which branch HEAD is on, by its own name. The name match gate_branch_specs reads is this name;
+# the specs a branch adds are found whatever it is called (#316).
 #
 # Asked of the FULL ref and stripped by hand, never of a short form. Git shortens a ref only as
 # far as stays unambiguous, so a branch that shares its name with a tag, or a branch named

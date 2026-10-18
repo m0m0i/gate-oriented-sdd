@@ -2308,6 +2308,40 @@ else
   report "no shipped shell splits a Source globs value outside set -f" ok
 fi
 
+# 361. #316 AC4 — the class rather than the instance, as case 204 is for #254. Every reader composed
+#      the spec's path from the branch's name, and nothing read the shipped shell for that shape, so
+#      a fourth reader (the digest) was still doing it when #316's design was written. This case
+#      walks hooks/*.sh and assets/*.sh and fails on a line that is not a whole-line comment and
+#      builds `.specs/` from a variable named `branch` or `slug`, outside gate_branch_specs. The
+#      region is the function's own lines, from `gate_branch_specs() {` to the first `}` alone on
+#      a line. A slug passed in from a listed spec, as gate_work_reached_base takes it, is a
+#      different variable and not a hit. Like 204, the matcher runs on known lines first and awk's
+#      status is read, so a broken pattern or an empty file list cannot report ok having read nothing.
+spec_by_name_re='[.]specs/"?[$][{]?(branch|slug)([^A-Za-z0-9_]|$)'   # bracketed, not backslashed: awk -v unescapes its value
+specs_by_name() {  # <file>... — prints file:line: text for each spec path built from a branch name
+  awk -v re="$spec_by_name_re" '
+    FNR == 1 { inf = 0 }
+    /^gate_branch_specs\(\) \{/ { inf = 1; next }
+    inf && /^}[[:space:]]*$/ { inf = 0; next }
+    !inf && !/^[[:space:]]*#/ && $0 ~ re { print FILENAME ":" FNR ": " $0 }' "$@"
+}
+printf '%s\n' 'spec=".specs/$branch/spec.md"' 'state=$(gate_spec_review_state ".specs/$slug" "$tip" "$ref")' \
+  'receipt=".specs/${branch}/.review-receipt"' 'x=.specs/"$slug"' > "$TMP/specneedle-hit.sh"
+printf '%s\n' '# reads .specs/$branch/spec.md' 'gate_branch_specs() {  # <base>' '  _sdir=".specs/$branch"' '}' \
+  '_wlive=".specs/$_wslug/spec.md"' '[ "${dir#.specs/}" = "$branch" ]' '  # .specs/$slug, said in a comment' > "$TMP/specneedle-miss.sh"
+n_hit=$(specs_by_name "$TMP/specneedle-hit.sh" | wc -l | tr -d ' ')
+n_miss=$(specs_by_name "$TMP/specneedle-miss.sh" | wc -l | tr -d ' ')
+byname=$(specs_by_name "$ROOT"/hooks/*.sh "$ROOT"/assets/*.sh); rc=$?
+if [ "$n_hit$n_miss" != 40 ]; then
+  report "no shipped shell builds a spec path from a branch name outside gate_branch_specs" no "matcher self-test: $n_hit of 4 hits, $n_miss of 0 misses"
+elif [ "$rc" -ne 0 ]; then
+  report "no shipped shell builds a spec path from a branch name outside gate_branch_specs" no "awk exited $rc, so nothing was read"
+elif [ -n "$byname" ]; then
+  report "no shipped shell builds a spec path from a branch name outside gate_branch_specs" no "$(printf '%s' "$byname" | sed "s|$ROOT/||" | tr '\n' ';')"
+else
+  report "no shipped shell builds a spec path from a branch name outside gate_branch_specs" ok
+fi
+
 # --- quality gate: source changed since the last pass, committed or not (#297) ---------
 #
 # `implement` commits every task, and until #297 the skip asked `git status`, which sees only
@@ -5927,6 +5961,18 @@ case "$(cat "$TMP/dgout")" in *"The active branch 12-parked has spec .specs/12-p
 [ -s "$TMP/dgerr" ] && c2=no || c2=ok
 [ "$c1$c2" = "okok" ] && report "the digest names a branch a tag shadows, and finds its spec" ok \
   || report "the digest names a branch a tag shadows, and finds its spec" no "names-and-finds=$c1 clean-stderr=$c2 ($(grep -F 'active branch' "$TMP/dgout"))"
+
+# 360. #316 — the digest is a reader of the branch name too. On `feature/12-x` it told the session
+#      the branch had no spec directory under `.specs/`, while the review gate blocked on
+#      `.specs/12-x/spec.md`: a false fact at the start of the session about to work on that spec.
+r=$(make_repo dg-offname 1); spec_off_name "$r" feature/12-x 12-x
+cp "$ROOT/hooks/steering-digest.sh" "$r/hooks/"
+( cd "$r" && sh hooks/steering-digest.sh >"$TMP/dgout" 2>"$TMP/dgerr" )
+case "$(cat "$TMP/dgout")" in *"The active branch feature/12-x has spec .specs/12-x/spec.md (Status: approved, 0 task(s) still open)."*) c1=ok ;; *) c1=no ;; esac
+case "$(cat "$TMP/dgout")" in *"has no spec directory"*) c2=no ;; *) c2=ok ;; esac
+[ -s "$TMP/dgerr" ] && c3=no || c3=ok
+[ "$c1$c2$c3" = "okokok" ] && report "the digest names the spec a prefixed branch carries" ok \
+  || report "the digest names the spec a prefixed branch carries" no "names=$c1 no-denial=$c2 clean-stderr=$c3 ($(grep -F 'active branch' "$TMP/dgout"))"
 
 # 187. #233 — an unborn branch is named too, where `rev-parse` echoed its argument and the digest
 #      printed the literal `HEAD`. A detached HEAD still prints `HEAD`, unchanged: it has no
