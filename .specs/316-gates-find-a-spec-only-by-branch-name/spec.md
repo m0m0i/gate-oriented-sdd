@@ -74,7 +74,8 @@ Decided without asking, because the repository answers them:
   - The `docs/DESIGN.md` "Unreviewed work" row.
   - The readers' comments that say a spec is found by the branch's name (`review-gate.sh:474-477`, `gate-lib.sh:724`).
   - Both READMEs and `docs/fidelity.md`, where they state it. A `git grep` at T4 settles which.
-- **Affected files:** `hooks/gate-lib.sh`, `hooks/review-gate.sh`, `assets/check-unreviewed-work.sh`, `.github/workflows/ci.yml`, `skills/init/SKILL.md`, `skills/archive/SKILL.md`, `scripts/test-gates.sh`, `docs/DESIGN.md`, and docs as T4 finds them.
+- **`hooks/steering-digest.sh`**, a fourth reader the design above missed and T4's recurrence case found. It builds `.specs/$branch/spec.md` to tell each new session which spec is active. On `feature/12-x` it says the branch has no spec directory, while the gate blocks on `.specs/12-x`. It lists the working tree's specs through `gate_branch_specs` under the current-branch check's rules, and names each one. Antigravity's digest runs this script, so it follows.
+- **Affected files:** `hooks/gate-lib.sh`, `hooks/review-gate.sh`, `hooks/steering-digest.sh`, `assets/check-unreviewed-work.sh`, `.github/workflows/ci.yml`, `skills/init/SKILL.md`, `skills/archive/SKILL.md`, `scripts/test-gates.sh`, `docs/DESIGN.md`, and docs as T4 finds them.
 - **Blast radius:**
   - Every message that named `.specs/<branch>/` now names the directory found, so the existing cases asserting those messages are re-read in T1.
   - The silence cases must stay silent: 77, 83, 144, 148, 171, 172, 175, and the #182 shipped-skip cases 134 and 139–143.
