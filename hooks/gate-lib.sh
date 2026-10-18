@@ -781,6 +781,118 @@ gate_tree_names() {  # <ref> <path from the repository root>
   [ -n "$_tn" ]
 }
 
+# The commit the gates measure a branch against: what has shipped. One list, read by the review
+# gate and by check-unreviewed-work.sh, which used to keep it inline in the gate alone (#316).
+#
+# The list is longer since #26 widened the scan, because an unresolvable base costs far more than
+# it used to. It used to mean one false block, while you stood on your own merged branch; now it
+# means the merged check never fires for ANY branch, so every shipped but undeleted spec branch
+# blocks every turn from everywhere. `master` is the common case that was missing, and a
+# repository with no remote at all has no origin/* to fall back on.
+#
+# Each candidate is a full refname, resolved exactly. These used to be bare names, and git
+# resolves a bare name to a tag before a branch or a remote, so `git tag main <unreviewed tip>`
+# made that tip the base and the scan skipped its branch as shipped. #233, cases 181–183.
+gate_default_base() {
+  gate_ref_commit refs/remotes/origin/HEAD \
+    || gate_ref_commit refs/remotes/origin/main \
+    || gate_ref_commit refs/remotes/origin/master \
+    || gate_ref_commit refs/heads/main \
+    || gate_ref_commit refs/heads/master
+}
+
+# Which specs a branch carries. The one place a reader turns a branch into spec directories, and a
+# shape case in test-gates.sh fails if a reader composes `.specs/<branch>` anywhere else. #316.
+#
+# The flow names a branch and its spec directory alike (`spec` step 1), and every reader used to
+# take that convention as the address. A branch named any other way — `feature/12-x`, a typo, a
+# spec archived on its own branch — asked for a path that did not exist, `_gate_read` answered
+# "absent", and absent is "nothing to demand". So the list is a union of two readings, and a union
+# checks at least what either does:
+#
+#   the name match   `.specs/<branch>`, unless the tree read was read and does not name its
+#                    spec.md. Today's reading, kept so that no reader checks less than it did
+#   the adds         every spec.md the branch ADDS against its merge base with <base>, under
+#                    `.specs/` or `.specs/_archive/`, with renames detected. A spec the base
+#                    already carries and the branch moved is a rename, so an `archive` sweep adds
+#                    nothing; one the branch only edited is no add either (the spec's Q1)
+#
+# Prints one directory per line, such as `.specs/12-x` or `.specs/_archive/12-x`.
+#
+#   0  the list is complete
+#   2  git could not list the adds. What the name match found is printed all the same, so the
+#      caller still judges it, and blocks besides: a listing that failed is never "no spec"
+#
+# <tip> empty is the working tree, which #26 counts, and three lists: committed adds from the merge
+# base to HEAD, which is what #177 reads when the working tree lacks a committed spec; adds from the
+# merge base to the working tree; and untracked spec files that .gitignore does not exclude. <base>
+# empty is the name match alone, which is what a caller passes for no resolvable base, a detached
+# HEAD or an unborn branch.
+#
+# No merge base at all, an orphan branch, is `git merge-base` exiting 1 having printed nothing, and
+# the adds are then read against the empty tree. Every other failure is a 2.
+gate_branch_specs() {  # <base sha, empty for none> <tip sha, empty for the working tree> <branch name>
+  _sbase=$1; _stip=$2; _sname=$3
+  _sdir=".specs/$_sname"
+  _slist=''; _sfail=0
+  if [ -n "$_stip" ]; then
+    _shead=$_stip
+    gate_tree_names "$_stip" "$_sdir/spec.md"; [ "$?" -eq 1 ] || _slist=$_sdir
+  else
+    _shead=$(git rev-parse --verify -q HEAD 2>/dev/null) || _shead=''
+    if [ -f "$_sdir/spec.md" ]; then
+      _slist=$_sdir
+    elif [ -n "$_shead" ]; then
+      gate_tree_names HEAD "$_sdir/spec.md"; [ "$?" -eq 1 ] || _slist=$_sdir
+    fi
+  fi
+
+  if [ -n "$_sbase" ] && [ -n "$_shead" ]; then
+    _smb=$(git merge-base "$_sbase" "$_shead" 2>/dev/null); _src=$?
+    if [ "$_src" -eq 1 ] && [ -z "$_smb" ]; then
+      _smb=$(git hash-object -t tree /dev/null 2>/dev/null) || _sfail=2
+    elif [ "$_src" -ne 0 ] || [ -z "$_smb" ]; then
+      _sfail=2
+    fi
+    [ "$_sfail" -ne 0 ] || _sadd=$(_gate_spec_adds git diff --no-ext-diff --no-color -M --name-only --diff-filter=A -z "$_smb" "$_shead" -- .specs/) || _sfail=2
+    [ "$_sfail" -ne 0 ] || _slist="$_slist
+$_sadd"
+    if [ -z "$_stip" ] && [ "$_sfail" -eq 0 ]; then
+      _sadd=$(_gate_spec_adds git diff --no-ext-diff --no-color -M --name-only --diff-filter=A -z "$_smb" -- .specs/) || _sfail=2
+      [ "$_sfail" -ne 0 ] || _slist="$_slist
+$_sadd"
+    fi
+    if [ -z "$_stip" ] && [ "$_sfail" -eq 0 ]; then
+      _sadd=$(_gate_spec_adds git ls-files --others --exclude-standard -z -- .specs/) || _sfail=2
+      [ "$_sfail" -ne 0 ] || _slist="$_slist
+$_sadd"
+    fi
+  fi
+
+  printf '%s\n' "$_slist" | awk 'NF && !seen[$0]++'
+  return "$_sfail"
+}
+
+# The slug a spec directory names: its path under `.specs/`, with `_archive/` stripped. Never the
+# last component, which for the slashed slug `12-feat/sub` (case 179) is `sub`. #316.
+gate_spec_slug() {  # <spec dir, such as .specs/12-x or .specs/_archive/12-x>
+  _ss=${1#.specs/}
+  printf '%s\n' "${_ss#_archive/}"
+}
+
+# Run a git command that prints NUL-separated paths, and print the spec directories among them.
+#
+# `-z` because without it git quotes any path holding a byte outside printable ASCII, and a quoted
+# path names no directory. A shell variable cannot hold a NUL, so the bytes become newlines in the
+# pipe, and the command's status travels as a last line of its own: a pipeline's status is its last
+# command's, and a status line that never arrives is a failure like any other.
+_gate_spec_adds() {  # <command and arguments...>
+  _ga=$( { "$@" 2>/dev/null; printf '\n_gate_status=%s\n' "$?"; } | tr '\0' '\n') || return 2
+  [ "${_ga##*
+}" = _gate_status=0 ] || return 2
+  printf '%s\n' "$_ga" | awk '/^\.specs\/.+\/spec\.md$/ { sub(/\/spec\.md$/, ""); print }' || return 2
+}
+
 # Read a file from the working tree, or from a branch's own tree when <ref> is given.
 #
 # Absence returns 1 and unreadability returns 2, so the two stay distinguishable: the gate

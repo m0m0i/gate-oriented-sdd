@@ -305,33 +305,118 @@ reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 # shipped WITH a spec and was not deleted — which, in a squash-merging repository, is every
 # branch anyone has merged. #182 measured that and corrected the sentence.
 #
-# The candidate list is longer since #26 widened the scan, because an unresolvable base costs
-# far more than it used to. It used to mean one false block, while you stood on your own
-# merged branch; now it means the merged check never fires for ANY branch, so every shipped
-# but undeleted spec branch blocks every turn from everywhere. `master` is the common case
-# that was missing, and a repository with no remote at all has no origin/* to fall back on.
-#
 # Both skip sites below ask two questions of this base, not one: was the COMMIT joined into its
 # history, and did the WORK reach it. The second exists because a squash merge answers no to
-# the first forever — #182, and gate_work_reached_base carries the reasoning.
-#
-# Each candidate is a full refname, resolved exactly. These used to be bare names, and git
-# resolves a bare name to a tag before a branch or a remote, so `git tag main <unreviewed tip>`
-# made that tip the base and the scan skipped its branch as shipped. #233, cases 181–183.
-base=$(gate_ref_commit refs/remotes/origin/HEAD \
-     || gate_ref_commit refs/remotes/origin/main \
-     || gate_ref_commit refs/remotes/origin/master \
-     || gate_ref_commit refs/heads/main \
-     || gate_ref_commit refs/heads/master) || base=""
+# the first forever — #182, and gate_work_reached_base carries the reasoning. The candidates,
+# and why each is a full refname, are gate_default_base's.
+base=$(gate_default_base) || base=""
+
+# Has every spec in <specs> reached the base, by the work and not the commit? Every, not any: a
+# branch carrying one shipped spec and one unshipped one is not shipped, and a skip that fires
+# less is the safe way to be wrong (#182, #316's clarifications). Each spec is asked by its slug,
+# which is what names it in the base's tree.
+every_spec_reached_base() {  # <tip sha> <specs, one per line>
+  while IFS= read -r _ed; do
+    [ -n "$_ed" ] || continue
+    gate_work_reached_base "$(gate_spec_slug "$_ed")" "$1" "$base" || return 1
+  done <<EOF
+$2
+EOF
+  return 0
+}
+
+# One message for the current branch's block. check_current_branch ends in a single gate_block
+# holding every one, so a branch carrying two specs is told about both (#316, the spec's Q2).
+add_block() {
+  if [ -z "$blocks" ]; then blocks=$1; else blocks="$blocks
+
+$1"; fi
+}
 
 # The branch you are standing on, with the messages written in the second person because you
 # are the person who can act on them. Every exit from here is a `return`, never a pass: the
 # repository-wide pass below must run whatever this one concludes, or each of its early
 # returns is another way to be standing somewhere the gate does not look.
 check_current_branch() {
-  spec=".specs/$branch/spec.md"
+  blocks=''
+  # Empty on an unborn branch, which has no commit. `git rev-parse HEAD` there prints its argument
+  # before failing, so the `|| echo ''` this line used to carry appended to the literal `HEAD`
+  # rather than replacing it, and that word would have reached every reader below as a tip. #228.
+  head=$(git rev-parse --verify -q HEAD 2>/dev/null) || head=''
 
-  # Which tree answers for this branch, and why there are two of them.
+  # Which specs are yours. This used to be one path, `.specs/$branch/spec.md`, and a branch not
+  # named for its spec — `feature/12-x`, a typo, a spec archived on its own branch — asked for a
+  # path that did not exist and passed (#316). gate_branch_specs reads the name match and the
+  # specs this branch adds against the base.
+  #
+  # The adds are asked only where there is a branch with a commit of its own to ask about. Under a
+  # detached HEAD `branch` is the literal `HEAD`, and case 77's scan goes on reporting the real
+  # branches; an unborn branch has no commit to diff; and a HEAD that is an ancestor of the base —
+  # the base branch itself, or a branch with no commit beyond it — is skipped as shipped below
+  # whatever it carries, so the adds could only bring it the no-issue check. In each of those the
+  # name match alone is today's reading, unchanged.
+  ancestor=''
+  if [ -n "$base" ] && [ -n "$head" ] && git merge-base --is-ancestor HEAD "$base" 2>/dev/null; then
+    ancestor=1
+  fi
+  sbase=$base
+  { [ "$branch" != HEAD ] && [ -n "$head" ] && [ -z "$ancestor" ]; } || sbase=''
+  specs=$(gate_branch_specs "$sbase" '' "$branch"); listed=$?
+  [ "$listed" -eq 0 ] || add_block "Review gate: git could not list the specs this branch adds against the base it is measured from, so the gate cannot tell whether any of them hold finished work nobody reviewed. A damaged object store, or a partial clone that cannot reach its remote, produces that. Check the repository with git fsck, or reconnect and run git fetch, and re-run rather than treating this as a pass."
+
+  # No issue, no spec. The slug is <issue-number>-<kebab-title>, so a spec directory
+  # without a numeric prefix is work that never had an issue — unplanned work that
+  # entered through the side door and bypassed whatever decided the sprint. This is
+  # checkable without touching the network, so it is checked.
+  #
+  # It judges the spec's slug, not the branch's name (#316 AC7): a branch with an issue number
+  # carrying a directory without one is the unplanned work, and `feature/12-x` carrying
+  # `.specs/12-x/` is not. The slug is the directory under `.specs/` with `_archive/` stripped,
+  # never its last component, which for the slashed slug `12-feat/sub` (case 179) is `sub`.
+  #
+  # Current-branch only, on purpose: it is a rule about the spec you are authoring now, and
+  # asking it of every directory in .specs/ would fire forever on anything predating it.
+  #
+  # Asked of working-tree specs ONLY, which is the same sentence applied rather than an
+  # exception carved out of it: a spec that is not in your working tree is not one you are
+  # authoring now. It also matters where this sits — before the merged-work skip — so widening
+  # it to the fallback would block on branches that shipped long ago, which is the false block
+  # that skip exists to prevent.
+  while IFS= read -r dir; do
+    [ -n "$dir" ] && [ -f "$dir/spec.md" ] || continue
+    sslug=$(gate_spec_slug "$dir")
+    case "$sslug" in
+      [0-9]*) : ;;
+      *) add_block "No issue, no spec: the branch '$branch' carries a spec at $dir/spec.md whose slug, '$sslug', does not start with an issue number. The slug is <issue>-<kebab-title>, and the issue is what recorded that this work was chosen. Create the issue and rename the branch and spec directory to match, or say explicitly that this is acknowledged unplanned work." ;;
+    esac
+  done <<EOF
+$specs
+EOF
+
+  # Two arms, because there are two ways work reaches the base and only one of them leaves a
+  # parent link. Ancestry is kept and asked first: it is exact when it fires, costs one call,
+  # and is the whole of the merge-commit and fast-forward case on the path those projects
+  # already take. The second arm is #182 — see gate_work_reached_base — asked of every spec the
+  # branch carries, by its slug, since #316.
+  if [ -n "$base" ] && [ -n "$specs" ] && { [ -n "$ancestor" ] || every_spec_reached_base "$head" "$specs"; }; then
+    specs=''
+  fi
+
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    check_spec_here "$dir"
+  done <<EOF
+$specs
+EOF
+  [ -z "$blocks" ] || gate_block "$blocks"
+}
+
+# One spec the current branch carries, in <dir>. Every finding is an add_block and a return.
+check_spec_here() {  # <spec dir>
+  spec="$1/spec.md"
+  receipt="$1/.review-receipt"
+
+  # Which tree answers for this spec, and why there are two of them.
   #
   # The working tree is read first, deliberately: a spec edited and not yet committed is the
   # state its author is in for most of the spec's life, and #26 chose to count it.
@@ -345,36 +430,15 @@ check_current_branch() {
   # worktree, is the same state. #177 — and it is #26's own sentence, the author choosing what
   # the gate looks at, narrowed to one branch and reached through the tree rather than HEAD.
   #
-  # The fix is not a second place to look so much as one question asked once: both readers now
-  # decline on "is there a spec for this branch at all" rather than on two different tests of
-  # it. A spec is its branch's FIRST commit, so the branch's own tree is where it lives whenever
-  # the working tree does not have it.
+  # Whether there is a spec at all is gate_branch_specs' question, asked once: it lists a spec
+  # that is in neither tree only when it could not read HEAD's (#191, cases 197 and 198), and an
+  # unborn branch only from its working tree (cases 171 and 172). A spec is its branch's FIRST
+  # commit, so the branch's own tree is where it lives whenever the working tree does not have it.
   tree=''                             # empty — gate_spec_review_state reads the working tree
   note=''
   cause=''
-  # Empty on an unborn branch, which has no commit. `git rev-parse HEAD` there prints its argument
-  # before failing, so the `|| echo ''` this line used to carry appended to the literal `HEAD`
-  # rather than replacing it, and that word would have reached every reader below as a tip. #228.
-  head=$(git rev-parse --verify -q HEAD 2>/dev/null) || head=''
   if [ ! -f "$spec" ]; then
-    # An unborn branch with no spec in its working tree has nothing to gate — a fresh `git init`,
-    # or `git checkout --orphan` — because no commit means no tree to name anything. It is asked
-    # here, ahead of the reader, because the reader cannot tell the two apart: `ls-tree` exits 128
-    # for an unborn HEAD and for a tree it failed to read, and answering the first as the second
-    # would block every install before its first commit. Cases 171 and 172.
     [ -n "$head" ] || return 0
-    # Only a tree that was READ and does not name the spec ends the question. This line used to
-    # be `git cat-file -e "HEAD:$spec" || return 0`, which also returned for a tree that names
-    # the spec when git cannot get the object behind the name — a partial clone that cannot
-    # reach its remote, or a damaged object store — and for a tree that could not be read at
-    # all. Both go on from here as a spec in this branch's tree, and the state reader below says
-    # that it could not be read. #191, cases 197 and 198.
-    #
-    # Under a detached HEAD `branch` is the literal `HEAD`, so this asks for
-    # `.specs/HEAD/spec.md` in HEAD's tree, is told it is not there, and returns — case 77 is
-    # unchanged and the scan goes on reporting the real branches.
-    gate_tree_names HEAD "$spec"
-    [ "$?" -eq 1 ] && return 0        # read, and in neither tree — nothing to gate
     tree=HEAD
     # Appended to every block below. The remedy names a file the author cannot see, so the
     # message has to say why it is not there and which tree the answer came from; without it the
@@ -392,37 +456,6 @@ check_current_branch() {
     cause=" Git cannot get an object that tree needs: a partial clone that cannot reach its remote, or a damaged object store. Reconnect and run git fetch, or check the repository with git fsck, and re-run rather than treating this as a pass."
   fi
 
-  # No issue, no spec. The slug is <issue-number>-<kebab-title>, so a spec directory
-  # without a numeric prefix is work that never had an issue — unplanned work that
-  # entered through the side door and bypassed whatever decided the sprint. This is
-  # checkable without touching the network, so it is checked.
-  #
-  # Current-branch only, on purpose: it is a rule about the spec you are authoring now, and
-  # asking it of every directory in .specs/ would fire forever on anything predating it.
-  #
-  # Asked of the working-tree read ONLY, which is the same sentence applied rather than an
-  # exception carved out of it: a spec that is not in your working tree is not one you are
-  # authoring now. It also matters where this sits — before the merged-work skip — so widening
-  # it to the fallback would block on branches that shipped long ago, which is the false block
-  # that skip exists to prevent.
-  if [ -z "$tree" ]; then
-    case "$branch" in
-      [0-9]*) : ;;
-      *) gate_block "No issue, no spec: the branch '$branch' has a spec at $spec but its slug does not start with an issue number. The slug is <issue>-<kebab-title>, and the issue is what recorded that this work was chosen. Create the issue and rename the branch and spec directory to match, or say explicitly that this is acknowledged unplanned work." ;;
-    esac
-  fi
-
-  receipt=".specs/$branch/.review-receipt"
-
-  # Two arms, because there are two ways work reaches the base and only one of them leaves a
-  # parent link. Ancestry is kept and asked first: it is exact when it fires, costs one call,
-  # and is the whole of the merge-commit and fast-forward case on the path those projects
-  # already take. The second arm is #182 — see gate_work_reached_base.
-  if [ -n "$base" ] && { git merge-base --is-ancestor HEAD "$base" 2>/dev/null \
-       || gate_work_reached_base "$branch" "$head" "$base"; }; then
-    return 0
-  fi
-
   # Two ways there is nothing to review, indistinguishable in a count of unticked boxes alone
   # — which is why that count used to block a spec still being drafted while telling its
   # author that every task was ticked:
@@ -431,7 +464,7 @@ check_current_branch() {
   #   some still unticked    implementation is in progress
   #
   # Neither is the moment to demand a review. Both are an empty state below.
-  state=$(gate_spec_review_state ".specs/$branch" "$head" "$tree")
+  state=$(gate_spec_review_state "$1" "$head" "$tree")
 
   # An unborn branch has no commit, so a receipt in its working tree cannot describe code on it:
   # whatever reviewed_sha names is another branch's. Only the empty state needs saying so — every
@@ -443,7 +476,8 @@ check_current_branch() {
   if [ -z "$head" ] && [ -z "$state" ] && [ -f "$receipt" ] \
        && [ "$(gate_total_tasks "$spec")" -gt 0 ] 2>/dev/null \
        && [ "$(gate_open_tasks "$spec")" -eq 0 ] 2>/dev/null; then
-    gate_block "Review gate: every task in $spec is ticked and $receipt records a review, but this branch has no commits yet, so that review cannot describe any code on it. Commit the work, run $reviewer on the branch diff, and rewrite $receipt."
+    add_block "Review gate: every task in $spec is ticked and $receipt records a review, but this branch has no commits yet, so that review cannot describe any code on it. Commit the work, run $reviewer on the branch diff, and rewrite $receipt."
+    return 0
   fi
 
   case "$state" in
@@ -454,20 +488,26 @@ check_current_branch() {
       # and the difference is invisible downstream: both task counters come back 0 for a file
       # they cannot open, and a zero total is read as "nothing authored, stay silent". Fail
       # closed — an unreadable spec is a broken working tree, not an empty one.
-      [ -z "$tree" ] || gate_block "Review gate: $spec cannot be read from this branch's own tree at HEAD, so the gate cannot tell whether this branch has been reviewed.$cause$note"
-      gate_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass." ;;
+      if [ -n "$tree" ]; then
+        add_block "Review gate: $spec cannot be read from this branch's own tree at HEAD, so the gate cannot tell whether this branch has been reviewed.$cause$note"
+      else
+        add_block "Review gate: $spec exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass."
+      fi ;;
     no-receipt)
-      gate_block "Review gate: every task in $spec is ticked, but no reviewer receipt exists. Run $reviewer on the branch diff, then write its Receipt block to $receipt. If $reviewer is already running, wait for it and write the receipt from its result — do not start a second one.$note" ;;
+      add_block "Review gate: every task in $spec is ticked, but no reviewer receipt exists. Run $reviewer on the branch diff, then write its Receipt block to $receipt. If $reviewer is already running, wait for it and write the receipt from its result — do not start a second one.$note" ;;
     receipt-unreadable)
-      [ -z "$tree" ] || gate_block "Review gate: $receipt cannot be read from this branch's own tree at HEAD, so the gate cannot tell whether this branch has been reviewed.$cause$note"
-      gate_block "Review gate: $receipt exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass." ;;
+      if [ -n "$tree" ]; then
+        add_block "Review gate: $receipt cannot be read from this branch's own tree at HEAD, so the gate cannot tell whether this branch has been reviewed.$cause$note"
+      else
+        add_block "Review gate: $receipt exists but cannot be read, so the gate cannot tell whether this branch has been reviewed. Fix the file's permissions and re-run rather than treating this as a pass."
+      fi ;;
     verdict=*)
-      gate_block "Review gate: the recorded review verdict is '${state#verdict=}', not CLEAN. Address every BLOCKER and HIGH finding, re-run $reviewer, and update $receipt.$note" ;;
+      add_block "Review gate: the recorded review verdict is '${state#verdict=}', not CLEAN. Address every BLOCKER and HIGH finding, re-run $reviewer, and update $receipt.$note" ;;
     unresolved-sha=*)
-      gate_block "Review gate: $receipt records reviewed_sha '${state#unresolved-sha=}', which cannot be resolved in this repository, so the gate cannot tell whether the review covers the code that is here now. Re-run $reviewer and rewrite $receipt rather than treating an uncheckable receipt as a pass.$note" ;;
+      add_block "Review gate: $receipt records reviewed_sha '${state#unresolved-sha=}', which cannot be resolved in this repository, so the gate cannot tell whether the review covers the code that is here now. Re-run $reviewer and rewrite $receipt rather than treating an uncheckable receipt as a pass.$note" ;;
     stale=*)
       rest=${state#stale=}
-      gate_block "Review gate: source changed since the recorded review (${rest%% *}): ${rest#* }. Re-run $reviewer and update $receipt before opening the PR.$note" ;;
+      add_block "Review gate: source changed since the recorded review (${rest%% *}): ${rest#* }. Re-run $reviewer and update $receipt before opening the PR.$note" ;;
   esac
 }
 

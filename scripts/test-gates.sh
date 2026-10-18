@@ -505,12 +505,16 @@ case "$err" in *"no resolvable default branch"*) c3=ok ;; *) c3=no ;; esac
 #      which has no `origin/main` or `origin/master` behind it, and local `main` has merged the
 #      unreviewed branch: if `show-ref --verify` stopped following the symref, the base would fall
 #      through to `main` and the branch would read as shipped. Review round 1's LOW.
+#
+#      Since #316 the block comes from the current branch rather than the scan: local `main` is
+#      ahead of the base and carries the spec it merged, which is a spec the branch HEAD is on adds
+#      against the base. Followed or not is still exit 2 or exit 0.
 r=$(make_repo symrefbase 1); park_spec "$r" 12-parked 0
 ( cd "$r" && git checkout -q main && git update-ref refs/remotes/origin/trunk main \
   && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/trunk && git merge -q 12-parked ) >/dev/null 2>&1
 out=$(run_gate "$r"); err=$(cat "$TMP/err")
 case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
-case "$err" in *"  12-parked — every task is ticked and no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"every task in .specs/12-parked/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
 [ "$c1$c2" = "okok" ] && report "the base follows origin/HEAD to a branch that is not the next candidate" ok \
   || report "the base follows origin/HEAD to a branch that is not the next candidate" no "exit=$c1 names-branch=$c2 ($out)"
 
@@ -1445,6 +1449,130 @@ case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
 case "$err" in *".specs/12-parked/spec.md cannot be read from this branch's own tree"*) c2=ok ;; *) c2=no ;; esac
 [ "$c0$c1$c2" = "okokok" ] && report "a current branch whose tree cannot be read blocks" ok \
   || report "a current branch whose tree cannot be read blocks" no "fixture=$c0 exit=$c1 says-why=$c2 ($out)"
+
+# A finished spec at .specs/<dir>/ on a new branch <branch> off main, with a source change, all
+# committed: the shape `spec` writes, on a branch not named for it. #316's fixtures.
+spec_off_name() {  # <repo> <branch> <spec dir under .specs/>
+  ( cd "$1" && git checkout -q -b "$2" main && mkdir -p ".specs/$3" \
+    && printf '# Spec: off name\n- Slug: %s   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' "$3" > ".specs/$3/spec.md" \
+    && echo work >> src/main.txt && git add -A && git commit -qm "work off the name" ) >/dev/null 2>&1
+}
+
+# 340. #316 AC1 — the first reproduction shape. A branch carrying a prefix, `feature/12-x`, with its
+#      spec where `spec` writes it, `.specs/12-x/spec.md`. Every reader asked for
+#      `.specs/feature/12-x/spec.md`, which exists nowhere, and the turn ended over finished work
+#      nobody reviewed. The block names the spec found and its receipt path, and the slug carries
+#      an issue number, so the branch's own name does not raise "No issue, no spec".
+r=$(make_repo offprefix 1); spec_off_name "$r" feature/12-x 12-x
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"every task in .specs/12-x/spec.md is ticked, but no reviewer receipt exists"*".specs/12-x/.review-receipt"*) c3=ok ;; *) c3=no ;; esac
+case "$err" in *"No issue, no spec"*) c4=no ;; *) c4=ok ;; esac
+[ "$c1$c2$c3$c4" = "okokokok" ] && report "a finished spec on a prefixed branch blocks, naming the spec it found" ok \
+  || report "a finished spec on a prefixed branch blocks, naming the spec it found" no "exit=$c1 json=$c2 names-spec-and-receipt=$c3 no-no-issue=$c4 ($out)"
+
+# 341. #316 AC1 — the second shape, a typo in the branch name. No prefix rule can find this one,
+#      which is why the readers derive the spec from the diff rather than from a cleaned-up name.
+r=$(make_repo offtypo 1); spec_off_name "$r" 12-xx 12-x
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"every task in .specs/12-x/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a finished spec on a branch whose name has a typo blocks" ok \
+  || report "a finished spec on a branch whose name has a typo blocks" no "exit=$c1 names-spec=$c2 ($out)"
+
+# 342. #316 AC1 — the third shape, a spec archived on its own branch before it merged. The branch
+#      is named for the slug, and `archive`'s `git mv` took the spec out from under the name match;
+#      `skills/archive/SKILL.md` described the silence that followed as how the gate works. Against
+#      the merge base the spec was never anywhere else, so the move is an add at `_archive/`.
+r=$(make_repo offarchived 1); spec_off_name "$r" 12-x 12-x
+( cd "$r" && mkdir -p .specs/_archive && git mv .specs/12-x .specs/_archive/12-x \
+  && git commit -qm "archived on its own branch" ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"every task in .specs/_archive/12-x/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a finished spec archived on its own branch blocks there" ok \
+  || report "a finished spec archived on its own branch blocks there" no "exit=$c1 names-archived-spec=$c2 ($out)"
+
+# 343. #316 AC1 — a spec only in the working tree, which #26 counts: untracked, and then staged.
+#      The two are different lists to git (`ls-files --others`, and a diff against the working
+#      tree), so each half pins one of them.
+r=$(make_repo offwtonly 1)
+( cd "$r" && git checkout -q -b feature/12-x main && echo work >> src/main.txt && git commit -qam work \
+  && mkdir -p .specs/12-x \
+  && printf '# Spec: wt\n- Slug: 12-x   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' > .specs/12-x/spec.md ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"every task in .specs/12-x/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"not in your working tree"*) c3=no ;; *) c3=ok ;; esac
+( cd "$r" && git add .specs/12-x ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c4=ok ;; *) c4=no ;; esac
+case "$err" in *"every task in .specs/12-x/spec.md is ticked, but no reviewer receipt exists"*) c5=ok ;; *) c5=no ;; esac
+[ "$c1$c2$c3$c4$c5" = "okokokokok" ] && report "a finished spec only in the working tree of a prefixed branch blocks" ok \
+  || report "a finished spec only in the working tree of a prefixed branch blocks" no "untracked: exit=$c1 names=$c2 read-from-wt=$c3; staged: exit=$c4 names=$c5 ($out)"
+
+# 344. #316 AC6 — a listing git could not make is not a branch with no spec. The merge base's own
+#      `.specs` tree is removed from the object store, so the diff against it exits non-zero while
+#      everything the name match reads is intact; the only other branch is gone, so nothing else in
+#      this repository blocks. Before #316 the name match found nothing and the gate passed.
+r=$(make_repo offlistfail 1); spec_off_name "$r" feature/12-x 12-x
+( cd "$r" && git branch -qD 9-feature && t=$(git rev-parse main:.specs) \
+  && rm -f ".git/objects/$(printf '%s' "$t" | cut -c1-2)/$(printf '%s' "$t" | cut -c3-)" \
+  && ! git cat-file -e "$t" ) >/dev/null 2>&1 && c0=ok || c0=no
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"git could not list the specs this branch adds"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "a branch whose specs git cannot list blocks rather than passing" ok \
+  || report "a branch whose specs git cannot list blocks rather than passing" no "fixture=$c0 exit=$c1 json=$c2 says-why=$c3 ($out)"
+
+# 345. #316 AC7 — "No issue, no spec" judges the spec's slug, not the branch's name. A branch with an
+#      issue number carrying a spec directory without one is unplanned work, and the check used to
+#      look at the branch, find the number, and never see the directory.
+r=$(make_repo offnoissue 1)
+( cd "$r" && git checkout -q -b 12-x main && echo work >> src/main.txt && git commit -qam work \
+  && mkdir -p .specs/add-retries \
+  && printf '# Spec: no issue\n- Slug: add-retries   Status: draft\n\n## 3. Tasks (TDD-ordered)\n- [ ] T1: todo\n' > .specs/add-retries/spec.md ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"No issue, no spec"*".specs/add-retries/spec.md"*"'add-retries'"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = "okok" ] && report "a spec directory with no issue number blocks on a branch that has one" ok \
+  || report "a spec directory with no issue number blocks on a branch that has one" no "exit=$c1 names-slug=$c2 ($out)"
+
+# 346. #316 AC5, the current branch — a branch that moves a spec the base already carries, as an
+#      `archive` sweep does. The move is a rename against the merge base, not an add, so the branch
+#      carries no spec of its own and stays silent, as it did when the name match was the only
+#      reading. The moved spec is finished with a receipt that reads stale here, and the branch
+#      changes source too, so the shipped skip cannot be what keeps it silent: a reader that
+#      counted the rename as an add would block on it.
+r=$(make_repo offsweep 1)
+( cd "$r" && git checkout -q main && sed -i.bak 's/- \[ \] T1/- [x] T1/' .specs/9-feature/spec.md \
+  && rm .specs/9-feature/spec.md.bak && git commit -qam "finish 9" \
+  && printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(git rev-parse HEAD)" > .specs/9-feature/.review-receipt \
+  && git add .specs && git commit -qm "receipt" && echo later >> src/main.txt && git commit -qam "later source" \
+  && git checkout -q -b sweep && mkdir -p .specs/_archive && git mv .specs/9-feature .specs/_archive/9-feature \
+  && sed -i.bak 's/Status: approved/Status: archived/' .specs/_archive/9-feature/spec.md \
+  && rm .specs/_archive/9-feature/spec.md.bak && echo sweepwork >> src/main.txt \
+  && git commit -qam "archive the shipped spec, and some source" ) >/dev/null 2>&1
+out=$(run_gate "$r")
+case "$out" in *"exit=0"*) report "a branch that moves a spec the base carries carries no spec of its own" ok ;;
+                        *) report "a branch that moves a spec the base carries carries no spec of its own" no "$out $(cat "$TMP/err")" ;; esac
+
+# 347. #316 — a branch with no merge base at all, an orphan with commits of its own. `git merge-base`
+#      exits 1 having printed nothing, which is not a failure: the adds are read against the empty
+#      tree, so the spec is found and judged rather than reported as a listing git could not make.
+r=$(make_repo offorphan 1)
+( cd "$r" && git checkout -q --orphan pages && git rm -rqf --cached . && rm -rf .specs src \
+  && mkdir -p .specs/12-x src && echo page > src/page.txt \
+  && printf '# Spec: orphan\n- Slug: 12-x   Status: approved\n\n## 3. Tasks (TDD-ordered)\n- [x] T1: done\n' > .specs/12-x/spec.md \
+  && git add .specs src && git commit -qm "orphan root" ) >/dev/null 2>&1
+out=$(run_gate "$r"); err=$(cat "$TMP/err")
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err" in *"every task in .specs/12-x/spec.md is ticked, but no reviewer receipt exists"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"could not list"*) c3=no ;; *) c3=ok ;; esac
+[ "$c1$c2$c3" = "okokok" ] && report "an orphan branch's specs are read against the empty tree" ok \
+  || report "an orphan branch's specs are read against the empty tree" no "exit=$c1 names=$c2 not-a-listing-failure=$c3 ($out)"
 
 # 90. A receipt whose reviewed_sha this repository cannot resolve must BLOCK. Two shapes,
 #     one reading. Both used to pass silently, and both are worse than a stale receipt: the
