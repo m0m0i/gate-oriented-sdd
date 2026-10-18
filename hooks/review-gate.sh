@@ -519,7 +519,7 @@ scan_other_branches() {
   found=''
   # Full refnames, and the slug stripped by hand; gate_head_branch says why. `ref` is what git
   # reads, exactly, since for-each-ref has listed it (rg_refs, below); `slug` is what a person
-  # reads and what names the spec directory. Each branch is marked `checked` in the progress file
+  # reads, and the name match gate_branch_specs keeps (#316). Each branch is marked `checked` in the progress file
   # once it has been answered for, whichever way, which is how a cut-off names the ones it did not
   # reach (#304).
   for ref in $rg_refs; do
@@ -548,22 +548,47 @@ The gate asks what this repository contains, not which branch HEAD points at, so
 }
 
 # One branch of the scan, `ref` and `slug`; every return is that branch answered for. No branch
-# can be named `HEAD` (git refuses), so under a detached HEAD the skip below never fires. A branch
-# holding unreviewed work joins `found` and is marked `found` with its sentence, so a cut-off
-# still names the work the scan had already found.
+# can be named `HEAD` (git refuses), so under a detached HEAD the skip below never fires.
+#
+# `slug` is the branch's name, and since #316 it is only the name match: the specs are the ones
+# gate_branch_specs lists, judged one at a time. A spec named for its branch is reported as it
+# always was; any other carries its path, because the branch's name no longer says which spec it is.
 scan_branch() {
   [ "$slug" = "$branch" ] && return 0
   tip=$(git rev-parse --verify -q "$ref^{commit}" 2>/dev/null) || return 0
-  if [ -n "$base" ] && { git merge-base --is-ancestor "$tip" "$base" 2>/dev/null \
-       || gate_work_reached_base "$slug" "$tip" "$base"; }; then
+  # Ancestry first: exact when it fires, one call, and ahead of the listing's diff.
+  if [ -n "$base" ] && git merge-base --is-ancestor "$tip" "$base" 2>/dev/null; then
     return 0                          # shipped — case 8's reasoning, one branch over
   fi
-  state=$(gate_spec_review_state ".specs/$slug" "$tip" "$ref")
-  [ -n "$state" ] || return 0
-  sentence=$(gate_review_state_sentence "$state")
+  specs=$(gate_branch_specs "$base" "$tip" "$slug"); listed=$?
+  [ "$listed" -eq 0 ] || scan_found "git could not list the specs it adds, so the gate cannot tell whether it holds finished work nobody reviewed: a damaged object store, or a partial clone that cannot reach its remote"
+  [ -n "$specs" ] || return 0
+  # Shipped by the work rather than the commit, asked of every spec the branch carries (#182).
+  if [ -n "$base" ] && every_spec_reached_base "$tip" "$specs"; then
+    return 0
+  fi
+  while IFS= read -r dir; do
+    [ -n "$dir" ] || continue
+    state=$(gate_spec_review_state "$dir" "$tip" "$ref")
+    [ -n "$state" ] || continue
+    sentence=$(gate_review_state_sentence "$state")
+    if [ "$(gate_spec_slug "$dir")" = "$slug" ]; then
+      scan_found "$sentence"
+    else
+      scan_found "$dir/spec.md: $sentence"
+    fi
+  done <<EOF
+$specs
+EOF
+}
+
+# One line of the scan's block, for the branch in `slug`. It joins `found`, and is marked `found`
+# in the progress file with its sentence, so a cut-off still names the work the scan had already
+# found (#304).
+scan_found() {  # <what this branch holds>
   found="$found
-  $slug — $sentence"
-  rg_mark "found $slug — $sentence"
+  $slug — $1"
+  rg_mark "found $slug — $1"
 }
 
 # The branches the scan reads, listed once and before the current branch is checked, so that a
