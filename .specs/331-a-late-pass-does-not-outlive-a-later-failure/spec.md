@@ -1,5 +1,5 @@
 # Spec: an earlier run's pass, written after a later run failed, skips the validators on a red tree
-- Slug: 331-a-late-pass-does-not-outlive-a-later-failure   Issue: 331   Type: bug   Status: draft
+- Slug: 331-a-late-pass-does-not-outlive-a-later-failure   Issue: 331   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-10-21
 
 ## 1. Requirements (WHAT / WHY)
