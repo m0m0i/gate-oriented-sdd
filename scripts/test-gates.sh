@@ -2310,6 +2310,53 @@ run_qg "$TMP/qgp-worktree-wt" >/dev/null; n=$(qgp_runs "$TMP/qgp-worktree-wt")
 [ "$c1$c2$c3$c4" = okokokok ] && report "a linked worktree runs once and keeps its own pass record" ok \
   || report "a linked worktree runs once and keeps its own pass record" no "main-record=$c1 wt-ran=$c2 wt-record=$c3 main-untouched=$c4"
 
+# 340. #331 AC1, #297's AC3 under two runs at once — a failed run leaves no pass behind, even when an earlier
+#      run in the same worktree is still going. Two Stop hooks share one worktree whenever two
+#      sessions do, or Antigravity runs the workspace gates in a reviewer subagent's turn (#329).
+#      Run A starts on a green tree and holds in its validator; `bad.cfg`, outside the globs,
+#      turns the tree red; run B runs, fails and blocks; then A finishes green and records the
+#      fingerprint it took before B ever ran. The next turn end, with `bad.cfg` still there, must
+#      run the validators again. Sequenced by marker files, not sleeps, so the interleaving is the
+#      same on every run; every wait is bounded, so a fixture that cannot reach it fails here
+#      rather than hanging the suite. RED on main if the late pass is kept: C is `{}` with no run.
+r=$(qgp_repo qgp-race)
+cat > "$r/check.sh" <<'EOF'
+echo x >> ran.log
+[ -f bad.cfg ] && exit 1
+: > a.started
+i=0; while [ ! -f b.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+exit 0
+EOF
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.started" ] && c0=ok || c0=no
+: > "$r/bad.cfg"; out_b=$(run_qg "$r")
+: > "$r/b.done"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_b" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out_a" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$n" = 3 ] && c4=ok || c4=no
+[ "$c0$c1$c2$c3$c4" = okokokokok ] && report "a pass recorded by an earlier run after a later run failed does not skip a red tree" ok \
+  || report "a pass recorded by an earlier run after a later run failed does not skip a red tree" no "a-held=$c0 b-blocks=$c1 a-passes=$c2 next-blocks=$c3 runs=$n (want 3)"
+
+# 341. #331 AC1 — a record is honoured only while its writer is still the latest run to start or
+#      fail here. A pass, then the token naming some other run — one that started since, or was
+#      killed after it wrote its own record — and the next turn end runs; a third, with the token
+#      now its own again, skips. The order-free half of case 340: no timing at all, so a change
+#      that skips on a record without asking the token goes red here first. RED on main, which
+#      keeps no token and skips the second turn end (runs=1).
+r=$(qgp_repo qgp-stale-writer); out1=$(run_qg "$r")
+[ -n "$(sed -n 2p "$r/.git/gate-sdd/quality-pass" 2>/dev/null)" ] && c0=ok || c0=no   # run 1 recorded a writer, or the case proves nothing
+printf 'another-run\n' > "$r/.git/gate-sdd/quality-run"
+out2=$(run_qg "$r"); err2=$(cat "$TMP/qerr"); n2=$(qgp_runs "$r"); out3=$(run_qg "$r"); n3=$(qgp_runs "$r")
+case "$out1$out2$out3" in *"exit=0"*"exit=0"*"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$err2" in *"another run has started or failed"*) c2=ok ;; *) c2=no ;; esac
+[ "$c0$c1$c2" = okokok ] && [ "$n2$n3" = 22 ] && report "a pass recorded by a run that is no longer the latest is not skipped on" ok \
+  || report "a pass recorded by a run that is no longer the latest is not skipped on" no "writer=$c0 passes=$c1 says-why=$c2 runs=$n2$n3 (want 22)"
+
 # --- both gates: the library they block through ----------------------------------------
 #
 # Every case above runs these gates with a whole gate-lib.sh. The three states below are the
@@ -3514,7 +3561,11 @@ r_fail=$(t3_repo failfirst "sh -c 'echo failed early >&2; exit 1', sleep 20" '- 
 r_cc=$(t3_repo alone-cc "sleep 20" '- Validator budget: 2' '- Source globs: :(globs)*.txt')
 r_agy=$(t3_repo alone-agy "sleep 20" '- Validator budget: 2' '- Source globs: :(globs)*.txt')
 r_rec=$(t3_repo record "sh -c 'echo x >> ran.log'" '- Source globs: *.txt' '- Validator budget: 3')
-mkdir -p "$t3d/mvshim"; printf '#!/bin/sh\n"%s" "$@" || exit\nexec sleep 20\n' "$(command -v mv)" > "$t3d/mvshim/mv"; chmod +x "$t3d/mvshim/mv"
+# Case 298's `mv` hangs only once it has moved the record into place: its last argument ends in
+# /quality-pass. Since #331 the child also moves the start token, quality-run, into place before
+# its first validator, and a shim hanging on that one would cut the run off before it recorded
+# anything, which is not the state case 298 is about.
+mkdir -p "$t3d/mvshim"; printf '#!/bin/sh\n"%s" "$@" || exit\nfor a; do :; done\ncase "$a" in */quality-pass) exec sleep 20 ;; esac\n' "$(command -v mv)" > "$t3d/mvshim/mv"; chmod +x "$t3d/mvshim/mv"
 r_bg=$(t3_repo leftover "(sleep 20; echo late) &" '- Validator budget: 3')
 r_ag=$(t3_repo agents "sleep 20"); mkdir -p "$r_ag/.agents/hooks"; cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r_ag/.agents/hooks/"
 printf '%s\n' '{"gate-sdd":{"enabled":true,"Stop":[{"type":"command","command":"cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f .agents/hooks/quality-gate.sh ] || exit 0; sh .agents/hooks/quality-gate.sh","timeout":13}]}}' > "$r_ag/.agents/hooks.json"
@@ -3693,9 +3744,10 @@ case "$err" in *"--- touch never-ran.flag (did not run)"*) m=ok ;; *) m=no ;; es
   || report "a cut-off names each validator that did not run" no "named=$m ran=$([ -e "$r_cut/never-ran.flag" ] && echo yes || echo no)"
 
 # 298. #304 AC3 — a run cut off just after its pass was recorded leaves no record, so the next turn
-#      end runs the validators again. The fixture's `mv` moves the record into place and then hangs,
-#      so the child is killed holding a written pass. RED-CAPABLE under "the parent leaves the
-#      record when it builds the block": the next run skips on it.
+#      end runs the validators again. The fixture's `mv` moves the record into place and then hangs
+#      (the record's alone: #331's start token goes through untouched), so the child is killed
+#      holding a written pass. RED-CAPABLE under "the parent leaves the record when it builds the
+#      block": the next run skips on it.
 e=$(t3f record.run/exit); ms=$(t3f record.run/ms); err=$(t3f record.run/err)
 [ -e "$r_rec/.git/gate-sdd/quality-pass" ] && rec=yes || rec=no
 n1=$(qgp_runs "$r_rec"); t3_qg "$r_rec" >/dev/null; n2=$(qgp_runs "$r_rec")

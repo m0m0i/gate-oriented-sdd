@@ -48,7 +48,7 @@ Decided rather than asked, as design calls: a run never waits for another (Desig
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
-- [ ] T1: AC1, AC4. Case 340 (the reproduction, red on `main`: `next-blocks=no runs=2`) and the stale-writer case (a pass, then a different id written to the token, then a run that must run), after `qgp_repo`'s section. Narrow case 298's shim to a last argument ending in `/quality-pass`, and check 298 goes red with `qg_block`'s removal reverted. Then Design steps 1, 2 and 4.
+- [x] T1: AC1, AC4. Case 340 (the reproduction, red on `main`: `next-blocks=no runs=2`) and the stale-writer case (a pass, then a different id written to the token, then a run that must run), after `qgp_repo`'s section. Narrow case 298's shim to a last argument ending in `/quality-pass`, and check 298 goes red with `qg_block`'s removal reverted. Then Design steps 1, 2 and 4.
 - [ ] T2: AC2. Two cases, sequenced like 340, with the failure marker outside the globs and every wait bounded: B passes and records, then A fails; and A fails and finishes while B, started after it, is still running, then B passes. Both are red after T1, because a failure leaves the token naming B. Then Design step 3.
 - [ ] T3: AC3. A case with a directory at the token path: red after T2 because `mv` drops a file into it and stderr names no step. Then the regular-file check and the failure paths of steps 1 to 3.
 - [ ] T4: AC6. `docs/DESIGN.md:32`, `docs/layout.md:102` and the comments in `hooks/quality-gate.sh`.
