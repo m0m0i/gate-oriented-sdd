@@ -113,18 +113,49 @@ qg_nl='
 # it. A run never waits for another — a wait would count against #304's deadline — and a run that
 # dies partway leaves a token that withholds a pass, never one that grants it.
 #
-# Both halves write the token: the child when a run starts or a validator first fails, the parent
-# on every block it builds. Written through a temp file and `mv` in the record's own directory, so
-# a reader never sees half a value. qg_tnew names the temp file while it exists, for each half's
-# EXIT trap.
+# Both halves write the token: the child when a run starts or a validator fails, the parent on
+# every block it builds. Written through a temp file and `mv` in the record's own directory, so a
+# reader never sees half a value, and only over nothing or a regular file: `mv` onto a directory,
+# or a link to one, moves the file into it and reports success. qg_tnew names the temp file while
+# it exists, for each half's EXIT trap; qg_tfail names the step that failed, for the message.
 qg_token_write() {  # <value> — status 0 only if the token now holds it
-  [ -n "$qg_token" ] || return 1
-  mkdir -p "${qg_token%/*}" 2>/dev/null || return 1
-  qg_tnew=$(mktemp "${qg_token%/*}/quality-run.XXXXXX" 2>/dev/null) || { qg_tnew=""; return 1; }
-  if printf '%s\n' "$1" > "$qg_tnew" && mv -f "$qg_tnew" "$qg_token"; then
+  qg_tfail=""
+  [ -n "$qg_token" ] || { qg_tfail="there is no work tree to hold it"; return 1; }
+  if [ -e "$qg_token" ] && [ ! -f "$qg_token" ]; then qg_tfail="it is not a regular file"; return 1; fi
+  mkdir -p "${qg_token%/*}" 2>/dev/null || { qg_tfail="its directory could not be made"; return 1; }
+  qg_tnew=$(mktemp "${qg_token%/*}/quality-run.XXXXXX" 2>/dev/null) || { qg_tnew=""; qg_tfail="no temp file could be made beside it"; return 1; }
+  if ! printf '%s\n' "$1" > "$qg_tnew"; then
+    qg_tfail="the temp file beside it could not be written"
+  elif ! mv -f "$qg_tnew" "$qg_token"; then
+    qg_tfail="the temp file could not be moved into place"
+  else
     qg_tnew=""; return 0
   fi
   rm -f "$qg_tnew"; qg_tnew=""; return 1
+}
+# A token that could not be written is removed if it is a regular file, so it names no run at all
+# and every skip runs. Anything else at that path already makes every skip run (step 4 reads only a
+# regular file), and is left alone. Status 1 only if a token a skip would read may still be there:
+# a directory this user cannot search hides one as well as it hides none.
+qg_token_drop() {
+  if [ -f "$qg_token" ]; then
+    rm -f "$qg_token" 2>/dev/null
+    [ ! -f "$qg_token" ]; return
+  fi
+  if [ -e "$qg_token" ] || [ -L "$qg_token" ]; then return 0; fi
+  [ ! -e "${qg_token%/*}" ] || [ -x "${qg_token%/*}" ]
+}
+# A failure, for the parent's block and the child's failed validators: written, or else dropped.
+# Status 1 only if neither took, when the token may still name a run that started before this
+# failure and the block must say so (qg_unordered); a later failure that takes clears it.
+qg_token_fail() {  # <value>
+  qg_unordered=""
+  qg_token_write "$1" || qg_token_drop || {
+    qg_unordered="
+
+This failure could not be recorded at $qg_token, because $qg_tfail, and what is there could not be removed, so a pass recorded by a run that started before it, already or later, may still be skipped on at the next turn end. Remove it by hand."
+    return 1
+  }
 }
 
 if [ "${1-}" != --bounded ]; then
@@ -140,7 +171,7 @@ if [ "${1-}" != --bounded ]; then
   # recorded and returns (AC5). POSIX runs the trap only once the foreground child has returned,
   # so it cannot cut the child's tree short: the child got the same group-wide signal and ends
   # through its own traps, or the watchdog ends it. The parent then judges, and a signal is a block.
-  run=""; qg_sig=""; qg_token=""; qg_tnew=""
+  run=""; qg_sig=""; qg_token=""; qg_tnew=""; qg_tfail=""; qg_unordered=""
   qg_caught() {  # <signal>
     qg_sig="${qg_sig:+$qg_sig, }SIG$1"
     [ -z "$run" ] || { echo "$1" >> "$run/signalled"; } 2>/dev/null
@@ -170,7 +201,7 @@ if [ "${1-}" != --bounded ]; then
     if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" = true ] \
        && _qb_r=$(git rev-parse --git-path gate-sdd/quality-pass 2>/dev/null); then
       qg_token=${_qb_r%/*}/quality-run
-      qg_token_write "${run##*/}.$$.failed" || :
+      qg_token_fail "${run##*/}.$$.failed" || _qb_m="$_qb_m$qg_unordered"
     else
       _qb_r=""
     fi
@@ -426,7 +457,7 @@ trap 'exit 129' HUP; trap 'exit 130' INT; trap 'exit 143' TERM
 # A temp file the child made and did not move into place is removed however it ends; the parent
 # removes the run dir, but these live in the git directory, beside the files they replace. Both
 # are emptied first, so a value inherited from the environment never names a file to remove.
-qg_tnew=""; qg_new=""
+qg_tnew=""; qg_new=""; qg_tfail=""; qg_unordered=""; qg_unrec=""
 trap '[ -z "${qg_tnew-}" ] || rm -f "$qg_tnew"; [ -z "${qg_new-}" ] || rm -f "$qg_new"' EXIT
 
 fp=""; qg_step=""; qg_record=""; qg_token=""; qg_stale=""
@@ -500,9 +531,14 @@ fi
 # This run starts here, before the record is removed (#331): from now on no run that started
 # before it can record a pass or be skipped on; only this run, or one that starts after it, can.
 # A start that cannot be written leaves this run unable to record its own pass, which costs the
-# next turn end a run.
+# next turn end a run, and is removed. One that cannot be removed either may still name a run that
+# started earlier, whose pass is then skipped on: the same residual as a record that cannot be
+# removed, below, and named the same way.
 qg_id="${run##*/}.$$"; qg_why=""
-qg_token_write "$qg_id" || { qg_id=""; qg_why="this run's start could not be recorded at ${qg_token:-a token outside any work tree}"; }
+if ! qg_token_write "$qg_id"; then
+  qg_id=""; qg_why="this run's start could not be recorded at ${qg_token:-a token outside any work tree}, because $qg_tfail"
+  qg_token_drop || printf 'Quality gate: %s, and what is there could not be removed, so a pass an earlier run records may still be skipped on. Remove it by hand.\n' "$qg_why" >&2
+fi
 # The validators are about to run, so the last pass stops counting until they pass again —
 # whatever the globs line says. Kept through a failure, the record matched source put back to a
 # state that passed EARLIER, and the gate skipped a tree still red from an input outside the
@@ -538,8 +574,12 @@ for cmd in $cmds; do
     # that started before this failure, earlier or later than this run, can no longer record a
     # pass, or be skipped on one it already recorded, and a cut-off or a signal from here on
     # cannot undo that. Not only the first: a run can start between two failures.
-    qg_token_write "${run##*/}.$$.failed" || :
-    [ -z "$qg_record" ] || rm -f "$qg_record" 2>/dev/null
+    qg_token_fail "${run##*/}.$$.failed" || :
+    if [ -n "$qg_record" ] && [ -e "$qg_record" ] && ! rm -f "$qg_record" 2>/dev/null; then
+      qg_unrec="
+
+The last pass record at $qg_record could not be removed, so the next turn end may skip the validators on it. Remove it by hand."
+    fi
     # Only the tail. The model needs to know which validator failed and roughly why; a
     # full test-runner dump in a hook message buries that in its own output.
     failed="${failed}
@@ -577,4 +617,4 @@ fi
 [ -z "$failed" ] && gate_pass
 
 gate_block "Quality gate: a gating validator failed. These are the commands on the '- Validators:' line in .steering/tech.md, and they gate CI too — fix the failure rather than working around the gate.
-$failed"
+$failed$qg_unordered$qg_unrec"

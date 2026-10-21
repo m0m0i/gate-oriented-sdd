@@ -2540,6 +2540,88 @@ case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
 [ "$c0$c1$c2$c3" = okokokok ] && [ "$n" = 3 ] && report "a run's second failure ends the pass of a run started between its failures" ok \
   || report "a run's second failure ends the pass of a run started between its failures" no "both-held=$c0 a-failed-both=$c1 b-passes=$c2 next-blocks=$c3 runs=$n (want 3)"
 
+# 347. #331 AC3 — a directory at the token path. `mv` onto a directory moves the file into it and
+#      reports success, on BSD and GNU alike, so a run that wrote there unchecked would believe its
+#      start recorded. Every write — a run's start, a failed validator, and the parent's block at a
+#      cut-off — must leave the directory empty and record no pass, and the passing run must say
+#      the pass could not be recorded and why. RED after T2: the start drops a file into it.
+r=$(qgp_repo qgp-token-dir)
+printf 'echo x >> ran.log\n[ ! -f fail.cfg ] || exit 1\n[ ! -f hang.cfg ] || exec sleep 20\n' > "$r/check.sh"
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n- Validator budget: 3\n' > "$r/.steering/tech.md"
+qd="$r/.git/gate-sdd/quality-run"; mkdir -p "$qd"
+qd_empty() { for f in "$qd"/* "$qd"/.[!.]*; do [ -e "$f" ] && return 1; done; return 0; }
+out1=$(run_qg "$r"); err1=$(cat "$TMP/qerr"); qd_empty && e1=ok || e1=no
+[ -e "$r/.git/gate-sdd/quality-pass" ] && rec=yes || rec=no
+out2=$(run_qg "$r"); n=$(qgp_runs "$r")
+: > "$r/fail.cfg"; out3=$(run_qg "$r"); qd_empty && e3=ok || e3=no
+rm -f "$r/fail.cfg"; : > "$r/hang.cfg"; out4=$(run_qg "$r"); qd_empty && e4=ok || e4=no; rm -f "$r/hang.cfg"
+case "$out1$out2" in *"exit=0"*"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out3$out4" in *"exit=2"*"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err1" in *"could not be recorded"*".git/gate-sdd/quality-run"*"not a regular file"*) c3=ok ;; *) c3=no ;; esac
+[ "$e1$e3$e4$c1$c2$c3" = okokokokokok ] && [ "$rec" = no ] && [ "$n" = 2 ] && report "a directory at the token path is left empty, records no pass, and is named" ok \
+  || report "a directory at the token path is left empty, records no pass, and is named" no "empty-after-start=$e1 -fail=$e3 -cutoff=$e4 passes=$c1 blocks=$c2 names=$c3 record=$rec runs=$n (want 2) err=$(printf '%s' "$err1" | head -c 200)"
+
+# 348. #331 AC3, #297 AC5 — a pass whose record cannot be moved into place costs the next turn end a
+#      run, says so, and leaves no temp file behind. Case 247's read-only directory now fails at
+#      the start token first, so this is the one case that reaches the record's own write: the
+#      fixture's `mv` fails only on a last argument ending in /quality-pass. RED-CAPABLE under
+#      "the record write ignores mv's status", which neither names the failure nor removes its
+#      temp file (names=no left=yes).
+r=$(qgp_repo qgp-record-mv)
+mkdir -p "$TMP/qgp-mvfail"; printf '#!/bin/sh\nfor a; do :; done\ncase "$a" in */quality-pass) exit 1 ;; esac\nexec "%s" "$@"\n' "$(command -v mv)" > "$TMP/qgp-mvfail/mv"; chmod +x "$TMP/qgp-mvfail/mv"
+out1=$( PATH="$TMP/qgp-mvfail:$PATH"; export PATH; run_qg "$r" ); err1=$(cat "$TMP/qerr")
+out2=$( PATH="$TMP/qgp-mvfail:$PATH"; export PATH; run_qg "$r" ); n=$(qgp_runs "$r")
+left=no; for f in "$r/.git/gate-sdd"/quality-pass* "$r/.git/gate-sdd"/quality-run.*; do [ -e "$f" ] && left=yes; done
+case "$out1$out2" in *"exit=0"*"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$err1" in *"could not be recorded at"*"quality-pass, so the next turn end runs them again"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = okok ] && [ "$n" = 2 ] && [ "$left" = no ] && report "a pass record that cannot be moved into place runs again next turn, says so, and leaves nothing" ok \
+  || report "a pass record that cannot be moved into place runs again next turn, says so, and leaves nothing" no "passes=$c1 names=$c2 runs=$n (want 2) left=$left err=$(printf '%s' "$err1" | head -c 200)"
+
+# 349. #331 AC3 — a token that can be neither written nor removed. After a pass, the record's
+#      directory is made read-only and the source turns red: the run cannot record its start or
+#      its failure, and cannot remove the token, which still names the run that passed. It blocks
+#      on the red tree, and says at its start and in its block that a pass may still be skipped
+#      on, naming the record it could not remove as qg_block does; then a run cut off at its
+#      deadline says the same in the parent's block. RED-CAPABLE under "ignore a token that
+#      cannot be written", which says none of it.
+r=$(qgp_repo qgp-token-stuck); run_qg "$r" >/dev/null; chmod 555 "$r/.git/gate-sdd" 2>/dev/null
+if ( : > "$r/.git/gate-sdd/probe" ) 2>/dev/null; then
+  rm -f "$r/.git/gate-sdd/probe"; chmod 755 "$r/.git/gate-sdd" 2>/dev/null
+  note_skip "qg/stuck-token" "permissions not enforced here (running as root?)"
+else
+  echo RED >> "$r/src.txt"; out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
+  printf -- '- Validators: sh -c "exec sleep 20"\n- Source globs: *.txt\n- Validator budget: 3\n' > "$r/.steering/tech.md"
+  out2=$(run_qg "$r"); err2=$(cat "$TMP/qerr")
+  chmod 755 "$r/.git/gate-sdd" 2>/dev/null
+  case "$out$out2" in *"exit=2"*"exit=2"*) c1=ok ;; *) c1=no ;; esac
+  case "$err" in *"start could not be recorded at"*"could not be removed, so a pass an earlier run records may still be skipped on"*) c2=ok ;; *) c2=no ;; esac
+  case "$err" in *"RAN-RED"*"This failure could not be recorded at"*"may still be skipped on at the next turn end"*"last pass record at"*"could not be removed"*) c3=ok ;; *) c3=no ;; esac
+  case "$err2" in *"budget of 3 s"*"This failure could not be recorded at"*"quality-run"*) c4=ok ;; *) c4=no ;; esac
+  [ "$c1$c2$c3$c4" = okokokok ] && report "a token that can be neither written nor removed is named at the start and in both halves' blocks" ok \
+    || report "a token that can be neither written nor removed is named at the start and in both halves' blocks" no "blocks=$c1 start-names=$c2 child-block-names=$c3 parent-block-names=$c4 err=$(printf '%s' "$err" | head -c 300)"
+fi
+
+# 350. #331 AC3 — a token that cannot be written is removed, so it names no run and the next turn
+#      end runs. The fixture's `mv` fails only on a last argument ending in /quality-run. After a
+#      pass, a run with that `mv` cannot record its start: it passes, removes the token, says why,
+#      and leaves no temp file; then a red run with the same `mv` cannot record its failure,
+#      blocks, and removes the token again. RED-CAPABLE under "a drop that does not remove":
+#      the token naming the first run survives (token=yes).
+r=$(qgp_repo qgp-token-mv); run_qg "$r" >/dev/null
+mkdir -p "$TMP/qgp-mvtok"; printf '#!/bin/sh\nfor a; do :; done\ncase "$a" in */quality-run) exit 1 ;; esac\nexec "%s" "$@"\n' "$(command -v mv)" > "$TMP/qgp-mvtok/mv"; chmod +x "$TMP/qgp-mvtok/mv"
+echo two >> "$r/src.txt"
+out1=$( PATH="$TMP/qgp-mvtok:$PATH"; export PATH; run_qg "$r" ); err1=$(cat "$TMP/qerr")
+[ -e "$r/.git/gate-sdd/quality-run" ] && t1=yes || t1=no
+printf 'another-run\n' > "$r/.git/gate-sdd/quality-run"; echo RED >> "$r/src.txt"
+out2=$( PATH="$TMP/qgp-mvtok:$PATH"; export PATH; run_qg "$r" ); err2=$(cat "$TMP/qerr")
+[ -e "$r/.git/gate-sdd/quality-run" ] && t2=yes || t2=no
+left=no; for f in "$r/.git/gate-sdd"/quality-run.*; do [ -e "$f" ] && left=yes; done
+case "$out1$out2" in *"exit=0"*"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err1" in *"start could not be recorded at"*"could not be moved into place"*) c2=ok ;; *) c2=no ;; esac
+case "$err2" in *RAN-RED*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = okokok ] && [ "$t1$t2$left" = nonono ] && report "a token that cannot be written is removed, at a run's start and at its failure" ok \
+  || report "a token that cannot be written is removed, at a run's start and at its failure" no "verdicts=$c1 names=$c2 ran-red=$c3 token-after-start=$t1 token-after-fail=$t2 left=$left err=$(printf '%s' "$err1" | head -c 200)"
+
 # --- both gates: the library they block through ----------------------------------------
 #
 # Every case above runs these gates with a whole gate-lib.sh. The three states below are the
@@ -3822,11 +3904,12 @@ case "$err" in *"Validator budget:' line"*"reads '12s'"*"from 1 to 590"*) m=ok ;
 
 # 290. #304 AC5 — the run dir. With TMPDIR naming a directory that does not exist, it is made under
 #      the git directory instead and the gate still decides: the pass is recorded and nothing is
-#      left there. With that place blocked too (a file where its directory goes), the gate blocks,
-#      naming both. RED-CAPABLE under "block when the first mktemp fails", which blocks the first.
+#      left there, nor any temp file of the token's or the record's (#331). With that place
+#      blocked too (a file where its directory goes), the gate blocks, naming both. RED-CAPABLE
+#      under "block when the first mktemp fails", which blocks the first.
 r=$(t3_repo notmp "true" '- Source globs: *.txt')
 o1=$( TMPDIR="$t3d/no-such-dir"; export TMPDIR; t3_qg "$r" ); out1=$(cat "$t3d/out")
-left=no; for f in "$r/.git/gate-sdd"/gate-sdd-run.*; do [ -e "$f" ] && left=yes; done
+left=no; for f in "$r/.git/gate-sdd"/gate-sdd-run.* "$r/.git/gate-sdd"/quality-run.* "$r/.git/gate-sdd"/quality-pass.*; do [ -e "$f" ] && left=yes; done
 r2=$(t3_repo notmp2 "true"); : > "$r2/.git/gate-sdd"
 o2=$( TMPDIR="$t3d/no-such-dir"; export TMPDIR; t3_qg "$r2" ); err2=$(cat "$t3d/err")
 case "$err2" in *"$t3d/no-such-dir"*".git/gate-sdd"*) m=ok ;; *) m=no ;; esac
