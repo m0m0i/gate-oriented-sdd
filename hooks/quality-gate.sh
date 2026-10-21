@@ -411,7 +411,8 @@ validators=$(gate_steering_read .steering/tech.md Validators); rc=$?
 # commits every task — so a red task committed during the turn ended it with `{}` and no
 # validator run, and stayed invisible to every turn end after it. The answer is a fingerprint
 # of the source's CONTENT (below), compared with a record written only when every validator
-# passed. Committing content that already passed does not change it; anything else does.
+# passed, and honoured only while no other run has started or failed in this worktree since
+# (#331, below). Committing content that already passed does not change it; anything else does.
 #
 # `Source globs` is the same line the review gate reads to decide what counts as reviewable
 # source, so a project states "what is code here" once and both gates obey it. When the line
