@@ -121,8 +121,14 @@ jobs:
       # network and an authenticated `gh`, and a Stop hook that reaches the network is a turn
       # that hangs when the network is down. PR-only, so a merge to main never reddens main on
       # its own; the next pull request is where a row citing newly-closed work is caught.
+      # Advisory since #327: it reports on every pull request and blocks none. Blocking made
+      # unrelated pull requests carry backlog bookkeeping (#326 was a docs-only change held up
+      # by issues it neither filed nor closes), and backlog-only commits went from 9 of 87 to
+      # 38 of 79 after it arrived. Run by hand it still exits non-zero, so a refinement starts
+      # from it.
       - name: The ordered list agrees with the tracker
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         run: ./scripts/check-backlog-tracker.py
