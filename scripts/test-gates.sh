@@ -2357,6 +2357,189 @@ case "$err2" in *"another run has started or failed"*) c2=ok ;; *) c2=no ;; esac
 [ "$c0$c1$c2" = okokok ] && [ "$n2$n3" = 22 ] && report "a pass recorded by a run that is no longer the latest is not skipped on" ok \
   || report "a pass recorded by a run that is no longer the latest is not skipped on" no "writer=$c0 passes=$c1 says-why=$c2 runs=$n2$n3 (want 22)"
 
+# 342. #331 AC2 — a failure ends a pass already recorded by a run that started after it began.
+#      Run A starts and holds; run B starts after it, passes and records; `bad.cfg` turns the tree
+#      red; A fails. The next turn end must run, though B's record still matches the source and B
+#      was the latest run to start. A takes its role from `a.role`, which it removes, so B and the
+#      third run take the other branch. RED after T1, where a failure orders nothing: C skips.
+r=$(qgp_repo qgp-race-fail-after)
+cat > "$r/check.sh" <<'EOF'
+echo x >> ran.log
+if [ -f a.role ]; then
+  rm -f a.role; : > a.started
+  i=0; while [ ! -f b.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+fi
+[ ! -f bad.cfg ]
+EOF
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+: > "$r/a.role"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.started" ] && c0=ok || c0=no
+out_b=$(run_qg "$r"); [ -s "$r/.git/gate-sdd/quality-pass" ] && cr=ok || cr=no
+: > "$r/bad.cfg"; : > "$r/b.done"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_b" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out_a" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$cr$c1$c2$c3" = okokokokok ] && [ "$n" = 3 ] && report "a failure ends a pass a later-started run recorded before it" ok \
+  || report "a failure ends a pass a later-started run recorded before it" no "a-held=$c0 b-recorded=$cr b-passes=$c1 a-blocks=$c2 next-blocks=$c3 runs=$n (want 3)"
+
+# 343. #331 AC2 — the other order of finishing: A fails and finishes while B, started after it, is
+#      still running, and B then passes. B's pass must not be recorded, so the next turn end runs.
+#      B checks the tree before `bad.cfg` exists and A after, so the two disagree about one source.
+#      RED after T1: the token still names B when B finishes, B records, and C skips.
+r=$(qgp_repo qgp-race-fail-during)
+cat > "$r/check.sh" <<'EOF'
+echo x >> ran.log
+if [ -f a.role ]; then
+  rm -f a.role; : > a.started
+  i=0; while [ ! -f go.a ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+  [ ! -f bad.cfg ]; exit
+fi
+[ ! -f bad.cfg ] || exit 1
+[ -f a.started ] || exit 0
+: > b.started
+i=0; while [ ! -f a.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+EOF
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+: > "$r/a.role"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-b" 2>&1; echo "exit=$?" >> "$TMP/qrace-b" ) &
+qrace_b=$!
+i=0; while [ ! -f "$r/b.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.started" ] && [ -f "$r/b.started" ] && c0=ok || c0=no
+: > "$r/bad.cfg"; : > "$r/go.a"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+: > "$r/a.done"; wait "$qrace_b"; out_b=$(cat "$TMP/qrace-b")
+rm -f "$r/a.started"; out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_a" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out_b" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = okokokok ] && [ "$n" = 3 ] && report "a failure that finishes first ends the pass of a run started after it" ok \
+  || report "a failure that finishes first ends the pass of a run started after it" no "both-held=$c0 a-blocks=$c1 b-passes=$c2 next-blocks=$c3 runs=$n (want 3)"
+
+# 344. #331 AC2 — a run that failed a validator and was then cut off has still failed. A fails its
+#      first validator and hangs in its second until its deadline cuts it off; B, started after
+#      it, is still running and passes once A has gone. A's budget is 5 s; tech.md is rewritten
+#      with a 60 s one after A has read it, so B outlasts A's deadline without racing its own.
+#      RED after T1: nothing orders a failure, the parent's block finds no record to remove, the
+#      token still names B, B records, and C skips.
+r=$(qgp_repo qgp-race-fail-cutoff)
+cat > "$r/check.sh" <<'EOF'
+echo x >> ran.log
+if [ -f a.role ]; then
+  rm -f a.role; : > a.started
+  i=0; while [ ! -f go.a ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+  [ ! -f bad.cfg ] || { : > a.hang; exit 1; }
+  exit 0
+fi
+[ ! -f bad.cfg ] || exit 1
+[ -f a.started ] || exit 0
+: > b.started
+i=0; while [ ! -f a.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+EOF
+printf '[ -f a.hang ] || exit 0\nrm -f a.hang\nexec sleep 20\n' > "$r/hang.sh"
+printf -- '- Validators: sh check.sh, sh hang.sh\n- Source globs: *.txt\n- Validator budget: 5\n' > "$r/.steering/tech.md"
+: > "$r/a.role"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+printf -- '- Validators: sh check.sh, sh hang.sh\n- Source globs: *.txt\n- Validator budget: 60\n' > "$r/.steering/tech.md"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-b" 2>&1; echo "exit=$?" >> "$TMP/qrace-b" ) &
+qrace_b=$!
+i=0; while [ ! -f "$r/b.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.started" ] && [ -f "$r/b.started" ] && c0=ok || c0=no
+: > "$r/bad.cfg"; : > "$r/go.a"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+case "$out_a" in *"--- sh hang.sh (cut off at the deadline)"*) cc=ok ;; *) cc=no ;; esac   # A failed its first and was cut off in its second, or the case proves nothing
+: > "$r/a.done"; wait "$qrace_b"; out_b=$(cat "$TMP/qrace-b")
+rm -f "$r/a.started"; out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_a" in *"budget of 5 s"*"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out_b" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$cc$c1$c2$c3" = okokokokok ] && [ "$n" = 3 ] && report "a run cut off after a failed validator ends the pass of a run started after it" ok \
+  || report "a run cut off after a failed validator ends the pass of a run started after it" no "both-held=$c0 a-reached-v2=$cc a-cut-off=$c1 b-passes=$c2 next-blocks=$c3 runs=$n (want 3)"
+
+# 345. #331 AC2 — the same with no validator failed first: A's only validator hangs on the red
+#      tree until the deadline cuts it off, so the only failure there is to order is the block the
+#      parent builds. Pins the parent's half of Design step 3, which 344 cannot, since there the
+#      child's half alone turns it green. RED after T1, and with the parent's token write
+#      removed: C skips.
+r=$(qgp_repo qgp-race-hang-cutoff)
+cat > "$r/check.sh" <<'EOF'
+echo x >> ran.log
+if [ -f a.role ]; then
+  rm -f a.role; : > a.started
+  i=0; while [ ! -f go.a ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+  [ ! -f bad.cfg ] || exec sleep 20
+  exit 0
+fi
+[ ! -f bad.cfg ] || exit 1
+[ -f a.started ] || exit 0
+: > b.started
+i=0; while [ ! -f a.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+EOF
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n- Validator budget: 5\n' > "$r/.steering/tech.md"
+: > "$r/a.role"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n- Validator budget: 60\n' > "$r/.steering/tech.md"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-b" 2>&1; echo "exit=$?" >> "$TMP/qrace-b" ) &
+qrace_b=$!
+i=0; while [ ! -f "$r/b.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.started" ] && [ -f "$r/b.started" ] && c0=ok || c0=no
+: > "$r/bad.cfg"; : > "$r/go.a"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+: > "$r/a.done"; wait "$qrace_b"; out_b=$(cat "$TMP/qrace-b")
+rm -f "$r/a.started"; out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_a" in *"budget of 5 s"*"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out_b" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = okokokok ] && [ "$n" = 3 ] && report "a run cut off with no failed validator ends the pass of a run started after it" ok \
+  || report "a run cut off with no failed validator ends the pass of a run started after it" no "both-held=$c0 a-cut-off=$c1 b-passes=$c2 next-blocks=$c3 runs=$n (want 3)"
+
+# 346. #331 AC2 — every failure orders the runs, not only a run's first. A fails its first
+#      validator before B starts, then holds in its second; B starts, passes its first and holds;
+#      `bad.cfg` turns the tree red; A's second fails and A finishes; then B passes. A's second
+#      failure came after B started, so B's pass must not stand. RED after T1, and with only the
+#      first failure written: the token names B again by then, B records, and C skips.
+r=$(qgp_repo qgp-race-second-fail)
+cat > "$r/v1.sh" <<'EOF'
+echo x >> ran.log
+if [ -f a.role ]; then rm -f a.role; : > a.in-v2; exit 1; fi
+[ ! -f bad.cfg ]
+EOF
+cat > "$r/v2.sh" <<'EOF'
+if [ -f a.in-v2 ]; then
+  rm -f a.in-v2; : > a.held
+  i=0; while [ ! -f go.a ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+  [ ! -f bad.cfg ]; exit
+fi
+[ ! -f bad.cfg ] || exit 1
+[ -f a.held ] || exit 0
+: > b.started
+i=0; while [ ! -f a.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+EOF
+printf -- '- Validators: sh v1.sh, sh v2.sh\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+: > "$r/a.role"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.held" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-b" 2>&1; echo "exit=$?" >> "$TMP/qrace-b" ) &
+qrace_b=$!
+i=0; while [ ! -f "$r/b.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.held" ] && [ -f "$r/b.started" ] && c0=ok || c0=no
+: > "$r/bad.cfg"; : > "$r/go.a"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+: > "$r/a.done"; wait "$qrace_b"; out_b=$(cat "$TMP/qrace-b")
+rm -f "$r/a.held"; out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_a" in *"--- sh v1.sh"*"--- sh v2.sh"*"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out_b" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = okokokok ] && [ "$n" = 3 ] && report "a run's second failure ends the pass of a run started between its failures" ok \
+  || report "a run's second failure ends the pass of a run started between its failures" no "both-held=$c0 a-failed-both=$c1 b-passes=$c2 next-blocks=$c3 runs=$n (want 3)"
+
 # --- both gates: the library they block through ----------------------------------------
 #
 # Every case above runs these gates with a whole gate-lib.sh. The three states below are the
