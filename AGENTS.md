@@ -60,7 +60,7 @@ Run these before every commit. The `- Validators:` line in `.steering/tech.md` i
 ./scripts/check-reviewer-allow-list.py  # the reviewer's allow-list covers the Validators line
 ./scripts/test-gates.sh             # the gates still behave
 ./scripts/check-version-bump.py     # shipped changes carry a version bump (PR-only in CI)
-./scripts/check-backlog-tracker.py  # the ordered list agrees with the tracker (PR-only in CI)
+./scripts/check-backlog-tracker.py  # the ordered list agrees with the tracker (PR-only in CI, advisory)
 ```
 
 - `check-leakage.sh` matters most. This harness was extracted from a private polyrepo; the extraction is clean-room. If the guard fires, **rewrite the file — do not scrub it in place.** Scrubbing leaves the shape, and the shape is where the private structure lives.
