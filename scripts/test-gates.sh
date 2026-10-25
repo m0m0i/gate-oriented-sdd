@@ -8272,7 +8272,7 @@ case "$err" in *"no badge labelled"*) s3=no ;; *) s3=ok ;; esac
 
 # A non-version shields badge alongside the real one is fine. Without this, "a static badge
 # fails" is satisfiable by a guard that rejects every badge but one, and a licence or CI badge
-# added later would go red for no reason — LV-2, a gate firing on an ordinary edit.
+# added later would go red for no reason — LV-4, a gate firing on an ordinary edit.
 r=$(readme_repo rm-otherbadge)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
@@ -8340,7 +8340,7 @@ case "$err" in *"no badge labelled"*) q3=no ;; *) q3=ok ;; esac
 #
 # The green half is the one that keeps this from being a gate people switch off: query strings
 # get reordered by editors and by hand, and a guard matching the whole URL literally would fail
-# on a change that alters nothing. LV-2 — a gate that fires on an ordinary edit gets disabled.
+# on a change that alters nothing. LV-4 — a gate that fires on an ordinary edit gets disabled.
 mutate_badge() {   # $1 = repo, $2 = replacement URL
   python3 - "$1" "$2" <<'PYEOF'
 import pathlib, re, sys

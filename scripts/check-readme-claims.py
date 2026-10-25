@@ -72,7 +72,7 @@ BADGE_SOURCE = "https://raw.githubusercontent.com/m0m0i/gate-oriented-sdd/main/p
 BADGE_QUERY = "$.version"
 #: Which dynamic badge is the VERSION badge. Selecting on `/badge/dynamic/` alone made the
 #: subject "any dynamic badge", so a later badge measuring anything else would have failed for
-#: reading its own source — a gate firing on an edit that broke nothing (LV-2). Selecting by
+#: reading its own source — a gate firing on an edit that broke nothing (LV-4). Selecting by
 #: label fails CLOSED: rename it and no version badge is found, which is the absence branch.
 BADGE_LABEL = "gate-sdd"
 
@@ -333,7 +333,7 @@ def main():
         for b in dynamic:
             # Parsed, not string-matched. A guard comparing the whole URL literally fails when
             # someone reorders the query string, which changes nothing — and a gate that fires
-            # on an ordinary edit is one people switch off (LV-2).
+            # on an ordinary edit is one people switch off (LV-4).
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(b).query)
             got = (q.get("url") or [""])[0]
             if got != BADGE_SOURCE:
