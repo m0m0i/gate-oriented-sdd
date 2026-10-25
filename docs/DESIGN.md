@@ -1,6 +1,6 @@
 # Design
 
-- Reconciled against PRD: 99e15913803d5e882a1cfc2e2713c6a6d1b081cd
+- Reconciled against PRD: 5e33fa0176dc3e423776699043e2b01d6116ca26
 - Serves: the capabilities in `docs/PRD.md`. The directory pictures are `docs/layout.md` and are not repeated here.
 - Status: accepted — this describes what ships at 0.4.2, not a proposal.
 
@@ -19,7 +19,7 @@ Three layers, chosen by how much each can be talked out of (`AGENTS.md`): determ
 | Tracker — issues typed feature, bug, chore | external | the project's tracker, via templates `init` installs | CAP-6 |
 | `evals/` | none yet | `evals/` | no capability. Under development — authored, unverified; kept because CAP-1's claim needs it to run one day |
 
-The PRD's third user, the reference-implementation reader, is served by `README*` and `docs/`. No component exists for them, as the PRD says.
+This table does not yet place CAP-8, CAP-9 or CAP-10; the next design pass does.
 
 ## Seams
 
@@ -40,7 +40,7 @@ What crosses, who produces it, who consumes it, and what happens when they disag
 | The library's location | where `gate-lib.sh` is, for the two copied checks: `GATE_SDD_HOOKS`, a copy in `hooks/`, `.claude/hooks/` or `.agents/hooks/`, `$CLAUDE_PLUGIN_ROOT/hooks`, `$GATE_SDD_PLUGIN_ROOT/hooks`, in that order | CI's workflow, `init`'s copies, the plugin's turn-end environment, and `plugin-gate.sh` on `SessionStart` through the session's env file → `check-steering-anchors.sh`, `check-unreviewed-work.sh` | found nowhere, a check exits 1 naming every place and what to set; a `GATE_SDD_HOOKS` that names no library fails rather than falling through (#16, #256, #264, ADR-9) | `test-gates.sh` — "check-steering-anchors finds the library by GATE_SDD_HOOKS, then a copy, then the plugin root" and its check-unreviewed-work twin, the two "… finds the library from the session's shell by GATE_SDD_PLUGIN_ROOT, last", "a migrated project's anchor check gives one verdict at turn end and in the session's shell", and "plugin-gate tells the session's shell where the plugin is, once, without damaging the env file". Named rather than numbered, per G-9 |
 | Load-bearing sentences | a sentence in a skill that a hook or another skill depends on | skill author → the consumer the contract names | the consumer breaks silently while the sentence reads as editable prose | `check-skill-contracts.py` (#54 for the skills it does not cover) |
 | Version | `version` in both manifests | a shipped-path change → `claude plugin update` | an unbumped fix reaches nobody and reports success (#3) | `check-version-bump.py`, CI on pull requests |
-| Inception hand-offs | `NORTH_STAR.md` → `PRD.md` → `EPICS.md` → `BACKLOG.md` → issues; `contract` → rulebook; `design-doc` → `structure.md` | each skill → the next, and the harness | citations are checked forward only, and `PRD.md` and `EPICS.md` have no mechanical consumer (#22) | none — recorded in `docs/verified.md` |
+| Inception hand-offs | `NORTH_STAR.md` → `PRD.md` → `ROADMAP.md` → `BACKLOG.md` → issues; `contract` → rulebook; `design-doc` → `structure.md` | each skill → the next, and the harness | citations are checked forward only, and nothing reads `PRD.md`'s capability ids mechanically (#22) | none — recorded in `docs/verified.md` |
 
 ## Where tests live
 
@@ -48,8 +48,8 @@ What crosses, who produces it, who consumes it, and what happens when they disag
 
 ## Risks, and what would change course
 
-- **The gate is enforced against the model and negotiable by the human.** `git checkout` silences it (#26), and CAP-1's falsifier is live. Course changes if the escape keeps being used after the false blocks it hides behind are fixed: enforcement moves to `git push` or `gh pr create` (#36).
+- **The gate is enforced against the model and negotiable by the human.** `git checkout` silenced it (#26) until #175 closed that escape, and CAP-1's falsifier stands for the next one. Course changes if an escape keeps being used after the false blocks it hides behind are fixed: enforcement moves to `git push` or `gh pr create` (#36).
 - **Independence is asserted by a field.** `reviewed_by=subagent` is written by the author of the diff. Course changes if receipts are predominantly `inline` on a fresh install, which #25 predicts: the gate refuses CLEAN on an `inline` review once `init` guarantees a spawnable reviewer.
-- **Two inception documents have no consumer.** If nothing comes to read `PRD.md` and `EPICS.md`, CAP-6 is narrower than stated and the product's own boundary puts the skills that produce them out of scope (#22).
+- **The capability ids have no consumer.** If nothing comes to read the ids `PRD.md` defines — CAP-9's chain check is the reader it names — CAP-6 is narrower than stated and the product's own boundary puts the skill that produces them out of scope (#22).
 - **Facts stated twice drift silently.** `Source globs` duplicates `check-version-bump.py`'s `SHIPPED` tuple (#14); `C-2` enumerates count sites (#23); `CONTRACT.md` indexes the rulebook, and only its ids are checked (#84). Course changes when a drift causes a wrong finding: a single source each derives from, or a guard that compares them.
 - **A new reviewer cannot be pinned.** `--update` creates no lock (#19), and this repository's own reviewer is the standing example (ADR-6). Course changes if a consumer ships an unpinned rulebook without knowing; the fix is a bootstrap mode visibly distinct from re-pinning.
