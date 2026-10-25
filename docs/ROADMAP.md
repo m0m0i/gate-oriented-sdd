@@ -1,8 +1,10 @@
 # Roadmap
 
-- Reconciled against PRD: 99e15913803d5e882a1cfc2e2713c6a6d1b081cd
+- Reconciled against PRD: 5e33fa0176dc3e423776699043e2b01d6116ca26
 
 Major versions are content commitments, milestone demos, and capability completions — not dates or calendar quarters. Issue and backlog row membership are derived in BACKLOG.md from position relative to version lines in ## Lines, never listed here.
+
+CAP-8, CAP-9 and CAP-10 are not yet placed in any version; the next roadmap pass places them.
 
 ## 1.0-baseline-harness
 - Completes: CAP-1, CAP-2, CAP-3, CAP-4, CAP-5, CAP-7
