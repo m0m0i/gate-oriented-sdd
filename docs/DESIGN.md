@@ -11,7 +11,7 @@ Three layers, chosen by how much each can be talked out of (`AGENTS.md`): determ
 | Component | Layer | Lives in | Serves |
 | :-- | :-- | :-- | :-- |
 | Gates — `gate-lib.sh`, `quality-gate.sh`, `review-gate.sh`, `steering-digest.sh` | deterministic | `hooks/` | CAP-1, CAP-2, CAP-7 |
-| Guards — the validators on the `- Validators:` line, and the two CI-only ones, `check-version-bump.py` and `check-unreviewed-work.sh` | deterministic, at turn end and in CI | `scripts/`, `assets/` | CAP-5, CAP-7, and the gates' own correctness |
+| Guards — the validators on the `- Validators:` line, and the three CI-only ones, `check-version-bump.py`, `check-backlog-tracker.py` and `check-unreviewed-work.sh` | deterministic, at turn end and in CI | `scripts/`, `assets/` | CAP-5, CAP-7, and the gates' own correctness |
 | Reviewer — agent file, rulebook, lock, shared contract | judgment | `reviewers/<name>.md`, `reviewers/<name>/`, `reviewers/_shared/` | CAP-3 |
 | Skills — one copy read by both harnesses | process | `skills/` | CAP-4, CAP-6 |
 | Steering — three files, eight machine-read lines | bridge | `.steering/` in a project | every capability; it is what the layers agree through |
