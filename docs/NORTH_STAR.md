@@ -1,6 +1,6 @@
 # North star
 
-- Status: updated on 2026-10-20
+- Status: updated on 2026-10-25
 
 ## What this is for
 
@@ -22,7 +22,7 @@ Measured two ways: a scheduled re-entry check, in which a fresh agent session an
 
 - **LV-1 Pieces one engineer can hold** — one issue, one spec, one branch, one pull request, each small enough to understand without reading the code. The engineer writes the deciding sentences; agents draft, build and review.
 - **LV-2 Plan adherence** — every change to source traces to the plan, and the gate refuses one that does not. Source includes dependency manifests and lockfiles: a dependency bump has an issue and a spec whose impact research decides its tests. Code without a spec is blocked.
-- **LV-3 Where you stopped** — a new session shows the state before anyone asks: behind or ahead of origin, the newest work log with each open next step and its real state, the active pull request, the backlog's top row for this repository, and open issues the backlog has not placed. This is the lever that moves the metric directly.
+- **LV-3 Where you stopped** — asked where things stand, a session answers right at the lowest latency and token cost, from state the harness keeps: behind or ahead of origin, the newest work log with each open next step and its real state, the active pull request, the backlog's top row for this repository, and open issues the backlog has not placed. This is the lever that moves the metric directly.
 - **LV-4 Strict about what, cheap about when** — fast checks at turn end; the full chain check when the pull request is created; the same check again in CI. A gate that fires every turn on guesses gets switched off, so the counterweight to LV-2 is false blocks per real block.
 - **LV-5 Field signal first** — a bug from real use is triaged before any new spec starts, then fixed by severity; a gate that passes when it should block, or lost work, goes first. A fix reaches the projects running the harness without anyone copying files.
 
