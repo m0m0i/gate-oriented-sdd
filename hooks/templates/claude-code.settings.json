@@ -12,7 +12,7 @@
       {
         "matcher": "Write|Edit",
         "hooks": [
-          { "type": "command", "command": "{{FAST_CHECK}}", "timeout": 60 }
+          { "type": "command", "command": "( {{FAST_CHECK}} ) 1>&2 || exit 2", "timeout": 60 }
         ]
       }
     ]

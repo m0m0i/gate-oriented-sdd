@@ -256,17 +256,14 @@ $_hf_k
 # failed or stopped short, or an awk that printed nothing, is a file that does not parse. A
 # timeout past nine digits reads as 999999999, which no budget reaches and the shell's `-lt` can
 # hold.
-gate_hook_timeout() {  # <gate script> <ceiling> <file>...
-  _ht_gate=$1; _ht_lo=$2; _ht_src=ceiling; shift 2
-  for _ht_f in "$@"; do
-    if [ ! -f "$_ht_f" ] || [ ! -r "$_ht_f" ]; then
-      printf '%s exists and cannot be read, so the "timeout" it gives %s is unknown\n' "$_ht_f" "$_ht_gate"
-      return 2
-    fi
-    _ht_r=$(LC_ALL=C tr '\n' '\001' < "$_ht_f" | LC_ALL=C fold -b -w 512 | LC_ALL=C awk -v g="$_ht_gate" '
+# That tokenizer, as one program both hook-file readers run: `mode=timeout` for gate_hook_timeout,
+# `mode=switches` for gate_hook_switches below (#330). Only the two modes' own lines differ, so the
+# readers cannot disagree about what a file says. It is awk, whose `$0` is its own, not the shell's.
+# shellcheck disable=SC2016
+_gate_hook_scan='
       function fail(why) { if (err == "") err = why " near byte " pos }
       function namech(c) { return c ~ /[A-Za-z0-9._-]/ }
-      function names(s,   p, off) {
+      function names(s, g,   p, off) {
         off = 0
         while (g != "" && (p = index(substr(s, off + 1), g)) > 0) {
           p += off
@@ -280,7 +277,17 @@ gate_hook_timeout() {  # <gate script> <ceiling> <file>...
         if (depth == 0) { want = "end"; return }
         want = "sep"
         if (type[depth] != "o") return
-        if (key[depth] == "command" && kind == "s" && names(text)) named[depth] = 1
+        if (mode == "switches") {
+          # A group is a member of the top-level object; its `enabled` is at depth 2, and
+          # anything but the literal true is off. A gate counts wherever its group nests it.
+          if (depth == 2 && type[1] == "o" && key[2] == "enabled" && !(kind == "l" && text == "true")) off[key[1]] = 1
+          if (depth >= 2 && type[1] == "o" && key[depth] == "command" && kind == "s") {
+            if (names(text, "quality-gate.sh")) { runs[key[1], "quality-gate.sh"] = 1; grp[key[1]] = 1 }
+            if (names(text, "review-gate.sh")) { runs[key[1], "review-gate.sh"] = 1; grp[key[1]] = 1 }
+          }
+          return
+        }
+        if (key[depth] == "command" && kind == "s" && names(text, g)) named[depth] = 1
         if (key[depth] != "timeout") return
         if (kind != "n" || text !~ /^-?(0|[1-9][0-9]*)$/) { tbad[depth] = 1; return }
         sg = ""; if (substr(text, 1, 1) == "-") { sg = "-"; text = substr(text, 2) }
@@ -398,9 +405,30 @@ gate_hook_timeout() {  # <gate script> <ceiling> <file>...
           else if (want != "end") fail("no JSON value")
         }
         if (err != "") print "err " err
+        else if (mode == "switches") {
+          for (k in grp) {
+            gs = ""
+            if ((k, "quality-gate.sh") in runs) gs = "quality-gate.sh"
+            if ((k, "review-gate.sh") in runs) gs = gs (gs == "" ? "" : " and ") "review-gate.sh"
+            if (k in off) print "off\t" gs "\t" k
+            else { if ((k, "quality-gate.sh") in runs) onq = 1; if ((k, "review-gate.sh") in runs) onr = 1 }
+          }
+          if (onq && !onr) print "one\tquality-gate.sh\treview-gate.sh"
+          if (onr && !onq) print "one\treview-gate.sh\tquality-gate.sh"
+          print "done"
+        }
         else if (notime) print "notime"
         else print "ok" (best == "" ? "" : " " best)
-      }')
+      }
+'
+gate_hook_timeout() {  # <gate script> <ceiling> <file>...
+  _ht_gate=$1; _ht_lo=$2; _ht_src=ceiling; shift 2
+  for _ht_f in "$@"; do
+    if [ ! -f "$_ht_f" ] || [ ! -r "$_ht_f" ]; then
+      printf '%s exists and cannot be read, so the "timeout" it gives %s is unknown\n' "$_ht_f" "$_ht_gate"
+      return 2
+    fi
+    _ht_r=$(LC_ALL=C tr '\n' '\001' < "$_ht_f" | LC_ALL=C fold -b -w 512 | LC_ALL=C awk -v g="$_ht_gate" -v mode=timeout "$_gate_hook_scan")
     case "$_ht_r" in
       ok) ;;
       'ok '*)
@@ -422,6 +450,43 @@ gate_hook_timeout() {  # <gate script> <ceiling> <file>...
     return 2
   fi
   printf '%s %s\n' "$_ht_lo" "$_ht_src"
+}
+
+# Each thing in one hook file that switches a gate off, one sentence a line (#330, #324 AC5).
+# Antigravity's `enabled` belongs to a named group, and a group whose `enabled` is not the literal
+# true runs none of its entries, so the gates it holds stop with no message. Read fail-closed:
+# `false`, `"false"`, 0 and null are all off, since what Antigravity makes of a non-boolean was
+# never measured. Also a file whose enabled groups run one of the two gates and not the other. A
+# file that runs neither gate is not judged: nothing here can tell it from a project's own
+# Antigravity hooks. Status 0 with nothing printed when nothing is off, 1 when something is, and 2
+# with a sentence when the file cannot be read or does not parse.
+gate_hook_switches() {  # <file>
+  _hs_f=$1
+  if [ ! -f "$_hs_f" ] || [ ! -r "$_hs_f" ]; then
+    printf '%s exists and cannot be read, so whether it switches a gate off is unknown\n' "$_hs_f"
+    return 2
+  fi
+  _hs_r=$(LC_ALL=C tr '\n' '\001' < "$_hs_f" | LC_ALL=C fold -b -w 512 | LC_ALL=C awk -v g= -v mode=switches "$_gate_hook_scan")
+  case "$_hs_r" in
+    'err '*)
+      printf '%s does not parse as JSON (%s), so whether it switches a gate off is unknown\n' "$_hs_f" "${_hs_r#err }"
+      return 2 ;;
+    done) return 0 ;;
+    *"
+done") ;;
+    *)
+      printf '%s could not be scanned for its switches: the scan printed no answer\n' "$_hs_f"
+      return 2 ;;
+  esac
+  _hs_tab=$(printf '\t')
+  printf '%s\n' "${_hs_r%"
+done"}" | while IFS=$_hs_tab read -r _hs_kind _hs_a _hs_b; do
+    case "$_hs_kind" in
+      off) printf '%s: the group "%s" runs %s, and its "enabled" is not true, so Antigravity runs none of it; set it to true\n' "$_hs_f" "$_hs_b" "$_hs_a" ;;
+      one) printf '%s: %s runs and %s does not, so that gate never runs on this project; restore its entry as init renders it\n' "$_hs_f" "$_hs_a" "$_hs_b" ;;
+    esac
+  done
+  return 1
 }
 
 # Run <command> as the gate's child, bounded by <budget> seconds, and return its status (#304).

@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-10-17 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity CLI rows below reflect the 2026-10-11 verification run (A1–A14). Antigravity IDE has been discontinued and is removed from the active target matrix.
+Last **updated**: 2026-10-26 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity CLI rows below reflect the 2026-10-11 verification run (A1–A14), and the #324 section re-ran `PostToolUse` and named groups on CLI 1.4.7. Antigravity IDE has been discontinued and is removed from the active target matrix.
 
 The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The Antigravity CLI row carries the date it was verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
@@ -11,7 +11,7 @@ The version table below carries a date beside each row. Claude Code's row was re
 | Component | Version |
 | :-- | :-- |
 | Claude Code | 2.1.300 — the #304 section of 2026-10-16. 2.1.296 — the #239 section of 2026-10-12. 2.1.294 — the #274 section of 2026-10-10: the terminal CLI, started from a desktop-app session whose own copy was 2.1.295; its F3 ran on the maintainer's second machine, the app's copy 2.1.295 and its terminal CLI 2.1.296. 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
-| Antigravity CLI (`agy`) | 1.3.3 — the #239 section of 2026-10-12, and verified 2026-10-11 (A1–A14 run sheet from 2026-10-11 deep review, headless `agy -p` in trusted scratch fixture). 1.2.16 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
+| Antigravity CLI (`agy`) | 1.4.7 — the #324 section of 2026-10-26, whose R0 ran on 1.4.0. 1.3.3 — the #239 section of 2026-10-12, and verified 2026-10-11 (A1–A14 run sheet from 2026-10-11 deep review, headless `agy -p` in trusted scratch fixture). 1.2.16 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
 | Antigravity IDE | Discontinued; removed from active target matrix. (Historical: 2.3.1 verified 2026-08-21) |
 | Platform | macOS (darwin, arm64) |
 
@@ -502,9 +502,42 @@ So on Claude Code, as on Antigravity, a gate that has no verdict by its `timeout
 
 **A12 — Plugin-shipped hooks. Observed (matches review).** Created a test `hooks.json` inside `~/.gemini/config/plugins/gate-sdd/` registering `PreInvocation` and `Stop` hooks. In an unrelated project, both hooks fired. In the probe log: `CWD` was the plugin directory (`~/.gemini/config/plugins/gate-sdd/`), not the consumer workspace. `workspacePaths` was passed in JSON on stdin (`["/tmp/unrelated-consumer-project"]`). Plugin-shipped hooks fire globally, but must read `workspacePaths` from stdin rather than relying on `pwd`.
 
-**A13 — PostToolUse execution. Observed (matches review).** Configured a `PostToolUse` hook with `matcher: ".*"`. The hook executed synchronously after every tool call. Stdout must be `{}`; returning non-empty content or non-zero exit does not block the turn (observe-only). It shares a single `"enabled": true` switch with the gating hooks in `antigravity.hooks.json`.
+**A13 — PostToolUse execution. Observed (matches review).** Configured a `PostToolUse` hook with `matcher: ".*"`. The hook executed synchronously after every tool call. Stdout must be `{}`; returning non-empty content or non-zero exit does not block the turn (observe-only). It shares a single `"enabled": true` switch with the gating hooks in `antigravity.hooks.json`. *Since #324 the fast check has a group of its own, measured on CLI 1.4.7 in the #324 section below, where a passing check's plain stdout is also shown to fail the parse.*
 
 **A14 — Control characters in hook JSON output. Observed (matches review).** A `Stop` hook returning a `reason` containing an unescaped horizontal tab (`\t`) was tested. In `agy.log`: `failed to unmarshal result from hook ... via protojson: proto: syntax error: invalid character '\t' in string`. The unmarshaling failed, the hook result was dropped, and the turn ended with `status: SUCCESS` (fails open). `hooks/gate-lib.sh`'s `_gate_json_escape` only handles `\` and `"`, failing to escape control characters emitted by failing validators.
+
+## The fast check's group and matcher, on Antigravity CLI 1.4.7 (#324, #330)
+
+**Run on 2026-10-26, Antigravity CLI 1.4.7**, before #324's template changed. R0 alone ran on 1.4.0: its start spawned the CLI's background updater, and every later run's `agy.log` reports `Language server version: 1.4.7`. R7 repeats R0's shape on 1.4.7. They test what the spec's design rests on. Every turn was headless: `agy --sandbox --mode accept-edits --effort low -p`, in a `mktemp -d` project under a folder `trustedWorkspaces` already listed, with `ANTIGRAVITY_CONVERSATION_ID` unset. The prompt asked for a read, a write, and in some runs an edit, with no shell command.
+- **The project's hooks file:** `.agents/hooks.json` was hand-rendered with `{{HOOKS_DIR}}` set to `.agents/hooks`, in the shape each run names.
+- **Stand-ins:**
+  - The `Stop` entries ran stand-ins named `quality-gate.sh` and `review-gate.sh`. Each logged its call and stdin, blocked once with `{"decision":"continue",…}`, and passed after.
+  - The `PreInvocation` entry ran a stand-in that logged each call.
+  - The fast check printed to stdout, appended a line to a log, and exited 1, unless a run says otherwise.
+
+What blocking does is A2's finding above; these runs show which hooks fire, and what Antigravity makes of each one's stdout.
+
+| Run | The file | Observed |
+| :-- | :-- | :-- |
+| R0 | `main`'s shape: one `gate-sdd` group, the fast check bare on `".*"` | It fired after the read and after the write. Each time, `agy.log` has `post-tool hooks failed for step <n>: JSON hook "jsonhook__gate-sdd_PostToolUse_0_0" failed: command failed: exit status 1`. Both stand-in gates blocked, one after the other, and the digest fired. |
+| R7 | R0, with a fast check that prints `All checks passed!` and exits 0 | Fired after the read and the write. Each time, `failed to unmarshal result from hook jsonhook__gate-sdd_PostToolUse_0_0 via protojson: All checks passed!: proto: syntax error (line 1:1): invalid value All`. This is #324's report, reproduced. |
+| R1 | Two groups: `gate-sdd` with the digest and both gates; `gate-sdd-fast-check` with the fast check wrapped as `( … ) 1>&2; echo '{}'` on the hooks page's names, `write_to_file\|replace_file_content\|multi_replace_file_content` | The file loaded: `loaded 4 named hooks from 2 hooks.json file(s)`, against R0's 3, so a named group is what that line counts. Both gates blocked and the digest fired. **The fast check never ran**, after the write either. |
+| R2 | R1 with `"enabled": false` on `gate-sdd-fast-check` | Both gates blocked and the digest fired. The fast check did not run, but it had not run in R1 either, so R2 showed nothing about the switch. R6 repeats it with a matcher that fires. |
+| R3 | R1 with the matcher `".*"`, and a fast check that saved its stdin | Ran after both calls, with no line in `agy.log`, so `{}` with exit 0 is accepted. The stdin's `toolCall.name` was `read_file` for the read and `write_file` for the write. |
+| R4 | R3, with a prompt to edit one file and to make two non-adjacent edits in another in one call | The edit was `edit_file`, with args `Path`, `Target` and `Replacement`. The model made no multi-edit. It quoted `edit_file`'s rule, "Use this tool for a single contiguous block of edits. To edit multiple non-adjacent regions, make separate calls", and said no tool makes several edits in one call. |
+| R5 | R3 with the matcher `write_file\|edit_file\|write_to_file\|replace_file_content\|multi_replace_file_content` | Ran after `write_file` and `edit_file`, not after `read_file`. No hook error. |
+| R6 | R5 with `"enabled": false` on `gate-sdd-fast-check` only | The fast check ran after nothing. Both gates still blocked (3 and 2 calls, as in every run), and the digest fired. |
+
+**What this settles for #324's spec.** On 1.4.7, and for R0's failure on 1.4.0 as well:
+- A hooks file can hold several named groups, and `enabled` belongs to a group. A group switched off leaves the others running.
+- On CLI 1.4.7, `PostToolUse` stdout must parse as JSON, whatever the exit code, or the call is logged as failed. `{}` with exit 0 is clean.
+- The CLI's write tools are `write_file` and `edit_file`, not the names the hooks page gives. A matcher of only the documented names runs nothing, and nothing says so.
+
+**Not run:**
+- The real gates. Their blocking on Antigravity is the #282 runs and A2.
+- Whether the matcher is anchored, which no tool name here could tell.
+- A `PostToolUse` error's effect on the model, beyond the log line.
+- The IDE, which is discontinued.
 
 ## Still to verify
 

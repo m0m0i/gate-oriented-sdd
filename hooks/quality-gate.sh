@@ -436,6 +436,10 @@ validators=$(gate_steering_read .steering/tech.md Validators); rc=$?
 #     a validator runs it; the plugin-root variables, so a pass in one of #264's two
 #     environments is not trusted by the other; and this gate's own files, so an upgrade by
 #     re-copy runs once.
+#   - Not hashed: the toolchain the validators call. A linter replaced by a script that always
+#     passes, as an agent did to quiet #324's parse error, changes nothing listed here, so a pass
+#     recorded under that shim outlives it until the source changes. The gate trusts the commands
+#     the Validators line names; what they are is the project's.
 #   - GIT_INDEX_FILE prefixes git itself only. On a shell function, macOS sh keeps the
 #     assignment and exports it to every validator after it.
 qg_fingerprint() {  # <pathspec>...

@@ -8,18 +8,6 @@
         "timeout": 15
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && {{FAST_CHECK}}",
-            "timeout": 60
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "type": "command",
@@ -30,6 +18,21 @@
         "type": "command",
         "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh",
         "timeout": 120
+      }
+    ]
+  },
+  "gate-sdd-fast-check": {
+    "enabled": true,
+    "PostToolUse": [
+      {
+        "matcher": "write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && ( {{FAST_CHECK}} ) 1>&2; echo '{}'",
+            "timeout": 60
+          }
+        ]
       }
     ]
   }

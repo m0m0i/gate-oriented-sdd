@@ -255,23 +255,84 @@ if isinstance(a, dict) and isinstance(b, dict):
     a_events = set((a.get("hooks") or {}).keys())
     if isinstance(p_doc, dict):
         a_events |= set((p_doc.get("hooks") or {}).keys())
-    envelope = b.get(cc.get("name") if cc else "", {})
-    b_events = {k for k in envelope if k != "enabled"}
+    # The template is named groups, each with its own `enabled` (#330): `gate-sdd` holds the digest
+    # and both gates, and the fast check has a group of its own so that switching it off leaves
+    # the gates on. Events and shapes are read across every group; the gates pair by `gate-sdd`.
+    agy_groups = {name: g for name, g in b.items() if isinstance(g, dict)}
+    envelope = agy_groups.get(cc.get("name") if cc else "", {})
+    b_events = {k for g in agy_groups.values() for k in g if k != "enabled"}
 
     # Antigravity's schema is mixed: tool events nest under {matcher, hooks:[...]},
     # non-tool events are flat {type, command}. Getting it wrong invalidates the
     # whole file with a misleading error, so check the shapes here rather than
     # discovering it at runtime.
     TOOL_EVENTS = {"PreToolUse", "PostToolUse"}
-    for event, entries in envelope.items():
-        if event == "enabled":
-            continue
-        for e in entries if isinstance(entries, list) else []:
-            nested = isinstance(e, dict) and "hooks" in e
-            if event in TOOL_EVENTS and not nested:
-                errors.append(f"antigravity {event}: tool events need the nested {{matcher, hooks:[...]}} form")
-            if event not in TOOL_EVENTS and nested:
-                errors.append(f"antigravity {event}: non-tool events need the flat {{type, command}} form")
+    for group in agy_groups.values():
+        for event, entries in group.items():
+            if event == "enabled":
+                continue
+            for e in entries if isinstance(entries, list) else []:
+                nested = isinstance(e, dict) and "hooks" in e
+                if event in TOOL_EVENTS and not nested:
+                    errors.append(f"antigravity {event}: tool events need the nested {{matcher, hooks:[...]}} form")
+                if event not in TOOL_EVENTS and nested:
+                    errors.append(f"antigravity {event}: non-tool events need the flat {{type, command}} form")
+
+    # The fast check, held to what #324 measured (docs/verified.md, CLI 1.4.7). Antigravity reads a
+    # PostToolUse hook's stdout as its JSON result, so the check runs in a subshell with its output
+    # on stderr and the hook prints `{}`; its matcher names the write tools, so it does not run
+    # after every read; and it is a group of its own, so `"enabled": false` on it leaves the gates
+    # on (#330). Every group ships enabled: a template switched off installs no gate at all.
+    gates_group = cc.get("name") if cc else ""
+    FAST_GROUP = f"{gates_group}-fast-check"
+    FAST_MATCHER = "write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content"
+    FAST_COMMAND = 'cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && ( {{FAST_CHECK}} ) 1>&2; echo \'{}\''
+    # Every top-level key, not only the objects: a stray `"enabled": false` at the root is no group.
+    if set(b) != {gates_group, FAST_GROUP}:
+        errors.append(
+            f"antigravity: the template's groups are {sorted(b)}; they must be exactly "
+            f"{gates_group!r}, for the digest and the gates, and {FAST_GROUP!r}, for the fast check"
+        )
+    for name, group in sorted(agy_groups.items()):
+        if group.get("enabled") is not True:
+            errors.append(f'antigravity {name}: "enabled" is {group.get("enabled")!r}; every group ships true')
+    if "PostToolUse" in envelope:
+        errors.append(
+            f"antigravity {gates_group}: PostToolUse belongs in {FAST_GROUP}, so that switching the "
+            "fast check off does not switch the gates off with it"
+        )
+    fast = agy_groups.get(FAST_GROUP, {})
+    if fast and set(fast) != {"enabled", "PostToolUse"}:
+        errors.append(f"antigravity {FAST_GROUP}: holds {sorted(set(fast) - {'enabled'})}; it holds PostToolUse only")
+    fast_entries = fast.get("PostToolUse")
+    if fast and not (isinstance(fast_entries, list) and len(fast_entries) == 1 and isinstance(fast_entries[0], dict)):
+        errors.append(f"antigravity {FAST_GROUP} PostToolUse: one entry, the fast check, is expected")
+    elif fast:
+        entry = fast_entries[0]
+        if entry.get("matcher") != FAST_MATCHER:
+            errors.append(
+                f"antigravity {FAST_GROUP} PostToolUse: the matcher is {entry.get('matcher')!r}; it must be "
+                f"{FAST_MATCHER!r}, the write tools Antigravity CLI 1.4.7 calls and its hooks page names"
+            )
+        hooks = entry.get("hooks")
+        cmd = hooks[0].get("command") if isinstance(hooks, list) and len(hooks) == 1 and isinstance(hooks[0], dict) else None
+        if cmd != FAST_COMMAND:
+            errors.append(
+                f"antigravity {FAST_GROUP} PostToolUse: the command is {cmd!r}; it must be {FAST_COMMAND!r}, "
+                "so the check's output goes to stderr and Antigravity's parser reads {}"
+            )
+
+    # And Claude Code's half (#324 AC8): there a PostToolUse hook's stderr reaches the model on exit
+    # 2 only, and a linter exits 1 with its diagnostics on stdout, so the bare check reached nobody.
+    CC_FAST_COMMAND = "( {{FAST_CHECK}} ) 1>&2 || exit 2"
+    cc_post = (a.get("hooks") or {}).get("PostToolUse")
+    cc_cmds = [h.get("command") for e in cc_post if isinstance(e, dict) for h in (e.get("hooks") or []) if isinstance(h, dict)] \
+        if isinstance(cc_post, list) else []
+    if cc_cmds != [CC_FAST_COMMAND]:
+        errors.append(
+            f"claude-code PostToolUse: the command is {cc_cmds!r}; it must be one entry, {CC_FAST_COMMAND!r}, "
+            "so a failing check's output reaches the model on stderr"
+        )
     # Claude Code uses SessionStart for steering digest injection; Antigravity uses PreInvocation (turn 0).
     if (a_events - {"SessionStart"}) != (b_events - {"PreInvocation"}):
         errors.append(

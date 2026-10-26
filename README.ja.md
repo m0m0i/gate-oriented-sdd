@@ -254,7 +254,7 @@ agy plugin install ./gate-oriented-sdd
 | ターン終了時の品質ゲート        | 完全（`Stop`, exit 2） | 完全（`Stop`, `{"decision":"continue"}`） |
 | review receipt のゲート         | 完全                   | 完全                                      |
 | ゲートの配布 | プラグインから（`.claude-plugin/hooks.json` がゲートを実行する。V1、V2）。修正はプラグインの更新で届く。デスクトップアプリから始めたセッションでは、`init` が書く `env` の行があるときだけ自動更新が行われる（#274）。移行済みのプロジェクトでの実セッションは検証済み（`docs/verified.md` の #263 の節）。更新が届くことの確認は未実施（#265）。この行で自動更新が戻ることはデスクトップセッションのシェルから検証（F2）、アプリ自身が始めたセッションでも検証（F3） | `init` が `.agents/hooks/` にコピー。修正はコピーの更新で届き、`.agents/hooks.json` に書き出した `timeout` は `init` の再実行でしか届かない（#304）。`init` の再実行による更新は未実施 |
-| 編集ごとの高速フィードバック    | 完全（`PostToolUse`）  | 完全（`PostToolUse`、観測のみ）           |
+| 編集ごとの高速フィードバック    | 完全（`PostToolUse`。失敗したチェックの出力を stderr に出して exit 2 で終える。Claude Code の hooks のページによればモデルに渡るが、セッションでの受け渡しは未検証。#324） | 部分的（`PostToolUse` は書き込みのたびに動くが観測のみで、出力はモデルに届かない。専用のグループにあり、ゲートを止めずにオフにできる。#324、#330） |
 | steering digest の注入          | 完全（`SessionStart`） | 完全（`PreInvocation`、ターン0のステップ注入） |
 | compaction 後の steering 再注入 | 完全（`SessionStart`） | **なし**（該当するイベントが存在しない）  |
 
@@ -264,7 +264,7 @@ agy plugin install ./gate-oriented-sdd
 
 **pre-release です。** 検証済みバージョンの一覧を添えた reference implementation であって、サポート付きのプロダクトではありません。[eval スイート](./evals/) は開発中です。4つのケースは書いてありますが、`claude plugin eval` は読み込み時にそれらを拒否する（`case.yaml` に `graders` が必要）ため、まだ一度も実行できていません。
 
-検証環境: Claude Code 2.1.300（2026-10-16）/ Antigravity CLI 1.3.3（2026-10-12）· macOS
+検証環境: Claude Code 2.1.300（2026-10-16）/ Antigravity CLI 1.4.7（2026-10-26、編集ごとの高速チェック）と 1.3.3（2026-10-12、それ以外）· macOS
 
 **検証できていること。** まず、ゲートとガードの挙動です。モデルを介さず、決定的にテストしています（[`scripts/test-gates.sh`](./scripts/test-gates.sh)。何通りあるかはスイートが持つ数字であって、ここで維持している数字ではありません）。Antigravity の `Stop` フックが実際にブロックすることも、ドキュメントを読んで済ませたのではなく、動かして確かめました（[`docs/verified.md`](./docs/verified.md)）。2つのプラグインマニフェスト、ルールブックのハッシュ、機密混入チェックは、CI で毎回実行しています。skill は13個すべてが、少なくとも一度は実際に動いています。inception の一連の skill と `init` はこのリポジトリ自身か、実在するプロジェクトの使い捨てクローンに対して実行し、`spec`・`clarify`・`implement`・`worklog` は #17 以降のすべての spec で使い、`archive` はこのリポジトリ自身の出荷済み spec に対して何度もスイープしています。inception と `init` の実行で見つかったことは [`docs/verified.md`](./docs/verified.md) に記録し、Issue として起票してあります。そして #17 以降のすべての spec には、`.specs/` の下に review receipt があります。3件を除いてサブエージェントとして起動した reviewer によるレビューで、その3件は inline でレビューしたことが receipt 自体に記録されています。
 

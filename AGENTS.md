@@ -20,7 +20,7 @@ A refactor that loads the rulebook into normal sessions, or turns an enforced ga
 | Artifact | Claude Code | Antigravity |
 | :-- | :-- | :-- |
 | Manifest | `.claude-plugin/plugin.json` | `plugin.json` |
-| Hooks | the gates ship from `.claude-plugin/hooks.json`, which runs `hooks/plugin-gate.sh`; `hooks/templates/claude-code.settings.json`, rendered into the project by `init`, carries the marketplace declaration and the fast check only (#256, ADR-8) | `hooks/templates/antigravity.hooks.json`, rendered the same way (plugin-name envelope, `enabled` flag), with the gates copied beside it |
+| Hooks | the gates ship from `.claude-plugin/hooks.json`, which runs `hooks/plugin-gate.sh`; `hooks/templates/claude-code.settings.json`, rendered into the project by `init`, carries the marketplace declaration and the fast check only (#256, ADR-8) | `hooks/templates/antigravity.hooks.json`, rendered the same way (plugin-named groups, each with its own `enabled` flag: `gate-sdd` for the digest and the gates, `gate-sdd-fast-check` for the fast check), with the gates copied beside it |
 | Skills | `skills/<name>/SKILL.md` | same path, same format |
 | Reviewers | `reviewers/<name>.md`, copied by `init` into `.claude/agents/` | the same file, copied into `.agents/agents/` |
 | Rules | `AGENTS.md` | `rules/AGENTS.md` (symlinked, auto-discovered by plugin loader) |

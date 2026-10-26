@@ -5816,6 +5816,61 @@ case "$out:$err" in 1:*".agents/hooks.json"*) c=ok ;; *) c="no(exit=$out: $(prin
 [ "$a$b$c" = "okokok" ] && report "the anchor check passes with no hook file, and reads the working directory's outside git" ok \
   || report "the anchor check passes with no hook file, and reads the working directory's outside git" no "none=$a nogit-none=$b nogit-agy=$c"
 
+# --- assets: a gate switched off in `.agents/hooks.json` (#330, #324 AC5) -------------------------
+#
+# Antigravity's `enabled` belongs to a named group, and `false` on the group that runs a gate runs
+# none of it, with no message, while every check reported success. The anchor check now reads each
+# `.agents/hooks.json` it reads for timeouts with gate_hook_switches, the same tokenizer. A file
+# that runs neither gate is not judged: it cannot be told from a Claude Code project's own
+# Antigravity hooks, which C4 records as the residual.
+agy_groups() { # agy_groups <gates' enabled> <fast check's enabled> [noreview] — the shape #324 renders
+  _rv=',{"type":"command","command":"sh .agents/hooks/review-gate.sh","timeout":120}'
+  [ "${3:-}" = noreview ] && _rv=''
+  printf '{"gate-sdd":{"enabled":%s,"Stop":[{"type":"command","command":"sh .agents/hooks/quality-gate.sh","timeout":600}%s]},"gate-sdd-fast-check":{"enabled":%s,"PostToolUse":[{"matcher":"write_file","hooks":[{"type":"command","command":"( true ) 1>&2; echo {}","timeout":60}]}]}}\n' "$1" "$_rv" "$2"
+}
+agy_switch_case() { # agy_switch_case <name> <file content> — exit code, stderr in $TMP/aerr
+  _r=$(anc_git "$1"); mkdir -p "$_r/.agents"; printf '%s\n' "$2" > "$_r/.agents/hooks.json"; git -C "$_r" add -A
+  run_anchors "$_r"
+}
+
+# 385. #330 — the reproduction: `"enabled": false` on the gates' group fails, naming the file, the
+#      group and both gates it switches off. On `main` it passed.
+out=$(agy_switch_case anc-sw-off "$(agy_groups false true)"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in 1:*".agents/hooks.json"*'"gate-sdd"'*quality-gate.sh*review-gate.sh*) c1=ok ;; *) c1="no(exit=$out: $(printf '%s' "$err" | head -c 300))" ;; esac
+
+# 386. #330, C4 — `enabled` is read fail-closed: a string "false" is not a running gate. Antigravity's
+#      reading of a non-boolean was never measured, so only an absent key or `true` counts as on.
+out=$(agy_switch_case anc-sw-str "$(agy_groups '"false"' true)"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in 1:*'"gate-sdd"'*) c2=ok ;; *) c2="no(exit=$out: $(printf '%s' "$err" | head -c 300))" ;; esac
+
+# 387. #330 — one gate removed from an enabled file fails, naming the gate that does not run.
+out=$(agy_switch_case anc-sw-one "$(agy_groups true true noreview)"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in 1:*".agents/hooks.json"*"review-gate.sh does not"*) c3=ok ;; *) c3="no(exit=$out: $(printf '%s' "$err" | head -c 300))" ;; esac
+
+# 388. #324 AC4 — the fast check's own group switched off passes: that is what the group is for.
+out=$(agy_switch_case anc-sw-fast "$(agy_groups true false)")
+[ "$out" = 0 ] && c4=ok || c4="no(exit=$out: $(head -c 300 "$TMP/aerr"))"
+
+# 389. #330, C4 — a file that runs neither gate passes, as a Claude Code project's own Antigravity
+#      hooks would. RED-CAPABLE under "fail every .agents/hooks.json without both gates".
+out=$(agy_switch_case anc-sw-none '{"their-hooks":{"enabled":false,"Stop":[{"type":"command","command":"sh lint.sh","timeout":30}]}}')
+[ "$out" = 0 ] && c5=ok || c5="no(exit=$out: $(head -c 300 "$TMP/aerr"))"
+
+# 390. #330 — a library without gate_hook_switches fails with the guard's diagnosis, not exit 127.
+#      #323's review found the review gate's guard loop missing the functions that change added.
+r=$(anc_git anc-sw-stale); git -C "$r" add -A
+python3 - "$r/hooks/gate-lib.sh" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]); src = p.read_text(); assert "\ngate_hook_switches() {" in src
+p.write_text(src.replace("\ngate_hook_switches() {", "\n_gone_gate_hook_switches() {"))
+PYEOF
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in 1:*"no gate_hook_switches"*"predates"*) c6=ok ;; *) c6="no(exit=$out: $(printf '%s' "$err" | head -c 300))" ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6" = okokokokokok ] && report "the anchor check fails a gate switched off in .agents/hooks.json, and only that" ok \
+  || report "the anchor check fails a gate switched off in .agents/hooks.json, and only that" no \
+     "off=$c1 string=$c2 one-gate=$c3 fast-only=$c4 neither=$c5 stale-lib=$c6"
+
 # 219. #264 — the reproduction, end to end: one tree, one verdict. A Claude Code project migrated
 #      to the plugin — no hooks directory at all — whose `- Validators:` line runs the copied
 #      anchor check. At turn end the plugin's wrapper runs the quality gate with
@@ -9275,12 +9330,12 @@ case "$err" in *"README.md: the declaration's \`extraKnownMarketplaces\`"*) c18=
 # with cwd set to .agents/, or it passes for the wrong reason.
 
 agy_get_cmd() {
-  # $1 = hooks.json, $2 = event, $3 = index
+  # $1 = hooks.json, $2 = event, $3 = index. The event is read from whichever named group holds
+  # it: since #324 the fast check's PostToolUse is in a group of its own.
   python3 -c "
 import json, sys
 data = json.load(open(sys.argv[1]))
-pkg = data.get('gate-sdd', {})
-ev = pkg.get(sys.argv[2], [])
+ev = next((g[sys.argv[2]] for g in data.values() if isinstance(g, dict) and sys.argv[2] in g), [])
 idx = int(sys.argv[3])
 if sys.argv[2] == 'PostToolUse':
     print(ev[idx]['hooks'][0]['command'])
@@ -9352,6 +9407,71 @@ case "$out_rv" in *"exit=0"*) c7=ok ;; *) c7=no ;; esac
 [ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] && report "Antigravity hooks execute from repo root when cwd is .agents/" ok \
   || report "Antigravity hooks execute from repo root when cwd is .agents/" no \
      "qg-exit=$c1 qg-json=$c2 rv-exit=$c3 rv-json=$c4 fast-check-root=$c5 clean-qg-exit=$c6 clean-rv-exit=$c7"
+
+# The fast check is rendered by json.dump rather than sed, because a compound check carries `&`,
+# which sed's replacement reads as the matched text, and because the command has to arrive in the
+# JSON string escaped, as init writes it. $1 = template, $2 = output, $3 = the fast check.
+render_fast_check() {
+  python3 -c "
+import json, sys
+doc = json.load(open(sys.argv[1]))
+def sub(node):
+    if isinstance(node, dict):
+        return {k: sub(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [sub(v) for v in node]
+    if isinstance(node, str):
+        return node.replace('{{HOOKS_DIR}}', '.agents/hooks').replace('{{FAST_CHECK}}', sys.argv[3])
+    return node
+json.dump(sub(doc), open(sys.argv[2], 'w'), indent=2)
+" "$1" "$2" "$3"
+}
+
+# 377. #324 AC1, AC2, AC4 — Antigravity reads a PostToolUse hook's stdout as its JSON result, and
+# on CLI 1.4.7 a fast check that printed `All checks passed!` was logged as a protojson syntax
+# error after every tool call, reads included (docs/verified.md, #324's R7). The rendered command
+# must print exactly `{}` and exit 0 whatever the check prints or returns, with the check's output
+# on stderr; it must sit in a group of its own, so `enabled: false` on it leaves the gates on
+# (#330); and its matcher must name the write tools CLI 1.4.7 calls and the ones the hooks page
+# names. The gates' own reader must still find each gate's timeout in the two-group file.
+r=$(antigravity_repo agy-fast-envelope 1)
+render_fast_check "$ROOT/hooks/templates/antigravity.hooks.json" "$r/.agents/hooks.json" \
+  'echo LINT-STDOUT; echo LINT-STDERR >&2; exit 1'
+cmd=$(agy_get_cmd "$r/.agents/hooks.json" PostToolUse 0)
+( cd "$r/.agents" && printf '{"toolCall":{"name":"write_file"}}' | sh -c "$cmd" >"$TMP/agy_fc_out" 2>"$TMP/agy_fc_err"; echo "$?" >"$TMP/agy_fc_rc" )
+[ "$(cat "$TMP/agy_fc_out")" = '{}' ] && [ "$(wc -l < "$TMP/agy_fc_out" | tr -d ' ')" = 1 ] && c1=ok || c1=no
+[ "$(cat "$TMP/agy_fc_rc")" = 0 ] && c2=ok || c2=no
+grep -q LINT-STDOUT "$TMP/agy_fc_err" && grep -q LINT-STDERR "$TMP/agy_fc_err" && c3=ok || c3=no
+groups=$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+fc, gs = d.get('gate-sdd-fast-check', {}), d.get('gate-sdd', {})
+print(fc.get('enabled') is True, 'PostToolUse' not in gs, sorted(k for k in fc if k != 'enabled'),
+      fc.get('PostToolUse', [{}])[0].get('matcher'))
+" "$r/.agents/hooks.json")
+want="True True ['PostToolUse'] write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content"
+[ "$groups" = "$want" ] && c4=ok || c4=no
+qt=$( (cd "$r" && . .agents/hooks/gate-lib.sh && gate_hook_timeout quality-gate.sh 600 .agents/hooks.json) )
+rt=$( (cd "$r" && . .agents/hooks/gate-lib.sh && gate_hook_timeout review-gate.sh 120 .agents/hooks.json) )
+[ "$qt" = "600 .agents/hooks.json" ] && c5=ok || c5=no
+[ "$rt" = "120 .agents/hooks.json" ] && c6=ok || c6=no
+[ "$c1$c2$c3$c4$c5$c6" = okokokokokok ] && report "the Antigravity fast check prints {} in a group of its own" ok \
+  || report "the Antigravity fast check prints {} in a group of its own" no \
+     "stdout={}=$c1 ($(head -c 80 "$TMP/agy_fc_out")) exit0=$c2 output-on-stderr=$c3 group=$c4 ($groups) qg-timeout=$c5 ($qt) rv-timeout=$c6 ($rt)"
+
+# 378. #324 AC1 — the check is the project's command, and a compound one that calls `exit` must
+# end only itself: inline in a brace group or bare, `exit 3` would end the hook before it printed
+# `{}`, which is the parse error again.
+r=$(antigravity_repo agy-fast-exit 1)
+render_fast_check "$ROOT/hooks/templates/antigravity.hooks.json" "$r/.agents/hooks.json" \
+  'true && echo STEP-ONE; exit 3; echo NEVER'
+cmd=$(agy_get_cmd "$r/.agents/hooks.json" PostToolUse 0)
+out=$( (cd "$r/.agents" && sh -c "$cmd" </dev/null 2>"$TMP/agy_fc_exit_err"; echo "exit=$?") )
+[ "$out" = '{}
+exit=0' ] && c1=ok || c1=no
+grep -q STEP-ONE "$TMP/agy_fc_exit_err" && ! grep -q NEVER "$TMP/agy_fc_exit_err" && c2=ok || c2=no
+[ "$c1$c2" = okok ] && report "a fast check that calls exit still leaves {} on stdout" ok \
+  || report "a fast check that calls exit still leaves {} on stdout" no "stdout+exit=$c1 ($out) stderr=$c2"
 
 
 # --- Hooks invoked directly from a subdirectory (defense in depth) ----------------
@@ -9705,6 +9825,99 @@ case "$err" in *"antigravity PreInvocation: non-tool events need the flat {type,
 [ "$c7$c8$c9$c10" = "okokokok" ] && report "check-manifests enforces PreInvocation on Antigravity in flat form" ok \
   || report "check-manifests enforces PreInvocation on Antigravity in flat form" no \
      "missing-preinv-exit=$c7 missing-preinv-err=$c8 nested-preinv-exit=$c9 nested-preinv-err=$c10"
+
+# #324 AC3. The fast check's envelope, matcher and group are what keep Antigravity's parser quiet
+# and the gates' switch separate, and each is one edit from gone with every test above still
+# green, because those run a rendered copy and not the template's own text. So check-manifests
+# holds the template: a mutation of each must fail, naming the group and what is wrong.
+# $1 = name, $2 = a python statement over the template loaded as `d`.
+mutate_agy_template() {
+  r=$(manifest_repo "$1")
+  python3 -c "
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+exec(sys.argv[2])
+json.dump(d, open(p, 'w'), indent=2)
+" "$r/hooks/templates/antigravity.hooks.json" "$2"
+  echo "$r"
+}
+fc_hook="d['gate-sdd-fast-check']['PostToolUse'][0]"
+
+# 379. #324 AC3 — the matcher widened back to ".*": the fast check runs after every read again.
+r=$(mutate_agy_template mf-fc-matcher "$fc_hook['matcher'] = '.*'")
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *"gate-sdd-fast-check PostToolUse: the matcher"*) c1=ok ;; *) c1=no ;; esac || c1=no
+
+# 380. #324 AC3 — the envelope dropped: the check's stdout is the hook's result again.
+r=$(mutate_agy_template mf-fc-bare "$fc_hook['hooks'][0]['command'] = 'cd \"\$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && {{FAST_CHECK}}'")
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *"gate-sdd-fast-check PostToolUse: the command"*) c2=ok ;; *) c2=no ;; esac || c2=no
+
+# 381. #324 AC3, AC4 — the fast check moved back into the gates' group, under their one switch.
+r=$(mutate_agy_template mf-fc-in-gates "d['gate-sdd']['PostToolUse'] = d.pop('gate-sdd-fast-check')['PostToolUse']")
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *"gate-sdd: PostToolUse"*) c3=ok ;; *) c3=no ;; esac || c3=no
+
+# 382. #324 AC3 — a group shipped switched off: on the gates' group, no gate runs anywhere.
+r=$(mutate_agy_template mf-gates-off "d['gate-sdd']['enabled'] = False")
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *'gate-sdd: "enabled"'*) c4=ok ;; *) c4=no ;; esac || c4=no
+
+[ "$c1$c2$c3$c4" = okokokok ] && report "check-manifests holds the fast check's matcher, envelope and group" ok \
+  || report "check-manifests holds the fast check's matcher, envelope and group" no \
+     "matcher=$c1 envelope=$c2 in-gates=$c3 gates-off=$c4 (last stderr: $(head -c 300 "$TMP/mferr"))"
+
+# 383. #324 AC8 — Claude Code gives the model a PostToolUse hook's stderr on exit 2 only; exit 1 is a
+# non-blocking error and stdout goes to the debug log. A linter exits 1 with its diagnostics on
+# stdout, so the template's bare `{{FAST_CHECK}}` reached nobody, though docs/fidelity.md said
+# "exit 2 to stderr". The rendered command must exit 2 with the check's output, both streams, on
+# stderr when the check fails, exit 0 when it passes, and leave stdout empty either way. A
+# compound check that calls `exit` must not decide the hook's code.
+r="$TMP/cc-fast-check"; mkdir -p "$r"
+cc_fast_cmd() {
+  python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+print(d['hooks']['PostToolUse'][0]['hooks'][0]['command'].replace('{{FAST_CHECK}}', sys.argv[2]))
+" "$ROOT/hooks/templates/claude-code.settings.json" "$1"
+}
+cmd=$(cc_fast_cmd 'echo LINT-STDOUT; echo LINT-STDERR >&2; exit 1')
+( cd "$r" && sh -c "$cmd" </dev/null >"$TMP/cc_fc_out" 2>"$TMP/cc_fc_err"; echo "$?" >"$TMP/cc_fc_rc" )
+[ "$(cat "$TMP/cc_fc_rc")" = 2 ] && c1=ok || c1=no
+[ ! -s "$TMP/cc_fc_out" ] && grep -q LINT-STDOUT "$TMP/cc_fc_err" && grep -q LINT-STDERR "$TMP/cc_fc_err" && c2=ok || c2=no
+cmd=$(cc_fast_cmd 'echo All checks passed!')
+( cd "$r" && sh -c "$cmd" </dev/null >"$TMP/cc_fc_out" 2>/dev/null; echo "$?" >"$TMP/cc_fc_rc" )
+[ "$(cat "$TMP/cc_fc_rc")" = 0 ] && [ ! -s "$TMP/cc_fc_out" ] && c3=ok || c3=no
+cmd=$(cc_fast_cmd 'echo STEP-ONE; exit 3; echo NEVER')
+( cd "$r" && sh -c "$cmd" </dev/null >/dev/null 2>"$TMP/cc_fc_err"; echo "$?" >"$TMP/cc_fc_rc" )
+[ "$(cat "$TMP/cc_fc_rc")" = 2 ] && grep -q STEP-ONE "$TMP/cc_fc_err" && ! grep -q NEVER "$TMP/cc_fc_err" && c4=ok || c4=no
+[ "$c1$c2$c3$c4" = okokokok ] && report "the Claude Code fast check exits 2 with its output on stderr when it fails" ok \
+  || report "the Claude Code fast check exits 2 with its output on stderr when it fails" no \
+     "fail-exit2=$c1 output-on-stderr=$c2 pass-exit0-quiet=$c3 compound-exit=$c4 (command: $cmd)"
+
+# 384. #324 AC8 — the same envelope held by check-manifests, which reads the template itself.
+r=$(manifest_repo mf-cc-bare)
+python3 -c "
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d['hooks']['PostToolUse'][0]['hooks'][0]['command'] = '{{FAST_CHECK}}'
+json.dump(d, open(p, 'w'), indent=2)
+" "$r/hooks/templates/claude-code.settings.json"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *"claude-code PostToolUse: the command"*) c1=ok ;; *) c1=no ;; esac || c1=no
+[ "$c1" = ok ] && report "check-manifests holds the Claude Code fast check's envelope" ok \
+  || report "check-manifests holds the Claude Code fast check's envelope" no "exit=$out stderr=$(head -c 300 "$TMP/mferr")"
+
+# 391. #324 review round 1, LOW — the group rule compared only the template's object members, so a
+#      stray scalar at its root, such as `"enabled": false` written beside the groups rather than in
+#      one, passed "exactly these groups" unseen. Every top-level key is a group or an error.
+r=$(mutate_agy_template mf-root-scalar "d['enabled'] = False")
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *"the template's groups are"*"enabled"*) c1=ok ;; *) c1=no ;; esac || c1=no
+[ "$c1" = ok ] && report "check-manifests fails a stray key at the Antigravity template's root" ok \
+  || report "check-manifests fails a stray key at the Antigravity template's root" no "exit=$out stderr=$(head -c 300 "$TMP/mferr")"
 
 
 
