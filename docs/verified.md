@@ -539,6 +539,22 @@ What blocking does is A2's finding above; these runs show which hooks fire, and 
 - A `PostToolUse` error's effect on the model, beyond the log line.
 - The IDE, which is discontinued.
 
+## What a `Stop` block may hold, and the harness marker, on Antigravity CLI 1.4.7 (#302)
+
+**Run on 2026-10-27, Antigravity CLI 1.4.7** (`agy.log`: `Language server version: 1.4.7`), before #302's code changed. The setup is the #324 section's: one headless turn per run, `agy --sandbox --mode accept-edits --effort low -p`, in a fresh `mktemp -d` project under the trusted folder, with `ANTIGRAVITY_CONVERSATION_ID` and `ANTIGRAVITY_AGENT` unset. The prompt asked for one file write and no shell command.
+- **The project's hooks file:** one `gate-sdd` group holding one `Stop` entry, `cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; <command>`, with the command each run names.
+- **The stand-in:** it counted its calls, saved its stdin, and logged the `GATE_SDD_HARNESS` it saw. On its first call it printed a fixed verdict, byte for byte, and exited 0. After that it printed nothing and exited 0. Each verdict's reason ended with an instruction to write `seen.txt` holding a word of that run's own, so the file shows the model read the reason.
+
+| Run | The verdict, and the command | Observed |
+| :-- | :-- | :-- |
+| P1 | `{"decision":"continue","reason":"<ESC>[31mFAIL<ESC>[0m …"}` with raw ESC bytes, as today's escape prints a coloured validator line; `sh .agents/hooks/stop.sh` | **Dropped.** `agy.log`: `failed to call custom stop hook jsonhook__gate-sdd_Stop_0_0: failed to unmarshal result from hook jsonhook__gate-sdd_Stop_0_0 via protojson: … proto: syntax error (line 1:33): invalid character '\x1b' in string`. The stand-in ran once, no `seen.txt` was written, and the turn ended with `status: SUCCESS`. A14's fail-open, for ESC, on 1.4.7. |
+| P2 | The same reason written as `\u001b[31mFAIL\u001b[0m`, then `�`, raw `日本語` as UTF-8, and `\r\n`; `sh .agents/hooks/stop.sh` | **Honoured.** No hook error. The stand-in ran twice, and the model wrote `seen.txt` with the run's word. |
+| P3 | A plain ASCII reason; `GATE_SDD_HARNESS=antigravity sh .agents/hooks/stop.sh` | **Honoured, and the marker arrived.** The stand-in logged `antigravity` on both calls. It ran twice, and the model wrote `seen.txt`. |
+
+The `Stop` hook's stdin on 1.4.7 is one JSON object with `artifactDirectoryPath`, `conversationId`, `error`, `executionNum`, `fullyIdle`, `lastUserInput`, `modelName`, `terminationReason`, `transcriptPath` and `workspacePaths`. It names no harness, so the marker is still the gate's one sure source.
+
+**What this settles for #302's spec.** On 1.4.7, a raw control byte in a `Stop` reason still turns a block into a pass, with nothing but a log line to show it. `\u00XX`, `�` and raw valid UTF-8 parse. A variable set on the hook's command reaches the gate.
+
 ## Still to verify
 
 - [x] The Antigravity run sheet from the 2026-10-11 deep review, A1–A14 in [`reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md): whether a gate blocks at all, the continuation cap, timeouts, digest timing, reviewer registration and `rules/AGENTS.md` — run on 2026-10-11 on CLI 1.3.3, section above.

@@ -135,7 +135,7 @@ The marker reaches the validators too, since they inherit the gate's environment
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
-- [ ] T1: **Probe, with stand-ins (AC9's first three items).** On Antigravity CLI 1.4.7, in a trusted `mktemp -d` project, run `Stop` stand-ins that print:
+- [x] T1: **Probe, with stand-ins (AC9's first three items).** On Antigravity CLI 1.4.7, in a trusted `mktemp -d` project, run `Stop` stand-ins that print:
   - a raw-ESC reason;
   - a reason with `\u001b`, `\ufffd` and raw valid UTF-8;
   - a block under `GATE_SDD_HARNESS=antigravity sh …`, which logs the marker it sees.
