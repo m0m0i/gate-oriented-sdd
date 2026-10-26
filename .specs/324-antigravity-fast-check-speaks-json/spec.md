@@ -154,7 +154,7 @@ It reuses `gate_hook_timeout`'s byte-level JSON walk, the same tokenizer and the
 - `scripts/check-manifests.py`
 - `scripts/test-gates.sh`: cases 377 onward; `agy_get_cmd` finds an event in whichever group holds it
 - `docs/fidelity.md`, `docs/verified.md`, `skills/init/SKILL.md`, `hooks/templates/README.md`, `AGENTS.md`
-- `plugin.json`, `.claude-plugin/plugin.json`: 0.37.0. Minor: a behaviour change in both rendered templates and a new failure in a copied guard.
+- `plugin.json`, `.claude-plugin/plugin.json`: 0.37.0, after the receipt. Minor: a behaviour change in both rendered templates and a new failure in a copied guard.
 
 ### Blast radius
 
@@ -194,7 +194,6 @@ It reuses `gate_hook_timeout`'s byte-level JSON walk, the same tokenizer and the
     - a file running neither gate: passes;
     - an old `gate-lib.sh` without the function: fails with the guard's remedy.
   - Green: `gate_hook_switches` and the anchor check's call and guard.
-- [ ] T6: **Docs and release (AC6).**
-  - The docs listed in Design, and the fingerprint comment.
-  - 0.37.0 in both manifests.
-  - Every validator and `check-version-bump.py` pass.
+- [ ] T6: **Docs (AC6).** The docs listed in Design and the fingerprint comment. Every validator passes.
+
+The 0.37.0 bump is not a task. It lands after the receipt, as `implement` step 5 says (#113).
