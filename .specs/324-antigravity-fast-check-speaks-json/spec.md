@@ -196,6 +196,6 @@ It reuses `gate_hook_timeout`'s byte-level JSON walk, the same tokenizer and the
     - a file running neither gate: passes;
     - an old `gate-lib.sh` without the function: fails with the guard's remedy.
   - Green: `gate_hook_switches` and the anchor check's call and guard.
-- [ ] T6: **Docs (AC6).** The docs listed in Design and the fingerprint comment. Every validator passes.
+- [x] T6: **Docs (AC6).** The docs listed in Design and the fingerprint comment. Every validator passes.
 
 The 0.37.0 bump is not a task. It lands after the receipt, as `implement` step 5 says (#113).

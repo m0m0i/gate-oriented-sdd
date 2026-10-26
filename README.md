@@ -246,7 +246,7 @@ Every row was produced by running it. Method, versions, and open questions: [`do
 | Quality gate on turn end | full — `Stop`, exit 2 | full — `Stop`, `{"decision":"continue"}` |
 | Review-receipt gate | full | full |
 | Gate delivery | from the plugin — `.claude-plugin/hooks.json` runs the gates (V1, V2), and a fix arrives by plugin update, whose pass a session the Claude desktop app starts runs only with the `env` line `init` writes (#274); a live session on a migrated project verified (#263's section of `docs/verified.md`), an update arriving not run (#265); the line restoring the pass verified from a desktop session's shell (F2) and in a session the app itself started (F3) | copied into `.agents/hooks/` by `init`, and a fix arrives by refreshing the copies, and the `timeout`s rendered into `.agents/hooks.json` only by re-running `init` (#304); a refresh by re-running `init` not run |
-| Per-edit fast feedback | full — `PostToolUse` | full — `PostToolUse`, observe-only |
+| Per-edit fast feedback | full — `PostToolUse`, a failing check's output given to the model on exit 2 (#324) | partial — `PostToolUse` runs after each write, observe-only, so its output reaches no model; in a group of its own, switched off without the gates (#324, #330) |
 | Steering digest | full — `SessionStart` | full — `PreInvocation` (turn 0 step injection) |
 | Context re-injection after compaction | full — `SessionStart` | **none** — no session compaction hook |
 
