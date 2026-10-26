@@ -8,7 +8,7 @@ That line is machine-read by the reviewer and the steering digest, and it is the
 
 ## Who uses it
 
-Developers running an agent against their own codebase who want the review step to be a mechanical gate rather than a request the model can decline. Secondarily, people reading it as a reference implementation of hook-enforced process.
+One user: an engineer with many duties, building real applications in short slots, who designs while agents build. `docs/PRD.md` holds the full statement.
 
 ## Capabilities
 
@@ -16,15 +16,18 @@ Summarised from `docs/PRD.md`, which holds the full statement of each — the le
 
 | Id | Capability | Serves |
 | :-- | :-- | :-- |
-| CAP-1 | Review that cannot be declined | LV-1 |
-| CAP-2 | Enforcement the project defines, not the hook | LV-1, LV-4 |
-| CAP-3 | Judgment that is independent, and says when it was not | LV-3 |
-| CAP-4 | Installation into a repository that already has opinions | LV-4 |
-| CAP-5 | Fixes that reach the people running it | LV-5 |
-| CAP-6 | Planning that terminates in something the harness reads | LV-4 |
-| CAP-7 | A gate people leave switched on | LV-2 |
+| CAP-1 | Review that cannot be declined | LV-2 |
+| CAP-2 | Enforcement the project defines, not the hook | LV-4 |
+| CAP-3 | Judgment that is independent, and says when it was not | LV-2 |
+| CAP-4 | Installation into any of the user's projects | LV-4 |
+| CAP-5 | Fixes that reach the projects running it | LV-5 |
+| CAP-6 | Planning that terminates in something the harness reads | LV-2 |
+| CAP-7 | A gate people leave switched on | LV-4 |
+| CAP-8 | Where you stopped | LV-3 |
+| CAP-9 | Every change traces to a decision | LV-2 |
+| CAP-10 | Pieces one engineer can hold | LV-1 |
 
-`LV-*` are the levers in `docs/NORTH_STAR.md`. **`docs/DESIGN.md` and `docs/EPICS.md` cite every capability in prose, and nothing consumes them mechanically** — no spec is required to name one, and no check verifies that a cited id exists. Recorded rather than implied; see #22.
+`LV-*` are the levers in `docs/NORTH_STAR.md`. **`docs/DESIGN.md` and `docs/ROADMAP.md` cite the capabilities in prose, and nothing consumes them mechanically yet** — no spec is required to name one, and no check verifies that a cited id exists; CAP-9's chain check is what would change that. Recorded rather than implied; see #22.
 
 ## What it deliberately is not
 

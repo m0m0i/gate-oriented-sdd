@@ -2706,6 +2706,318 @@ run_qg "$TMP/qgp-worktree-wt" >/dev/null; n=$(qgp_runs "$TMP/qgp-worktree-wt")
 [ "$c1$c2$c3$c4" = okokokok ] && report "a linked worktree runs once and keeps its own pass record" ok \
   || report "a linked worktree runs once and keeps its own pass record" no "main-record=$c1 wt-ran=$c2 wt-record=$c3 main-untouched=$c4"
 
+# 340. #331 AC1, #297's AC3 under two runs at once — a failed run leaves no pass behind, even when an earlier
+#      run in the same worktree is still going. Two Stop hooks share one worktree whenever two
+#      sessions do, or Antigravity runs the workspace gates in a reviewer subagent's turn (#329).
+#      Run A starts on a green tree and holds in its validator; `bad.cfg`, outside the globs,
+#      turns the tree red; run B runs, fails and blocks; then A finishes green and records the
+#      fingerprint it took before B ever ran. The next turn end, with `bad.cfg` still there, must
+#      run the validators again. Sequenced by marker files, not sleeps, so the interleaving is the
+#      same on every run; every wait is bounded, so a fixture that cannot reach it fails here
+#      rather than hanging the suite. RED on main if the late pass is kept: C is `{}` with no run.
+r=$(qgp_repo qgp-race)
+cat > "$r/check.sh" <<'EOF'
+echo x >> ran.log
+[ -f bad.cfg ] && exit 1
+: > a.started
+i=0; while [ ! -f b.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+exit 0
+EOF
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.started" ] && c0=ok || c0=no
+: > "$r/bad.cfg"; out_b=$(run_qg "$r")
+: > "$r/b.done"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_b" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out_a" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$n" = 3 ] && c4=ok || c4=no
+[ "$c0$c1$c2$c3$c4" = okokokokok ] && report "a pass recorded by an earlier run after a later run failed does not skip a red tree" ok \
+  || report "a pass recorded by an earlier run after a later run failed does not skip a red tree" no "a-held=$c0 b-blocks=$c1 a-passes=$c2 next-blocks=$c3 runs=$n (want 3)"
+
+# 341. #331 AC1 — a record is honoured only while its writer is still the latest run to start or
+#      fail here. A pass, then the token naming some other run — one that started since, or was
+#      killed after it wrote its own record — and the next turn end runs; a third, with the token
+#      now its own again, skips. The order-free half of case 340: no timing at all, so a change
+#      that skips on a record without asking the token goes red here first. RED on main, which
+#      keeps no token and skips the second turn end (runs=1).
+r=$(qgp_repo qgp-stale-writer); out1=$(run_qg "$r")
+[ -n "$(sed -n 2p "$r/.git/gate-sdd/quality-pass" 2>/dev/null)" ] && c0=ok || c0=no   # run 1 recorded a writer, or the case proves nothing
+printf 'another-run\n' > "$r/.git/gate-sdd/quality-run"
+out2=$(run_qg "$r"); err2=$(cat "$TMP/qerr"); n2=$(qgp_runs "$r"); out3=$(run_qg "$r"); n3=$(qgp_runs "$r")
+case "$out1$out2$out3" in *"exit=0"*"exit=0"*"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$err2" in *"another run has started or failed"*) c2=ok ;; *) c2=no ;; esac
+[ "$c0$c1$c2" = okokok ] && [ "$n2$n3" = 22 ] && report "a pass recorded by a run that is no longer the latest is not skipped on" ok \
+  || report "a pass recorded by a run that is no longer the latest is not skipped on" no "writer=$c0 passes=$c1 says-why=$c2 runs=$n2$n3 (want 22)"
+
+# 342. #331 AC2 — a failure ends a pass already recorded by a run that started after it began.
+#      Run A starts and holds; run B starts after it, passes and records; `bad.cfg` turns the tree
+#      red; A fails. The next turn end must run, though B's record still matches the source and B
+#      was the latest run to start. A takes its role from `a.role`, which it removes, so B and the
+#      third run take the other branch. RED after T1, where a failure orders nothing: C skips.
+r=$(qgp_repo qgp-race-fail-after)
+cat > "$r/check.sh" <<'EOF'
+echo x >> ran.log
+if [ -f a.role ]; then
+  rm -f a.role; : > a.started
+  i=0; while [ ! -f b.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+fi
+[ ! -f bad.cfg ]
+EOF
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+: > "$r/a.role"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.started" ] && c0=ok || c0=no
+out_b=$(run_qg "$r"); [ -s "$r/.git/gate-sdd/quality-pass" ] && cr=ok || cr=no
+: > "$r/bad.cfg"; : > "$r/b.done"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_b" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out_a" in *"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$cr$c1$c2$c3" = okokokokok ] && [ "$n" = 3 ] && report "a failure ends a pass a later-started run recorded before it" ok \
+  || report "a failure ends a pass a later-started run recorded before it" no "a-held=$c0 b-recorded=$cr b-passes=$c1 a-blocks=$c2 next-blocks=$c3 runs=$n (want 3)"
+
+# 343. #331 AC2 — the other order of finishing: A fails and finishes while B, started after it, is
+#      still running, and B then passes. B's pass must not be recorded, so the next turn end runs.
+#      B checks the tree before `bad.cfg` exists and A after, so the two disagree about one source.
+#      RED after T1: the token still names B when B finishes, B records, and C skips.
+r=$(qgp_repo qgp-race-fail-during)
+cat > "$r/check.sh" <<'EOF'
+echo x >> ran.log
+if [ -f a.role ]; then
+  rm -f a.role; : > a.started
+  i=0; while [ ! -f go.a ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+  [ ! -f bad.cfg ]; exit
+fi
+[ ! -f bad.cfg ] || exit 1
+[ -f a.started ] || exit 0
+: > b.started
+i=0; while [ ! -f a.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+EOF
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+: > "$r/a.role"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-b" 2>&1; echo "exit=$?" >> "$TMP/qrace-b" ) &
+qrace_b=$!
+i=0; while [ ! -f "$r/b.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.started" ] && [ -f "$r/b.started" ] && c0=ok || c0=no
+: > "$r/bad.cfg"; : > "$r/go.a"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+: > "$r/a.done"; wait "$qrace_b"; out_b=$(cat "$TMP/qrace-b")
+rm -f "$r/a.started"; out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_a" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out_b" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = okokokok ] && [ "$n" = 3 ] && report "a failure that finishes first ends the pass of a run started after it" ok \
+  || report "a failure that finishes first ends the pass of a run started after it" no "both-held=$c0 a-blocks=$c1 b-passes=$c2 next-blocks=$c3 runs=$n (want 3)"
+
+# 344. #331 AC2 — a run that failed a validator and was then cut off has still failed. A fails its
+#      first validator and hangs in its second until its deadline cuts it off; B, started after
+#      it, is still running and passes once A has gone. A's budget is 5 s; tech.md is rewritten
+#      with a 60 s one after A has read it, so B outlasts A's deadline without racing its own.
+#      RED after T1: nothing orders a failure, the parent's block finds no record to remove, the
+#      token still names B, B records, and C skips.
+r=$(qgp_repo qgp-race-fail-cutoff)
+cat > "$r/check.sh" <<'EOF'
+echo x >> ran.log
+if [ -f a.role ]; then
+  rm -f a.role; : > a.started
+  i=0; while [ ! -f go.a ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+  [ ! -f bad.cfg ] || { : > a.hang; exit 1; }
+  exit 0
+fi
+[ ! -f bad.cfg ] || exit 1
+[ -f a.started ] || exit 0
+: > b.started
+i=0; while [ ! -f a.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+EOF
+printf '[ -f a.hang ] || exit 0\nrm -f a.hang\nexec sleep 20\n' > "$r/hang.sh"
+printf -- '- Validators: sh check.sh, sh hang.sh\n- Source globs: *.txt\n- Validator budget: 5\n' > "$r/.steering/tech.md"
+: > "$r/a.role"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+printf -- '- Validators: sh check.sh, sh hang.sh\n- Source globs: *.txt\n- Validator budget: 60\n' > "$r/.steering/tech.md"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-b" 2>&1; echo "exit=$?" >> "$TMP/qrace-b" ) &
+qrace_b=$!
+i=0; while [ ! -f "$r/b.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.started" ] && [ -f "$r/b.started" ] && c0=ok || c0=no
+: > "$r/bad.cfg"; : > "$r/go.a"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+case "$out_a" in *"--- sh hang.sh (cut off at the deadline)"*) cc=ok ;; *) cc=no ;; esac   # A failed its first and was cut off in its second, or the case proves nothing
+: > "$r/a.done"; wait "$qrace_b"; out_b=$(cat "$TMP/qrace-b")
+rm -f "$r/a.started"; out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_a" in *"budget of 5 s"*"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out_b" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$cc$c1$c2$c3" = okokokokok ] && [ "$n" = 3 ] && report "a run cut off after a failed validator ends the pass of a run started after it" ok \
+  || report "a run cut off after a failed validator ends the pass of a run started after it" no "both-held=$c0 a-reached-v2=$cc a-cut-off=$c1 b-passes=$c2 next-blocks=$c3 runs=$n (want 3)"
+
+# 345. #331 AC2 — the same with no validator failed first: A's only validator hangs on the red
+#      tree until the deadline cuts it off, so the only failure there is to order is the block the
+#      parent builds. Pins the parent's half of Design step 3, which 344 cannot, since there the
+#      child's half alone turns it green. RED after T1, and with the parent's token write
+#      removed: C skips.
+r=$(qgp_repo qgp-race-hang-cutoff)
+cat > "$r/check.sh" <<'EOF'
+echo x >> ran.log
+if [ -f a.role ]; then
+  rm -f a.role; : > a.started
+  i=0; while [ ! -f go.a ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+  [ ! -f bad.cfg ] || exec sleep 20
+  exit 0
+fi
+[ ! -f bad.cfg ] || exit 1
+[ -f a.started ] || exit 0
+: > b.started
+i=0; while [ ! -f a.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+EOF
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n- Validator budget: 5\n' > "$r/.steering/tech.md"
+: > "$r/a.role"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n- Validator budget: 60\n' > "$r/.steering/tech.md"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-b" 2>&1; echo "exit=$?" >> "$TMP/qrace-b" ) &
+qrace_b=$!
+i=0; while [ ! -f "$r/b.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.started" ] && [ -f "$r/b.started" ] && c0=ok || c0=no
+: > "$r/bad.cfg"; : > "$r/go.a"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+: > "$r/a.done"; wait "$qrace_b"; out_b=$(cat "$TMP/qrace-b")
+rm -f "$r/a.started"; out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_a" in *"budget of 5 s"*"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out_b" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = okokokok ] && [ "$n" = 3 ] && report "a run cut off with no failed validator ends the pass of a run started after it" ok \
+  || report "a run cut off with no failed validator ends the pass of a run started after it" no "both-held=$c0 a-cut-off=$c1 b-passes=$c2 next-blocks=$c3 runs=$n (want 3)"
+
+# 346. #331 AC2 — every failure orders the runs, not only a run's first. A fails its first
+#      validator before B starts, then holds in its second; B starts, passes its first and holds;
+#      `bad.cfg` turns the tree red; A's second fails and A finishes; then B passes. A's second
+#      failure came after B started, so B's pass must not stand. RED after T1, and with only the
+#      first failure written: the token names B again by then, B records, and C skips.
+r=$(qgp_repo qgp-race-second-fail)
+cat > "$r/v1.sh" <<'EOF'
+echo x >> ran.log
+if [ -f a.role ]; then rm -f a.role; : > a.in-v2; exit 1; fi
+[ ! -f bad.cfg ]
+EOF
+cat > "$r/v2.sh" <<'EOF'
+if [ -f a.in-v2 ]; then
+  rm -f a.in-v2; : > a.held
+  i=0; while [ ! -f go.a ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+  [ ! -f bad.cfg ]; exit
+fi
+[ ! -f bad.cfg ] || exit 1
+[ -f a.held ] || exit 0
+: > b.started
+i=0; while [ ! -f a.done ] && [ "$i" -lt 300 ]; do sleep 0.1; i=$((i+1)); done
+EOF
+printf -- '- Validators: sh v1.sh, sh v2.sh\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
+: > "$r/a.role"
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-a" 2>&1; echo "exit=$?" >> "$TMP/qrace-a" ) &
+qrace_a=$!
+i=0; while [ ! -f "$r/a.held" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+( cd "$r" && sh hooks/quality-gate.sh > "$TMP/qrace-b" 2>&1; echo "exit=$?" >> "$TMP/qrace-b" ) &
+qrace_b=$!
+i=0; while [ ! -f "$r/b.started" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i+1)); done
+[ -f "$r/a.held" ] && [ -f "$r/b.started" ] && c0=ok || c0=no
+: > "$r/bad.cfg"; : > "$r/go.a"; wait "$qrace_a"; out_a=$(cat "$TMP/qrace-a")
+: > "$r/a.done"; wait "$qrace_b"; out_b=$(cat "$TMP/qrace-b")
+rm -f "$r/a.held"; out_c=$(run_qg "$r"); n=$(qgp_runs "$r")
+case "$out_a" in *"--- sh v1.sh"*"--- sh v2.sh"*"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$out_b" in *"exit=0"*) c2=ok ;; *) c2=no ;; esac
+case "$out_c" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = okokokok ] && [ "$n" = 3 ] && report "a run's second failure ends the pass of a run started between its failures" ok \
+  || report "a run's second failure ends the pass of a run started between its failures" no "both-held=$c0 a-failed-both=$c1 b-passes=$c2 next-blocks=$c3 runs=$n (want 3)"
+
+# 347. #331 AC3 — a directory at the token path. `mv` onto a directory moves the file into it and
+#      reports success, on BSD and GNU alike, so a run that wrote there unchecked would believe its
+#      start recorded. Every write — a run's start, a failed validator, and the parent's block at a
+#      cut-off — must leave the directory empty and record no pass, and the passing run must say
+#      the pass could not be recorded and why. RED after T2: the start drops a file into it.
+r=$(qgp_repo qgp-token-dir)
+printf 'echo x >> ran.log\n[ ! -f fail.cfg ] || exit 1\n[ ! -f hang.cfg ] || exec sleep 20\n' > "$r/check.sh"
+printf -- '- Validators: sh check.sh\n- Source globs: *.txt\n- Validator budget: 3\n' > "$r/.steering/tech.md"
+qd="$r/.git/gate-sdd/quality-run"; mkdir -p "$qd"
+qd_empty() { for f in "$qd"/* "$qd"/.[!.]*; do [ -e "$f" ] && return 1; done; return 0; }
+out1=$(run_qg "$r"); err1=$(cat "$TMP/qerr"); qd_empty && e1=ok || e1=no
+[ -e "$r/.git/gate-sdd/quality-pass" ] && rec=yes || rec=no
+out2=$(run_qg "$r"); n=$(qgp_runs "$r")
+: > "$r/fail.cfg"; out3=$(run_qg "$r"); qd_empty && e3=ok || e3=no
+rm -f "$r/fail.cfg"; : > "$r/hang.cfg"; out4=$(run_qg "$r"); qd_empty && e4=ok || e4=no; rm -f "$r/hang.cfg"
+case "$out1$out2" in *"exit=0"*"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$out3$out4" in *"exit=2"*"exit=2"*) c2=ok ;; *) c2=no ;; esac
+case "$err1" in *"could not be recorded"*".git/gate-sdd/quality-run"*"not a regular file"*) c3=ok ;; *) c3=no ;; esac
+[ "$e1$e3$e4$c1$c2$c3" = okokokokokok ] && [ "$rec" = no ] && [ "$n" = 2 ] && report "a directory at the token path is left empty, records no pass, and is named" ok \
+  || report "a directory at the token path is left empty, records no pass, and is named" no "empty-after-start=$e1 -fail=$e3 -cutoff=$e4 passes=$c1 blocks=$c2 names=$c3 record=$rec runs=$n (want 2) err=$(printf '%s' "$err1" | head -c 200)"
+
+# 348. #331 AC3, #297 AC5 — a pass whose record cannot be moved into place costs the next turn end a
+#      run, says so, and leaves no temp file behind. Case 247's read-only directory now fails at
+#      the start token first, so this is the one case that reaches the record's own write: the
+#      fixture's `mv` fails only on a last argument ending in /quality-pass. RED-CAPABLE under
+#      "the record write ignores mv's status", which neither names the failure nor removes its
+#      temp file (names=no left=yes).
+r=$(qgp_repo qgp-record-mv)
+mkdir -p "$TMP/qgp-mvfail"; printf '#!/bin/sh\nfor a; do :; done\ncase "$a" in */quality-pass) exit 1 ;; esac\nexec "%s" "$@"\n' "$(command -v mv)" > "$TMP/qgp-mvfail/mv"; chmod +x "$TMP/qgp-mvfail/mv"
+out1=$( PATH="$TMP/qgp-mvfail:$PATH"; export PATH; run_qg "$r" ); err1=$(cat "$TMP/qerr")
+out2=$( PATH="$TMP/qgp-mvfail:$PATH"; export PATH; run_qg "$r" ); n=$(qgp_runs "$r")
+left=no; for f in "$r/.git/gate-sdd"/quality-pass* "$r/.git/gate-sdd"/quality-run.*; do [ -e "$f" ] && left=yes; done
+case "$out1$out2" in *"exit=0"*"exit=0"*) c1=ok ;; *) c1=no ;; esac
+case "$err1" in *"could not be recorded at"*"quality-pass, so the next turn end runs them again"*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = okok ] && [ "$n" = 2 ] && [ "$left" = no ] && report "a pass record that cannot be moved into place runs again next turn, says so, and leaves nothing" ok \
+  || report "a pass record that cannot be moved into place runs again next turn, says so, and leaves nothing" no "passes=$c1 names=$c2 runs=$n (want 2) left=$left err=$(printf '%s' "$err1" | head -c 200)"
+
+# 349. #331 AC3 — a token that can be neither written nor removed. After a pass, the record's
+#      directory is made read-only and the source turns red: the run cannot record its start or
+#      its failure, and cannot remove the token, which still names the run that passed. It blocks
+#      on the red tree, and says at its start and in its block that a pass may still be skipped
+#      on, naming the record it could not remove as qg_block does; then a run cut off at its
+#      deadline says the same in the parent's block. RED-CAPABLE under "ignore a token that
+#      cannot be written", which says none of it.
+r=$(qgp_repo qgp-token-stuck); run_qg "$r" >/dev/null; chmod 555 "$r/.git/gate-sdd" 2>/dev/null
+if ( : > "$r/.git/gate-sdd/probe" ) 2>/dev/null; then
+  rm -f "$r/.git/gate-sdd/probe"; chmod 755 "$r/.git/gate-sdd" 2>/dev/null
+  note_skip "qg/stuck-token" "permissions not enforced here (running as root?)"
+else
+  echo RED >> "$r/src.txt"; out=$(run_qg "$r"); err=$(cat "$TMP/qerr")
+  printf -- '- Validators: sh -c "exec sleep 20"\n- Source globs: *.txt\n- Validator budget: 3\n' > "$r/.steering/tech.md"
+  out2=$(run_qg "$r"); err2=$(cat "$TMP/qerr")
+  chmod 755 "$r/.git/gate-sdd" 2>/dev/null
+  case "$out$out2" in *"exit=2"*"exit=2"*) c1=ok ;; *) c1=no ;; esac
+  case "$err" in *"start could not be recorded at"*"could not be removed, so a pass an earlier run records may still be skipped on"*) c2=ok ;; *) c2=no ;; esac
+  case "$err" in *"RAN-RED"*"This failure could not be recorded at"*"may still be skipped on at the next turn end"*"last pass record at"*"could not be removed"*) c3=ok ;; *) c3=no ;; esac
+  case "$err2" in *"budget of 3 s"*"This failure could not be recorded at"*"quality-run"*) c4=ok ;; *) c4=no ;; esac
+  [ "$c1$c2$c3$c4" = okokokok ] && report "a token that can be neither written nor removed is named at the start and in both halves' blocks" ok \
+    || report "a token that can be neither written nor removed is named at the start and in both halves' blocks" no "blocks=$c1 start-names=$c2 child-block-names=$c3 parent-block-names=$c4 err=$(printf '%s' "$err" | head -c 300)"
+fi
+
+# 350. #331 AC3 — a token that cannot be written is removed, so it names no run and the next turn
+#      end runs. The fixture's `mv` fails only on a last argument ending in /quality-run. After a
+#      pass, a run with that `mv` cannot record its start: it passes, removes the token, says why,
+#      and leaves no temp file; then a red run with the same `mv` cannot record its failure,
+#      blocks, and removes the token again. RED-CAPABLE under "a drop that does not remove":
+#      the token naming the first run survives (token=yes).
+r=$(qgp_repo qgp-token-mv); run_qg "$r" >/dev/null
+mkdir -p "$TMP/qgp-mvtok"; printf '#!/bin/sh\nfor a; do :; done\ncase "$a" in */quality-run) exit 1 ;; esac\nexec "%s" "$@"\n' "$(command -v mv)" > "$TMP/qgp-mvtok/mv"; chmod +x "$TMP/qgp-mvtok/mv"
+echo two >> "$r/src.txt"
+out1=$( PATH="$TMP/qgp-mvtok:$PATH"; export PATH; run_qg "$r" ); err1=$(cat "$TMP/qerr")
+[ -e "$r/.git/gate-sdd/quality-run" ] && t1=yes || t1=no
+printf 'another-run\n' > "$r/.git/gate-sdd/quality-run"; echo RED >> "$r/src.txt"
+out2=$( PATH="$TMP/qgp-mvtok:$PATH"; export PATH; run_qg "$r" ); err2=$(cat "$TMP/qerr")
+[ -e "$r/.git/gate-sdd/quality-run" ] && t2=yes || t2=no
+left=no; for f in "$r/.git/gate-sdd"/quality-run.*; do [ -e "$f" ] && left=yes; done
+case "$out1$out2" in *"exit=0"*"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$err1" in *"start could not be recorded at"*"could not be moved into place"*) c2=ok ;; *) c2=no ;; esac
+case "$err2" in *RAN-RED*) c3=ok ;; *) c3=no ;; esac
+[ "$c1$c2$c3" = okokok ] && [ "$t1$t2$left" = nonono ] && report "a token that cannot be written is removed, at a run's start and at its failure" ok \
+  || report "a token that cannot be written is removed, at a run's start and at its failure" no "verdicts=$c1 names=$c2 ran-red=$c3 token-after-start=$t1 token-after-fail=$t2 left=$left err=$(printf '%s' "$err1" | head -c 200)"
+
 # --- both gates: the library they block through ----------------------------------------
 #
 # Every case above runs these gates with a whole gate-lib.sh. The three states below are the
@@ -3910,7 +4222,11 @@ r_fail=$(t3_repo failfirst "sh -c 'echo failed early >&2; exit 1', sleep 20" '- 
 r_cc=$(t3_repo alone-cc "sleep 20" '- Validator budget: 2' '- Source globs: :(globs)*.txt')
 r_agy=$(t3_repo alone-agy "sleep 20" '- Validator budget: 2' '- Source globs: :(globs)*.txt')
 r_rec=$(t3_repo record "sh -c 'echo x >> ran.log'" '- Source globs: *.txt' '- Validator budget: 3')
-mkdir -p "$t3d/mvshim"; printf '#!/bin/sh\n"%s" "$@" || exit\nexec sleep 20\n' "$(command -v mv)" > "$t3d/mvshim/mv"; chmod +x "$t3d/mvshim/mv"
+# Case 298's `mv` hangs only once it has moved the record into place: its last argument ends in
+# /quality-pass. Since #331 the child also moves the start token, quality-run, into place before
+# its first validator, and a shim hanging on that one would cut the run off before it recorded
+# anything, which is not the state case 298 is about.
+mkdir -p "$t3d/mvshim"; printf '#!/bin/sh\n"%s" "$@" || exit\nfor a; do :; done\ncase "$a" in */quality-pass) exec sleep 20 ;; esac\n' "$(command -v mv)" > "$t3d/mvshim/mv"; chmod +x "$t3d/mvshim/mv"
 r_bg=$(t3_repo leftover "(sleep 20; echo late) &" '- Validator budget: 3')
 r_ag=$(t3_repo agents "sleep 20"); mkdir -p "$r_ag/.agents/hooks"; cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r_ag/.agents/hooks/"
 printf '%s\n' '{"gate-sdd":{"enabled":true,"Stop":[{"type":"command","command":"cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f .agents/hooks/quality-gate.sh ] || exit 0; sh .agents/hooks/quality-gate.sh","timeout":13}]}}' > "$r_ag/.agents/hooks.json"
@@ -3984,11 +4300,12 @@ case "$err" in *"Validator budget:' line"*"reads '12s'"*"from 1 to 590"*) m=ok ;
 
 # 290. #304 AC5 — the run dir. With TMPDIR naming a directory that does not exist, it is made under
 #      the git directory instead and the gate still decides: the pass is recorded and nothing is
-#      left there. With that place blocked too (a file where its directory goes), the gate blocks,
-#      naming both. RED-CAPABLE under "block when the first mktemp fails", which blocks the first.
+#      left there, nor any temp file of the token's or the record's (#331). With that place
+#      blocked too (a file where its directory goes), the gate blocks, naming both. RED-CAPABLE
+#      under "block when the first mktemp fails", which blocks the first.
 r=$(t3_repo notmp "true" '- Source globs: *.txt')
 o1=$( TMPDIR="$t3d/no-such-dir"; export TMPDIR; t3_qg "$r" ); out1=$(cat "$t3d/out")
-left=no; for f in "$r/.git/gate-sdd"/gate-sdd-run.*; do [ -e "$f" ] && left=yes; done
+left=no; for f in "$r/.git/gate-sdd"/gate-sdd-run.* "$r/.git/gate-sdd"/quality-run.* "$r/.git/gate-sdd"/quality-pass.*; do [ -e "$f" ] && left=yes; done
 r2=$(t3_repo notmp2 "true"); : > "$r2/.git/gate-sdd"
 o2=$( TMPDIR="$t3d/no-such-dir"; export TMPDIR; t3_qg "$r2" ); err2=$(cat "$t3d/err")
 case "$err2" in *"$t3d/no-such-dir"*".git/gate-sdd"*) m=ok ;; *) m=no ;; esac
@@ -4089,9 +4406,10 @@ case "$err" in *"--- touch never-ran.flag (did not run)"*) m=ok ;; *) m=no ;; es
   || report "a cut-off names each validator that did not run" no "named=$m ran=$([ -e "$r_cut/never-ran.flag" ] && echo yes || echo no)"
 
 # 298. #304 AC3 — a run cut off just after its pass was recorded leaves no record, so the next turn
-#      end runs the validators again. The fixture's `mv` moves the record into place and then hangs,
-#      so the child is killed holding a written pass. RED-CAPABLE under "the parent leaves the
-#      record when it builds the block": the next run skips on it.
+#      end runs the validators again. The fixture's `mv` moves the record into place and then hangs
+#      (the record's alone: #331's start token goes through untouched), so the child is killed
+#      holding a written pass. RED-CAPABLE under "the parent leaves the record when it builds the
+#      block": the next run skips on it.
 e=$(t3f record.run/exit); ms=$(t3f record.run/ms); err=$(t3f record.run/err)
 [ -e "$r_rec/.git/gate-sdd/quality-pass" ] && rec=yes || rec=no
 n1=$(qgp_runs "$r_rec"); t3_qg "$r_rec" >/dev/null; n2=$(qgp_runs "$r_rec")
@@ -8362,7 +8680,7 @@ case "$err" in *"no badge labelled"*) s3=no ;; *) s3=ok ;; esac
 
 # A non-version shields badge alongside the real one is fine. Without this, "a static badge
 # fails" is satisfiable by a guard that rejects every badge but one, and a licence or CI badge
-# added later would go red for no reason — LV-2, a gate firing on an ordinary edit.
+# added later would go red for no reason — LV-4, a gate firing on an ordinary edit.
 r=$(readme_repo rm-otherbadge)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
@@ -8430,7 +8748,7 @@ case "$err" in *"no badge labelled"*) q3=no ;; *) q3=ok ;; esac
 #
 # The green half is the one that keeps this from being a gate people switch off: query strings
 # get reordered by editors and by hand, and a guard matching the whole URL literally would fail
-# on a change that alters nothing. LV-2 — a gate that fires on an ordinary edit gets disabled.
+# on a change that alters nothing. LV-4 — a gate that fires on an ordinary edit gets disabled.
 mutate_badge() {   # $1 = repo, $2 = replacement URL
   python3 - "$1" "$2" <<'PYEOF'
 import pathlib, re, sys

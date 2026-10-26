@@ -1,6 +1,6 @@
 # Development contract
 
-- Reconciled against PRD: 99e15913803d5e882a1cfc2e2713c6a6d1b081cd
+- Reconciled against PRD: 5e33fa0176dc3e423776699043e2b01d6116ca26
 - Applies to: everything this repository ships — `skills/`, `reviewers/`, `hooks/`, `assets/`, the two manifests — and the guards under `scripts/` that CI runs against them. `.steering/`, `.specs/`, `.work_logs/` and `.claude/` are the dogfood instance and hold to the same rules.
 - Quality anchor: **gates never fail open**, the `- Owns:` line in `.steering/product.md`. A defect that lets a gate exit 0 when it should have blocked is at least HIGH; one that makes a gate silently stop checking is a BLOCKER.
 
