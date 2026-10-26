@@ -9813,6 +9813,48 @@ out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
   || report "check-manifests holds the fast check's matcher, envelope and group" no \
      "matcher=$c1 envelope=$c2 in-gates=$c3 gates-off=$c4 (last stderr: $(head -c 300 "$TMP/mferr"))"
 
+# 383. #324 AC8 — Claude Code gives the model a PostToolUse hook's stderr on exit 2 only; exit 1 is a
+# non-blocking error and stdout goes to the debug log. A linter exits 1 with its diagnostics on
+# stdout, so the template's bare `{{FAST_CHECK}}` reached nobody, though docs/fidelity.md said
+# "exit 2 to stderr". The rendered command must exit 2 with the check's output, both streams, on
+# stderr when the check fails, exit 0 when it passes, and leave stdout empty either way. A
+# compound check that calls `exit` must not decide the hook's code.
+r="$TMP/cc-fast-check"; mkdir -p "$r"
+cc_fast_cmd() {
+  python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+print(d['hooks']['PostToolUse'][0]['hooks'][0]['command'].replace('{{FAST_CHECK}}', sys.argv[2]))
+" "$ROOT/hooks/templates/claude-code.settings.json" "$1"
+}
+cmd=$(cc_fast_cmd 'echo LINT-STDOUT; echo LINT-STDERR >&2; exit 1')
+( cd "$r" && sh -c "$cmd" </dev/null >"$TMP/cc_fc_out" 2>"$TMP/cc_fc_err"; echo "$?" >"$TMP/cc_fc_rc" )
+[ "$(cat "$TMP/cc_fc_rc")" = 2 ] && c1=ok || c1=no
+[ ! -s "$TMP/cc_fc_out" ] && grep -q LINT-STDOUT "$TMP/cc_fc_err" && grep -q LINT-STDERR "$TMP/cc_fc_err" && c2=ok || c2=no
+cmd=$(cc_fast_cmd 'echo All checks passed!')
+( cd "$r" && sh -c "$cmd" </dev/null >"$TMP/cc_fc_out" 2>/dev/null; echo "$?" >"$TMP/cc_fc_rc" )
+[ "$(cat "$TMP/cc_fc_rc")" = 0 ] && [ ! -s "$TMP/cc_fc_out" ] && c3=ok || c3=no
+cmd=$(cc_fast_cmd 'echo STEP-ONE; exit 0; echo NEVER')
+( cd "$r" && sh -c "$cmd" </dev/null >/dev/null 2>"$TMP/cc_fc_err"; echo "$?" >"$TMP/cc_fc_rc" )
+[ "$(cat "$TMP/cc_fc_rc")" = 0 ] && ! grep -q NEVER "$TMP/cc_fc_err" && c4=ok || c4=no
+[ "$c1$c2$c3$c4" = okokokok ] && report "the Claude Code fast check exits 2 with its output on stderr when it fails" ok \
+  || report "the Claude Code fast check exits 2 with its output on stderr when it fails" no \
+     "fail-exit2=$c1 output-on-stderr=$c2 pass-exit0-quiet=$c3 compound-exit=$c4 (command: $cmd)"
+
+# 384. #324 AC8 — the same envelope held by check-manifests, which reads the template itself.
+r=$(manifest_repo mf-cc-bare)
+python3 -c "
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d['hooks']['PostToolUse'][0]['hooks'][0]['command'] = '{{FAST_CHECK}}'
+json.dump(d, open(p, 'w'), indent=2)
+" "$r/hooks/templates/claude-code.settings.json"
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *"claude-code PostToolUse: the command"*) c1=ok ;; *) c1=no ;; esac || c1=no
+[ "$c1" = ok ] && report "check-manifests holds the Claude Code fast check's envelope" ok \
+  || report "check-manifests holds the Claude Code fast check's envelope" no "exit=$out stderr=$(head -c 300 "$TMP/mferr")"
+
 
 
 # 154. A hook-template comparison that could not run is not a comparison that agreed.

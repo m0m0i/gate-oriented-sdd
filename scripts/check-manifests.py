@@ -320,6 +320,18 @@ if isinstance(a, dict) and isinstance(b, dict):
                 f"antigravity {FAST_GROUP} PostToolUse: the command is {cmd!r}; it must be {FAST_COMMAND!r}, "
                 "so the check's output goes to stderr and Antigravity's parser reads {}"
             )
+
+    # And Claude Code's half (#324 AC8): there a PostToolUse hook's stderr reaches the model on exit
+    # 2 only, and a linter exits 1 with its diagnostics on stdout, so the bare check reached nobody.
+    CC_FAST_COMMAND = "( {{FAST_CHECK}} ) 1>&2 || exit 2"
+    cc_post = (a.get("hooks") or {}).get("PostToolUse")
+    cc_cmds = [h.get("command") for e in cc_post if isinstance(e, dict) for h in (e.get("hooks") or []) if isinstance(h, dict)] \
+        if isinstance(cc_post, list) else []
+    if cc_cmds != [CC_FAST_COMMAND]:
+        errors.append(
+            f"claude-code PostToolUse: the command is {cc_cmds!r}; it must be one entry, {CC_FAST_COMMAND!r}, "
+            "so a failing check's output reaches the model on stderr"
+        )
     # Claude Code uses SessionStart for steering digest injection; Antigravity uses PreInvocation (turn 0).
     if (a_events - {"SessionStart"}) != (b_events - {"PreInvocation"}):
         errors.append(
