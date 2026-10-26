@@ -180,7 +180,7 @@ It reuses `gate_hook_timeout`'s byte-level JSON walk, the same tokenizer and the
   - Red: case 377 renders the template with a fast check that prints and exits 1, runs the `PostToolUse` command from `.agents/`, and expects stdout `{}` and exit 0. It fails on `main` because stdout carries the check's output. Case 378 does the same with `exit 3` inside a compound check.
   - Green: change the template.
   - In the same commit, so that it stays green: `agy_get_cmd` and the existing working-directory case read the new group, and `check-manifests.py` reads events and shapes across groups.
-- [ ] T3: **`check-manifests.py` pins the Antigravity template (AC3).**
+- [x] T3: **`check-manifests.py` pins the Antigravity template (AC3).**
   - Red: cases 379 to 382 mutate a copy of the template: the matcher widened to `.*`, the envelope dropped, `PostToolUse` moved back into `gate-sdd`, and `enabled` false on a group. Each expects exit 1 and an error naming the entry.
   - Green: the rules.
 - [ ] T4: **The Claude Code envelope (AC8).**

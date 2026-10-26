@@ -9771,6 +9771,48 @@ case "$err" in *"antigravity PreInvocation: non-tool events need the flat {type,
   || report "check-manifests enforces PreInvocation on Antigravity in flat form" no \
      "missing-preinv-exit=$c7 missing-preinv-err=$c8 nested-preinv-exit=$c9 nested-preinv-err=$c10"
 
+# #324 AC3. The fast check's envelope, matcher and group are what keep Antigravity's parser quiet
+# and the gates' switch separate, and each is one edit from gone with every test above still
+# green, because those run a rendered copy and not the template's own text. So check-manifests
+# holds the template: a mutation of each must fail, naming the group and what is wrong.
+# $1 = name, $2 = a python statement over the template loaded as `d`.
+mutate_agy_template() {
+  r=$(manifest_repo "$1")
+  python3 -c "
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+exec(sys.argv[2])
+json.dump(d, open(p, 'w'), indent=2)
+" "$r/hooks/templates/antigravity.hooks.json" "$2"
+  echo "$r"
+}
+fc_hook="d['gate-sdd-fast-check']['PostToolUse'][0]"
+
+# 379. #324 AC3 — the matcher widened back to ".*": the fast check runs after every read again.
+r=$(mutate_agy_template mf-fc-matcher "$fc_hook['matcher'] = '.*'")
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *"gate-sdd-fast-check PostToolUse: the matcher"*) c1=ok ;; *) c1=no ;; esac || c1=no
+
+# 380. #324 AC3 — the envelope dropped: the check's stdout is the hook's result again.
+r=$(mutate_agy_template mf-fc-bare "$fc_hook['hooks'][0]['command'] = 'cd \"\$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && {{FAST_CHECK}}'")
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *"gate-sdd-fast-check PostToolUse: the command"*) c2=ok ;; *) c2=no ;; esac || c2=no
+
+# 381. #324 AC3, AC4 — the fast check moved back into the gates' group, under their one switch.
+r=$(mutate_agy_template mf-fc-in-gates "d['gate-sdd']['PostToolUse'] = d.pop('gate-sdd-fast-check')['PostToolUse']")
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *"gate-sdd: PostToolUse"*) c3=ok ;; *) c3=no ;; esac || c3=no
+
+# 382. #324 AC3 — a group shipped switched off: on the gates' group, no gate runs anywhere.
+r=$(mutate_agy_template mf-gates-off "d['gate-sdd']['enabled'] = False")
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *'gate-sdd: "enabled"'*) c4=ok ;; *) c4=no ;; esac || c4=no
+
+[ "$c1$c2$c3$c4" = okokokok ] && report "check-manifests holds the fast check's matcher, envelope and group" ok \
+  || report "check-manifests holds the fast check's matcher, envelope and group" no \
+     "matcher=$c1 envelope=$c2 in-gates=$c3 gates-off=$c4 (last stderr: $(head -c 300 "$TMP/mferr"))"
+
 
 
 # 154. A hook-template comparison that could not run is not a comparison that agreed.
