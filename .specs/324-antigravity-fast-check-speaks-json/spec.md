@@ -48,7 +48,7 @@ One spec for two issues, by the maintainer's decision at the twenty-sixth refine
 ### Acceptance criteria
 
 - [ ] **AC1:** WHEN the rendered Antigravity `PostToolUse` command runs a fast check that prints to stdout and exits non-zero THE SYSTEM SHALL print exactly `{}` on stdout and exit 0, with the fast check's output on stderr. The same holds when the fast check is a compound command, or calls `exit`.
-- [ ] **AC2:** WHEN Antigravity runs a tool that does not write a file THE SYSTEM SHALL run no fast check. The template's `PostToolUse` matcher is `write_to_file|replace_file_content|multi_replace_file_content`, the edit tools Antigravity's hooks page names.
+- [ ] **AC2:** WHEN Antigravity runs a tool that does not write a file THE SYSTEM SHALL run no fast check. The template's `PostToolUse` matcher is `write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content`. These are the write tools Antigravity CLI 1.4.0 calls (`write_file`, `edit_file`) and the ones its hooks page names (C6).
 - [ ] **AC3:** WHEN `scripts/check-manifests.py` runs over an Antigravity template whose `PostToolUse` command lacks the envelope of AC1, or whose matcher is not the one in AC2, THE SYSTEM SHALL fail and name the entry.
 - [ ] **AC4:** WHEN a project sets `"enabled": false` on the fast check THE SYSTEM SHALL keep both `Stop` gates and the steering digest running. The fast check is a named group of its own, `gate-sdd-fast-check`, in the rendered file. `gate-sdd` keeps the digest and both gates (C1).
 - [ ] **AC5:** WHEN `check-steering-anchors.sh` runs in a project whose `.agents/hooks.json` turns off a group that runs `quality-gate.sh` or `review-gate.sh`, or runs only one of the two gates, THE SYSTEM SHALL fail and name the file and what is off (C4).
@@ -84,6 +84,7 @@ Asked and answered on 2026-10-26.
 - **C3: fold in the Claude Code template's bare fast check.** Answer: **fold it in.** It is a behaviour change on Claude Code: a failing fast check's output now reaches the model after every edit, as `docs/fidelity.md` already claims. The third subsection and AC8 added. The Claude Code matcher stays `Write|Edit`. Widening it to `NotebookEdit` is not asked for.
 - **C4, decided here, not asked: which hook files AC5 judges.** Every `.agents/hooks.json` the anchor check already reads for `timeout`s (`assets/check-steering-anchors.sh:200-245`). A file that runs either gate must run both, and no group running one may be turned off. A file that runs neither passes. The anchor check cannot tell an Antigravity install whose `gate-sdd` group was deleted from a project that never installed for Antigravity, and failing the second would be a false block on every Claude Code project with Antigravity hooks of its own. That is a stated residual, like deleting the file itself.
 - **C5, decided here, not asked: the steering digest stays in `gate-sdd`.** It is the gates' context, and a group of its own would add a third switch for nothing anyone asked to turn off.
+- **C6, from T1's probe, asked and answered on 2026-10-26: AC2's matcher.** On Antigravity CLI 1.4.0 the file tools are `read_file`, `write_file` and `edit_file`, and there is no multi-edit tool. The hooks page's `write_to_file`, `replace_file_content` and `multi_replace_file_content` matched nothing, so the matcher AC2 first named would never have run the fast check. Answer: **both sets of names.** R5 measured that matcher: the fast check ran after `write_file` and `edit_file`, and not after `read_file`. The documented names stay in case a later CLI uses them. AC2 and the Design's template amended.
 
 ## 2. Design (HOW)
 
@@ -98,7 +99,7 @@ Asked and answered on 2026-10-26.
     "enabled": true,
     "PostToolUse": [
       {
-        "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
+        "matcher": "write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content",
         "hooks": [
           {
             "type": "command",
