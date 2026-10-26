@@ -7,12 +7,14 @@
 # available. A pull request has no working tree to step out of: its head branch and head
 # commit come from the event, not from wherever the checkout happens to be standing.
 #
-# Usage:  check-unreviewed-work.sh [<branch> [<commit>]]
+# Usage:  check-unreviewed-work.sh [<branch> [<commit> [<base commit>]]]
 #
-#   In CI, pass both, from the pull-request event — `actions/checkout` leaves a pull request
+#   In CI, pass all three, from the pull-request event — `actions/checkout` leaves a pull request
 #   on a detached merge ref, so a checker reading HEAD would be asking about a commit that
-#   exists nowhere else. With no arguments it asks about the current branch, which is what is
-#   wanted when a person runs it by hand.
+#   exists nowhere else. The base is the event's `pull_request.base.sha`: the head's specs are
+#   the ones it adds against its merge base with that commit (#316). Without it the check uses
+#   the gates' own candidate list, so a two-argument workflow keeps working. With no arguments
+#   it asks about the current branch, which is what is wanted when a person runs it by hand.
 #
 # Deliberately NOT a turn-end validator. `quality-gate.sh` runs the `- Validators:` line
 # whenever the source has changed since it last passed, and the review gate already asks this question there, in
@@ -99,6 +101,15 @@ if ! command -v gate_tree_names >/dev/null 2>&1; then
   exit 1
 fi
 
+# The same for the lister #316 added, and for the same reason: against a library older than it,
+# `gate_branch_specs` below is a command not found, the list comes back empty, and a head carrying
+# a spec not named for it goes on to "carries no spec", a sentence that claims a check. Case 369.
+if ! command -v gate_branch_specs >/dev/null 2>&1; then
+  echo "check-unreviewed-work: $lib has no gate_branch_specs — it predates the lister that finds a branch's specs from what it adds rather than from its name (#316)." >&2
+  echo "  Re-copy the plugin's hooks/gate-lib.sh over it and run this again." >&2
+  exit 1
+fi
+
 # By hand only, both of them: CI passes the branch and the commit from the event. Each goes
 # through the library's full-refname readers, because a short name is ambiguous whenever a tag
 # shares it, and git then lengthens the branch to `heads/<name>` or resolves the tag in its
@@ -135,29 +146,74 @@ if ! git rev-parse --verify -q "$sha^{commit}" >/dev/null 2>&1; then
   exit 1
 fi
 
-spec=".specs/$branch/spec.md"
+# The base, from the event when it is passed, and verified like the head: a base this clone cannot
+# see would otherwise fall back to a reading the event did not ask for. Case 367. Without it, every
+# candidate in the gates' own list that resolves.
+#
+# With no base at all this fails. The gate keeps the name match alone there, which is what every
+# reader did before #316, but a pull request always has a base, and a check that says the head
+# adds no spec, having never asked, claims a check it did not make: #16's shape. A two-argument
+# workflow in a repository whose default branch is neither `main` nor `master`, checked out with no
+# `origin/HEAD`, is that state, and the remedy is the third argument. Case 375.
+base=${3:-}
+if [ -n "$base" ]; then
+  if ! git rev-parse --verify -q "$base^{commit}" >/dev/null 2>&1; then
+    echo "check-unreviewed-work: cannot resolve base commit '$base' in this clone, so the specs this head adds cannot be told." >&2
+    echo "  A shallow checkout hides it: check out with fetch-depth: 0." >&2
+    exit 1
+  fi
+  bases=$(git rev-parse --verify -q "$base^{commit}")
+else
+  bases=$(gate_default_bases 2>/dev/null) || bases=""
+fi
+if [ -z "$bases" ]; then
+  echo "check-unreviewed-work: no base to measure '$branch' against, so the specs it adds cannot be told and nothing was checked." >&2
+  echo "  Pass the pull request's base commit as the third argument: on GitHub Actions," >&2
+  echo "  \"\${{ github.event.pull_request.base.sha }}\". By hand, pass the commit the branch will merge into." >&2
+  exit 1
+fi
+
 short=$(git rev-parse --short "$sha" 2>/dev/null || printf '%s' "$sha")
 
-# Asked separately from the state below, and only to choose the wording. "Nothing to check"
-# and "checked, and clean" must not share a sentence: that is #16's shape, and a guard that
-# reports a success it did not earn is what #39 is open about.
+# Which specs the head carries: the name match, and every spec it adds against its merge base with
+# the base. This read `.specs/<head branch>/spec.md` alone, so a head named any other way — a
+# prefix, a typo, a spec archived on its own branch — "carried no spec" and passed (#316). A tree
+# that names a spec git cannot get stays listed, and the library says the spec cannot be read
+# (#191, case 199).
 #
-# Asked of the TREE, and only a tree that was read and does not name the spec is "no spec".
-# This was `git cat-file -e "$sha:$spec"`, whose non-zero status is also a tree that names the
-# spec when git cannot get the object behind the name — a partial clone that cannot reach its
-# remote, or a damaged object store — and a tree git could not read at all. Both said "carries
-# no spec" and exited 0. They go on to the library now, which says the spec cannot be read.
-# #191, case 199.
-gate_tree_names "$sha" "$spec"; named=$?
-if [ "$named" -eq 1 ]; then
-  echo "check-unreviewed-work: branch '$branch' carries no spec at $spec in $short — no review to demand, and nothing else examined."
+# A listing git could not make fails the check, and what the name match found is judged all the
+# same, so a tree git cannot read still says that its spec cannot be read (case 199).
+specs=$(gate_branch_specs "$bases" "$sha" "$branch"); listed=$?
+failed=''
+receipts=''
+[ "$listed" -eq 0 ] || failed="
+  $branch — git could not list the specs it adds at $short: a shallow checkout, a damaged object store, or a partial clone that cannot reach its remote. Check out with fetch-depth: 0, or run git fsck, and re-run."
+
+# "Nothing to check" and "checked, and clean" must not share a sentence: that is #16's shape, and
+# a guard that reports a success it did not earn is what #39 is open about.
+if [ "$listed" -eq 0 ] && [ -z "$specs" ]; then
+  echo "check-unreviewed-work: branch '$branch' carries no spec in $short — none named for it, and none it adds — so there is no review to demand, and nothing else was examined."
   exit 0
 fi
 
-state=$(gate_spec_review_state ".specs/$branch" "$sha" "$sha")
+while IFS= read -r dir; do
+  [ -n "$dir" ] || continue
+  state=$(gate_spec_review_state "$dir" "$sha" "$sha")
+  [ -n "$state" ] || continue
+  if [ "${dir#.specs/}" = "$branch" ]; then
+    failed="$failed
+  $branch — $(gate_review_state_sentence "$state")"
+  else
+    failed="$failed
+  $branch — $dir/spec.md: $(gate_review_state_sentence "$state")"
+  fi
+  receipts="$receipts${receipts:+, }$dir/.review-receipt"
+done <<EOF
+$specs
+EOF
 
-if [ -z "$state" ]; then
-  echo "check-unreviewed-work: $spec at $short holds no finished, unreviewed work."
+if [ -z "$failed" ]; then
+  echo "check-unreviewed-work: $(printf '%s' "$specs" | tr '\n' ' ' | sed 's/ $//') at $short holds no finished, unreviewed work."
   exit 0
 fi
 
@@ -165,9 +221,10 @@ reviewer=$(gate_steering_value .steering/tech.md Reviewer)
 [ -n "$reviewer" ] || reviewer="the reviewer named in .steering/tech.md"
 
 echo "check-unreviewed-work FAILED" >&2
-echo "  $branch — $(gate_review_state_sentence "$state")" >&2
+printf '%s\n' "$failed" | sed '1d' >&2
+[ -n "$receipts" ] || exit 1          # only the listing failed, and its line says what to do
 echo "" >&2
 echo "  This pull request carries finished work that no review covers. The turn-end gate can be" >&2
 echo "  switched off and HEAD can be moved; a pull request can do neither. Run $reviewer against" >&2
-echo "  $short, write its Receipt block to .specs/$branch/.review-receipt, and push that commit." >&2
+echo "  $short, write its Receipt block to $receipts, and push that commit." >&2
 exit 1
