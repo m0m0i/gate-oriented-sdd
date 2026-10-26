@@ -48,7 +48,7 @@ One spec for two issues, by the maintainer's decision at the twenty-sixth refine
 ### Acceptance criteria
 
 - [ ] **AC1:** WHEN the rendered Antigravity `PostToolUse` command runs a fast check that prints to stdout and exits non-zero THE SYSTEM SHALL print exactly `{}` on stdout and exit 0, with the fast check's output on stderr. The same holds when the fast check is a compound command, or calls `exit`.
-- [ ] **AC2:** WHEN Antigravity runs a tool that does not write a file THE SYSTEM SHALL run no fast check. The template's `PostToolUse` matcher is `write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content`. These are the write tools Antigravity CLI 1.4.0 calls (`write_file`, `edit_file`) and the ones its hooks page names (C6).
+- [ ] **AC2:** WHEN Antigravity runs a tool that does not write a file THE SYSTEM SHALL run no fast check. The template's `PostToolUse` matcher is `write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content`. These are the write tools Antigravity CLI 1.4.7 calls (`write_file`, `edit_file`) and the ones its hooks page names (C6).
 - [ ] **AC3:** WHEN `scripts/check-manifests.py` runs over an Antigravity template whose `PostToolUse` command lacks the envelope of AC1, or whose matcher is not the one in AC2, THE SYSTEM SHALL fail and name the entry.
 - [ ] **AC4:** WHEN a project sets `"enabled": false` on the fast check THE SYSTEM SHALL keep both `Stop` gates and the steering digest running. The fast check is a named group of its own, `gate-sdd-fast-check`, in the rendered file. `gate-sdd` keeps the digest and both gates (C1).
 - [ ] **AC5:** WHEN `check-steering-anchors.sh` runs in a project whose `.agents/hooks.json` turns off a group that runs `quality-gate.sh` or `review-gate.sh`, or runs only one of the two gates, THE SYSTEM SHALL fail and name the file and what is off (C4).
@@ -61,7 +61,7 @@ One spec for two issues, by the maintainer's decision at the twenty-sixth refine
   That includes a sentence saying the quality pass's fingerprint does not cover the toolchain, so a pass recorded under a shimmed linter can outlive the shim.
 - [ ] **AC7:** each regression case fails on `main` for the stated reason and passes after the fix.
 - [ ] **AC8:** WHEN the rendered Claude Code `PostToolUse` command runs a fast check that fails THE SYSTEM SHALL exit 2 with the fast check's output, stdout and stderr both, on stderr. WHEN the fast check passes it SHALL exit 0. A compound fast check, or one that calls `exit`, behaves the same. `scripts/check-manifests.py` fails a Claude Code template whose `PostToolUse` command lacks that envelope.
-- [ ] **AC9:** WHEN this ships THE SYSTEM SHALL have a recorded run on Antigravity CLI 1.4.0 in `docs/verified.md` (C2). It records whether:
+- [ ] **AC9:** WHEN this ships THE SYSTEM SHALL have a recorded run on Antigravity CLI 1.4.7 in `docs/verified.md` (C2). It records whether:
   - a rendered file with the two named groups loads, and both gates still block;
   - `"enabled": false` on `gate-sdd-fast-check` leaves the gates firing;
   - the narrowed matcher runs the fast check after an edit and not after a read;
@@ -80,11 +80,11 @@ One spec for two issues, by the maintainer's decision at the twenty-sixth refine
 Asked and answered on 2026-10-26.
 
 - **C1: how switching off the fast check stops switching off the gates.** Answer: **a group of its own.** The fast check moves to a named group, `gate-sdd-fast-check`, with its own `enabled`. `gate-sdd` keeps the digest and both `Stop` gates. Antigravity's hooks page shows several named groups in one file, each with an `enabled`. The alternative was one group and AC5's guard alone. It was not taken because quieting the fast check would still have turned the gates off, and the guard would only have said so afterwards. AC4 amended.
-- **C2: probing the local Antigravity CLI 1.4.0 during implement.** Answer: **yes**, in a scratch trusted folder made with `mktemp -d`, recorded in `docs/verified.md`. The two-group file is the measurement that matters. If Antigravity rejected a file with two groups, the whole file would be invalid and every gate off. AC9 added.
+- **C2: probing the local Antigravity CLI 1.4.7 during implement.** Answer: **yes**, in a scratch trusted folder made with `mktemp -d`, recorded in `docs/verified.md`. The two-group file is the measurement that matters. If Antigravity rejected a file with two groups, the whole file would be invalid and every gate off. AC9 added.
 - **C3: fold in the Claude Code template's bare fast check.** Answer: **fold it in.** It is a behaviour change on Claude Code: a failing fast check's output now reaches the model after every edit, as `docs/fidelity.md` already claims. The third subsection and AC8 added. The Claude Code matcher stays `Write|Edit`. Widening it to `NotebookEdit` is not asked for.
 - **C4, decided here, not asked: which hook files AC5 judges.** Every `.agents/hooks.json` the anchor check already reads for `timeout`s (`assets/check-steering-anchors.sh:200-245`). A file that runs either gate must run both, and no group running one may be turned off. A file that runs neither passes. The anchor check cannot tell an Antigravity install whose `gate-sdd` group was deleted from a project that never installed for Antigravity, and failing the second would be a false block on every Claude Code project with Antigravity hooks of its own. That is a stated residual, like deleting the file itself.
 - **C5, decided here, not asked: the steering digest stays in `gate-sdd`.** It is the gates' context, and a group of its own would add a third switch for nothing anyone asked to turn off.
-- **C6, from T1's probe, asked and answered on 2026-10-26: AC2's matcher.** On Antigravity CLI 1.4.0 the file tools are `read_file`, `write_file` and `edit_file`, and there is no multi-edit tool. The hooks page's `write_to_file`, `replace_file_content` and `multi_replace_file_content` matched nothing, so the matcher AC2 first named would never have run the fast check. Answer: **both sets of names.** R5 measured that matcher: the fast check ran after `write_file` and `edit_file`, and not after `read_file`. The documented names stay in case a later CLI uses them. AC2 and the Design's template amended.
+- **C6, from T1's probe, asked and answered on 2026-10-26: AC2's matcher.** On Antigravity CLI 1.4.7 the file tools are `read_file`, `write_file` and `edit_file`, and there is no multi-edit tool. The hooks page's `write_to_file`, `replace_file_content` and `multi_replace_file_content` matched nothing, so the matcher AC2 first named would never have run the fast check. Answer: **both sets of names.** R5 measured that matcher: the fast check ran after `write_file` and `edit_file`, and not after `read_file`. The documented names stay in case a later CLI uses them. AC2 and the Design's template amended.
 
 ## 2. Design (HOW)
 
@@ -145,7 +145,7 @@ It reuses `gate_hook_timeout`'s byte-level JSON walk, the same tokenizer and the
 - `AGENTS.md`'s table reads "plugin-named groups, each with its `enabled` flag".
 - The fingerprint sentence goes beside `qg_fingerprint` in `hooks/quality-gate.sh`, the one place that defines what the fingerprint covers.
 
-**The probe (AC9, C2)** runs first, before any code, on a hand-rendered file in a `mktemp -d` project trusted in Antigravity CLI 1.4.0. It checks the two groups loading, both gates blocking, `enabled: false` on the fast-check group only, the matcher (an edit against a read), and `{}` raising no parse error in `agy.log`. If the two-group file does not load, implementation stops there.
+**The probe (AC9, C2)** runs first, before any code, on a hand-rendered file in a `mktemp -d` project trusted in Antigravity CLI 1.4.7. It checks the two groups loading, both gates blocking, `enabled: false` on the fast-check group only, the matcher (an edit against a read), and `{}` raising no parse error in `agy.log`. If the two-group file does not load, implementation stops there.
 
 ### Affected files
 
@@ -175,7 +175,7 @@ It reuses `gate_hook_timeout`'s byte-level JSON walk, the same tokenizer and the
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
-- [ ] T1: **Probe (AC9).** On Antigravity CLI 1.4.0, in a trusted `mktemp -d` project, load a hand-rendered two-group file and record each AC9 item in `docs/verified.md`. Stop if the file does not load.
+- [ ] T1: **Probe (AC9).** On Antigravity CLI 1.4.7, in a trusted `mktemp -d` project, load a hand-rendered two-group file and record each AC9 item in `docs/verified.md`. Stop if the file does not load.
 - [ ] T2: **Antigravity envelope, matcher and group (AC1, AC2, AC4).**
   - Red: case 377 renders the template with a fast check that prints and exits 1, runs the `PostToolUse` command from `.agents/`, and expects stdout `{}` and exit 0. It fails on `main` because stdout carries the check's output. Case 378 does the same with `exit 3` inside a compound check.
   - Green: change the template.
