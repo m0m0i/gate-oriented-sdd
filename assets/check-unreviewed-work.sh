@@ -103,7 +103,7 @@ fi
 
 # The same for the lister #316 added, and for the same reason: against a library older than it,
 # `gate_branch_specs` below is a command not found, the list comes back empty, and a head carrying
-# a spec not named for it goes on to "carries no spec", a sentence that claims a check. Case 358.
+# a spec not named for it goes on to "carries no spec", a sentence that claims a check. Case 369.
 if ! command -v gate_branch_specs >/dev/null 2>&1; then
   echo "check-unreviewed-work: $lib has no gate_branch_specs — it predates the lister that finds a branch's specs from what it adds rather than from its name (#316)." >&2
   echo "  Re-copy the plugin's hooks/gate-lib.sh over it and run this again." >&2
@@ -147,14 +147,14 @@ if ! git rev-parse --verify -q "$sha^{commit}" >/dev/null 2>&1; then
 fi
 
 # The base, from the event when it is passed, and verified like the head: a base this clone cannot
-# see would otherwise fall back to a reading the event did not ask for. Case 356. Without it, every
+# see would otherwise fall back to a reading the event did not ask for. Case 367. Without it, every
 # candidate in the gates' own list that resolves.
 #
 # With no base at all this fails. The gate keeps the name match alone there, which is what every
 # reader did before #316, but a pull request always has a base, and a check that says the head
 # adds no spec, having never asked, claims a check it did not make: #16's shape. A two-argument
 # workflow in a repository whose default branch is neither `main` nor `master`, checked out with no
-# `origin/HEAD`, is that state, and the remedy is the third argument. Case 364.
+# `origin/HEAD`, is that state, and the remedy is the third argument. Case 375.
 base=${3:-}
 if [ -n "$base" ]; then
   if ! git rev-parse --verify -q "$base^{commit}" >/dev/null 2>&1; then

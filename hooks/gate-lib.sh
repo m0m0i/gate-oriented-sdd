@@ -831,12 +831,12 @@ gate_default_base() {
 # The adds are asked with `--no-renames`, and the slug test does the work rename detection was
 # first asked to do. Git pairs a deleted file with an added one at 50% similarity, every spec
 # shares the template's headings, and a branch that deleted a shipped spec and added a finished
-# look-alike lost the new one to the pairing (review round 1, case 362).
+# look-alike lost the new one to the pairing (review round 1, case 373).
 #
 # The merge base is one call against every base given: `git merge-base <tip> <base>...` is the
 # latest point where the tip meets any of them. The first candidate alone lagged whenever a local
 # `main` was ahead of its remote-tracking ref, and every spec merged in between became the
-# branch's own (case 363). Nothing is derived when that point is the tip itself: the base branch,
+# branch's own (case 374). Nothing is derived when that point is the tip itself: the base branch,
 # a branch with no commit of its own, or one already in a local candidate, each of which the
 # callers skip as shipped. The cost of that, said once: an unreviewed branch not named for its spec,
 # merged into a local `main` and not pushed, is silent locally, as it was before #316.
