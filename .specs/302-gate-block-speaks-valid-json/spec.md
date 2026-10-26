@@ -1,6 +1,6 @@
 # Spec: A gate's block is valid JSON whatever its message holds, and the hook file says which harness reads it
 
-- Slug: 302-gate-block-speaks-valid-json   Issue: 302   Type: bug   Status: draft
+- Slug: 302-gate-block-speaks-valid-json   Issue: 302   Type: bug   Status: approved
 - Author: m0m0i (Claude Code)   Date: 2026-10-26
 
 Backlog row 1's next spec ("Antigravity ready"), after #324 and #330 shipped as #345. #302 is two defects in the nine lines of `gate_block` (`hooks/gate-lib.sh:31-46`), one on each harness. Both turn a block into a pass with no message.
@@ -77,7 +77,7 @@ Asked and answered on 2026-10-26.
   - `C2..DF` needs one continuation byte;
   - `E0` needs a second byte of `A0..BF`, `ED` one of `80..9F`, and the rest of `E1..EF` one of `80..BF`, then one more continuation byte;
   - `F0` needs a second byte of `90..BF`, `F4` one of `80..8F`, and `F1..F3` one of `80..BF`, then two more continuation bytes.
-- Any other byte, and the lead of a sequence that fails these checks, becomes `�`, and the walk moves on one byte. So each invalid byte is one replacement, and a valid character after it is kept (AC2).
+- Any other byte, and the lead of a sequence that fails these checks, becomes `\ufffd`, and the walk moves on one byte. So each invalid byte is one replacement, and a valid character after it is kept (AC2).
 
 The output is ASCII plus the valid UTF-8 it kept. No `\u` surrogate is ever written, so protojson's surrogate rule cannot fire.
 
@@ -137,12 +137,12 @@ The marker reaches the validators too, since they inherit the gate's environment
 
 - [ ] T1: **Probe, with stand-ins (AC9's first three items).** On Antigravity CLI 1.4.7, in a trusted `mktemp -d` project, run `Stop` stand-ins that print:
   - a raw-ESC reason;
-  - a reason with `\u001b`, `�` and raw valid UTF-8;
+  - a reason with `\u001b`, `\ufffd` and raw valid UTF-8;
   - a block under `GATE_SDD_HARNESS=antigravity sh …`, which logs the marker it sees.
 
   Record each in `docs/verified.md`. Stop if an escaped reason is not honoured.
 - [ ] T2: **The escape (AC1, AC2).**
-  - Red: case 392 sweeps 0x01 to 0x1F and DEL through `gate_block`, under `LC_ALL=C` and a UTF-8 locale, on both channels, with the strict check above. It fails on `main` at ESC. Case 393 does the same with the invalid UTF-8 classes in AC2 between valid Japanese text. It expects each bad byte as one `�` and the Japanese kept, and fails on `main` with an empty or raw reason. The #282 probe gets a real CR byte.
+  - Red: case 392 sweeps 0x01 to 0x1F and DEL through `gate_block`, under `LC_ALL=C` and a UTF-8 locale, on both channels, with the strict check above. It fails on `main` at ESC. Case 393 does the same with the invalid UTF-8 classes in AC2 between valid Japanese text. It expects each bad byte as one `\ufffd` and the Japanese kept, and fails on `main` with an empty or raw reason. The #282 probe gets a real CR byte.
   - Green: the new `_gate_json_escape`.
 - [ ] T3: **Fail closed (AC3).**
   - Red: case 394 runs `gate_block` with an `awk` on `PATH` that exits 1. It expects a block on both channels with the fixed reason and parseable JSON. On `main` the reason is empty.
