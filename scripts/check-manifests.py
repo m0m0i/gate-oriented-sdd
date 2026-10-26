@@ -287,9 +287,10 @@ if isinstance(a, dict) and isinstance(b, dict):
     FAST_GROUP = f"{gates_group}-fast-check"
     FAST_MATCHER = "write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content"
     FAST_COMMAND = 'cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && ( {{FAST_CHECK}} ) 1>&2; echo \'{}\''
-    if set(agy_groups) != {gates_group, FAST_GROUP}:
+    # Every top-level key, not only the objects: a stray `"enabled": false` at the root is no group.
+    if set(b) != {gates_group, FAST_GROUP}:
         errors.append(
-            f"antigravity: the template's groups are {sorted(agy_groups)}; they must be exactly "
+            f"antigravity: the template's groups are {sorted(b)}; they must be exactly "
             f"{gates_group!r}, for the digest and the gates, and {FAST_GROUP!r}, for the fast check"
         )
     for name, group in sorted(agy_groups.items()):

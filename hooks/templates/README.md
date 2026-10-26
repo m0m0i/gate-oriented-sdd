@@ -10,7 +10,7 @@
 | Placeholder | Becomes | In |
 | :-- | :-- | :-- |
 | `{{HOOKS_DIR}}` | where the scripts were installed (`.agents/hooks`) | the Antigravity template |
-| `{{FAST_CHECK}}` | the per-edit check for this project's language | both |
+| `{{FAST_CHECK}}` | the per-edit check for this project's language, or `true` when the stack has none — rendered empty, both envelopes are a shell syntax error, which Claude Code would show the model after every edit | both |
 
 The blocking quality gate is **not** a placeholder. It ships as `quality-gate.sh` and reads its commands from the `- Validators:` line in `.steering/tech.md`, so the project configures enforcement by editing steering rather than by having `init` bake a command into a settings file. It used to be `{{QUALITY_GATE}}`, which meant every `init` invented the most important hook in the harness — and an invented one usually loses the dual-channel blocking that `gate-lib.sh` exists to provide.
 

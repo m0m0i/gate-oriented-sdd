@@ -246,7 +246,7 @@ Every row was produced by running it. Method, versions, and open questions: [`do
 | Quality gate on turn end | full — `Stop`, exit 2 | full — `Stop`, `{"decision":"continue"}` |
 | Review-receipt gate | full | full |
 | Gate delivery | from the plugin — `.claude-plugin/hooks.json` runs the gates (V1, V2), and a fix arrives by plugin update, whose pass a session the Claude desktop app starts runs only with the `env` line `init` writes (#274); a live session on a migrated project verified (#263's section of `docs/verified.md`), an update arriving not run (#265); the line restoring the pass verified from a desktop session's shell (F2) and in a session the app itself started (F3) | copied into `.agents/hooks/` by `init`, and a fix arrives by refreshing the copies, and the `timeout`s rendered into `.agents/hooks.json` only by re-running `init` (#304); a refresh by re-running `init` not run |
-| Per-edit fast feedback | full — `PostToolUse`, a failing check's output given to the model on exit 2 (#324) | partial — `PostToolUse` runs after each write, observe-only, so its output reaches no model; in a group of its own, switched off without the gates (#324, #330) |
+| Per-edit fast feedback | full — `PostToolUse`, a failing check's output on stderr with exit 2, which Claude Code's hooks page says reaches the model; that delivery not run in a session (#324) | partial — `PostToolUse` runs after each write, observe-only, so its output reaches no model; in a group of its own, switched off without the gates (#324, #330) |
 | Steering digest | full — `SessionStart` | full — `PreInvocation` (turn 0 step injection) |
 | Context re-injection after compaction | full — `SessionStart` | **none** — no session compaction hook |
 
@@ -256,7 +256,7 @@ The last row is a real gap, not a rounding error. Re-injecting steering after co
 
 **Pre-release.** A reference implementation with a tested-against version matrix, not a supported product. The [eval suite](./evals/) is under development: its four cases are authored, but `claude plugin eval` now rejects them at load, because a `case.yaml` must declare `graders`, so they are still unrun.
 
-Tested against: Claude Code 2.1.300 (2026-10-16) and Antigravity CLI 1.3.3 (2026-10-12) · macOS.
+Tested against: Claude Code 2.1.300 (2026-10-16) and Antigravity CLI 1.4.7 (2026-10-26, the per-edit fast check) and 1.3.3 (2026-10-12, the rest) · macOS.
 
 What *is* verified: the gates' and guards' behaviours, tested deterministically with no model in the loop ([`scripts/test-gates.sh`](./scripts/test-gates.sh) — the count is the suite's, not a number maintained here); Antigravity's `Stop` hook genuinely blocking, run rather than read from documentation ([`docs/verified.md`](./docs/verified.md)); both plugin manifests, the rulebook hashes, and the leakage guard, all in CI; every one of the thirteen skills executed at least once — the inception chain and `init` against this repository or a scratch clone of a real project, `spec`, `clarify`, `implement` and `worklog` on every spec since #17, and `archive` as repeated sweeps of this repository's own shipped specs — with what the inception and `init` runs found recorded in [`docs/verified.md`](./docs/verified.md) and filed as issues; and a review receipt on every spec since #17, under `.specs/`, from a spawned reviewer on all but three, which were reviewed inline and whose receipts say so.
 

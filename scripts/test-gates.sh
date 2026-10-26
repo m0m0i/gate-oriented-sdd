@@ -9889,9 +9889,9 @@ cmd=$(cc_fast_cmd 'echo LINT-STDOUT; echo LINT-STDERR >&2; exit 1')
 cmd=$(cc_fast_cmd 'echo All checks passed!')
 ( cd "$r" && sh -c "$cmd" </dev/null >"$TMP/cc_fc_out" 2>/dev/null; echo "$?" >"$TMP/cc_fc_rc" )
 [ "$(cat "$TMP/cc_fc_rc")" = 0 ] && [ ! -s "$TMP/cc_fc_out" ] && c3=ok || c3=no
-cmd=$(cc_fast_cmd 'echo STEP-ONE; exit 0; echo NEVER')
+cmd=$(cc_fast_cmd 'echo STEP-ONE; exit 3; echo NEVER')
 ( cd "$r" && sh -c "$cmd" </dev/null >/dev/null 2>"$TMP/cc_fc_err"; echo "$?" >"$TMP/cc_fc_rc" )
-[ "$(cat "$TMP/cc_fc_rc")" = 0 ] && ! grep -q NEVER "$TMP/cc_fc_err" && c4=ok || c4=no
+[ "$(cat "$TMP/cc_fc_rc")" = 2 ] && grep -q STEP-ONE "$TMP/cc_fc_err" && ! grep -q NEVER "$TMP/cc_fc_err" && c4=ok || c4=no
 [ "$c1$c2$c3$c4" = okokokok ] && report "the Claude Code fast check exits 2 with its output on stderr when it fails" ok \
   || report "the Claude Code fast check exits 2 with its output on stderr when it fails" no \
      "fail-exit2=$c1 output-on-stderr=$c2 pass-exit0-quiet=$c3 compound-exit=$c4 (command: $cmd)"
@@ -9909,6 +9909,15 @@ out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
 [ "$out" = 1 ] && case "$err" in *"claude-code PostToolUse: the command"*) c1=ok ;; *) c1=no ;; esac || c1=no
 [ "$c1" = ok ] && report "check-manifests holds the Claude Code fast check's envelope" ok \
   || report "check-manifests holds the Claude Code fast check's envelope" no "exit=$out stderr=$(head -c 300 "$TMP/mferr")"
+
+# 391. #324 review round 1, LOW — the group rule compared only the template's object members, so a
+#      stray scalar at its root, such as `"enabled": false` written beside the groups rather than in
+#      one, passed "exactly these groups" unseen. Every top-level key is a group or an error.
+r=$(mutate_agy_template mf-root-scalar "d['enabled'] = False")
+out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+[ "$out" = 1 ] && case "$err" in *"the template's groups are"*"enabled"*) c1=ok ;; *) c1=no ;; esac || c1=no
+[ "$c1" = ok ] && report "check-manifests fails a stray key at the Antigravity template's root" ok \
+  || report "check-manifests fails a stray key at the Antigravity template's root" no "exit=$out stderr=$(head -c 300 "$TMP/mferr")"
 
 
 
