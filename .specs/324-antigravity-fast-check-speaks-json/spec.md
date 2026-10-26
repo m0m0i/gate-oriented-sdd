@@ -186,7 +186,7 @@ It reuses `gate_hook_timeout`'s byte-level JSON walk, the same tokenizer and the
 - [x] T4: **The Claude Code envelope (AC8).**
   - Red: case 383 runs the rendered Claude Code command with a fast check that prints and exits 1, expecting exit 2, the output on stderr and an empty stdout. A passing check exits 0. Case 384 mutates the template back to a bare check and expects `check-manifests.py` to fail.
   - Green: change the template and add the rule.
-- [ ] T5: **The anchor check reads the switches (AC5).**
+- [x] T5: **The anchor check reads the switches (AC5).**
   - Red: cases 385 to 390, each a project file:
     - `enabled: false` on `gate-sdd`: fails;
     - `"enabled": "false"`: fails;

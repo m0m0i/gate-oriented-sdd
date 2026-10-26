@@ -5816,6 +5816,61 @@ case "$out:$err" in 1:*".agents/hooks.json"*) c=ok ;; *) c="no(exit=$out: $(prin
 [ "$a$b$c" = "okokok" ] && report "the anchor check passes with no hook file, and reads the working directory's outside git" ok \
   || report "the anchor check passes with no hook file, and reads the working directory's outside git" no "none=$a nogit-none=$b nogit-agy=$c"
 
+# --- assets: a gate switched off in `.agents/hooks.json` (#330, #324 AC5) -------------------------
+#
+# Antigravity's `enabled` belongs to a named group, and `false` on the group that runs a gate runs
+# none of it, with no message, while every check reported success. The anchor check now reads each
+# `.agents/hooks.json` it reads for timeouts with gate_hook_switches, the same tokenizer. A file
+# that runs neither gate is not judged: it cannot be told from a Claude Code project's own
+# Antigravity hooks, which C4 records as the residual.
+agy_groups() { # agy_groups <gates' enabled> <fast check's enabled> [noreview] — the shape #324 renders
+  _rv=',{"type":"command","command":"sh .agents/hooks/review-gate.sh","timeout":120}'
+  [ "${3:-}" = noreview ] && _rv=''
+  printf '{"gate-sdd":{"enabled":%s,"Stop":[{"type":"command","command":"sh .agents/hooks/quality-gate.sh","timeout":600}%s]},"gate-sdd-fast-check":{"enabled":%s,"PostToolUse":[{"matcher":"write_file","hooks":[{"type":"command","command":"( true ) 1>&2; echo {}","timeout":60}]}]}}\n' "$1" "$_rv" "$2"
+}
+agy_switch_case() { # agy_switch_case <name> <file content> — exit code, stderr in $TMP/aerr
+  _r=$(anc_git "$1"); mkdir -p "$_r/.agents"; printf '%s\n' "$2" > "$_r/.agents/hooks.json"; git -C "$_r" add -A
+  run_anchors "$_r"
+}
+
+# 385. #330 — the reproduction: `"enabled": false` on the gates' group fails, naming the file, the
+#      group and both gates it switches off. On `main` it passed.
+out=$(agy_switch_case anc-sw-off "$(agy_groups false true)"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in 1:*".agents/hooks.json"*'"gate-sdd"'*quality-gate.sh*review-gate.sh*) c1=ok ;; *) c1="no(exit=$out: $(printf '%s' "$err" | head -c 300))" ;; esac
+
+# 386. #330, C4 — `enabled` is read fail-closed: a string "false" is not a running gate. Antigravity's
+#      reading of a non-boolean was never measured, so only an absent key or `true` counts as on.
+out=$(agy_switch_case anc-sw-str "$(agy_groups '"false"' true)"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in 1:*'"gate-sdd"'*) c2=ok ;; *) c2="no(exit=$out: $(printf '%s' "$err" | head -c 300))" ;; esac
+
+# 387. #330 — one gate removed from an enabled file fails, naming the gate that does not run.
+out=$(agy_switch_case anc-sw-one "$(agy_groups true true noreview)"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in 1:*".agents/hooks.json"*"review-gate.sh does not"*) c3=ok ;; *) c3="no(exit=$out: $(printf '%s' "$err" | head -c 300))" ;; esac
+
+# 388. #324 AC4 — the fast check's own group switched off passes: that is what the group is for.
+out=$(agy_switch_case anc-sw-fast "$(agy_groups true false)")
+[ "$out" = 0 ] && c4=ok || c4="no(exit=$out: $(head -c 300 "$TMP/aerr"))"
+
+# 389. #330, C4 — a file that runs neither gate passes, as a Claude Code project's own Antigravity
+#      hooks would. RED-CAPABLE under "fail every .agents/hooks.json without both gates".
+out=$(agy_switch_case anc-sw-none '{"their-hooks":{"enabled":false,"Stop":[{"type":"command","command":"sh lint.sh","timeout":30}]}}')
+[ "$out" = 0 ] && c5=ok || c5="no(exit=$out: $(head -c 300 "$TMP/aerr"))"
+
+# 390. #330 — a library without gate_hook_switches fails with the guard's diagnosis, not exit 127.
+#      #323's review found the review gate's guard loop missing the functions that change added.
+r=$(anc_git anc-sw-stale); git -C "$r" add -A
+python3 - "$r/hooks/gate-lib.sh" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1]); src = p.read_text(); assert "\ngate_hook_switches() {" in src
+p.write_text(src.replace("\ngate_hook_switches() {", "\n_gone_gate_hook_switches() {"))
+PYEOF
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in 1:*"no gate_hook_switches"*"predates"*) c6=ok ;; *) c6="no(exit=$out: $(printf '%s' "$err" | head -c 300))" ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6" = okokokokokok ] && report "the anchor check fails a gate switched off in .agents/hooks.json, and only that" ok \
+  || report "the anchor check fails a gate switched off in .agents/hooks.json, and only that" no \
+     "off=$c1 string=$c2 one-gate=$c3 fast-only=$c4 neither=$c5 stale-lib=$c6"
+
 # 219. #264 — the reproduction, end to end: one tree, one verdict. A Claude Code project migrated
 #      to the plugin — no hooks directory at all — whose `- Validators:` line runs the copied
 #      anchor check. At turn end the plugin's wrapper runs the quality gate with

@@ -107,6 +107,13 @@ for fn in gate_validator_budget gate_hook_timeout; do
     exit 1
   fi
 done
+# And the switch reader (#330), which a library from before #324 lacks.
+if ! command -v gate_hook_switches >/dev/null 2>&1; then
+  echo "check-steering-anchors: $lib has no gate_hook_switches — it predates the reader that finds a gate" >&2
+  echo "  switched off in .agents/hooks.json (#330), so this check cannot say whether the gates run." >&2
+  echo "  Re-copy the plugin's hooks/gate-lib.sh over it and run this again." >&2
+  exit 1
+fi
 
 failed=""
 resolved=0
@@ -277,6 +284,22 @@ for gate in quality-gate.sh review-gate.sh; do
       would lower the line without a word. Raise that \"timeout\" to at least $((vb + _gate_margin))
       (the plugin ships $_gate_qg_ceiling), or lower the line to $bound or less."
   fi
+done
+
+# A gate switched off (#330, #324 AC5). Antigravity's `enabled` belongs to a named group, and a group
+# that is off runs none of its entries, so the gates it holds stop and nothing says so. Each
+# .agents/hooks.json in the set above is read with the same tokenizer; one that does not parse has
+# already been reported by the timeout reader, in its own words.
+for f in "$@"; do
+  case "$f" in .agents/hooks.json|*/.agents/hooks.json) ;; *) continue ;; esac
+  hs=$(cd "$hroot" && gate_hook_switches "$f"); hsrc=$?
+  case "$hsrc" in
+    0) ;;
+    1) failed="${failed}
+$(printf '%s\n' "$hs" | sed 's/^/  /')" ;;
+    *) case "$failed" in *"$f does not parse"*|*"$f exists and cannot be read"*) ;; *) failed="${failed}
+  ${hs:-gate_hook_switches exited $hsrc for $f, so its switches were not checked}." ;; esac ;;
+  esac
 done
 
 if [ -n "$failed" ]; then
