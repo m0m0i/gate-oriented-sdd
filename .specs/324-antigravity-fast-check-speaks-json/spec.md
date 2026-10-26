@@ -1,6 +1,6 @@
 # Spec: The fast check speaks each harness's protocol, and switching it off leaves the gates on
 
-- Slug: 324-antigravity-fast-check-speaks-json   Issue: 324, with 330   Type: bug   Status: approved
+- Slug: 324-antigravity-fast-check-speaks-json   Issue: 324, with 330   Type: bug   Status: done
 - Author: m0m0i (Claude Code)   Date: 2026-10-26
 
 One spec for two issues, by the maintainer's decision at the twenty-sixth refinement: both are `hooks/templates/antigravity.hooks.json`, and #324's failure is what makes #330's edit likely. The pull request closes both. #324's triage asked to fold in the Claude Code template's fast check only if the spec rewrote both templates; `clarify` chose to, so it is the third subsection.
