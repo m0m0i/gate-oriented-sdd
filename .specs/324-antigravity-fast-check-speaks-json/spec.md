@@ -176,7 +176,7 @@ It reuses `gate_hook_timeout`'s byte-level JSON walk, the same tokenizer and the
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
 - [x] T1: **Probe (AC9).** On Antigravity CLI 1.4.7, in a trusted `mktemp -d` project, load a hand-rendered two-group file and record each AC9 item in `docs/verified.md`. Stop if the file does not load.
-- [ ] T2: **Antigravity envelope, matcher and group (AC1, AC2, AC4).**
+- [x] T2: **Antigravity envelope, matcher and group (AC1, AC2, AC4).**
   - Red: case 377 renders the template with a fast check that prints and exits 1, runs the `PostToolUse` command from `.agents/`, and expects stdout `{}` and exit 0. It fails on `main` because stdout carries the check's output. Case 378 does the same with `exit 3` inside a compound check.
   - Green: change the template.
   - In the same commit, so that it stays green: `agy_get_cmd` and the existing working-directory case read the new group, and `check-manifests.py` reads events and shapes across groups.

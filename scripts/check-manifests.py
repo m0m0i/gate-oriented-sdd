@@ -255,23 +255,28 @@ if isinstance(a, dict) and isinstance(b, dict):
     a_events = set((a.get("hooks") or {}).keys())
     if isinstance(p_doc, dict):
         a_events |= set((p_doc.get("hooks") or {}).keys())
-    envelope = b.get(cc.get("name") if cc else "", {})
-    b_events = {k for k in envelope if k != "enabled"}
+    # The template is named groups, each with its own `enabled` (#330): `gate-sdd` holds the digest
+    # and both gates, and the fast check has a group of its own so that switching it off leaves
+    # the gates on. Events and shapes are read across every group; the gates pair by `gate-sdd`.
+    agy_groups = {name: g for name, g in b.items() if isinstance(g, dict)}
+    envelope = agy_groups.get(cc.get("name") if cc else "", {})
+    b_events = {k for g in agy_groups.values() for k in g if k != "enabled"}
 
     # Antigravity's schema is mixed: tool events nest under {matcher, hooks:[...]},
     # non-tool events are flat {type, command}. Getting it wrong invalidates the
     # whole file with a misleading error, so check the shapes here rather than
     # discovering it at runtime.
     TOOL_EVENTS = {"PreToolUse", "PostToolUse"}
-    for event, entries in envelope.items():
-        if event == "enabled":
-            continue
-        for e in entries if isinstance(entries, list) else []:
-            nested = isinstance(e, dict) and "hooks" in e
-            if event in TOOL_EVENTS and not nested:
-                errors.append(f"antigravity {event}: tool events need the nested {{matcher, hooks:[...]}} form")
-            if event not in TOOL_EVENTS and nested:
-                errors.append(f"antigravity {event}: non-tool events need the flat {{type, command}} form")
+    for group in agy_groups.values():
+        for event, entries in group.items():
+            if event == "enabled":
+                continue
+            for e in entries if isinstance(entries, list) else []:
+                nested = isinstance(e, dict) and "hooks" in e
+                if event in TOOL_EVENTS and not nested:
+                    errors.append(f"antigravity {event}: tool events need the nested {{matcher, hooks:[...]}} form")
+                if event not in TOOL_EVENTS and nested:
+                    errors.append(f"antigravity {event}: non-tool events need the flat {{type, command}} form")
     # Claude Code uses SessionStart for steering digest injection; Antigravity uses PreInvocation (turn 0).
     if (a_events - {"SessionStart"}) != (b_events - {"PreInvocation"}):
         errors.append(

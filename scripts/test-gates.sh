@@ -9275,12 +9275,12 @@ case "$err" in *"README.md: the declaration's \`extraKnownMarketplaces\`"*) c18=
 # with cwd set to .agents/, or it passes for the wrong reason.
 
 agy_get_cmd() {
-  # $1 = hooks.json, $2 = event, $3 = index
+  # $1 = hooks.json, $2 = event, $3 = index. The event is read from whichever named group holds
+  # it: since #324 the fast check's PostToolUse is in a group of its own.
   python3 -c "
 import json, sys
 data = json.load(open(sys.argv[1]))
-pkg = data.get('gate-sdd', {})
-ev = pkg.get(sys.argv[2], [])
+ev = next((g[sys.argv[2]] for g in data.values() if isinstance(g, dict) and sys.argv[2] in g), [])
 idx = int(sys.argv[3])
 if sys.argv[2] == 'PostToolUse':
     print(ev[idx]['hooks'][0]['command'])
@@ -9352,6 +9352,71 @@ case "$out_rv" in *"exit=0"*) c7=ok ;; *) c7=no ;; esac
 [ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] && report "Antigravity hooks execute from repo root when cwd is .agents/" ok \
   || report "Antigravity hooks execute from repo root when cwd is .agents/" no \
      "qg-exit=$c1 qg-json=$c2 rv-exit=$c3 rv-json=$c4 fast-check-root=$c5 clean-qg-exit=$c6 clean-rv-exit=$c7"
+
+# The fast check is rendered by json.dump rather than sed, because a compound check carries `&`,
+# which sed's replacement reads as the matched text, and because the command has to arrive in the
+# JSON string escaped, as init writes it. $1 = template, $2 = output, $3 = the fast check.
+render_fast_check() {
+  python3 -c "
+import json, sys
+doc = json.load(open(sys.argv[1]))
+def sub(node):
+    if isinstance(node, dict):
+        return {k: sub(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [sub(v) for v in node]
+    if isinstance(node, str):
+        return node.replace('{{HOOKS_DIR}}', '.agents/hooks').replace('{{FAST_CHECK}}', sys.argv[3])
+    return node
+json.dump(sub(doc), open(sys.argv[2], 'w'), indent=2)
+" "$1" "$2" "$3"
+}
+
+# 377. #324 AC1, AC2, AC4 — Antigravity reads a PostToolUse hook's stdout as its JSON result, and
+# on CLI 1.4.7 a fast check that printed `All checks passed!` was logged as a protojson syntax
+# error after every tool call, reads included (docs/verified.md, #324's R7). The rendered command
+# must print exactly `{}` and exit 0 whatever the check prints or returns, with the check's output
+# on stderr; it must sit in a group of its own, so `enabled: false` on it leaves the gates on
+# (#330); and its matcher must name the write tools CLI 1.4.7 calls and the ones the hooks page
+# names. The gates' own reader must still find each gate's timeout in the two-group file.
+r=$(antigravity_repo agy-fast-envelope 1)
+render_fast_check "$ROOT/hooks/templates/antigravity.hooks.json" "$r/.agents/hooks.json" \
+  'echo LINT-STDOUT; echo LINT-STDERR >&2; exit 1'
+cmd=$(agy_get_cmd "$r/.agents/hooks.json" PostToolUse 0)
+( cd "$r/.agents" && printf '{"toolCall":{"name":"write_file"}}' | sh -c "$cmd" >"$TMP/agy_fc_out" 2>"$TMP/agy_fc_err"; echo "$?" >"$TMP/agy_fc_rc" )
+[ "$(cat "$TMP/agy_fc_out")" = '{}' ] && [ "$(wc -l < "$TMP/agy_fc_out" | tr -d ' ')" = 1 ] && c1=ok || c1=no
+[ "$(cat "$TMP/agy_fc_rc")" = 0 ] && c2=ok || c2=no
+grep -q LINT-STDOUT "$TMP/agy_fc_err" && grep -q LINT-STDERR "$TMP/agy_fc_err" && c3=ok || c3=no
+groups=$(python3 -c "
+import json, sys
+d = json.load(open(sys.argv[1]))
+fc, gs = d.get('gate-sdd-fast-check', {}), d.get('gate-sdd', {})
+print(fc.get('enabled') is True, 'PostToolUse' not in gs, sorted(k for k in fc if k != 'enabled'),
+      fc.get('PostToolUse', [{}])[0].get('matcher'))
+" "$r/.agents/hooks.json")
+want="True True ['PostToolUse'] write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content"
+[ "$groups" = "$want" ] && c4=ok || c4=no
+qt=$( (cd "$r" && . .agents/hooks/gate-lib.sh && gate_hook_timeout quality-gate.sh 600 .agents/hooks.json) )
+rt=$( (cd "$r" && . .agents/hooks/gate-lib.sh && gate_hook_timeout review-gate.sh 120 .agents/hooks.json) )
+[ "$qt" = "600 .agents/hooks.json" ] && c5=ok || c5=no
+[ "$rt" = "120 .agents/hooks.json" ] && c6=ok || c6=no
+[ "$c1$c2$c3$c4$c5$c6" = okokokokokok ] && report "the Antigravity fast check prints {} in a group of its own" ok \
+  || report "the Antigravity fast check prints {} in a group of its own" no \
+     "stdout={}=$c1 ($(head -c 80 "$TMP/agy_fc_out")) exit0=$c2 output-on-stderr=$c3 group=$c4 ($groups) qg-timeout=$c5 ($qt) rv-timeout=$c6 ($rt)"
+
+# 378. #324 AC1 — the check is the project's command, and a compound one that calls `exit` must
+# end only itself: inline in a brace group or bare, `exit 3` would end the hook before it printed
+# `{}`, which is the parse error again.
+r=$(antigravity_repo agy-fast-exit 1)
+render_fast_check "$ROOT/hooks/templates/antigravity.hooks.json" "$r/.agents/hooks.json" \
+  'true && echo STEP-ONE; exit 3; echo NEVER'
+cmd=$(agy_get_cmd "$r/.agents/hooks.json" PostToolUse 0)
+out=$( (cd "$r/.agents" && sh -c "$cmd" </dev/null 2>"$TMP/agy_fc_exit_err"; echo "exit=$?") )
+[ "$out" = '{}
+exit=0' ] && c1=ok || c1=no
+grep -q STEP-ONE "$TMP/agy_fc_exit_err" && ! grep -q NEVER "$TMP/agy_fc_exit_err" && c2=ok || c2=no
+[ "$c1$c2" = okok ] && report "a fast check that calls exit still leaves {} on stdout" ok \
+  || report "a fast check that calls exit still leaves {} on stdout" no "stdout+exit=$c1 ($out) stderr=$c2"
 
 
 # --- Hooks invoked directly from a subdirectory (defense in depth) ----------------
