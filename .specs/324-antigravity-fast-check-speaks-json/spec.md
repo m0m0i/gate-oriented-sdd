@@ -58,6 +58,7 @@ One spec for two issues, by the maintainer's decision at the twenty-sixth refine
   - `skills/init/SKILL.md:72`, on the stdout rule and the groups;
   - `hooks/templates/README.md`;
   - `AGENTS.md`'s layout table ("plugin-name envelope, `enabled` flag").
+  - the "Per-edit fast feedback" row in `README.md` and `README.ja.md`, whose Antigravity cell said "full" for an event whose output reaches no model.
   That includes a sentence saying the quality pass's fingerprint does not cover the toolchain, so a pass recorded under a shimmed linter can outlive the shim.
 - [ ] **AC7:** each regression case fails on `main` for the stated reason and passes after the fix.
 - [ ] **AC8:** WHEN the rendered Claude Code `PostToolUse` command runs a fast check that fails THE SYSTEM SHALL exit 2 with the fast check's output, stdout and stderr both, on stderr. WHEN the fast check passes it SHALL exit 0. A compound fast check, or one that calls `exit`, behaves the same. `scripts/check-manifests.py` fails a Claude Code template whose `PostToolUse` command lacks that envelope.
