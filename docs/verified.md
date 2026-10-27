@@ -92,7 +92,7 @@ The reason text reaches the model, so a gate message on Antigravity carries the 
 | Message to the model | stderr | the `reason` field |
 | Non-blocking pass | exit `0` | `{}` |
 
-One gate script serves both: `gate_block` emits the JSON on stdout and stderr, then inspects the environment (`ANTIGRAVITY_CONVERSATION_ID` or `ANTIGRAVITY_AGENT`) to exit 0 on Antigravity (where non-zero exit fails open; A1, A2, #282) and exit 2 on Claude Code.
+One gate script serves both: `gate_block` emits the JSON on stdout and stderr, then reads `GATE_SDD_HARNESS` from the hook file, and only without it the environment (`ANTIGRAVITY_CONVERSATION_ID` or `ANTIGRAVITY_AGENT`; #302), to exit 0 on Antigravity (where non-zero exit fails open; A1, A2, #282) and exit 2 on Claude Code.
 
 ## The inception chain — northstar, prd, epics
 
@@ -559,9 +559,9 @@ The `Stop` hook's stdin on 1.4.7 is one JSON object with `artifactDirectoryPath`
 
 | Run | The gates, and the validator's output | Observed |
 | :-- | :-- | :-- |
-| P4 | `main`'s (`969dbb1`); colour, and one `\377` byte on the `FAIL` line | **Blocked, with the validator's output lost.** The model received `Quality gate: a gating validator failed. … --- sh check.sh` and nothing after it: awk had aborted at the invalid byte under the inherited UTF-8 locale. To find the failure, the model read `check.sh` itself, then wrote `fixed.txt`. |
+| P4 | `main`'s (`969dbb1`); colour, and one `\377` byte on the `FAIL` line | **Blocked, with the validator's output lost.** The conversation's transcript (`transcript_full.jsonl` in the CLI's `brain/` directory) holds the block as a system message: `Stop hook blocked termination: Quality gate: a gating validator failed. … --- sh check.sh`, and nothing after it: awk had aborted at the invalid byte under the inherited UTF-8 locale. To find the failure, the model read `check.sh` itself, then wrote `fixed.txt`. |
 | P5 | `main`'s; colour only | **Dropped.** `agy.log`: `failed to unmarshal result from hook jsonhook__gate-sdd_Stop_0_0 via protojson: … invalid character '\x1b' in string`. The validator ran once, no `fixed.txt` was written, and the turn ended with `status: SUCCESS`. This is #302's report, end to end. |
-| P6 | This branch's, from the rendered template with the marker; P4's validator | **Blocked, with the whole message.** The model received `\u001b[31mFAIL\u001b[0m 日本語 � bad byte` and the line after it, wrote `fixed.txt`, and the validator passed on the next `Stop`. No hook error. The validator saw `GATE_SDD_HARNESS`. |
+| P6 | This branch's, from the rendered template with the marker; P4's validator | **Blocked, with the whole message.** The transcript's system message holds the validator's lines after `--- sh check.sh`: `FAIL` with its two ESC characters, written in the transcript's own JSON as `\u001b`, then `日本語`, U+FFFD where the `\377` was, `bad byte`, and the line after it. The model wrote `fixed.txt`, and the validator passed on the next `Stop`. No hook error. The validator saw `GATE_SDD_HARNESS`. |
 
 **Not run:** this branch's gates against P5's colour-only validator, which P6's output covers; and a Claude Code session started from inside Antigravity, Part 2's reproduction. The marker's channel on Claude Code is cases 396 to 398 in `scripts/test-gates.sh`.
 

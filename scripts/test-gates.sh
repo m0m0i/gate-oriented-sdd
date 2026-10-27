@@ -3333,7 +3333,8 @@ gbs_run "$gbs"; gbs_out=$(gbs_check "$gbs") && c1=ok || c1=no
 
 # 393. #302 — invalid UTF-8 between Japanese text: each invalid byte becomes one U+FFFD and every
 # Japanese character is kept, in either locale. On main a UTF-8 locale's awk aborts at the first
-# bad byte, so the reason is cut short, and under LC_ALL=C the bytes pass raw.
+# bad byte, so the reason is cut short, and under LC_ALL=C the bytes pass raw. The medge messages
+# put each kind across the walk's window edges.
 gbs=$TMP/gbs-utf8; mkdir -p "$gbs"
 python3 -I -c '
 import sys
@@ -3349,6 +3350,12 @@ for name, b in bad.items():
     open(f"{d}/m{name}", "wb").write(j + b + t)
 open(f"{d}/mend", "wb").write(j + b"\xe6\x97")
 open(f"{d}/mlines", "wb").write(j + b"\xff\n" + t + b"\n\xe6\x97\xa5")
+# The escape reads a line through windows of 256 bytes and 64 KB (review round 1): a character,
+# a cut-short one and an invalid byte, each across both edges.
+for edge in (256, 65536):
+    for name, b in (("char", "日".encode()), ("four", "😀".encode()), ("cut", b"\xe6\x97"), ("bad", b"\xff\xfe")):
+        for back in range(1, len(b) + 1):
+            open(f"{d}/medge{edge}{name}{back}", "wb").write(b"x" * (edge - back) + b + t)
 ' "$gbs"
 gbs_run "$gbs"; gbs_out=$(gbs_check "$gbs") && c1=ok || c1=no
 [ -n "$gbs_utf8" ] && c2=ok || c2=no
@@ -3358,14 +3365,18 @@ gbs_run "$gbs"; gbs_out=$(gbs_check "$gbs") && c1=ok || c1=no
      "utf8-locale=${gbs_utf8:-none} $gbs_out"
 
 # 394. #302 — when the escape itself fails, gate_block still blocks, with a fixed reason that says
-# the message is on stderr: never an empty or cut-short reason (AC3). The stand-in awk prints part
-# of a reason and exits 1, as one killed mid-message would. On main the block's reason is that part.
+# the message is on stderr: never an empty or cut-short reason (AC3). One stand-in awk prints part
+# of a reason and exits 1, as one killed mid-message would, and one prints nothing and exits 0. On
+# main the block's reason is that part, or empty.
 gbf=$TMP/gbs-fail; mkdir -p "$gbf/bin"
 printf '#!/bin/sh\nprintf partial\nexit 1\n' > "$gbf/bin/awk"; chmod +x "$gbf/bin/awk"
-for ch in cc agy; do
+# And one that prints nothing and exits 0, the condition's other half (review round 1).
+mkdir -p "$gbf/bin0"; printf '#!/bin/sh\nexit 0\n' > "$gbf/bin0/awk"; chmod +x "$gbf/bin0/awk"
+for ch in cc agy cc0 agy0; do
+  case "$ch" in *0) gbf_bin=$gbf/bin0 ;; *) gbf_bin=$gbf/bin ;; esac
   (
-    PATH=$gbf/bin:$PATH
-    [ "$ch" = agy ] && { ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; }
+    PATH=$gbf_bin:$PATH
+    case "$ch" in agy*) ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT ;; esac
     . "$ROOT/hooks/gate-lib.sh"; gate_block "the real message"
   ) > "$gbf/$ch.out" 2> "$gbf/$ch.err"
   echo "$?" > "$gbf/$ch.rc"
@@ -3373,7 +3384,7 @@ done
 gbf_out=$(python3 -I -c '
 import json, sys
 d, bad = sys.argv[1], []
-for ch, rc in (("cc", "2"), ("agy", "0")):
+for ch, rc in (("cc", "2"), ("agy", "0"), ("cc0", "2"), ("agy0", "0")):
     out = open(f"{d}/{ch}.out", "rb").read()
     try:
         r = json.loads(out.decode("utf-8"))["reason"]
@@ -3417,6 +3428,21 @@ done
 [ "$gbr_res" = " ok ok ok ok ok ok" ] \
   && report "gate_replay refuses a verdict holding a raw control byte or invalid UTF-8" ok \
   || report "gate_replay refuses a verdict holding a raw control byte or invalid UTF-8" no "$gbr_res"
+
+# 402. #302 review round 1, HIGH — a block is written in time linear in its message. A gate writes
+#      its block inside the margin it keeps before the harness timeout, which is a pass, and the
+#      validator tail it escapes is twenty lines of any length. A walk over the line itself was
+#      quadratic on BWK awk: 300 KB took 3 s, so this 1 MB line, escaped by gate_block and again by
+#      gate_replay's check, took over a minute. Ten seconds is far above the linear walk's time.
+gbt=$TMP/gbs-time; mkdir -p "$gbt"; : > "$gbt/end"; : > "$gbt/err"
+python3 -I -c 'import sys; open(sys.argv[1], "wb").write(b"a" * 900000 + "日本語".encode() * 30000)' "$gbt/m"
+gbt_m=$(cat "$gbt/m"); gbt_s=$(date +%s)
+( . "$ROOT/hooks/gate-lib.sh"; gate_block "$gbt_m" ) > "$gbt/verdict" 2>/dev/null
+( . "$ROOT/hooks/gate-lib.sh"; gate_replay "$gbt" 2 ) > "$gbt/replay" 2>/dev/null; gbt_rc=$?
+gbt_t=$(( $(date +%s) - gbt_s ))
+[ "$gbt_t" -le 10 ] && [ "$gbt_rc" = 2 ] && cmp -s "$gbt/verdict" "$gbt/replay" && c1=ok || c1=no
+[ "$c1" = ok ] && report "gate_block and gate_replay handle a 1 MB line in linear time" ok \
+  || report "gate_block and gate_replay handle a 1 MB line in linear time" no "seconds=$gbt_t replay-exit=$gbt_rc"
 
 # --- GATE_SDD_HARNESS: the hook file says which harness reads the block (#302) ----------------
 #
