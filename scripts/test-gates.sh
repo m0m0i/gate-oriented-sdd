@@ -3166,15 +3166,16 @@ if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-mk-lib-out" "$TMP/bs-mk-cp-out" \
      "discovered=$bs_regions/$c1 identical=$c2 cc-channels=$c3 agy-channels=$c4 marker-channels=$c5 (cc-exit=$bs_libexit/$bs_cpexit, agy-exit=$bs_agy_libexit/$bs_agy_cpexit, marker-exit=$bs_mk_libexit/$bs_mk_cpexit)"
 
 
-# --- gate_block: dual-target exit codes and character escaping (#282) ------
+# --- gate_block: dual-target exit codes, and the escape's #282 probe ------
 #
 # #282. Under Claude Code, gate_block must exit 2 with the message on stderr.
-# Under Antigravity (ANTIGRAVITY_CONVERSATION_ID or ANTIGRAVITY_AGENT set),
-# non-zero exit is treated as an execution failure and fails open; gate_block
-# must emit {"decision":"continue","reason":"..."} on stdout and exit 0.
+# Under Antigravity (ANTIGRAVITY_CONVERSATION_ID or ANTIGRAVITY_AGENT set, with
+# no GATE_SDD_HARNESS marker; #302's section below has the marker), non-zero exit
+# is treated as an execution failure and fails open; gate_block must emit
+# {"decision":"continue","reason":"..."} on stdout and exit 0.
 #
-# Control characters (tabs, carriage returns, newlines) must be escaped in JSON
-# so protojson / RFC 8259 unmarshalers do not reject the hook output.
+# The probe below holds backslash, quote, tab, CR and newline. Every other byte
+# is #302's section, cases 392 to 395.
 
 # 1. Claude Code baseline: exit 2, message on stderr, valid continue JSON on stdout
 ( . "$ROOT/hooks/gate-lib.sh"; gate_block "standard block" ) >"$TMP/gb_cc_out" 2>"$TMP/gb_cc_err"; ex_cc=$?

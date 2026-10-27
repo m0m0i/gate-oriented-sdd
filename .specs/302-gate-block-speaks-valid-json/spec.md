@@ -161,6 +161,6 @@ The marker reaches the validators too, since they inherit the gate's environment
     Case 159 gains the marker, and the suite unsets `GATE_SDD_HARNESS` at its top.
   - Green: `_gate_block_status`, the bootstrap guards, `plugin-gate.sh`, the template, `.claude/settings.json`, and the check.
 - [x] T6: **Probe, end to end (AC9's last item).** The real gates from this branch, rendered from the template into a trusted `mktemp -d` project. A validator prints colour and fails, and the quality gate blocks on Antigravity CLI 1.4.7. Record it.
-- [ ] T7: **Docs (AC7).** The documents AC7 lists, with A14 brought up to date. Every validator passes.
+- [x] T7: **Docs (AC7).** The documents AC7 lists, with A14 brought up to date. Every validator passes.
 
 The 0.38.0 bump is not a task. It lands after the receipt (#113).
