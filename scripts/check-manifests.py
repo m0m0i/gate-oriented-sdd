@@ -322,6 +322,20 @@ if isinstance(a, dict) and isinstance(b, dict):
                 "so the check's output goes to stderr and Antigravity's parser reads {}"
             )
 
+    # The harness marker (#302): each gate's Stop command runs it as `GATE_SDD_HARNESS=antigravity sh
+    # {{HOOKS_DIR}}/<gate>`, so the gate knows from this file that Antigravity reads its block, and
+    # not from a variable a session nested in the other harness inherited. Without it the gate falls
+    # back to that variable, and with none set exits 2, which Antigravity reads as a pass.
+    for e in envelope.get("Stop") or []:
+        cmd = e.get("command") if isinstance(e, dict) else None
+        for gate in ("quality-gate.sh", "review-gate.sh"):
+            path = "{{HOOKS_DIR}}/" + gate
+            if isinstance(cmd, str) and path in cmd and f"GATE_SDD_HARNESS=antigravity sh {path}" not in cmd:
+                errors.append(
+                    f"antigravity {gates_group} Stop: the command running {gate} must run it as "
+                    f"'GATE_SDD_HARNESS=antigravity sh {path}', so the gate blocks as Antigravity reads a block"
+                )
+
     # And Claude Code's half (#324 AC8): there a PostToolUse hook's stderr reaches the model on exit
     # 2 only, and a linter exits 1 with its diagnostics on stdout, so the bare check reached nobody.
     CC_FAST_COMMAND = "( {{FAST_CHECK}} ) 1>&2 || exit 2"

@@ -194,7 +194,10 @@ set +f
 
 # (3) The gate runs from here, beside this file, with the project as cwd. A Stop gate is exec'd,
 # as it always was; the digest runs as a child, so that (4) can follow it under its heading, and
-# its exit status is kept.
+# its exit status is kept. This file is Claude Code's hook file, so it says so: GATE_SDD_HARNESS
+# is how the gate knows which channel ends a block, whatever ANTIGRAVITY_* variables this session
+# inherited (#302).
+export GATE_SDD_HARNESS=claude-code
 [ -f "$DIR/$gate" ] || _plugin_gate_block "Plugin gate: $gate is missing from the plugin's hooks/ directory beside plugin-gate.sh, so the gate cannot run. Re-install the plugin and run again rather than treating this turn as a pass."
 [ "$event" = SessionStart ] || exec sh "$DIR/$gate"
 sh "$DIR/$gate"; _rc=$?

@@ -150,7 +150,7 @@ The marker reaches the validators too, since they inherit the gate's environment
 - [x] T4: **The replay (AC4).**
   - Red: case 395 hands `gate_replay` a child verdict of the right shape whose reason holds a raw ESC. It expects no replay: the parent's own block.
   - Green: the check mode.
-- [ ] T5: **The marker (AC5, AC6).**
+- [x] T5: **The marker (AC5, AC6).**
   - Red, cases 396 to 400:
     - `GATE_SDD_HARNESS=claude-code` with an inherited `ANTIGRAVITY_*` exits 2, through `gate_block` and through both bootstrap guards;
     - `GATE_SDD_HARNESS=antigravity` with `CLAUDECODE=1` exits 0 with the JSON;

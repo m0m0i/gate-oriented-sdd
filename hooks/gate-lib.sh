@@ -81,7 +81,14 @@ gate_block() {
 # The status each harness reads as a block once the JSON and the message are out: 0 on
 # Antigravity, which reads the JSON, and 2 on Claude Code. gate_replay asks it too, so a replayed
 # block is judged by the same test that ends one.
+#
+# The hook file says which harness runs the gate, as GATE_SDD_HARNESS (#302): the Antigravity
+# template sets it on each gate's command and plugin-gate.sh exports it for Claude Code. It wins
+# over the ANTIGRAVITY_* variables, which a session nested in the other harness inherits. With no
+# marker, or one it does not know, the old reading stands, so a hook file not yet re-rendered
+# behaves as it did.
 _gate_block_status() {
+  case "${GATE_SDD_HARNESS:-}" in antigravity) return 0 ;; claude-code) return 2 ;; esac
   if [ -n "${ANTIGRAVITY_CONVERSATION_ID:-}" ] || [ -n "${ANTIGRAVITY_AGENT:-}" ]; then
     return 0
   fi

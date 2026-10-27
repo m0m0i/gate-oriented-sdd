@@ -23,7 +23,9 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # is that session's own env file, which a plugin-gate.sh case must never append to. So is
 # CLAUDE_PROJECT_DIR: the quality gate runs this suite from a Stop hook, where it names this
 # repository, and the wrapper's stand-down reads the settings under it (#262).
-unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR ANTIGRAVITY_CONVERSATION_ID ANTIGRAVITY_AGENT
+# And GATE_SDD_HARNESS, which this repository's own settings set on its gates, the suite among their
+# validators, and which would otherwise read every Antigravity case here as Claude Code (#302).
+unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR ANTIGRAVITY_CONVERSATION_ID ANTIGRAVITY_AGENT GATE_SDD_HARNESS
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -3150,9 +3152,18 @@ if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-agy-lib-out" "$TMP/bs-agy-cp-out" \
      && cmp -s "$TMP/bs-agy-lib-err" "$TMP/bs-agy-cp-err" \
      && [ "$bs_agy_libexit" = "$bs_agy_cpexit" ] && [ "$bs_agy_libexit" -eq 0 ]; then c4=ok; else c4=no; fi
 
-[ "$c1$c2$c3$c4" = "okokokok" ] && report "the bootstrap guard is one copy, and it still matches gate_block" ok \
+# And under the harness marker (#302), which wins over the inherited variable on both sides.
+( export GATE_SDD_HARNESS=claude-code ANTIGRAVITY_AGENT=1; . "$ROOT/hooks/gate-lib.sh"; gate_block 'bootstrap drift probe' ) \
+  >"$TMP/bs-mk-lib-out" 2>"$TMP/bs-mk-lib-err"; bs_mk_libexit=$?
+( export GATE_SDD_HARNESS=claude-code ANTIGRAVITY_AGENT=1; . "$TMP/bs-fn.sh"; _gate_bootstrap_block 'bootstrap drift probe' ) \
+  >"$TMP/bs-mk-cp-out" 2>"$TMP/bs-mk-cp-err"; bs_mk_cpexit=$?
+if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-mk-lib-out" "$TMP/bs-mk-cp-out" \
+     && cmp -s "$TMP/bs-mk-lib-err" "$TMP/bs-mk-cp-err" \
+     && [ "$bs_mk_libexit" = "$bs_mk_cpexit" ] && [ "$bs_mk_libexit" -eq 2 ]; then c5=ok; else c5=no; fi
+
+[ "$c1$c2$c3$c4$c5" = "okokokokok" ] && report "the bootstrap guard is one copy, and it still matches gate_block" ok \
   || report "the bootstrap guard is one copy, and it still matches gate_block" no \
-     "discovered=$bs_regions/$c1 identical=$c2 cc-channels=$c3 agy-channels=$c4 (cc-exit=$bs_libexit/$bs_cpexit, agy-exit=$bs_agy_libexit/$bs_agy_cpexit)"
+     "discovered=$bs_regions/$c1 identical=$c2 cc-channels=$c3 agy-channels=$c4 marker-channels=$c5 (cc-exit=$bs_libexit/$bs_cpexit, agy-exit=$bs_agy_libexit/$bs_agy_cpexit, marker-exit=$bs_mk_libexit/$bs_mk_cpexit)"
 
 
 # --- gate_block: dual-target exit codes and character escaping (#282) ------
@@ -3406,6 +3417,49 @@ done
   && report "gate_replay refuses a verdict holding a raw control byte or invalid UTF-8" ok \
   || report "gate_replay refuses a verdict holding a raw control byte or invalid UTF-8" no "$gbr_res"
 
+# --- GATE_SDD_HARNESS: the hook file says which harness reads the block (#302) ----------------
+#
+# A gate guessed its harness from ANTIGRAVITY_* variables, which a nested session inherits: a
+# Claude Code session started from a shell inside Antigravity read every block as Antigravity's,
+# exited 0, and Claude Code ended the turn. Claude Code's own CLAUDECODE=1 would break the mirror
+# case the same way. The hook file knows its harness, so it says so: the Antigravity template runs
+# each gate as `GATE_SDD_HARNESS=antigravity sh …`, and plugin-gate.sh exports claude-code. The
+# marker wins; with none, or a value it does not know, the gate keeps the old reading (AC6, C4).
+
+# 396. #302 AC5, AC6 — gate_block's channel by marker, against an inherited variable of the other
+#      harness. On main the marker is not read, so the first row exits 0 and the second's
+#      CLAUDECODE changes nothing either way.
+gbh_res=''
+for row in "claude-code ANTIGRAVITY_AGENT 2" "claude-code ANTIGRAVITY_CONVERSATION_ID 2" \
+           "antigravity CLAUDECODE 0" "- ANTIGRAVITY_AGENT 0" "- CLAUDECODE 2" "claudecode ANTIGRAVITY_AGENT 0"; do
+  h=${row%% *}; v=${row#* }; want=${v#* }; v=${v%% *}
+  (
+    [ "$h" = - ] || { GATE_SDD_HARNESS=$h; export GATE_SDD_HARNESS; }
+    eval "$v=1; export $v"
+    . "$ROOT/hooks/gate-lib.sh"; gate_block "marker probe"
+  ) > "$TMP/gbh.out" 2> "$TMP/gbh.err"; rc=$?
+  if [ "$rc" = "$want" ] && [ "$(cat "$TMP/gbh.out")" = '{"decision":"continue","reason":"marker probe"}' ] \
+     && [ "$(cat "$TMP/gbh.err")" = "marker probe" ]; then gbh_res="$gbh_res ok"; else gbh_res="$gbh_res $h/$v=$rc"; fi
+done
+[ "$gbh_res" = " ok ok ok ok ok ok" ] \
+  && report "gate_block takes its channel from GATE_SDD_HARNESS, and keeps the old reading without one" ok \
+  || report "gate_block takes its channel from GATE_SDD_HARNESS, and keeps the old reading without one" no "$gbh_res"
+
+# 397. #302 AC5, AC6 — the bootstrap guards decide the same way, for the one state that cannot
+#      call gate_block: each gate with its library absent, under the marker and an inherited
+#      variable of the other harness.
+gbh_res=''
+for gate in $BS_GATES; do
+  r=$(bs_repo "bs-marker-${gate%.sh}"); rm -f "$r/hooks/gate-lib.sh"
+  out=$( GATE_SDD_HARNESS=claude-code ANTIGRAVITY_AGENT=1; export GATE_SDD_HARNESS ANTIGRAVITY_AGENT; run_bs "$r" "$gate" )
+  case "$out" in *"exit=2"*) gbh_res="$gbh_res ok" ;; *) gbh_res="$gbh_res $gate/cc=$out" ;; esac
+  out=$( GATE_SDD_HARNESS=antigravity CLAUDECODE=1; export GATE_SDD_HARNESS CLAUDECODE; run_bs "$r" "$gate" )
+  case "$out" in *"exit=0"*) gbh_res="$gbh_res ok" ;; *) gbh_res="$gbh_res $gate/agy=$out" ;; esac
+done
+[ "$gbh_res" = " ok ok ok ok" ] \
+  && report "the bootstrap guards take their channel from GATE_SDD_HARNESS" ok \
+  || report "the bootstrap guards take their channel from GATE_SDD_HARNESS" no "$gbh_res"
+
 
 
 # --- hooks/plugin-gate.sh: the gates as the plugin runs them (#256) ---------------------
@@ -3449,6 +3503,29 @@ case "$(cat "$TMP/pgout")" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; es
 case "$(cat "$TMP/pgerr")" in *RAN*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "plugin-gate runs the quality gate from the plugin with the project as cwd, and it blocks" ok \
   || report "plugin-gate runs the quality gate from the plugin with the project as cwd, and it blocks" no "exit=$c1 json=$c2 ran=$c3 ($out; $(head -c 200 "$TMP/pgerr"))"
+
+# 398. #302 AC5 — plugin-gate.sh exports GATE_SDD_HARNESS=claude-code before it runs a gate, so a
+#      Claude Code session that inherited an Antigravity variable still blocks with exit 2. Every
+#      Claude Code project gets this by plugin update. On main the gate exits 0, which Claude Code
+#      reads as a pass.
+p=$(pg_repo pg-marker)
+out=$( ANTIGRAVITY_CONVERSATION_ID=inherited; export ANTIGRAVITY_CONVERSATION_ID; run_pg "$p" quality-gate.sh )
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$(cat "$TMP/pgerr")" in *RAN*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = okok ] && report "plugin-gate blocks with exit 2 under an inherited Antigravity variable" ok \
+  || report "plugin-gate blocks with exit 2 under an inherited Antigravity variable" no "exit=$c1 ran=$c2 ($out)"
+
+# 401. #302 — the stand-down still reads a settings entry that carries the marker. This repository's
+#      own .claude/settings.json runs its gates as `GATE_SDD_HARNESS=claude-code sh hooks/<gate>`, and
+#      the plugin's wrapper must still find the gate on that line and stand down, silent, or every
+#      gate here would run twice.
+p=$(pg_repo pg-sd-marker); mkdir -p "$p/project/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/hooks/"
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"[ -f hooks/quality-gate.sh ] || exit 0; GATE_SDD_HARNESS=claude-code sh hooks/quality-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"
+out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+[ -s "$TMP/pgout" ] || [ -s "$TMP/pgerr" ] && c1=no
+[ "$c1" = ok ] && report "plugin-gate stands down on a settings entry that runs the gate under the harness marker" ok \
+  || report "plugin-gate stands down on a settings entry that runs the gate under the harness marker" no "$out $(head -c 200 "$TMP/pgerr")"
 
 # 206. #256 AC2 — no .steering/, no sound. All three gates, because the digest would otherwise
 #      print "## Repo facts" into every session of every project on the machine.
@@ -9568,14 +9645,16 @@ echo '- Validators: false' >> "$r/.steering/tech.md"
 echo dirty >> "$r/src/main.txt"
 cmd=$(agy_get_cmd "$r/.agents/hooks.json" Stop 0)
 out=$( ( cd "$r/.agents" && sh -c "$cmd" 2>"$TMP/agy_qg_err"; echo "exit=$?" ) )
-case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+# Exit 0: the rendered command carries GATE_SDD_HARNESS=antigravity, so the gate blocks as
+# Antigravity reads a block. Before #302 it exited 2 here, which Antigravity reads as a pass.
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
 case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
 
 # 2. Review gate blocks when unreviewed spec is completed and cwd is .agents/
 r=$(antigravity_repo agy-rv-fail 0)
 cmd=$(agy_get_cmd "$r/.agents/hooks.json" Stop 1)
 out=$( ( cd "$r/.agents" && sh -c "$cmd" 2>"$TMP/agy_rv_err"; echo "exit=$?" ) )
-case "$out" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+case "$out" in *"exit=0"*) c3=ok ;; *) c3=no ;; esac
 case "$out" in *'"decision":"continue"'*) c4=ok ;; *) c4=no ;; esac
 
 # 3. PostToolUse fast-check runs with cwd anchored to repo root
@@ -9604,6 +9683,26 @@ case "$out_rv" in *"exit=0"*) c7=ok ;; *) c7=no ;; esac
 [ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] && report "Antigravity hooks execute from repo root when cwd is .agents/" ok \
   || report "Antigravity hooks execute from repo root when cwd is .agents/" no \
      "qg-exit=$c1 qg-json=$c2 rv-exit=$c3 rv-json=$c4 fast-check-root=$c5 clean-qg-exit=$c6 clean-rv-exit=$c7"
+
+# 399. #302 AC5 — the rendered template's Stop commands block as Antigravity reads a block, exit 0
+#      with the JSON, under Claude Code's own CLAUDECODE=1 and with no ANTIGRAVITY_* set: the
+#      marker on each command is what says so. On main both exit 2, which Antigravity reads as a
+#      failed hook and so a pass.
+r_qg=$(antigravity_repo agy-marker-qg 1)
+echo '- Validators: false' >> "$r_qg/.steering/tech.md"
+( cd "$r_qg" && git commit -qam "add failing validator" ) >/dev/null 2>&1
+echo dirty >> "$r_qg/src/main.txt"
+r_rv=$(antigravity_repo agy-marker-rv 0)
+gbh_res=''
+for i in 0 1; do
+  [ "$i" = 0 ] && r=$r_qg || r=$r_rv
+  cmd=$(agy_get_cmd "$r/.agents/hooks.json" Stop "$i")
+  ( cd "$r/.agents" && CLAUDECODE=1 sh -c "$cmd" >"$TMP/agym.out" 2>/dev/null; echo "$?" > "$TMP/agym.rc" )
+  if [ "$(cat "$TMP/agym.rc")" = 0 ] && python3 -I -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))["decision"] == "continue" else 1)' "$TMP/agym.out" 2>/dev/null
+  then gbh_res="$gbh_res ok"; else gbh_res="$gbh_res stop$i=$(cat "$TMP/agym.rc")"; fi
+done
+[ "$gbh_res" = " ok ok" ] && report "the rendered Antigravity Stop commands block with exit 0 and JSON, whatever harness variables are set" ok \
+  || report "the rendered Antigravity Stop commands block with exit 0 and JSON, whatever harness variables are set" no "$gbh_res"
 
 # The fast check is rendered by json.dump rather than sed, because a compound check carries `&`,
 # which sed's replacement reads as the matched text, and because the command has to arrive in the
@@ -10115,6 +10214,17 @@ out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
 [ "$out" = 1 ] && case "$err" in *"the template's groups are"*"enabled"*) c1=ok ;; *) c1=no ;; esac || c1=no
 [ "$c1" = ok ] && report "check-manifests fails a stray key at the Antigravity template's root" ok \
   || report "check-manifests fails a stray key at the Antigravity template's root" no "exit=$out stderr=$(head -c 300 "$TMP/mferr")"
+
+# 400. #302 AC5 — check-manifests fails a template whose Stop command for either gate lost the
+#      marker. On main there is no marker to lose and the check says nothing.
+gbh_res=''
+for i in 0 1; do
+  r=$(mutate_agy_template "mf-marker-$i" "e = d['gate-sdd']['Stop'][$i]; e['command'] = e['command'].replace('GATE_SDD_HARNESS=antigravity ', '')")
+  out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+  [ "$out" = 1 ] && case "$err" in *"GATE_SDD_HARNESS=antigravity"*) gbh_res="$gbh_res ok" ;; *) gbh_res="$gbh_res stop$i" ;; esac || gbh_res="$gbh_res stop$i=$out"
+done
+[ "$gbh_res" = " ok ok" ] && report "check-manifests fails an Antigravity Stop command without the harness marker" ok \
+  || report "check-manifests fails an Antigravity Stop command without the harness marker" no "$gbh_res $(head -c 300 "$TMP/mferr")"
 
 
 
