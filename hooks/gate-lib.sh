@@ -14,17 +14,53 @@
 #         gate_block "message the model needs to read"
 #         gate_pass
 
-# JSON string escaping, enough for the messages gates actually produce
-# (backslashes, quotes, newlines, tabs, carriage returns). Gate messages are ours, not user input.
-_gate_json_escape() {
-  printf '%s' "$1" | awk 'BEGIN{ORS=""} {
-    gsub(/\\/, "\\\\");
-    gsub(/"/, "\\\"");
-    gsub(/\r/, "\\r");
-    gsub(/\t/, "\\t");
-    print sep $0;
-    sep="\\n";
-  }'
+# A JSON string's contents for any message (#302). A gate's message carries bytes it did not
+# write: a validator's output tail, a file or branch name. Antigravity parses the block with Go's
+# protojson, which rejects a raw byte below 0x20 or invalid UTF-8 in a string, and a rejected Stop
+# result ends the turn as a pass. So this encodes by rule rather than listing bad bytes:
+#
+#   - `\` and `"` are escaped, tab and CR take their short forms, every other byte below 0x20
+#     becomes \u00XX, and lines are joined with \n;
+#   - 0x20 to 0x7F, DEL included, are copied;
+#   - a byte of 0x80 or above is copied with its sequence only when that sequence is well formed
+#     by RFC 3629's table. Any other byte becomes �, one per byte, and the walk moves on one.
+#
+# awk runs under LC_ALL=C, so its input is bytes whatever locale the hook inherits: a UTF-8 locale
+# aborts BWK awk at the first invalid byte and the message is cut short, which is the 2026-10-17
+# `tr` lesson again. No \u surrogate is ever written.
+#
+# With `check` as $2 it prints nothing, and returns 1 when the text holds a byte below 0x20 or
+# invalid UTF-8: gate_replay's test for a verdict the harness could parse.
+_gate_json_escape() {  # <message> [check]
+  printf '%s' "$1" | LC_ALL=C awk -v check="${2:-}" '
+    function e(s) { if (check == "") printf "%s", s }
+    function cont(s, j, lo, hi,   v) { v = ord[substr(s, j, 1)] + 0; return v >= lo && v <= hi }
+    function seq(s, i, b,   lo, hi) {
+      if (b >= 194 && b <= 223) return cont(s, i + 1, 128, 191) ? 2 : 0
+      if (b >= 224 && b <= 239) {
+        lo = b == 224 ? 160 : 128; hi = b == 237 ? 159 : 191
+        return (cont(s, i + 1, lo, hi) && cont(s, i + 2, 128, 191)) ? 3 : 0
+      }
+      if (b >= 240 && b <= 244) {
+        lo = b == 240 ? 144 : 128; hi = b == 244 ? 143 : 191
+        return (cont(s, i + 1, lo, hi) && cont(s, i + 2, 128, 191) && cont(s, i + 3, 128, 191)) ? 4 : 0
+      }
+      return 0
+    }
+    BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i }
+    {
+      if (NR > 1) e("\\n")
+      n = length($0)
+      for (i = 1; i <= n; i++) {
+        c = substr($0, i, 1); b = ord[c] + 0
+        if (c == "\\" || c == "\"") e("\\" c)
+        else if (b < 32) { bad = 1; e(b == 9 ? "\\t" : b == 13 ? "\\r" : sprintf("\\u%04x", b)) }
+        else if (b < 128) e(c)
+        else if (k = seq($0, i, b)) { e(substr($0, i, k)); i += k - 1 }
+        else { bad = 1; e("\\ufffd") }
+      }
+    }
+    END { exit (check != "" && bad) ? 1 : 0 }'
 }
 
 # Block the turn. Speaks to both harnesses, exiting 0 for Antigravity and 2 for Claude Code.

@@ -141,7 +141,7 @@ The marker reaches the validators too, since they inherit the gate's environment
   - a block under `GATE_SDD_HARNESS=antigravity sh …`, which logs the marker it sees.
 
   Record each in `docs/verified.md`. Stop if an escaped reason is not honoured.
-- [ ] T2: **The escape (AC1, AC2).**
+- [x] T2: **The escape (AC1, AC2).**
   - Red: case 392 sweeps 0x01 to 0x1F and DEL through `gate_block`, under `LC_ALL=C` and a UTF-8 locale, on both channels, with the strict check above. It fails on `main` at ESC. Case 393 does the same with the invalid UTF-8 classes in AC2 between valid Japanese text. It expects each bad byte as one `\ufffd` and the Japanese kept, and fails on `main` with an empty or raw reason. The #282 probe gets a real CR byte.
   - Green: the new `_gate_json_escape`.
 - [ ] T3: **Fail closed (AC3).**

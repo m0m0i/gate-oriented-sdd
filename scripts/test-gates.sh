@@ -3190,9 +3190,7 @@ c7=no
      "cc-exit=$c1 cc-json=$c2 cc-err=$c3 agy-agent-exit=$c4 agy-agent-json=$c5 agy-agent-err=$c6 agy-conv-exit=$c7"
 
 # 4. Control character escaping: tabs, carriage returns, quotes, backslashes, newlines
-probe_str='hello\world
-with "quotes"	and	tabs
-and CRLF'
+probe_str=$(printf 'hello\\world\nwith "quotes"\tand\ttabs\r\nand CRLF\r\nend')
 ( . "$ROOT/hooks/gate-lib.sh"; gate_block "$probe_str" ) >"$TMP/gb_esc_out" 2>/dev/null || true
 c_esc=no
 if python3 -c '
@@ -3208,6 +3206,144 @@ fi
   && report "gate_block escapes backslashes, quotes, tabs, and carriage returns as valid JSON" ok \
   || report "gate_block escapes backslashes, quotes, tabs, and carriage returns as valid JSON" no \
      "json-parse failed or reason mismatch"
+
+# --- gate_block: a block is valid JSON whatever its message holds (#302) ---------------
+#
+# Every message a gate blocks with can carry bytes it did not write: a validator's output tail,
+# a file or branch name. Antigravity parses the block with Go's protojson, which rejects a raw
+# byte below 0x20 or invalid UTF-8 in a string, and a rejected Stop result ends the turn as a pass
+# (docs/verified.md, A14 and the #302 runs). So each case below runs gate_block over its messages
+# under LC_ALL=C and under a UTF-8 locale, on both channels, and holds every block to a check as
+# strict as protojson's: the bytes decode as UTF-8 with no replacement, the object parses with no
+# raw control character, no duplicate key and nothing after it, and no surrogate is decoded.
+# Python's json.loads alone takes a lone surrogate escape, hence the last.
+#
+# The reason must decode to the message with each invalid byte as one U+FFFD (C3): gbs_expect
+# below states that rule independently of the awk, using Python's own strict decoder to judge
+# each sequence a lead byte starts.
+gbs_utf8=''
+for l in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do
+  locale -a 2>/dev/null | grep -qx "$l" && { gbs_utf8=$l; break; }
+done
+
+# gbs_run <dir>: every m<n> in <dir> through gate_block, under each locale and on each channel.
+# Each message file ends in a byte other than a newline, so $(cat) reads it whole.
+gbs_run() {
+  for gbs_loc in C "${gbs_utf8:-C}"; do
+    for gbs_ch in cc agy; do
+      (
+        LC_ALL=$gbs_loc; export LC_ALL
+        [ "$gbs_ch" = agy ] && { ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; }
+        . "$ROOT/hooks/gate-lib.sh"
+        for f in "$1"/m*; do
+          case "${f##*/}" in *.*) continue ;; esac
+          m=$(cat "$f")
+          ( gate_block "$m" ) > "$f.$gbs_loc.$gbs_ch.out" 2>/dev/null
+          echo "$?" > "$f.$gbs_loc.$gbs_ch.rc"
+        done
+      )
+    done
+  done
+}
+
+# gbs_check <dir>: prints nothing and returns 0 when every block passes, else the first failures.
+gbs_check() {
+  python3 -I - "$1" "${gbs_utf8:-C}" <<'PY'
+import glob, json, os, sys
+d, utf8 = sys.argv[1], sys.argv[2]
+def expect(b):
+    out, i = [], 0
+    while i < len(b):
+        c = b[i]
+        if c < 0x80:
+            out.append(chr(c)); i += 1; continue
+        k = 2 if 0xC2 <= c <= 0xDF else 3 if 0xE0 <= c <= 0xEF else 4 if 0xF0 <= c <= 0xF4 else 0
+        try:
+            if not k or len(b) < i + k:
+                raise UnicodeDecodeError("utf-8", b, i, i + 1, "no sequence")
+            out.append(b[i:i + k].decode("utf-8")); i += k
+        except UnicodeDecodeError:
+            out.append("\ufffd"); i += 1
+    return "".join(out)
+def dup(pairs):
+    keys = [k for k, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise ValueError("duplicate key")
+    return dict(pairs)
+bad = []
+for f in sorted(glob.glob(os.path.join(d, "m*"))):
+    if "." in os.path.basename(f):
+        continue
+    msg = open(f, "rb").read()
+    for loc in ("C", utf8):
+        for ch, rc in (("cc", "2"), ("agy", "0")):
+            out = open(f"{f}.{loc}.{ch}.out", "rb").read()
+            got_rc = open(f"{f}.{loc}.{ch}.rc").read().strip()
+            tag = f"{os.path.basename(f)}/{loc}/{ch}"
+            try:
+                if got_rc != rc:
+                    raise ValueError(f"exit {got_rc}")
+                if not out.endswith(b"\n") or out.count(b"\n") != 1:
+                    raise ValueError("not one line")
+                obj = json.loads(out.decode("utf-8"), object_pairs_hook=dup)
+                if set(obj) != {"decision", "reason"} or obj["decision"] != "continue":
+                    raise ValueError("keys or decision")
+                r = obj["reason"]
+                if any(0xD800 <= ord(x) <= 0xDFFF for x in r):
+                    raise ValueError("surrogate")
+                if r != expect(msg):
+                    raise ValueError(f"reason {r!r} != {expect(msg)!r}")
+            except Exception as e:
+                bad.append(f"{tag}: {e}"[:200])
+if bad:
+    print(f"{len(bad)} bad; " + " | ".join(bad[:4]))
+    sys.exit(1)
+PY
+}
+
+# 392. #302 — every byte from 0x01 to 0xFF, alone and in one run, comes out of gate_block as a
+# block that check accepts: a control byte escaped, DEL and the rest of ASCII kept, and a byte of
+# 0x80 or above on its own, which is never UTF-8, as one U+FFFD. On main it fails at ESC.
+gbs=$TMP/gbs-sweep; mkdir -p "$gbs"
+python3 -I -c '
+import sys
+d = sys.argv[1]
+for i in range(1, 256):
+    open(f"{d}/m{i:03d}", "wb").write(b"a" + bytes([i]) + b"z")
+open(f"{d}/mall", "wb").write(bytes(range(1, 256)) + b"z")
+' "$gbs"
+gbs_run "$gbs"; gbs_out=$(gbs_check "$gbs") && c1=ok || c1=no
+[ -n "$gbs_utf8" ] && c2=ok || c2=no
+[ "$c1$c2" = okok ] \
+  && report "gate_block prints a strict-JSON block for every byte, in both locales and on both channels" ok \
+  || report "gate_block prints a strict-JSON block for every byte, in both locales and on both channels" no \
+     "utf8-locale=${gbs_utf8:-none} $gbs_out"
+
+# 393. #302 — invalid UTF-8 between Japanese text: each invalid byte becomes one U+FFFD and every
+# Japanese character is kept, in either locale. On main a UTF-8 locale's awk aborts at the first
+# bad byte, so the reason is cut short, and under LC_ALL=C the bytes pass raw.
+gbs=$TMP/gbs-utf8; mkdir -p "$gbs"
+python3 -I -c '
+import sys
+d, j, t = sys.argv[1], "日本語".encode(), "テスト".encode()
+bad = {
+    "stray": b"\x80", "stray2": b"\xbf\x80", "c0": b"\xc0\xaf", "c1": b"\xc1\xbf",
+    "f5": b"\xf5\x80\x80\x80", "fe": b"\xfe", "ff": b"\xff",
+    "over3": b"\xe0\x80\xaf", "over4": b"\xf0\x80\x80\xaf",
+    "surr": b"\xed\xa0\x80", "surr2": b"\xed\xbf\xbf", "big": b"\xf4\x90\x80\x80",
+    "cut3": b"\xe6\x97", "cut4": b"\xf0\x9f\x98",
+}
+for name, b in bad.items():
+    open(f"{d}/m{name}", "wb").write(j + b + t)
+open(f"{d}/mend", "wb").write(j + b"\xe6\x97")
+open(f"{d}/mlines", "wb").write(j + b"\xff\n" + t + b"\n\xe6\x97\xa5")
+' "$gbs"
+gbs_run "$gbs"; gbs_out=$(gbs_check "$gbs") && c1=ok || c1=no
+[ -n "$gbs_utf8" ] && c2=ok || c2=no
+[ "$c1$c2" = okok ] \
+  && report "gate_block replaces each invalid UTF-8 byte with one U+FFFD and keeps the text around it" ok \
+  || report "gate_block replaces each invalid UTF-8 byte with one U+FFFD and keeps the text around it" no \
+     "utf8-locale=${gbs_utf8:-none} $gbs_out"
 
 
 
