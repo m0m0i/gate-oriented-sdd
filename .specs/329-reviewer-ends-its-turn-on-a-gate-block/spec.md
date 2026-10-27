@@ -107,11 +107,16 @@ The prose half of #329, as its triage of 2026-10-21 scoped it, plus one sentence
   - An Antigravity install gets the gate's paragraph and the contract only by re-running `init` (A12, #343). `implement`'s text arrives with the plugin update.
 - **Why this cannot recur:**
   - One test runs every block kind through both channels and requires the paragraph exactly once. The four literal copies are compared.
-  - `check-skill-contracts.py` pins the contract's rule, the receipt-then-kill order, the fresh reviewer and the `self` ban, so a rewrite of step 2 or the contract that drops one fails.
+  - `check-skill-contracts.py` gains three entries, its thirty-ninth to forty-first. Each comes with the argument its docstring asks for, why review cannot defend the sentence:
+    - **The contract's rule.** Deleting it reads as trimming a harness-specific aside from a harness-neutral contract. What that restores is a reviewer that takes the author's instructions as its own on Antigravity: it loops, and on the `self` route it can edit the diff it is reviewing.
+    - **Receipt, then kill.** Dropping the kill reads as dropping cleanup, and swapping the two reads as neutral. Without the kill, the reviewer is re-entered until the cap, and the parent hears it has gone idle only then (Q2). With the kill first, a failed receipt write leaves nothing to clear the next review.
+    - **The `self` ban.** Without it, "use `self`" reads as an equivalent route. It is the one route with write tools on, so what that restores is a reviewer that can carry out the blocks it meets.
+
+    The fresh reviewer after a BLOCKED review needs no entry: a killed reviewer cannot be re-tasked.
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: AC1 and AC2. Red: test-gates cases asserting the paragraph exactly once, on both channels, for a no-receipt block, a BLOCKED block, the other-branch scan, a quality failure, a budget block, the fallback reason, the three bootstrap blocks and a replayed child's block, plus the four copies equal. Then the paragraph in `gate_block` and the bootstrap blocks.
 - [ ] T2: AC3. Red: the `check-skill-contracts.py` needle for the contract's rule. Then the section in the contract and its mirror.
-- [ ] T3: AC4 and AC5. Red: needles for the receipt-then-kill order, the fresh reviewer and the `self` ban. Then step 2's Antigravity bullet and the lifecycle paragraph.
+- [ ] T3: AC4 and AC5. Red: needles for the receipt-then-kill order and the `self` ban. Then step 2's Antigravity bullet and the lifecycle paragraph.
 - [ ] T4: AC6. `docs/verified.md`'s #329 section and open item, and `docs/fidelity.md`'s reviewer paragraph.
