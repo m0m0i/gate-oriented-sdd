@@ -92,7 +92,7 @@ The reason text reaches the model, so a gate message on Antigravity carries the 
 | Message to the model | stderr | the `reason` field |
 | Non-blocking pass | exit `0` | `{}` |
 
-One gate script serves both: `gate_block` emits the JSON on stdout and stderr, then inspects the environment (`ANTIGRAVITY_CONVERSATION_ID` or `ANTIGRAVITY_AGENT`) to exit 0 on Antigravity (where non-zero exit fails open; A1, A2, #282) and exit 2 on Claude Code.
+One gate script serves both: `gate_block` emits the JSON on stdout and stderr, then reads `GATE_SDD_HARNESS` from the hook file, and only without it the environment (`ANTIGRAVITY_CONVERSATION_ID` or `ANTIGRAVITY_AGENT`; #302), to exit 0 on Antigravity (where non-zero exit fails open; A1, A2, #282) and exit 2 on Claude Code.
 
 ## The inception chain — northstar, prd, epics
 
@@ -504,7 +504,7 @@ So on Claude Code, as on Antigravity, a gate that has no verdict by its `timeout
 
 **A13 — PostToolUse execution. Observed (matches review).** Configured a `PostToolUse` hook with `matcher: ".*"`. The hook executed synchronously after every tool call. Stdout must be `{}`; returning non-empty content or non-zero exit does not block the turn (observe-only). It shares a single `"enabled": true` switch with the gating hooks in `antigravity.hooks.json`. *Since #324 the fast check has a group of its own, measured on CLI 1.4.7 in the #324 section below, where a passing check's plain stdout is also shown to fail the parse.*
 
-**A14 — Control characters in hook JSON output. Observed (matches review).** A `Stop` hook returning a `reason` containing an unescaped horizontal tab (`\t`) was tested. In `agy.log`: `failed to unmarshal result from hook ... via protojson: proto: syntax error: invalid character '\t' in string`. The unmarshaling failed, the hook result was dropped, and the turn ended with `status: SUCCESS` (fails open). `hooks/gate-lib.sh`'s `_gate_json_escape` only handles `\` and `"`, failing to escape control characters emitted by failing validators.
+**A14 — Control characters in hook JSON output. Observed (matches review).** A `Stop` hook returning a `reason` containing an unescaped horizontal tab (`\t`) was tested. In `agy.log`: `failed to unmarshal result from hook ... via protojson: proto: syntax error: invalid character '\t' in string`. The unmarshaling failed, the hook result was dropped, and the turn ended with `status: SUCCESS` (fails open). At the time, `hooks/gate-lib.sh`'s `_gate_json_escape` handled only `\` and `"`. *#282 added tab and CR, and #302 replaced the list with an escape by rule: every control byte, and invalid UTF-8 as `\ufffd`. The #302 section below shows a raw ESC dropped the same way on CLI 1.4.7, and the new escape's block honoured.*
 
 ## The fast check's group and matcher, on Antigravity CLI 1.4.7 (#324, #330)
 
@@ -538,6 +538,32 @@ What blocking does is A2's finding above; these runs show which hooks fire, and 
 - Whether the matcher is anchored, which no tool name here could tell.
 - A `PostToolUse` error's effect on the model, beyond the log line.
 - The IDE, which is discontinued.
+
+## What a `Stop` block may hold, and the harness marker, on Antigravity CLI 1.4.7 (#302)
+
+**Run on 2026-10-27, Antigravity CLI 1.4.7** (`agy.log`: `Language server version: 1.4.7`), before #302's code changed. The setup is the #324 section's: one headless turn per run, `agy --sandbox --mode accept-edits --effort low -p`, in a fresh `mktemp -d` project under the trusted folder, with `ANTIGRAVITY_CONVERSATION_ID` and `ANTIGRAVITY_AGENT` unset. The prompt asked for one file write and no shell command.
+- **The project's hooks file:** one `gate-sdd` group holding one `Stop` entry, `cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)"; <command>`, with the command each run names.
+- **The stand-in:** it counted its calls, saved its stdin, and logged the `GATE_SDD_HARNESS` it saw. On its first call it printed a fixed verdict, byte for byte, and exited 0. After that it printed nothing and exited 0. Each verdict's reason ended with an instruction to write `seen.txt` holding a word of that run's own, so the file shows the model read the reason.
+
+| Run | The verdict, and the command | Observed |
+| :-- | :-- | :-- |
+| P1 | `{"decision":"continue","reason":"<ESC>[31mFAIL<ESC>[0m …"}` with raw ESC bytes, as today's escape prints a coloured validator line; `sh .agents/hooks/stop.sh` | **Dropped.** `agy.log`: `failed to call custom stop hook jsonhook__gate-sdd_Stop_0_0: failed to unmarshal result from hook jsonhook__gate-sdd_Stop_0_0 via protojson: … proto: syntax error (line 1:33): invalid character '\x1b' in string`. The stand-in ran once, no `seen.txt` was written, and the turn ended with `status: SUCCESS`. A14's fail-open, for ESC, on 1.4.7. |
+| P2 | The same reason written as `\u001b[31mFAIL\u001b[0m`, then `\ufffd`, raw `日本語` as UTF-8, and `\r\n`; `sh .agents/hooks/stop.sh` | **Honoured.** No hook error. The stand-in ran twice, and the model wrote `seen.txt` with the run's word. |
+| P3 | A plain ASCII reason; `GATE_SDD_HARNESS=antigravity sh .agents/hooks/stop.sh` | **Honoured, and the marker arrived.** The stand-in logged `antigravity` on both calls. It ran twice, and the model wrote `seen.txt`. |
+
+The `Stop` hook's stdin on 1.4.7 is one JSON object with `artifactDirectoryPath`, `conversationId`, `error`, `executionNum`, `fullyIdle`, `lastUserInput`, `modelName`, `terminationReason`, `transcriptPath` and `workspacePaths`. It names no harness, so the marker is still the gate's one sure source.
+
+**What this settles for #302's spec.** On 1.4.7, a raw control byte in a `Stop` reason still turns a block into a pass, with nothing but a log line to show it. `\u00XX`, `\ufffd` and raw valid UTF-8 parse. A variable set on the hook's command reaches the gate.
+
+**End to end, the same day, after the code changed.** These runs used the real gates in place of the stand-in: `gate-lib.sh`, both gates and the digest were copied into `.agents/hooks/`. `.agents/hooks.json` was rendered from that side's template with `{{HOOKS_DIR}}` as `.agents/hooks` and `{{FAST_CHECK}}` as `true`. `.steering/tech.md` named one validator, `sh check.sh`, and `src/*.txt` as source. Until `fixed.txt` existed, the validator printed a red `FAIL` with raw ESC bytes, then `日本語`, then a line telling the model to create `fixed.txt`, and exited 1. The prompt asked for one write to `src/a.txt`. The validator logged the names of the harness variables it inherited. Every run had `ANTIGRAVITY_CONVERSATION_ID`, which the CLI sets for its hooks although the launch unset it, and `CLAUDECODE` with the other `CLAUDE_CODE_*` variables, because the CLI was started from a Claude Code session.
+
+| Run | The gates, and the validator's output | Observed |
+| :-- | :-- | :-- |
+| P4 | `main`'s (`969dbb1`); colour, and one `\377` byte on the `FAIL` line | **Blocked, with the validator's output lost.** The conversation's transcript (`transcript_full.jsonl` in the CLI's `brain/` directory) holds the block as a system message: `Stop hook blocked termination: Quality gate: a gating validator failed. … --- sh check.sh`, and nothing after it: awk had aborted at the invalid byte under the inherited UTF-8 locale. To find the failure, the model read `check.sh` itself, then wrote `fixed.txt`. |
+| P5 | `main`'s; colour only | **Dropped.** `agy.log`: `failed to unmarshal result from hook jsonhook__gate-sdd_Stop_0_0 via protojson: … invalid character '\x1b' in string`. The validator ran once, no `fixed.txt` was written, and the turn ended with `status: SUCCESS`. This is #302's report, end to end. |
+| P6 | This branch's, from the rendered template with the marker; P4's validator | **Blocked, with the whole message.** The transcript's system message holds the validator's lines after `--- sh check.sh`: `FAIL` with its two ESC characters, written in the transcript's own JSON as `\u001b`, then `日本語`, U+FFFD where the `\377` was, `bad byte`, and the line after it. The model wrote `fixed.txt`, and the validator passed on the next `Stop`. No hook error. The validator saw `GATE_SDD_HARNESS`. |
+
+**Not run:** this branch's gates against P5's colour-only validator, which P6's output covers; and a Claude Code session started from inside Antigravity, Part 2's reproduction. The marker's channel on Claude Code is cases 396 to 398 in `scripts/test-gates.sh`.
 
 ## Still to verify
 

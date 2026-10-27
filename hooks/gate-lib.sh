@@ -14,23 +14,78 @@
 #         gate_block "message the model needs to read"
 #         gate_pass
 
-# JSON string escaping, enough for the messages gates actually produce
-# (backslashes, quotes, newlines, tabs, carriage returns). Gate messages are ours, not user input.
-_gate_json_escape() {
-  printf '%s' "$1" | awk 'BEGIN{ORS=""} {
-    gsub(/\\/, "\\\\");
-    gsub(/"/, "\\\"");
-    gsub(/\r/, "\\r");
-    gsub(/\t/, "\\t");
-    print sep $0;
-    sep="\\n";
-  }'
+# A JSON string's contents for any message (#302). A gate's message carries bytes it did not
+# write: a validator's output tail, a file or branch name. Antigravity parses the block with Go's
+# protojson, which rejects a raw byte below 0x20 or invalid UTF-8 in a string, and a rejected Stop
+# result ends the turn as a pass. So this encodes by rule rather than listing bad bytes:
+#
+#   - `\` and `"` are escaped, tab and CR take their short forms, every other byte below 0x20
+#     becomes \u00XX, and lines are joined with \n;
+#   - 0x20 to 0x7F, DEL included, are copied;
+#   - a byte of 0x80 or above is copied with its sequence only when that sequence is well formed
+#     by RFC 3629's table. Any other byte becomes �, one per byte, and the walk moves on one.
+#
+# The walk reads each line through two windows, 64 KB and then 256 bytes, each with 3 bytes of
+# lookahead for a sequence that crosses its end; `w` is a global so no call copies it. BWK awk's
+# substr measures its whole string on every call, so a walk over the line itself was quadratic
+# in its length, 300 KB taking 3 s, and a gate's block must be written well inside its margin
+# (#302 review round 1).
+#
+# awk runs under LC_ALL=C, so its input is bytes whatever locale the hook inherits: a UTF-8 locale
+# aborts BWK awk at the first invalid byte and the message is cut short, which is the 2026-10-17
+# `tr` lesson again. No \u surrogate is ever written.
+#
+# With `check` as $2 it prints nothing, and returns 1 when the text holds a byte below 0x20 or
+# invalid UTF-8: gate_replay's test for a verdict the harness could parse.
+_gate_json_escape() {  # <message> [check]
+  printf '%s' "$1" | LC_ALL=C awk -v check="${2:-}" '
+    function e(s) { if (check == "") printf "%s", s }
+    function cont(j, lo, hi,   v) { v = ord[substr(w, j, 1)] + 0; return v >= lo && v <= hi }
+    function seq(i, b,   lo, hi) {
+      if (b >= 194 && b <= 223) return cont(i + 1, 128, 191) ? 2 : 0
+      if (b >= 224 && b <= 239) {
+        lo = b == 224 ? 160 : 128; hi = b == 237 ? 159 : 191
+        return (cont(i + 1, lo, hi) && cont(i + 2, 128, 191)) ? 3 : 0
+      }
+      if (b >= 240 && b <= 244) {
+        lo = b == 240 ? 144 : 128; hi = b == 244 ? 143 : 191
+        return (cont(i + 1, lo, hi) && cont(i + 2, 128, 191) && cont(i + 3, 128, 191)) ? 4 : 0
+      }
+      return 0
+    }
+    BEGIN { for (i = 1; i < 256; i++) ord[sprintf("%c", i)] = i }
+    {
+      if (NR > 1) e("\\n")
+      n = length($0)
+      for (q = 1; q <= n; q += p - 1) {
+        big = substr($0, q, 65539); blim = length(big) < 65536 ? length(big) : 65536
+        for (p = 1; p <= blim; p += i - 1) {
+          w = substr(big, p, 259); lim = blim - p + 1 < 256 ? blim - p + 1 : 256
+          for (i = 1; i <= lim; i++) {
+            c = substr(w, i, 1); b = ord[c] + 0
+            if (c == "\\" || c == "\"") e("\\" c)
+            else if (b < 32) { bad = 1; e(b == 9 ? "\\t" : b == 13 ? "\\r" : sprintf("\\u%04x", b)) }
+            else if (b < 128) e(c)
+            else if (k = seq(i, b)) { e(substr(w, i, k)); i += k - 1 }
+            else { bad = 1; e("\\ufffd") }
+          }
+        }
+      }
+    }
+    END { exit (check != "" && bad) ? 1 : 0 }'
 }
 
 # Block the turn. Speaks to both harnesses, exiting 0 for Antigravity and 2 for Claude Code.
+#
+# The escaped reason is used only when the escape exited 0 and printed something for a message
+# that had some. An awk that died or was missing would leave an empty or cut-short reason, so
+# the block then carries a fixed one instead, and stderr still carries the message (#302).
 gate_block() {
   _msg=$1
-  printf '{"decision":"continue","reason":"%s"}\n' "$(_gate_json_escape "$_msg")"
+  if ! _gb_reason=$(_gate_json_escape "$_msg") || { [ -z "$_gb_reason" ] && [ -n "$_msg" ]; }; then
+    _gb_reason="The gate blocked this turn, but its message could not be encoded as JSON. The message is on the gate's stderr."
+  fi
+  printf '{"decision":"continue","reason":"%s"}\n' "$_gb_reason"
   printf '%s\n' "$_msg" >&2
   _gate_block_exit
 }
@@ -38,7 +93,14 @@ gate_block() {
 # The status each harness reads as a block once the JSON and the message are out: 0 on
 # Antigravity, which reads the JSON, and 2 on Claude Code. gate_replay asks it too, so a replayed
 # block is judged by the same test that ends one.
+#
+# The hook file says which harness runs the gate, as GATE_SDD_HARNESS (#302): the Antigravity
+# template sets it on each gate's command and plugin-gate.sh exports it for Claude Code. It wins
+# over the ANTIGRAVITY_* variables, which a session nested in the other harness inherits. With no
+# marker, or one it does not know, the old reading stands, so a hook file not yet re-rendered
+# behaves as it did.
 _gate_block_status() {
+  case "${GATE_SDD_HARNESS:-}" in antigravity) return 0 ;; claude-code) return 2 ;; esac
   if [ -n "${ANTIGRAVITY_CONVERSATION_ID:-}" ] || [ -n "${ANTIGRAVITY_AGENT:-}" ]; then
     return 0
   fi
@@ -723,8 +785,11 @@ _gate_watchdog_walk() {  # <run dir>
 #
 #   - `verdict` exactly `{}` with status 0 is a pass: the child's stderr is replayed and the gate
 #     passes;
-#   - one line that opens `{"decision":"continue","reason":"` and closes `"}`, with the status the
-#     channel gives a block, is that block: both files replayed, and out through _gate_block_exit.
+#   - one line that opens `{"decision":"continue","reason":"` and closes `"}`, holds no byte below
+#     0x20 and no invalid UTF-8, and comes with the status the channel gives a block, is that
+#     block: both files replayed, and out through _gate_block_exit. The byte test is the escape's
+#     `check` mode: a verdict Antigravity's parser would reject is a pass there, so it is not
+#     replayed (#302).
 #
 # Anything else returns 1 having written nothing, and the gate builds a block of its own; so does
 # a call with no status, read as `${2-}` because a gate under `set -u` must not abort with nothing
@@ -741,6 +806,7 @@ gate_replay() {  # <run dir> <the child's status>
     gate_pass
   fi
   case "$_rp_v" in '{"decision":"continue","reason":"'*'"}') ;; *) return 1 ;; esac
+  _gate_json_escape "$_rp_v" check || return 1
   _gate_block_status
   [ "${2-}" = "$?" ] || return 1
   printf '%s\n' "$_rp_v"

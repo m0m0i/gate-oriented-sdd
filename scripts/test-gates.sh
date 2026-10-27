@@ -23,7 +23,9 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # is that session's own env file, which a plugin-gate.sh case must never append to. So is
 # CLAUDE_PROJECT_DIR: the quality gate runs this suite from a Stop hook, where it names this
 # repository, and the wrapper's stand-down reads the settings under it (#262).
-unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR ANTIGRAVITY_CONVERSATION_ID ANTIGRAVITY_AGENT
+# And GATE_SDD_HARNESS, which this repository's own settings set on its gates, the suite among their
+# validators, and which would otherwise read every Antigravity case here as Claude Code (#302).
+unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR ANTIGRAVITY_CONVERSATION_ID ANTIGRAVITY_AGENT GATE_SDD_HARNESS
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -3150,20 +3152,30 @@ if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-agy-lib-out" "$TMP/bs-agy-cp-out" \
      && cmp -s "$TMP/bs-agy-lib-err" "$TMP/bs-agy-cp-err" \
      && [ "$bs_agy_libexit" = "$bs_agy_cpexit" ] && [ "$bs_agy_libexit" -eq 0 ]; then c4=ok; else c4=no; fi
 
-[ "$c1$c2$c3$c4" = "okokokok" ] && report "the bootstrap guard is one copy, and it still matches gate_block" ok \
+# And under the harness marker (#302), which wins over the inherited variable on both sides.
+( export GATE_SDD_HARNESS=claude-code ANTIGRAVITY_AGENT=1; . "$ROOT/hooks/gate-lib.sh"; gate_block 'bootstrap drift probe' ) \
+  >"$TMP/bs-mk-lib-out" 2>"$TMP/bs-mk-lib-err"; bs_mk_libexit=$?
+( export GATE_SDD_HARNESS=claude-code ANTIGRAVITY_AGENT=1; . "$TMP/bs-fn.sh"; _gate_bootstrap_block 'bootstrap drift probe' ) \
+  >"$TMP/bs-mk-cp-out" 2>"$TMP/bs-mk-cp-err"; bs_mk_cpexit=$?
+if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-mk-lib-out" "$TMP/bs-mk-cp-out" \
+     && cmp -s "$TMP/bs-mk-lib-err" "$TMP/bs-mk-cp-err" \
+     && [ "$bs_mk_libexit" = "$bs_mk_cpexit" ] && [ "$bs_mk_libexit" -eq 2 ]; then c5=ok; else c5=no; fi
+
+[ "$c1$c2$c3$c4$c5" = "okokokokok" ] && report "the bootstrap guard is one copy, and it still matches gate_block" ok \
   || report "the bootstrap guard is one copy, and it still matches gate_block" no \
-     "discovered=$bs_regions/$c1 identical=$c2 cc-channels=$c3 agy-channels=$c4 (cc-exit=$bs_libexit/$bs_cpexit, agy-exit=$bs_agy_libexit/$bs_agy_cpexit)"
+     "discovered=$bs_regions/$c1 identical=$c2 cc-channels=$c3 agy-channels=$c4 marker-channels=$c5 (cc-exit=$bs_libexit/$bs_cpexit, agy-exit=$bs_agy_libexit/$bs_agy_cpexit, marker-exit=$bs_mk_libexit/$bs_mk_cpexit)"
 
 
-# --- gate_block: dual-target exit codes and character escaping (#282) ------
+# --- gate_block: dual-target exit codes, and the escape's #282 probe ------
 #
 # #282. Under Claude Code, gate_block must exit 2 with the message on stderr.
-# Under Antigravity (ANTIGRAVITY_CONVERSATION_ID or ANTIGRAVITY_AGENT set),
-# non-zero exit is treated as an execution failure and fails open; gate_block
-# must emit {"decision":"continue","reason":"..."} on stdout and exit 0.
+# Under Antigravity (ANTIGRAVITY_CONVERSATION_ID or ANTIGRAVITY_AGENT set, with
+# no GATE_SDD_HARNESS marker; #302's section below has the marker), non-zero exit
+# is treated as an execution failure and fails open; gate_block must emit
+# {"decision":"continue","reason":"..."} on stdout and exit 0.
 #
-# Control characters (tabs, carriage returns, newlines) must be escaped in JSON
-# so protojson / RFC 8259 unmarshalers do not reject the hook output.
+# The probe below holds backslash, quote, tab, CR and newline. Every other byte
+# is #302's section, cases 392 to 395.
 
 # 1. Claude Code baseline: exit 2, message on stderr, valid continue JSON on stdout
 ( . "$ROOT/hooks/gate-lib.sh"; gate_block "standard block" ) >"$TMP/gb_cc_out" 2>"$TMP/gb_cc_err"; ex_cc=$?
@@ -3190,9 +3202,7 @@ c7=no
      "cc-exit=$c1 cc-json=$c2 cc-err=$c3 agy-agent-exit=$c4 agy-agent-json=$c5 agy-agent-err=$c6 agy-conv-exit=$c7"
 
 # 4. Control character escaping: tabs, carriage returns, quotes, backslashes, newlines
-probe_str='hello\world
-with "quotes"	and	tabs
-and CRLF'
+probe_str=$(printf 'hello\\world\nwith "quotes"\tand\ttabs\r\nand CRLF\r\nend')
 ( . "$ROOT/hooks/gate-lib.sh"; gate_block "$probe_str" ) >"$TMP/gb_esc_out" 2>/dev/null || true
 c_esc=no
 if python3 -c '
@@ -3208,6 +3218,274 @@ fi
   && report "gate_block escapes backslashes, quotes, tabs, and carriage returns as valid JSON" ok \
   || report "gate_block escapes backslashes, quotes, tabs, and carriage returns as valid JSON" no \
      "json-parse failed or reason mismatch"
+
+# --- gate_block: a block is valid JSON whatever its message holds (#302) ---------------
+#
+# Every message a gate blocks with can carry bytes it did not write: a validator's output tail,
+# a file or branch name. Antigravity parses the block with Go's protojson, which rejects a raw
+# byte below 0x20 or invalid UTF-8 in a string, and a rejected Stop result ends the turn as a pass
+# (docs/verified.md, A14 and the #302 runs). So each case below runs gate_block over its messages
+# under LC_ALL=C and under a UTF-8 locale, on both channels, and holds every block to a check as
+# strict as protojson's: the bytes decode as UTF-8 with no replacement, the object parses with no
+# raw control character, no duplicate key and nothing after it, and no surrogate is decoded.
+# Python's json.loads alone takes a lone surrogate escape, hence the last.
+#
+# The reason must decode to the message with each invalid byte as one U+FFFD (C3): gbs_expect
+# below states that rule independently of the awk, using Python's own strict decoder to judge
+# each sequence a lead byte starts.
+gbs_utf8=''
+for l in C.UTF-8 C.utf8 en_US.UTF-8 en_US.utf8; do
+  locale -a 2>/dev/null | grep -qx "$l" && { gbs_utf8=$l; break; }
+done
+
+# gbs_run <dir>: every m<n> in <dir> through gate_block, under each locale and on each channel.
+# Each message file ends in a byte other than a newline, so $(cat) reads it whole.
+gbs_run() {
+  for gbs_loc in C "${gbs_utf8:-C}"; do
+    for gbs_ch in cc agy; do
+      (
+        LC_ALL=$gbs_loc; export LC_ALL
+        [ "$gbs_ch" = agy ] && { ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; }
+        . "$ROOT/hooks/gate-lib.sh"
+        for f in "$1"/m*; do
+          case "${f##*/}" in *.*) continue ;; esac
+          m=$(cat "$f")
+          ( gate_block "$m" ) > "$f.$gbs_loc.$gbs_ch.out" 2>/dev/null
+          echo "$?" > "$f.$gbs_loc.$gbs_ch.rc"
+        done
+      )
+    done
+  done
+}
+
+# gbs_check <dir>: prints nothing and returns 0 when every block passes, else the first failures.
+gbs_check() {
+  python3 -I - "$1" "${gbs_utf8:-C}" <<'PY'
+import glob, json, os, sys
+d, utf8 = sys.argv[1], sys.argv[2]
+def expect(b):
+    out, i = [], 0
+    while i < len(b):
+        c = b[i]
+        if c < 0x80:
+            out.append(chr(c)); i += 1; continue
+        k = 2 if 0xC2 <= c <= 0xDF else 3 if 0xE0 <= c <= 0xEF else 4 if 0xF0 <= c <= 0xF4 else 0
+        try:
+            if not k or len(b) < i + k:
+                raise UnicodeDecodeError("utf-8", b, i, i + 1, "no sequence")
+            out.append(b[i:i + k].decode("utf-8")); i += k
+        except UnicodeDecodeError:
+            out.append("\ufffd"); i += 1
+    return "".join(out)
+def dup(pairs):
+    keys = [k for k, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise ValueError("duplicate key")
+    return dict(pairs)
+bad = []
+for f in sorted(glob.glob(os.path.join(d, "m*"))):
+    if "." in os.path.basename(f):
+        continue
+    msg = open(f, "rb").read()
+    for loc in ("C", utf8):
+        for ch, rc in (("cc", "2"), ("agy", "0")):
+            out = open(f"{f}.{loc}.{ch}.out", "rb").read()
+            got_rc = open(f"{f}.{loc}.{ch}.rc").read().strip()
+            tag = f"{os.path.basename(f)}/{loc}/{ch}"
+            try:
+                if got_rc != rc:
+                    raise ValueError(f"exit {got_rc}")
+                if not out.endswith(b"\n") or out.count(b"\n") != 1:
+                    raise ValueError("not one line")
+                obj = json.loads(out.decode("utf-8"), object_pairs_hook=dup)
+                if set(obj) != {"decision", "reason"} or obj["decision"] != "continue":
+                    raise ValueError("keys or decision")
+                r = obj["reason"]
+                if any(0xD800 <= ord(x) <= 0xDFFF for x in r):
+                    raise ValueError("surrogate")
+                if r != expect(msg):
+                    raise ValueError(f"reason {r!r} != {expect(msg)!r}")
+            except Exception as e:
+                bad.append(f"{tag}: {e}"[:200])
+if bad:
+    print(f"{len(bad)} bad; " + " | ".join(bad[:4]))
+    sys.exit(1)
+PY
+}
+
+# 392. #302 — every byte from 0x01 to 0xFF, alone and in one run, comes out of gate_block as a
+# block that check accepts: a control byte escaped, DEL and the rest of ASCII kept, and a byte of
+# 0x80 or above on its own, which is never UTF-8, as one U+FFFD. On main it fails at ESC.
+gbs=$TMP/gbs-sweep; mkdir -p "$gbs"
+python3 -I -c '
+import sys
+d = sys.argv[1]
+for i in range(1, 256):
+    open(f"{d}/m{i:03d}", "wb").write(b"a" + bytes([i]) + b"z")
+open(f"{d}/mall", "wb").write(bytes(range(1, 256)) + b"z")
+' "$gbs"
+gbs_run "$gbs"; gbs_out=$(gbs_check "$gbs") && c1=ok || c1=no
+[ -n "$gbs_utf8" ] && c2=ok || c2=no
+[ "$c1$c2" = okok ] \
+  && report "gate_block prints a strict-JSON block for every byte, in both locales and on both channels" ok \
+  || report "gate_block prints a strict-JSON block for every byte, in both locales and on both channels" no \
+     "utf8-locale=${gbs_utf8:-none} $gbs_out"
+
+# 393. #302 — invalid UTF-8 between Japanese text: each invalid byte becomes one U+FFFD and every
+# Japanese character is kept, in either locale. On main a UTF-8 locale's awk aborts at the first
+# bad byte, so the reason is cut short, and under LC_ALL=C the bytes pass raw. The medge messages
+# put each kind across the walk's window edges.
+gbs=$TMP/gbs-utf8; mkdir -p "$gbs"
+python3 -I -c '
+import sys
+d, j, t = sys.argv[1], "日本語".encode(), "テスト".encode()
+bad = {
+    "stray": b"\x80", "stray2": b"\xbf\x80", "c0": b"\xc0\xaf", "c1": b"\xc1\xbf",
+    "f5": b"\xf5\x80\x80\x80", "fe": b"\xfe", "ff": b"\xff",
+    "over3": b"\xe0\x80\xaf", "over4": b"\xf0\x80\x80\xaf",
+    "surr": b"\xed\xa0\x80", "surr2": b"\xed\xbf\xbf", "big": b"\xf4\x90\x80\x80",
+    "cut3": b"\xe6\x97", "cut4": b"\xf0\x9f\x98",
+}
+for name, b in bad.items():
+    open(f"{d}/m{name}", "wb").write(j + b + t)
+open(f"{d}/mend", "wb").write(j + b"\xe6\x97")
+open(f"{d}/mlines", "wb").write(j + b"\xff\n" + t + b"\n\xe6\x97\xa5")
+# The escape reads a line through windows of 256 bytes and 64 KB (review round 1): a character,
+# a cut-short one and an invalid byte, each across both edges.
+for edge in (256, 65536):
+    for name, b in (("char", "日".encode()), ("four", "😀".encode()), ("cut", b"\xe6\x97"), ("bad", b"\xff\xfe")):
+        for back in range(1, len(b) + 1):
+            open(f"{d}/medge{edge}{name}{back}", "wb").write(b"x" * (edge - back) + b + t)
+' "$gbs"
+gbs_run "$gbs"; gbs_out=$(gbs_check "$gbs") && c1=ok || c1=no
+[ -n "$gbs_utf8" ] && c2=ok || c2=no
+[ "$c1$c2" = okok ] \
+  && report "gate_block replaces each invalid UTF-8 byte with one U+FFFD and keeps the text around it" ok \
+  || report "gate_block replaces each invalid UTF-8 byte with one U+FFFD and keeps the text around it" no \
+     "utf8-locale=${gbs_utf8:-none} $gbs_out"
+
+# 394. #302 — when the escape itself fails, gate_block still blocks, with a fixed reason that says
+# the message is on stderr: never an empty or cut-short reason (AC3). One stand-in awk prints part
+# of a reason and exits 1, as one killed mid-message would, and one prints nothing and exits 0. On
+# main the block's reason is that part, or empty.
+gbf=$TMP/gbs-fail; mkdir -p "$gbf/bin"
+printf '#!/bin/sh\nprintf partial\nexit 1\n' > "$gbf/bin/awk"; chmod +x "$gbf/bin/awk"
+# And one that prints nothing and exits 0, the condition's other half (review round 1).
+mkdir -p "$gbf/bin0"; printf '#!/bin/sh\nexit 0\n' > "$gbf/bin0/awk"; chmod +x "$gbf/bin0/awk"
+for ch in cc agy cc0 agy0; do
+  case "$ch" in *0) gbf_bin=$gbf/bin0 ;; *) gbf_bin=$gbf/bin ;; esac
+  (
+    PATH=$gbf_bin:$PATH
+    case "$ch" in agy*) ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT ;; esac
+    . "$ROOT/hooks/gate-lib.sh"; gate_block "the real message"
+  ) > "$gbf/$ch.out" 2> "$gbf/$ch.err"
+  echo "$?" > "$gbf/$ch.rc"
+done
+gbf_out=$(python3 -I -c '
+import json, sys
+d, bad = sys.argv[1], []
+for ch, rc in (("cc", "2"), ("agy", "0"), ("cc0", "2"), ("agy0", "0")):
+    out = open(f"{d}/{ch}.out", "rb").read()
+    try:
+        r = json.loads(out.decode("utf-8"))["reason"]
+    except Exception as e:
+        bad.append(f"{ch}: {e}"); continue
+    if open(f"{d}/{ch}.rc").read().strip() != rc: bad.append(f"{ch}: exit")
+    if "could not be encoded" not in r or "stderr" not in r: bad.append(f"{ch}: reason {r!r}")
+    if open(f"{d}/{ch}.err").read() != "the real message\n": bad.append(f"{ch}: stderr")
+print(" ".join(bad)); sys.exit(1 if bad else 0)
+' "$gbf") && c1=ok || c1=no
+[ "$c1" = ok ] \
+  && report "gate_block blocks with a fixed reason when the escape fails" ok \
+  || report "gate_block blocks with a fixed reason when the escape fails" no "$gbf_out"
+
+# 395. #302 — gate_replay refuses a child's verdict the harness could not parse: the right shape,
+# with a raw ESC or invalid UTF-8 in its reason, is no verdict, and the parent blocks on its own
+# (AC4). A clean verdict beside them still replays, so the refusal is the check and not the
+# fixture. On main both bad verdicts are replayed as they are.
+gbr=$TMP/gbs-replay
+for v in esc utf8 clean; do
+  mkdir -p "$gbr/$v"; : > "$gbr/$v/end"; printf 'child said\n' > "$gbr/$v/err"
+done
+printf '{"decision":"continue","reason":"\033[31mFAIL\033[0m"}\n' > "$gbr/esc/verdict"
+printf '{"decision":"continue","reason":"bad \377 byte"}\n' > "$gbr/utf8/verdict"
+printf '{"decision":"continue","reason":"\\u001b[31mFAIL"}\n' > "$gbr/clean/verdict"
+gbr_res=''
+for ch in cc agy; do
+  [ "$ch" = agy ] && st=0 || st=2
+  for v in esc utf8 clean; do
+    o=$(
+      [ "$ch" = agy ] && { ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; }
+      . "$ROOT/hooks/gate-lib.sh"; gate_replay "$gbr/$v" "$st" 2>/dev/null; echo "returned=$?"
+    ); rc=$?
+    case "$v:$o:$rc" in
+      esc:returned=1:0|utf8:returned=1:0) gbr_res="$gbr_res ok" ;;
+      clean:*:"$st") [ "$o" = "$(cat "$gbr/clean/verdict")" ] && gbr_res="$gbr_res ok" || gbr_res="$gbr_res $ch/$v=no" ;;
+      *) gbr_res="$gbr_res $ch/$v=no($rc)" ;;
+    esac
+  done
+done
+[ "$gbr_res" = " ok ok ok ok ok ok" ] \
+  && report "gate_replay refuses a verdict holding a raw control byte or invalid UTF-8" ok \
+  || report "gate_replay refuses a verdict holding a raw control byte or invalid UTF-8" no "$gbr_res"
+
+# 402. #302 review round 1, HIGH — a block is written in time linear in its message. A gate writes
+#      its block inside the margin it keeps before the harness timeout, which is a pass, and the
+#      validator tail it escapes is twenty lines of any length. A walk over the line itself was
+#      quadratic on BWK awk: 300 KB took 3 s, so this 1 MB line, escaped by gate_block and again by
+#      gate_replay's check, took over a minute. Ten seconds is far above the linear walk's time.
+gbt=$TMP/gbs-time; mkdir -p "$gbt"; : > "$gbt/end"; : > "$gbt/err"
+python3 -I -c 'import sys; open(sys.argv[1], "wb").write(b"a" * 900000 + "日本語".encode() * 30000)' "$gbt/m"
+gbt_m=$(cat "$gbt/m"); gbt_s=$(date +%s)
+( . "$ROOT/hooks/gate-lib.sh"; gate_block "$gbt_m" ) > "$gbt/verdict" 2>/dev/null
+( . "$ROOT/hooks/gate-lib.sh"; gate_replay "$gbt" 2 ) > "$gbt/replay" 2>/dev/null; gbt_rc=$?
+gbt_t=$(( $(date +%s) - gbt_s ))
+[ "$gbt_t" -le 10 ] && [ "$gbt_rc" = 2 ] && cmp -s "$gbt/verdict" "$gbt/replay" && c1=ok || c1=no
+[ "$c1" = ok ] && report "gate_block and gate_replay handle a 1 MB line in linear time" ok \
+  || report "gate_block and gate_replay handle a 1 MB line in linear time" no "seconds=$gbt_t replay-exit=$gbt_rc"
+
+# --- GATE_SDD_HARNESS: the hook file says which harness reads the block (#302) ----------------
+#
+# A gate guessed its harness from ANTIGRAVITY_* variables, which a nested session inherits: a
+# Claude Code session started from a shell inside Antigravity read every block as Antigravity's,
+# exited 0, and Claude Code ended the turn. Claude Code's own CLAUDECODE=1 would break the mirror
+# case the same way. The hook file knows its harness, so it says so: the Antigravity template runs
+# each gate as `GATE_SDD_HARNESS=antigravity sh …`, and plugin-gate.sh exports claude-code. The
+# marker wins; with none, or a value it does not know, the gate keeps the old reading (AC6, C4).
+
+# 396. #302 AC5, AC6 — gate_block's channel by marker, against an inherited variable of the other
+#      harness. On main the marker is not read, so the first row exits 0 and the second's
+#      CLAUDECODE changes nothing either way.
+gbh_res=''
+for row in "claude-code ANTIGRAVITY_AGENT 2" "claude-code ANTIGRAVITY_CONVERSATION_ID 2" \
+           "antigravity CLAUDECODE 0" "- ANTIGRAVITY_AGENT 0" "- CLAUDECODE 2" "claudecode ANTIGRAVITY_AGENT 0"; do
+  h=${row%% *}; v=${row#* }; want=${v#* }; v=${v%% *}
+  (
+    [ "$h" = - ] || { GATE_SDD_HARNESS=$h; export GATE_SDD_HARNESS; }
+    eval "$v=1; export $v"
+    . "$ROOT/hooks/gate-lib.sh"; gate_block "marker probe"
+  ) > "$TMP/gbh.out" 2> "$TMP/gbh.err"; rc=$?
+  if [ "$rc" = "$want" ] && [ "$(cat "$TMP/gbh.out")" = '{"decision":"continue","reason":"marker probe"}' ] \
+     && [ "$(cat "$TMP/gbh.err")" = "marker probe" ]; then gbh_res="$gbh_res ok"; else gbh_res="$gbh_res $h/$v=$rc"; fi
+done
+[ "$gbh_res" = " ok ok ok ok ok ok" ] \
+  && report "gate_block takes its channel from GATE_SDD_HARNESS, and keeps the old reading without one" ok \
+  || report "gate_block takes its channel from GATE_SDD_HARNESS, and keeps the old reading without one" no "$gbh_res"
+
+# 397. #302 AC5, AC6 — the bootstrap guards decide the same way, for the one state that cannot
+#      call gate_block: each gate with its library absent, under the marker and an inherited
+#      variable of the other harness.
+gbh_res=''
+for gate in $BS_GATES; do
+  r=$(bs_repo "bs-marker-${gate%.sh}"); rm -f "$r/hooks/gate-lib.sh"
+  out=$( GATE_SDD_HARNESS=claude-code ANTIGRAVITY_AGENT=1; export GATE_SDD_HARNESS ANTIGRAVITY_AGENT; run_bs "$r" "$gate" )
+  case "$out" in *"exit=2"*) gbh_res="$gbh_res ok" ;; *) gbh_res="$gbh_res $gate/cc=$out" ;; esac
+  out=$( GATE_SDD_HARNESS=antigravity CLAUDECODE=1; export GATE_SDD_HARNESS CLAUDECODE; run_bs "$r" "$gate" )
+  case "$out" in *"exit=0"*) gbh_res="$gbh_res ok" ;; *) gbh_res="$gbh_res $gate/agy=$out" ;; esac
+done
+[ "$gbh_res" = " ok ok ok ok" ] \
+  && report "the bootstrap guards take their channel from GATE_SDD_HARNESS" ok \
+  || report "the bootstrap guards take their channel from GATE_SDD_HARNESS" no "$gbh_res"
 
 
 
@@ -3252,6 +3530,29 @@ case "$(cat "$TMP/pgout")" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; es
 case "$(cat "$TMP/pgerr")" in *RAN*) c3=ok ;; *) c3=no ;; esac
 [ "$c1$c2$c3" = "okokok" ] && report "plugin-gate runs the quality gate from the plugin with the project as cwd, and it blocks" ok \
   || report "plugin-gate runs the quality gate from the plugin with the project as cwd, and it blocks" no "exit=$c1 json=$c2 ran=$c3 ($out; $(head -c 200 "$TMP/pgerr"))"
+
+# 398. #302 AC5 — plugin-gate.sh exports GATE_SDD_HARNESS=claude-code before it runs a gate, so a
+#      Claude Code session that inherited an Antigravity variable still blocks with exit 2. Every
+#      Claude Code project gets this by plugin update. On main the gate exits 0, which Claude Code
+#      reads as a pass.
+p=$(pg_repo pg-marker)
+out=$( ANTIGRAVITY_CONVERSATION_ID=inherited; export ANTIGRAVITY_CONVERSATION_ID; run_pg "$p" quality-gate.sh )
+case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+case "$(cat "$TMP/pgerr")" in *RAN*) c2=ok ;; *) c2=no ;; esac
+[ "$c1$c2" = okok ] && report "plugin-gate blocks with exit 2 under an inherited Antigravity variable" ok \
+  || report "plugin-gate blocks with exit 2 under an inherited Antigravity variable" no "exit=$c1 ran=$c2 ($out)"
+
+# 401. #302 — the stand-down still reads a settings entry that carries the marker. This repository's
+#      own .claude/settings.json runs its gates as `GATE_SDD_HARNESS=claude-code sh hooks/<gate>`, and
+#      the plugin's wrapper must still find the gate on that line and stand down, silent, or every
+#      gate here would run twice.
+p=$(pg_repo pg-sd-marker); mkdir -p "$p/project/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/hooks/"
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"[ -f hooks/quality-gate.sh ] || exit 0; GATE_SDD_HARNESS=claude-code sh hooks/quality-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"
+out=$(run_pg "$p" quality-gate.sh)
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
+[ -s "$TMP/pgout" ] || [ -s "$TMP/pgerr" ] && c1=no
+[ "$c1" = ok ] && report "plugin-gate stands down on a settings entry that runs the gate under the harness marker" ok \
+  || report "plugin-gate stands down on a settings entry that runs the gate under the harness marker" no "$out $(head -c 200 "$TMP/pgerr")"
 
 # 206. #256 AC2 — no .steering/, no sound. All three gates, because the digest would otherwise
 #      print "## Repo facts" into every session of every project on the machine.
@@ -9371,14 +9672,16 @@ echo '- Validators: false' >> "$r/.steering/tech.md"
 echo dirty >> "$r/src/main.txt"
 cmd=$(agy_get_cmd "$r/.agents/hooks.json" Stop 0)
 out=$( ( cd "$r/.agents" && sh -c "$cmd" 2>"$TMP/agy_qg_err"; echo "exit=$?" ) )
-case "$out" in *"exit=2"*) c1=ok ;; *) c1=no ;; esac
+# Exit 0: the rendered command carries GATE_SDD_HARNESS=antigravity, so the gate blocks as
+# Antigravity reads a block. Before #302 it exited 2 here, which Antigravity reads as a pass.
+case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
 case "$out" in *'"decision":"continue"'*) c2=ok ;; *) c2=no ;; esac
 
 # 2. Review gate blocks when unreviewed spec is completed and cwd is .agents/
 r=$(antigravity_repo agy-rv-fail 0)
 cmd=$(agy_get_cmd "$r/.agents/hooks.json" Stop 1)
 out=$( ( cd "$r/.agents" && sh -c "$cmd" 2>"$TMP/agy_rv_err"; echo "exit=$?" ) )
-case "$out" in *"exit=2"*) c3=ok ;; *) c3=no ;; esac
+case "$out" in *"exit=0"*) c3=ok ;; *) c3=no ;; esac
 case "$out" in *'"decision":"continue"'*) c4=ok ;; *) c4=no ;; esac
 
 # 3. PostToolUse fast-check runs with cwd anchored to repo root
@@ -9407,6 +9710,26 @@ case "$out_rv" in *"exit=0"*) c7=ok ;; *) c7=no ;; esac
 [ "$c1$c2$c3$c4$c5$c6$c7" = "okokokokokokok" ] && report "Antigravity hooks execute from repo root when cwd is .agents/" ok \
   || report "Antigravity hooks execute from repo root when cwd is .agents/" no \
      "qg-exit=$c1 qg-json=$c2 rv-exit=$c3 rv-json=$c4 fast-check-root=$c5 clean-qg-exit=$c6 clean-rv-exit=$c7"
+
+# 399. #302 AC5 — the rendered template's Stop commands block as Antigravity reads a block, exit 0
+#      with the JSON, under Claude Code's own CLAUDECODE=1 and with no ANTIGRAVITY_* set: the
+#      marker on each command is what says so. On main both exit 2, which Antigravity reads as a
+#      failed hook and so a pass.
+r_qg=$(antigravity_repo agy-marker-qg 1)
+echo '- Validators: false' >> "$r_qg/.steering/tech.md"
+( cd "$r_qg" && git commit -qam "add failing validator" ) >/dev/null 2>&1
+echo dirty >> "$r_qg/src/main.txt"
+r_rv=$(antigravity_repo agy-marker-rv 0)
+gbh_res=''
+for i in 0 1; do
+  [ "$i" = 0 ] && r=$r_qg || r=$r_rv
+  cmd=$(agy_get_cmd "$r/.agents/hooks.json" Stop "$i")
+  ( cd "$r/.agents" && CLAUDECODE=1 sh -c "$cmd" >"$TMP/agym.out" 2>/dev/null; echo "$?" > "$TMP/agym.rc" )
+  if [ "$(cat "$TMP/agym.rc")" = 0 ] && python3 -I -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))["decision"] == "continue" else 1)' "$TMP/agym.out" 2>/dev/null
+  then gbh_res="$gbh_res ok"; else gbh_res="$gbh_res stop$i=$(cat "$TMP/agym.rc")"; fi
+done
+[ "$gbh_res" = " ok ok" ] && report "the rendered Antigravity Stop commands block with exit 0 and JSON, whatever harness variables are set" ok \
+  || report "the rendered Antigravity Stop commands block with exit 0 and JSON, whatever harness variables are set" no "$gbh_res"
 
 # The fast check is rendered by json.dump rather than sed, because a compound check carries `&`,
 # which sed's replacement reads as the matched text, and because the command has to arrive in the
@@ -9918,6 +10241,17 @@ out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
 [ "$out" = 1 ] && case "$err" in *"the template's groups are"*"enabled"*) c1=ok ;; *) c1=no ;; esac || c1=no
 [ "$c1" = ok ] && report "check-manifests fails a stray key at the Antigravity template's root" ok \
   || report "check-manifests fails a stray key at the Antigravity template's root" no "exit=$out stderr=$(head -c 300 "$TMP/mferr")"
+
+# 400. #302 AC5 — check-manifests fails a template whose Stop command for either gate lost the
+#      marker. On main there is no marker to lose and the check says nothing.
+gbh_res=''
+for i in 0 1; do
+  r=$(mutate_agy_template "mf-marker-$i" "e = d['gate-sdd']['Stop'][$i]; e['command'] = e['command'].replace('GATE_SDD_HARNESS=antigravity ', '')")
+  out=$(run_manifest "$r"); err=$(cat "$TMP/mferr")
+  [ "$out" = 1 ] && case "$err" in *"GATE_SDD_HARNESS=antigravity"*) gbh_res="$gbh_res ok" ;; *) gbh_res="$gbh_res stop$i" ;; esac || gbh_res="$gbh_res stop$i=$out"
+done
+[ "$gbh_res" = " ok ok" ] && report "check-manifests fails an Antigravity Stop command without the harness marker" ok \
+  || report "check-manifests fails an Antigravity Stop command without the harness marker" no "$gbh_res $(head -c 300 "$TMP/mferr")"
 
 
 
