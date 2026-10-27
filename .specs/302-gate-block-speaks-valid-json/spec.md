@@ -1,6 +1,6 @@
 # Spec: A gate's block is valid JSON whatever its message holds, and the hook file says which harness reads it
 
-- Slug: 302-gate-block-speaks-valid-json   Issue: 302   Type: bug   Status: approved
+- Slug: 302-gate-block-speaks-valid-json   Issue: 302   Type: bug   Status: done
 - Author: m0m0i (Claude Code)   Date: 2026-10-26
 
 Backlog row 1's next spec ("Antigravity ready"), after #324 and #330 shipped as #345. #302 is two defects in the nine lines of `gate_block` (`hooks/gate-lib.sh:31-46`), one on each harness. Both turn a block into a pass with no message.
