@@ -64,9 +64,16 @@ _gate_json_escape() {  # <message> [check]
 }
 
 # Block the turn. Speaks to both harnesses, exiting 0 for Antigravity and 2 for Claude Code.
+#
+# The escaped reason is used only when the escape exited 0 and printed something for a message
+# that had some. An awk that died or was missing would leave an empty or cut-short reason, so
+# the block then carries a fixed one instead, and stderr still carries the message (#302).
 gate_block() {
   _msg=$1
-  printf '{"decision":"continue","reason":"%s"}\n' "$(_gate_json_escape "$_msg")"
+  if ! _gb_reason=$(_gate_json_escape "$_msg") || { [ -z "$_gb_reason" ] && [ -n "$_msg" ]; }; then
+    _gb_reason="The gate blocked this turn, but its message could not be encoded as JSON. The message is on the gate's stderr."
+  fi
+  printf '{"decision":"continue","reason":"%s"}\n' "$_gb_reason"
   printf '%s\n' "$_msg" >&2
   _gate_block_exit
 }

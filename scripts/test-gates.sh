@@ -3345,6 +3345,37 @@ gbs_run "$gbs"; gbs_out=$(gbs_check "$gbs") && c1=ok || c1=no
   || report "gate_block replaces each invalid UTF-8 byte with one U+FFFD and keeps the text around it" no \
      "utf8-locale=${gbs_utf8:-none} $gbs_out"
 
+# 394. #302 — when the escape itself fails, gate_block still blocks, with a fixed reason that says
+# the message is on stderr: never an empty or cut-short reason (AC3). The stand-in awk prints part
+# of a reason and exits 1, as one killed mid-message would. On main the block's reason is that part.
+gbf=$TMP/gbs-fail; mkdir -p "$gbf/bin"
+printf '#!/bin/sh\nprintf partial\nexit 1\n' > "$gbf/bin/awk"; chmod +x "$gbf/bin/awk"
+for ch in cc agy; do
+  (
+    PATH=$gbf/bin:$PATH
+    [ "$ch" = agy ] && { ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; }
+    . "$ROOT/hooks/gate-lib.sh"; gate_block "the real message"
+  ) > "$gbf/$ch.out" 2> "$gbf/$ch.err"
+  echo "$?" > "$gbf/$ch.rc"
+done
+gbf_out=$(python3 -I -c '
+import json, sys
+d, bad = sys.argv[1], []
+for ch, rc in (("cc", "2"), ("agy", "0")):
+    out = open(f"{d}/{ch}.out", "rb").read()
+    try:
+        r = json.loads(out.decode("utf-8"))["reason"]
+    except Exception as e:
+        bad.append(f"{ch}: {e}"); continue
+    if open(f"{d}/{ch}.rc").read().strip() != rc: bad.append(f"{ch}: exit")
+    if "could not be encoded" not in r or "stderr" not in r: bad.append(f"{ch}: reason {r!r}")
+    if open(f"{d}/{ch}.err").read() != "the real message\n": bad.append(f"{ch}: stderr")
+print(" ".join(bad)); sys.exit(1 if bad else 0)
+' "$gbf") && c1=ok || c1=no
+[ "$c1" = ok ] \
+  && report "gate_block blocks with a fixed reason when the escape fails" ok \
+  || report "gate_block blocks with a fixed reason when the escape fails" no "$gbf_out"
+
 
 
 # --- hooks/plugin-gate.sh: the gates as the plugin runs them (#256) ---------------------

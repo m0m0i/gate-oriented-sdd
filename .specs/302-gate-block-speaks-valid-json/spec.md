@@ -144,7 +144,7 @@ The marker reaches the validators too, since they inherit the gate's environment
 - [x] T2: **The escape (AC1, AC2).**
   - Red: case 392 sweeps 0x01 to 0x1F and DEL through `gate_block`, under `LC_ALL=C` and a UTF-8 locale, on both channels, with the strict check above. It fails on `main` at ESC. Case 393 does the same with the invalid UTF-8 classes in AC2 between valid Japanese text. It expects each bad byte as one `\ufffd` and the Japanese kept, and fails on `main` with an empty or raw reason. The #282 probe gets a real CR byte.
   - Green: the new `_gate_json_escape`.
-- [ ] T3: **Fail closed (AC3).**
+- [x] T3: **Fail closed (AC3).**
   - Red: case 394 runs `gate_block` with an `awk` on `PATH` that exits 1. It expects a block on both channels with the fixed reason and parseable JSON. On `main` the reason is empty.
   - Green: `gate_block` checks the escape.
 - [ ] T4: **The replay (AC4).**
