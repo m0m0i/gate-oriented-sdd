@@ -3376,6 +3376,36 @@ print(" ".join(bad)); sys.exit(1 if bad else 0)
   && report "gate_block blocks with a fixed reason when the escape fails" ok \
   || report "gate_block blocks with a fixed reason when the escape fails" no "$gbf_out"
 
+# 395. #302 — gate_replay refuses a child's verdict the harness could not parse: the right shape,
+# with a raw ESC or invalid UTF-8 in its reason, is no verdict, and the parent blocks on its own
+# (AC4). A clean verdict beside them still replays, so the refusal is the check and not the
+# fixture. On main both bad verdicts are replayed as they are.
+gbr=$TMP/gbs-replay
+for v in esc utf8 clean; do
+  mkdir -p "$gbr/$v"; : > "$gbr/$v/end"; printf 'child said\n' > "$gbr/$v/err"
+done
+printf '{"decision":"continue","reason":"\033[31mFAIL\033[0m"}\n' > "$gbr/esc/verdict"
+printf '{"decision":"continue","reason":"bad \377 byte"}\n' > "$gbr/utf8/verdict"
+printf '{"decision":"continue","reason":"\\u001b[31mFAIL"}\n' > "$gbr/clean/verdict"
+gbr_res=''
+for ch in cc agy; do
+  [ "$ch" = agy ] && st=0 || st=2
+  for v in esc utf8 clean; do
+    o=$(
+      [ "$ch" = agy ] && { ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; }
+      . "$ROOT/hooks/gate-lib.sh"; gate_replay "$gbr/$v" "$st" 2>/dev/null; echo "returned=$?"
+    ); rc=$?
+    case "$v:$o:$rc" in
+      esc:returned=1:0|utf8:returned=1:0) gbr_res="$gbr_res ok" ;;
+      clean:*:"$st") [ "$o" = "$(cat "$gbr/clean/verdict")" ] && gbr_res="$gbr_res ok" || gbr_res="$gbr_res $ch/$v=no" ;;
+      *) gbr_res="$gbr_res $ch/$v=no($rc)" ;;
+    esac
+  done
+done
+[ "$gbr_res" = " ok ok ok ok ok ok" ] \
+  && report "gate_replay refuses a verdict holding a raw control byte or invalid UTF-8" ok \
+  || report "gate_replay refuses a verdict holding a raw control byte or invalid UTF-8" no "$gbr_res"
+
 
 
 # --- hooks/plugin-gate.sh: the gates as the plugin runs them (#256) ---------------------

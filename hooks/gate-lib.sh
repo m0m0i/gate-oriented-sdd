@@ -766,8 +766,11 @@ _gate_watchdog_walk() {  # <run dir>
 #
 #   - `verdict` exactly `{}` with status 0 is a pass: the child's stderr is replayed and the gate
 #     passes;
-#   - one line that opens `{"decision":"continue","reason":"` and closes `"}`, with the status the
-#     channel gives a block, is that block: both files replayed, and out through _gate_block_exit.
+#   - one line that opens `{"decision":"continue","reason":"` and closes `"}`, holds no byte below
+#     0x20 and no invalid UTF-8, and comes with the status the channel gives a block, is that
+#     block: both files replayed, and out through _gate_block_exit. The byte test is the escape's
+#     `check` mode: a verdict Antigravity's parser would reject is a pass there, so it is not
+#     replayed (#302).
 #
 # Anything else returns 1 having written nothing, and the gate builds a block of its own; so does
 # a call with no status, read as `${2-}` because a gate under `set -u` must not abort with nothing
@@ -784,6 +787,7 @@ gate_replay() {  # <run dir> <the child's status>
     gate_pass
   fi
   case "$_rp_v" in '{"decision":"continue","reason":"'*'"}') ;; *) return 1 ;; esac
+  _gate_json_escape "$_rp_v" check || return 1
   _gate_block_status
   [ "${2-}" = "$?" ] || return 1
   printf '%s\n' "$_rp_v"

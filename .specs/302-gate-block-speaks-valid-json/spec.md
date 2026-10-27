@@ -147,7 +147,7 @@ The marker reaches the validators too, since they inherit the gate's environment
 - [x] T3: **Fail closed (AC3).**
   - Red: case 394 runs `gate_block` with an `awk` on `PATH` that exits 1. It expects a block on both channels with the fixed reason and parseable JSON. On `main` the reason is empty.
   - Green: `gate_block` checks the escape.
-- [ ] T4: **The replay (AC4).**
+- [x] T4: **The replay (AC4).**
   - Red: case 395 hands `gate_replay` a child verdict of the right shape whose reason holds a raw ESC. It expects no replay: the parent's own block.
   - Green: the check mode.
 - [ ] T5: **The marker (AC5, AC6).**
