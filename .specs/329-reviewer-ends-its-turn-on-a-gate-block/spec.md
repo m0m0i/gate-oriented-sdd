@@ -117,6 +117,6 @@ The prose half of #329, as its triage of 2026-10-21 scoped it, plus one sentence
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: AC1 and AC2. Red: test-gates cases asserting the paragraph exactly once, on both channels, for a no-receipt block, a BLOCKED block, the other-branch scan, a quality failure, a budget block, the fallback reason, the three bootstrap blocks and a replayed child's block, plus the four copies equal. Then the paragraph in `gate_block` and the bootstrap blocks.
-- [ ] T2: AC3. Red: the `check-skill-contracts.py` needle for the contract's rule. Then the section in the contract and its mirror.
+- [x] T2: AC3. Red: the `check-skill-contracts.py` needle for the contract's rule. Then the section in the contract and its mirror.
 - [ ] T3: AC4 and AC5. Red: needles for the receipt-then-kill order and the `self` ban. Then step 2's Antigravity bullet and the lifecycle paragraph.
 - [ ] T4: AC6. `docs/verified.md`'s #329 section and open item, and `docs/fidelity.md`'s reviewer paragraph.

@@ -14,12 +14,12 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Thirty-eight today. A thirty-ninth needs an argument, in the spec that proposes it, for why review cannot
+Thirty-nine today. A fortieth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
 with it, #26 the twenty-fourth, #79 the twenty-fifth, #256 the twenty-sixth without moving it, #263 the
 twenty-seventh and twenty-eighth, #262 the twenty-ninth, #166 the thirtieth, #84 the thirty-first to thirty-fourth
-and #239 the thirty-fifth and thirty-sixth, both without moving it, #304 the thirty-seventh and #320 the thirty-eighth; a cap that is not moved with the entry reads as already exceeded, and the next author
+and #239 the thirty-fifth and thirty-sixth, both without moving it, #304 the thirty-seventh, #320 the thirty-eighth and #329 the thirty-ninth; a cap that is not moved with the entry reads as already exceeded, and the next author
 cannot tell whether the list is at its limit or the sentence is stale — which is how this said twenty-five over twenty-six, and thirty over thirty-six.
 """
 
@@ -409,6 +409,16 @@ CONTRACTS = (
         "reverting to \"writes no document\" reads as tightening a rule, which is the "
         "direction a reviewer waves through, and what it actually restores is a document "
         "false by construction from the moment this skill returns.",
+    ),
+    (
+        "reviewers/_shared/reviewer-contract.md",
+        "end your turn: write no file, the receipt included; fix nothing; start no agent; and do not poll for the receipt",
+        "Antigravity runs a workspace's Stop hooks in a subagent's own turn (#329, measured on "
+        "CLI 1.4.7), so the reviewer meets the gates' blocks, each written to the author: run the "
+        "reviewer, write the receipt, fix the validator, wait. Without this sentence a reviewer "
+        "takes them as its own and loops, and on the self route, which keeps its write tools, it "
+        "can edit the diff it is reviewing. Review cannot defend it: deleting it reads as trimming "
+        "a harness-specific aside from a harness-neutral contract.",
     ),
 )
 

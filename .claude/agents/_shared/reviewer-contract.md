@@ -10,6 +10,10 @@ Every reviewer in this harness obeys this document. A reviewer file adds only wh
 
 You review **the diff against the spec**, not the codebase against your taste.
 
+## When a gate blocks your turn
+
+Some harnesses run the project's turn-end hooks in a subagent's turn as well as the author's; Antigravity does. So the quality gate or the review gate may block the end of your turn, with a message telling its reader to run a reviewer, write the receipt, fix a validator, or wait. **That block is for the session doing the work, not for you.** Your report is your whole output, so once it is delivered, end your turn: write no file, the receipt included; fix nothing; start no agent; and do not poll for the receipt or wait for anyone to write it. If you answer the block at all, say in one line that it is for the author. The author writes the receipt from your Receipt block and ends your run.
+
 ## Bash policy
 
 Reviewers get shell access because a reviewer that can run the type checker finds things a reviewer reading files cannot. That access is scoped by an allow-list in each reviewer file, and it is for **gathering evidence only**:

@@ -7558,13 +7558,15 @@ fi
 # are both about: .steering/structure.md makes this file the project's whole notion of test
 # coverage, so a guard nothing exercises is a guard that can stop working unnoticed.
 
-# The real skills/ tree, so the control asserts every needle in CONTRACTS is genuinely
-# present rather than asserting it against a fixture built to satisfy it.
+# The real skills/ tree and the shared reviewer contract, which CONTRACTS also reads since #329,
+# so the control asserts every needle in CONTRACTS is genuinely present rather than asserting it
+# against a fixture built to satisfy it.
 contracts_repo() {
-  r="$TMP/$1"; mkdir -p "$r/scripts"
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/reviewers"
   cp "$ROOT/scripts/check-skill-contracts.py" "$r/scripts/"
   chmod +x "$r/scripts/check-skill-contracts.py"
   cp -R "$ROOT/skills" "$r/skills"
+  cp -R "$ROOT/reviewers/_shared" "$r/reviewers/_shared"
   echo "$r"
 }
 
@@ -7624,6 +7626,25 @@ case "$err" in *"define_subagent"*) c3=ok ;; *) c3=no ;; esac
 
 [ "$c0$c1$c2$c3" = "okokokok" ] && report "implement stripped of Antigravity reviewer invocation fails" ok \
   || report "implement stripped of Antigravity reviewer invocation fails" no \
+     "control=$c0 stripped-exit=$c1 names-file=$c2 names-needle=$c3"
+
+# 406. #329 AC3 — the shared reviewer contract stripped of its turn-end rule must fail. It is the
+#      first file CONTRACTS reads outside skills/, so this is also the case that shows the guard
+#      reads it at all. The mutation is a no-op on a contract without the rule, so the pre-fix red
+#      is the guard's, not the fixture's. c0 is 54b's control, which now holds the contract too.
+r=$(contracts_repo contracts-reviewer-stripped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "reviewers", "_shared", "reviewer-contract.md")
+needle = "and do not poll for the receipt"
+p.write_text(p.read_text().replace(needle, "and wait if you must"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"reviewers/_shared/reviewer-contract.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"do not poll for the receipt"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "the reviewer contract stripped of its turn-end rule fails" ok \
+  || report "the reviewer contract stripped of its turn-end rule fails" no \
      "control=$c0 stripped-exit=$c1 names-file=$c2 names-needle=$c3"
 
 
