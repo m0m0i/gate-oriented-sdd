@@ -1,6 +1,6 @@
 # Spec: A gate's block says who it is for, and a reviewer that meets one ends its turn
 
-- Slug: 329-reviewer-ends-its-turn-on-a-gate-block   Issue: 329   Type: bug   Status: approved
+- Slug: 329-reviewer-ends-its-turn-on-a-gate-block   Issue: 329   Type: bug   Status: done
 - Author: m0m0i (Claude Code)   Date: 2026-10-27
 - Approved: by the maintainer on 2026-10-27, whose go was "spec, clarify, then implement 329 for review".
 
@@ -72,7 +72,7 @@ The prose half of #329, as its triage of 2026-10-21 scoped it, plus one sentence
   - **Q3, the same gate, with the AC1 paragraph appended.** The parent was told to write the receipt, then kill.
     - Given the paragraph, the subagent answered "As a reviewer receiving this notification, I am ending my turn without writing files or performing further actions." That is one sample.
     - The parent wrote the receipt and called `manage_subagents` with `Action: kill`. It returned in 0.12 s: "Successfully killed 1 subagent(s) and their descendants".
-    - The subagent's `Stop` fired twice, the second time within the second before the kill. It fired no more after it.
+    - The subagent's `Stop` fired twice, the second time in the same second as the kill call. It fired no more after it.
 
 ## 2. Design (HOW)
 
@@ -119,4 +119,4 @@ The prose half of #329, as its triage of 2026-10-21 scoped it, plus one sentence
 - [x] T1: AC1 and AC2. Red: test-gates cases asserting the paragraph exactly once, on both channels, for a no-receipt block, a BLOCKED block, the other-branch scan, a quality failure, a budget block, the fallback reason, the three bootstrap blocks and a replayed child's block, plus the four copies equal. Then the paragraph in `gate_block` and the bootstrap blocks.
 - [x] T2: AC3. Red: the `check-skill-contracts.py` needle for the contract's rule. Then the section in the contract and its mirror.
 - [x] T3: AC4 and AC5. Red: needles for the receipt-then-kill order and the `self` ban. Then step 2's Antigravity bullet and the lifecycle paragraph.
-- [ ] T4: AC6. `docs/verified.md`'s #329 section and open item, and `docs/fidelity.md`'s reviewer paragraph.
+- [x] T4: AC6. `docs/verified.md`'s #329 section and open item, and `docs/fidelity.md`'s reviewer paragraph.
