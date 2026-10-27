@@ -77,14 +77,26 @@ _gate_json_escape() {  # <message> [check]
 
 # Block the turn. Speaks to both harnesses, exiting 0 for Antigravity and 2 for Claude Code.
 #
-# The escaped reason is used only when the escape exited 0 and printed something for a message
-# that had some. An awk that died or was missing would leave an empty or cut-short reason, so
-# the block then carries a fixed one instead, and stderr still carries the message (#302).
+# The escaped reason is used only when the escape exited 0 and printed it whole. An awk that died
+# or was missing would leave an empty or cut-short reason, so the block then carries a fixed one
+# instead, and stderr still carries the message (#302).
+#
+# Every block ends with _gate_addressee, after a blank line (#329). Antigravity runs these gates in
+# a subagent's own turn too, so the reviewer `implement` spawns meets them when it finishes, and
+# every message here is written to the session doing the work. Nothing tells the two turns
+# apart, so the block says whom it is for. The hand-written blocks in the bootstrap guards and
+# plugin-gate.sh carry the same words.
+_gate_addressee='This block is for the session doing the work. A reviewer that receives it ends its turn: it writes nothing, fixes nothing, starts nothing and waits for nothing.'
 gate_block() {
-  _msg=$1
-  if ! _gb_reason=$(_gate_json_escape "$_msg") || { [ -z "$_gb_reason" ] && [ -n "$_msg" ]; }; then
-    _gb_reason="The gate blocked this turn, but its message could not be encoded as JSON. The message is on the gate's stderr."
-  fi
+  _msg="$1
+
+$_gate_addressee"
+  # The paragraph is plain ASCII and escapes to itself, so a reason that does not end in it is
+  # one the escape cut short, whatever its exit status said.
+  _gb_reason=$(_gate_json_escape "$_msg") || _gb_reason=''
+  case "$_gb_reason" in *"$_gate_addressee") ;; *)
+    _gb_reason="The gate blocked this turn, but its message could not be encoded as JSON. The message is on the gate's stderr.\\n\\n$_gate_addressee" ;;
+  esac
   printf '{"decision":"continue","reason":"%s"}\n' "$_gb_reason"
   printf '%s\n' "$_msg" >&2
   _gate_block_exit
