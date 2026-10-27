@@ -9,6 +9,7 @@ Machine-read lines. Each must stay on ONE physical line — the gates read them 
 - Source globs: :(glob)rules/**/*.md :(glob)skills/**/*.md :(glob)reviewers/**/*.md :(glob)hooks/**/*.sh :(glob)assets/**/*.py :(glob)assets/**/*.sh :(glob)assets/**/*.md :(glob)scripts/**/*.py :(glob)scripts/**/*.sh :(glob).claude-plugin/hooks.json
 - Docs: docs/
 - Mode: full
+- Validator budget: 336
 
 ## Why `check-version-bump.py` is not on the Validators line
 
