@@ -123,7 +123,7 @@ The marker reaches the validators too, since they inherit the gate's environment
   - An Antigravity project keeps today's reading until `init` re-renders its file (#343). Meanwhile its gates still come from its copies, so the escape fix needs that re-run too. The upgrade note says so.
   - Neither project passes where it blocked before.
 - **The marker is inherited by whatever a gate spawns.** A validator that started a nested harness session would hand it the parent's marker. Nothing here does that, and test-gates' `unset` covers the one suite that runs gates inside a gate.
-- **The escape's cost** is a byte loop in awk over at most the 20-line tails the gates pass it. That is microseconds against the validator run.
+- **The escape's cost** must be linear in the message, because a block is written inside the margin a gate keeps before the harness `timeout`, and the 20-line tails the gates pass it bound lines, not bytes. A byte walk over the line itself is quadratic on BWK awk, whose `substr` measures its whole string on every call: 300 KB took 3 s (review round 1). So the walk reads each line through two windows, 64 KB and 256 bytes, each with 3 bytes of lookahead, and no function call copies a string. Measured on macOS awk: 1 MB in 0.7 s, 10 MB in 6 s. Case 402 holds a 1 MB line, escaped by `gate_block` and checked by `gate_replay`, to 10 s, and case 393 puts characters across both window edges.
 
 ### Why this cannot recur
 
