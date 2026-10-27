@@ -555,6 +555,16 @@ The `Stop` hook's stdin on 1.4.7 is one JSON object with `artifactDirectoryPath`
 
 **What this settles for #302's spec.** On 1.4.7, a raw control byte in a `Stop` reason still turns a block into a pass, with nothing but a log line to show it. `\u00XX`, `�` and raw valid UTF-8 parse. A variable set on the hook's command reaches the gate.
 
+**End to end, the same day, after the code changed.** These runs used the real gates in place of the stand-in: `gate-lib.sh`, both gates and the digest were copied into `.agents/hooks/`. `.agents/hooks.json` was rendered from that side's template with `{{HOOKS_DIR}}` as `.agents/hooks` and `{{FAST_CHECK}}` as `true`. `.steering/tech.md` named one validator, `sh check.sh`, and `src/*.txt` as source. Until `fixed.txt` existed, the validator printed a red `FAIL` with raw ESC bytes, then `日本語`, then a line telling the model to create `fixed.txt`, and exited 1. The prompt asked for one write to `src/a.txt`. The validator logged the names of the harness variables it inherited. Every run had `ANTIGRAVITY_CONVERSATION_ID`, which the CLI sets for its hooks although the launch unset it, and `CLAUDECODE` with the other `CLAUDE_CODE_*` variables, because the CLI was started from a Claude Code session.
+
+| Run | The gates, and the validator's output | Observed |
+| :-- | :-- | :-- |
+| P4 | `main`'s (`969dbb1`); colour, and one `\377` byte on the `FAIL` line | **Blocked, with the validator's output lost.** The model received `Quality gate: a gating validator failed. … --- sh check.sh` and nothing after it: awk had aborted at the invalid byte under the inherited UTF-8 locale. To find the failure, the model read `check.sh` itself, then wrote `fixed.txt`. |
+| P5 | `main`'s; colour only | **Dropped.** `agy.log`: `failed to unmarshal result from hook jsonhook__gate-sdd_Stop_0_0 via protojson: … invalid character '\x1b' in string`. The validator ran once, no `fixed.txt` was written, and the turn ended with `status: SUCCESS`. This is #302's report, end to end. |
+| P6 | This branch's, from the rendered template with the marker; P4's validator | **Blocked, with the whole message.** The model received `\u001b[31mFAIL\u001b[0m 日本語 � bad byte` and the line after it, wrote `fixed.txt`, and the validator passed on the next `Stop`. No hook error. The validator saw `GATE_SDD_HARNESS`. |
+
+**Not run:** this branch's gates against P5's colour-only validator, which P6's output covers; and a Claude Code session started from inside Antigravity, Part 2's reproduction. The marker's channel on Claude Code is cases 396 to 398 in `scripts/test-gates.sh`.
+
 ## Still to verify
 
 - [x] The Antigravity run sheet from the 2026-10-11 deep review, A1–A14 in [`reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md): whether a gate blocks at all, the continuation cap, timeouts, digest timing, reviewer registration and `rules/AGENTS.md` — run on 2026-10-11 on CLI 1.3.3, section above.
