@@ -565,6 +565,29 @@ The `Stop` hook's stdin on 1.4.7 is one JSON object with `artifactDirectoryPath`
 
 **Not run:** this branch's gates against P5's colour-only validator, which P6's output covers; and a Claude Code session started from inside Antigravity, Part 2's reproduction. The marker's channel on Claude Code is cases 396 to 398 in `scripts/test-gates.sh`.
 
+## A `Stop` hook in a subagent's own turn, on Antigravity CLI 1.4.7 (#329)
+
+**Run on 2026-10-27, Antigravity CLI 1.4.7**, at #329's `clarify`, before its code changed. The setup is the #302 section's: one headless turn per run, `agy --sandbox --mode accept-edits --effort low -p`, in a fresh `mktemp -d` project under the trusted folder, with `ANTIGRAVITY_CONVERSATION_ID` and `ANTIGRAVITY_AGENT` unset. The project's hooks file had one `gate-sdd` group holding one `Stop` entry, which ran a stand-in. The stand-in saved each call's stdin and environment, then passed; Q2 and Q3 also blocked every call whose `lastUserInput` was empty, which in these runs was every subagent call and no parent call. Each prompt had the parent define a subagent with `define_subagent` and invoke it with `invoke_subagent`.
+
+| Run | The subagent, and the stand-in | Observed |
+| :-- | :-- | :-- |
+| Q1 | Write tools off; told to reply with one word and call no tools. The stand-in only observed. | **`Stop` ran in the subagent's turn.** It ran twice: once in the subagent's conversation, then in the parent's. The two payloads had the same keys as #302's list above. The subagent's `conversationId` and `ANTIGRAVITY_CONVERSATION_ID` were its own, and its `lastUserInput` was empty. The definition the parent sent carried `enable_write_tools`, `enable_subagent_tools` and `enable_mcp_tools`. `invoke_subagent` returned in 0.16 s, and the reply reached the parent as a system message. |
+| Q2 | Write and subagent tools off; told to read a file and reply with a Receipt block. The stand-in blocked every subagent turn with today's no-receipt message. | **The subagent was re-entered until A4's cap.** Its `Stop` ran 11 times in 51 s, at `executionNum` 0 to 10. It had sent its report to the parent with `send_message` before the first block, unasked, and it repeated the report at each re-entry. Once it said it could not write the receipt, being read-only. The parent got the report as a message, then, after the cap, a system notice that the subagent "has gone idle", carrying its last response. |
+| Q3 | As Q2, told to send its report with `send_message`. The block also carried #329's paragraph. The parent was told to write the receipt, then kill the subagent. | **The kill ended it.** After the first block the subagent answered: "As a reviewer receiving this notification, I am ending my turn without writing files or performing further actions." The parent wrote the receipt with `write_file`, then called `manage_subagents` with `Action: kill`. It returned in 0.12 s: "Successfully killed 1 subagent(s) and their descendants". The subagent's `Stop` ran twice, the second time in the same second as the kill call, and never after it. |
+
+**What this settles for #329's spec.**
+- A workspace's `Stop` hooks run in a subagent's turn.
+- A4's cap holds there too, and the parent is told the subagent has gone idle only when the cap runs out.
+- `manage_subagents`' kill ends the loop, and no `Stop` ran after it.
+- Nothing in the payload marks a subagent, beyond its own conversation id and an empty `lastUserInput`. Neither is documented as a marker, so a gate cannot read a skip from either.
+
+**Not run:**
+- the `self` route, and which tools a `self` subagent has;
+- a parent that waits with the `wait` tool rather than ending its turn (both runs' parents ended theirs after `invoke_subagent` and were woken by the message);
+- the real gates in the subagent's turn.
+
+Q3's answer to the paragraph is one sample.
+
 ## Still to verify
 
 - [x] The Antigravity run sheet from the 2026-10-11 deep review, A1–A14 in [`reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md): whether a gate blocks at all, the continuation cap, timeouts, digest timing, reviewer registration and `rules/AGENTS.md` — run on 2026-10-11 on CLI 1.3.3, section above.
@@ -578,7 +601,7 @@ The `Stop` hook's stdin on 1.4.7 is one JSON object with `artifactDirectoryPath`
 - [ ] On Antigravity, a `Stop` `timeout` above A5's 1 s honoured — the template renders 600 and 120 — its SIGKILL reaching the hook's process group, and whether A4's continuation cap resets after a tool call. Each needs a trusted-folder fixture (#304).
 - [x] `PreInvocation` step injection as the `SessionStart` substitute, including a once-per-session guard (#144) — measured on 2026-10-11 (A6: `invocationNum: 0` on turn 0).
 - [x] Whether `agy plugin install` targets `~/.gemini/config/plugins/` (where the IDE's plugins live) or `~/.gemini/antigravity-cli/plugins/` (what the CLI docs describe) — verified on 2026-10-11: installs to `~/.gemini/config/plugins/`.
-- [ ] Antigravity subagent invocation contract, for the reviewer (semantics documented in `skills/implement/SKILL.md` and `docs/fidelity.md`; runtime invocation behavior pending verification).
+- [ ] Antigravity subagent invocation contract, for the reviewer: what #329's runs did not reach. Which tools a `self` subagent has. Whether a parent waiting with `wait` is woken by the reviewer's message. Whether anything the harness sets marks a subagent's turn in a way an agent cannot forge, which a gate-side skip would need. #329's runs, above, measured `Stop` in a subagent's turn, the cap there, and the kill.
 - [ ] `northstar` meeting an `Owns:` line it disagrees with — the collision path #55 could not reach.
 - [ ] The cold interview: `northstar`, `prd`, `epics` answered by someone without the repository's context.
 - [ ] **`init` on a real project at 0.7.0** — #126 ran against a synthetic target, which tests CAP-4 weakly. The three findings it produced (#127, #128, #129) were all reachable on a project whose opinions were the installer's; a real one may reach more.

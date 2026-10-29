@@ -46,11 +46,13 @@ _gate_name='Quality gate'
 #
 # Nothing is interpolated into the messages. _gate_json_escape lives in the library too, so a
 # path spliced in here would be a path nobody escaped — and the cases that trigger these
-# messages parse the stdout they produce rather than grepping it.
+# messages parse the stdout they produce rather than grepping it. Each ends, as gate_block's
+# do, with the library's _gate_addressee paragraph, written out here for the same reason (#329).
 DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 _gate_bootstrap_block() {             # gate_block, for the one state that cannot call it
-  printf '{"decision":"continue","reason":"%s"}\n' "$1"
-  printf '%s\n' "$1" >&2
+  _gate_addressee='This block is for the session doing the work. A reviewer that receives it ends its turn: it writes nothing, fixes nothing, starts nothing and waits for nothing.'
+  printf '{"decision":"continue","reason":"%s\\n\\n%s"}\n' "$1" "$_gate_addressee"
+  printf '%s\n\n%s\n' "$1" "$_gate_addressee" >&2
   case "${GATE_SDD_HARNESS:-}" in antigravity) exit 0 ;; claude-code) exit 2 ;; esac
   if [ -n "${ANTIGRAVITY_CONVERSATION_ID:-}" ] || [ -n "${ANTIGRAVITY_AGENT:-}" ]; then
     exit 0

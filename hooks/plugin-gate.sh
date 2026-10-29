@@ -49,8 +49,10 @@ DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 gate=${1:-}
 
 _plugin_gate_block() {  # the bootstrap guard's shape; nothing interpolated is user-authored
-  printf '{"decision":"continue","reason":"%s"}\n' "$1"
-  printf '%s\n' "$1" >&2
+  # gate-lib.sh's _gate_addressee, written out here as the bootstrap guard's is (#329).
+  _gate_addressee='This block is for the session doing the work. A reviewer that receives it ends its turn: it writes nothing, fixes nothing, starts nothing and waits for nothing.'
+  printf '{"decision":"continue","reason":"%s\\n\\n%s"}\n' "$1" "$_gate_addressee"
+  printf '%s\n\n%s\n' "$1" "$_gate_addressee" >&2
   exit 2
 }
 

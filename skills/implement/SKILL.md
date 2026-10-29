@@ -30,12 +30,14 @@ When every task is committed and the validators pass:
 
    **How to invoke the reviewer depends on your harness:**
    - **Claude Code**: Subagents defined in `.claude/agents/<name>.md` are auto-discovered by the subagent runner and can be invoked directly by name.
-   - **Antigravity**: Subagents are not auto-discovered from markdown files on disk. To obtain an independent review outside this session's context, register it dynamically via `define_subagent` or delegate to a `self` subagent:
-     1. *Dynamic registration*: Read the reviewer's agent file (e.g. `.claude/agents/<name>.md` or `.agents/agents/<name>.md`), register it via `define_subagent` using the system prompt and rules from the file with write tools disabled (`enable_write_tools=false`), and invoke it via `invoke_subagent`.
-     2. *Delegation to `self`*: Spawn a `self` subagent via `invoke_subagent` passing the reviewer instructions, contract, and diff in the prompt for context isolation.
+   - **Antigravity**: Subagents are not auto-discovered from markdown files on disk. To obtain an independent review outside this session's context, register it dynamically via `define_subagent` or delegate to a `self` subagent, in that order:
+     1. *Dynamic registration*: Read the reviewer's agent file (e.g. `.claude/agents/<name>.md` or `.agents/agents/<name>.md`), register it via `define_subagent` using the system prompt and rules from the file with write tools and subagent tools disabled (`enable_write_tools=false`, `enable_subagent_tools=false`), and invoke it via `invoke_subagent`.
+     2. *Delegation to `self`*, only where `define_subagent` is unavailable: Spawn a `self` subagent via `invoke_subagent` passing the reviewer instructions, contract, and diff in the prompt for context isolation. A `self` subagent keeps every write tool, so its prompt must forbid writing any file, the receipt included, and starting any agent.
      Both run outside this session's context, providing reviewer independence, and record `reviewed_by=subagent`.
 
    If the reviewer genuinely cannot be invoked at all — not registered, neither subagent mechanism is supported, added mid-session and needing a restart, or the harness has no subagents — run its procedure yourself from its agent file and record `reviewed_by=inline`.
+
+   **On Antigravity, the reviewer meets this project's gates too.** Antigravity runs the workspace's `Stop` hooks in a subagent's own turn, so when the reviewer finishes, the gates block it on a receipt only you can write. They re-enter it until the receipt clears them or the cap of 10 continuations runs out, and only then are you told it has gone idle. Its report reaches you as its message, or as that notice, which carries its last response. When it arrives, write the receipt from its Receipt block at once, CLEAN or BLOCKED, then end the reviewer with `manage_subagents` (`kill`). After fixing a BLOCKED review, register and invoke a fresh reviewer.
 3. Address every **BLOCKER** and **HIGH** through the TDD loop: a failing test, then the fix. Re-run the reviewer until none remain. Triage MEDIUM/LOW/INFO explicitly — fixed, or recorded with a reason.
 4. **Write the receipt.** The reviewer is read-only, so you record its result at `.specs/<slug>/.review-receipt`, copying its Receipt block verbatim:
 

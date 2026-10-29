@@ -29,6 +29,11 @@ unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLA
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
+
+# The paragraph every block ends with, after a blank line (#329; its section is "every block says
+# who it is for"). Stated here, not read from the library, so a rewording is a decision this file
+# records; the cases that compare a whole block expect it too.
+ADR_PARA='This block is for the session doing the work. A reviewer that receives it ends its turn: it writes nothing, fixes nothing, starts nothing and waits for nothing.'
 pass=0; fail=0
 
 report() { # report <name> <ok|no> <detail>
@@ -3182,14 +3187,18 @@ if [ -s "$TMP/bs-fn.sh" ] && cmp -s "$TMP/bs-mk-lib-out" "$TMP/bs-mk-cp-out" \
 c1=no; c2=no; c3=no
 [ "$ex_cc" -eq 2 ] && c1=ok
 case "$(cat "$TMP/gb_cc_out")" in *'"decision":"continue"'*) c2=ok ;; esac
-[ "$(cat "$TMP/gb_cc_err")" = "standard block" ] && c3=ok
+[ "$(cat "$TMP/gb_cc_err")" = "standard block
+
+$ADR_PARA" ] && c3=ok
 
 # 2. Antigravity via ANTIGRAVITY_AGENT: exit 0, message on stderr, valid continue JSON on stdout
 ( export ANTIGRAVITY_AGENT=1; . "$ROOT/hooks/gate-lib.sh"; gate_block "antigravity agent block" ) >"$TMP/gb_agy1_out" 2>"$TMP/gb_agy1_err"; ex_agy1=$?
 c4=no; c5=no; c6=no
 [ "$ex_agy1" -eq 0 ] && c4=ok
 case "$(cat "$TMP/gb_agy1_out")" in *'"decision":"continue"'*) c5=ok ;; esac
-[ "$(cat "$TMP/gb_agy1_err")" = "antigravity agent block" ] && c6=ok
+[ "$(cat "$TMP/gb_agy1_err")" = "antigravity agent block
+
+$ADR_PARA" ] && c6=ok
 
 # 3. Antigravity via ANTIGRAVITY_CONVERSATION_ID: exit 0
 ( export ANTIGRAVITY_CONVERSATION_ID="conv-123"; . "$ROOT/hooks/gate-lib.sh"; gate_block "antigravity conv block" ) >"$TMP/gb_agy2_out" 2>"$TMP/gb_agy2_err"; ex_agy2=$?
@@ -3209,9 +3218,9 @@ if python3 -c '
 import json, sys
 with open(sys.argv[1], "r") as f:
     data = json.load(f)
-if data.get("decision") != "continue" or data.get("reason") != sys.argv[2]:
+if data.get("decision") != "continue" or data.get("reason") != sys.argv[2] + "\n\n" + sys.argv[3]:
     sys.exit(1)
-' "$TMP/gb_esc_out" "$probe_str" 2>/dev/null; then
+' "$TMP/gb_esc_out" "$probe_str" "$ADR_PARA" 2>/dev/null; then
   c_esc=ok
 fi
 [ "$c_esc" = "ok" ] \
@@ -3260,9 +3269,9 @@ gbs_run() {
 
 # gbs_check <dir>: prints nothing and returns 0 when every block passes, else the first failures.
 gbs_check() {
-  python3 -I - "$1" "${gbs_utf8:-C}" <<'PY'
+  python3 -I - "$1" "${gbs_utf8:-C}" "$ADR_PARA" <<'PY'
 import glob, json, os, sys
-d, utf8 = sys.argv[1], sys.argv[2]
+d, utf8, para = sys.argv[1], sys.argv[2], sys.argv[3].encode()
 def expect(b):
     out, i = [], 0
     while i < len(b):
@@ -3286,7 +3295,7 @@ bad = []
 for f in sorted(glob.glob(os.path.join(d, "m*"))):
     if "." in os.path.basename(f):
         continue
-    msg = open(f, "rb").read()
+    msg = open(f, "rb").read() + b"\n\n" + para   # every block ends with it (#329)
     for loc in ("C", utf8):
         for ch, rc in (("cc", "2"), ("agy", "0")):
             out = open(f"{f}.{loc}.{ch}.out", "rb").read()
@@ -3392,9 +3401,9 @@ for ch, rc in (("cc", "2"), ("agy", "0"), ("cc0", "2"), ("agy0", "0")):
         bad.append(f"{ch}: {e}"); continue
     if open(f"{d}/{ch}.rc").read().strip() != rc: bad.append(f"{ch}: exit")
     if "could not be encoded" not in r or "stderr" not in r: bad.append(f"{ch}: reason {r!r}")
-    if open(f"{d}/{ch}.err").read() != "the real message\n": bad.append(f"{ch}: stderr")
+    if open(f"{d}/{ch}.err").read() != f"the real message\n\n{sys.argv[2]}\n": bad.append(f"{ch}: stderr")
 print(" ".join(bad)); sys.exit(1 if bad else 0)
-' "$gbf") && c1=ok || c1=no
+' "$gbf" "$ADR_PARA") && c1=ok || c1=no
 [ "$c1" = ok ] \
   && report "gate_block blocks with a fixed reason when the escape fails" ok \
   || report "gate_block blocks with a fixed reason when the escape fails" no "$gbf_out"
@@ -3465,8 +3474,10 @@ for row in "claude-code ANTIGRAVITY_AGENT 2" "claude-code ANTIGRAVITY_CONVERSATI
     eval "$v=1; export $v"
     . "$ROOT/hooks/gate-lib.sh"; gate_block "marker probe"
   ) > "$TMP/gbh.out" 2> "$TMP/gbh.err"; rc=$?
-  if [ "$rc" = "$want" ] && [ "$(cat "$TMP/gbh.out")" = '{"decision":"continue","reason":"marker probe"}' ] \
-     && [ "$(cat "$TMP/gbh.err")" = "marker probe" ]; then gbh_res="$gbh_res ok"; else gbh_res="$gbh_res $h/$v=$rc"; fi
+  if [ "$rc" = "$want" ] && [ "$(cat "$TMP/gbh.out")" = "{\"decision\":\"continue\",\"reason\":\"marker probe\\n\\n$ADR_PARA\"}" ] \
+     && [ "$(cat "$TMP/gbh.err")" = "marker probe
+
+$ADR_PARA" ]; then gbh_res="$gbh_res ok"; else gbh_res="$gbh_res $h/$v=$rc"; fi
 done
 [ "$gbh_res" = " ok ok ok ok ok ok" ] \
   && report "gate_block takes its channel from GATE_SDD_HARNESS, and keeps the old reading without one" ok \
@@ -3487,6 +3498,106 @@ done
   && report "the bootstrap guards take their channel from GATE_SDD_HARNESS" ok \
   || report "the bootstrap guards take their channel from GATE_SDD_HARNESS" no "$gbh_res"
 
+
+
+# --- every block says who it is for (#329) -------------------------------------------------
+#
+# Antigravity runs a workspace's Stop hooks in a subagent's own turn (docs/verified.md, #329's
+# runs on CLI 1.4.7), so the reviewer `implement` spawns there meets these gates when it
+# finishes, and every block is written to the session doing the work: run the reviewer, write
+# the receipt, fix the validator, wait for it. The gates cannot tell whose turn it is, so each
+# block ends with one paragraph saying whom it is for and that a reviewer ends its turn. These
+# cases hold every kind of block to it, on both channels: the reason ends in the paragraph
+# after one blank line, and so does stderr, each exactly once. ADR_PARA, at the top, is the text.
+
+# adr_check <tag> <stdout> <stderr> <exit> <wanted exit>: prints nothing when the block holds.
+adr_check() {
+  python3 -I - "$@" "$ADR_PARA" <<'PY'
+import json, sys
+tag, out, err, rc, want, para = sys.argv[1:7]
+bad = []
+o = open(out, "rb").read().decode("utf-8", "replace")
+e = open(err, "rb").read().decode("utf-8", "replace")
+if rc != want: bad.append(f"exit {rc}")
+try:
+    if o.count("\n") != 1 or not o.endswith("\n"): raise ValueError("not one line")
+    r = json.loads(o)["reason"]
+    if not r.endswith("\n\n" + para) or r.count(para) != 1: bad.append("reason " + repr(r[-90:]))
+except Exception as x:
+    bad.append(f"json {x}")
+if not e.endswith("\n\n" + para + "\n") or e.count(para) != 1: bad.append("stderr " + repr(e[-90:]))
+if bad: print(f"{tag}: " + "; ".join(bad))
+PY
+}
+
+# 403. #329 AC1, AC2 — the blocks a reviewer meets at its turn end, from the real gates, which run
+#      as a bounded child and hand its block on (#304): the review gate's no-receipt, BLOCKED and
+#      stale arms and its other-branch scan, and the quality gate's failure and deadline. Each
+#      still blocks as before; the no-receipt arm still names waiting (#27). On main no block
+#      carries the paragraph.
+adr_res=''
+r=$(make_repo adr-norcpt 0)
+r2=$(make_repo adr-blocked 0)
+printf 'reviewed_sha=%s\nverdict=BLOCKED\n' "$(cd "$r2" && git rev-parse HEAD)" > "$r2/.specs/9-feature/.review-receipt"
+r3=$(make_repo adr-stale 0)
+printf 'reviewed_sha=%s\nverdict=CLEAN\n' "$(cd "$r3" && git rev-parse HEAD~1)" > "$r3/.specs/9-feature/.review-receipt"
+r4=$(make_repo adr-scan 1); park_spec "$r4" 12-parked 0
+q1=$(qg_repo adr-qgfail)                       # this section's qg_repo: a validator that fails
+q2=$(qg_repo adr-qgslow)
+printf -- '- Validators: sh -c "exec sleep 20"\n- Source globs: *.txt\n- Validator budget: 1\n' > "$q2/.steering/tech.md"
+for row in "norcpt $r review" "blocked $r2 review" "stale $r3 review" "scan $r4 review" "qgfail $q1 quality" "qgslow $q2 quality"; do
+  set -- $row
+  for h in claude-code:2 antigravity:0; do
+    ( cd "$2" && GATE_SDD_HARNESS=${h%:*} sh "hooks/$3-gate.sh" > "$TMP/adr.out" 2> "$TMP/adr.err"; echo "$?" > "$TMP/adr.rc" )
+    adr_res="$adr_res$(adr_check "$1/${h%:*}" "$TMP/adr.out" "$TMP/adr.err" "$(cat "$TMP/adr.rc")" "${h#*:}")"
+    # Each row is the arm it names, so a fixture that drifts into another arm fails here.
+    case "$1:$(cat "$TMP/adr.err")" in
+      norcpt:*"already running, wait for it"*|blocked:*"verdict is 'BLOCKED'"*|stale:*"source changed since"*) ;;
+      scan:*"on a branch other than"*|qgfail:*"a gating validator failed"*|qgslow:*"did not finish within"*) ;;
+      *) adr_res="$adr_res $1/${h%:*}: not its arm;" ;;
+    esac
+  done
+done
+[ -z "$adr_res" ] \
+  && report "every block a reviewer meets at its turn end says it is for the session doing the work" ok \
+  || report "every block a reviewer meets at its turn end says it is for the session doing the work" no "$adr_res"
+
+# 404. #329 AC1 — the fixed reason gate_block falls back to when the escape fails (#302's AC3)
+#      carries the paragraph too, and stderr still carries the message with it. The last row is
+#      an escape that prints part of a reason and exits 0: a reason that does not end in the
+#      paragraph was cut short, so it gets the fixed one too. On main that row's reason is the part.
+mkdir -p "$gbf/bincut"; printf '#!/bin/sh\nprintf partial\nexit 0\n' > "$gbf/bincut/awk"; chmod +x "$gbf/bincut/awk"
+adr_res=''
+for ch in cc:2 agy:0 cccut:2; do
+  case "$ch" in *cut*) adr_bin=$gbf/bincut ;; *) adr_bin=$gbf/bin ;; esac
+  (
+    PATH=$adr_bin:$PATH
+    [ "${ch%:*}" = agy ] && { GATE_SDD_HARNESS=antigravity; export GATE_SDD_HARNESS; }
+    . "$ROOT/hooks/gate-lib.sh"; gate_block "the real message"
+  ) > "$TMP/adr.out" 2> "$TMP/adr.err"; rc=$?
+  adr_res="$adr_res$(adr_check "fallback/${ch%:*}" "$TMP/adr.out" "$TMP/adr.err" "$rc" "${ch#*:}")"
+  case "$(cat "$TMP/adr.out")" in *"could not be encoded"*) ;; *) adr_res="$adr_res fallback/${ch%:*}: not the fixed reason;" ;; esac
+done
+[ -z "$adr_res" ] \
+  && report "gate_block's fixed fallback reason says it is for the session doing the work" ok \
+  || report "gate_block's fixed fallback reason says it is for the session doing the work" no "$adr_res"
+
+# 405. #329 AC1 — the blocks written by hand, for the states that cannot call gate_block: each
+#      gate's bootstrap guard with its library absent, and plugin-gate.sh refusing a name it does
+#      not run. The bootstrap-drift case above already holds the guard's output to gate_block's.
+adr_res=''
+for gate in $BS_GATES; do
+  r=$(bs_repo "adr-bs-${gate%.sh}"); rm -f "$r/hooks/gate-lib.sh"
+  for h in claude-code:2 antigravity:0; do
+    out=$( GATE_SDD_HARNESS=${h%:*}; export GATE_SDD_HARNESS; run_bs "$r" "$gate" )
+    adr_res="$adr_res$(adr_check "$gate/${h%:*}" "$TMP/bsout" "$TMP/bserr" "${out#exit=}" "${h#*:}")"
+  done
+done
+( cd "$TMP" && sh "$ROOT/hooks/plugin-gate.sh" no-such-gate.sh > "$TMP/adr.out" 2> "$TMP/adr.err" ); rc=$?
+adr_res="$adr_res$(adr_check plugin-gate "$TMP/adr.out" "$TMP/adr.err" "$rc" 2)"
+[ -z "$adr_res" ] \
+  && report "the hand-written blocks say they are for the session doing the work" ok \
+  || report "the hand-written blocks say they are for the session doing the work" no "$adr_res"
 
 
 # --- hooks/plugin-gate.sh: the gates as the plugin runs them (#256) ---------------------
@@ -7447,13 +7558,15 @@ fi
 # are both about: .steering/structure.md makes this file the project's whole notion of test
 # coverage, so a guard nothing exercises is a guard that can stop working unnoticed.
 
-# The real skills/ tree, so the control asserts every needle in CONTRACTS is genuinely
-# present rather than asserting it against a fixture built to satisfy it.
+# The real skills/ tree and the shared reviewer contract, which CONTRACTS also reads since #329,
+# so the control asserts every needle in CONTRACTS is genuinely present rather than asserting it
+# against a fixture built to satisfy it.
 contracts_repo() {
-  r="$TMP/$1"; mkdir -p "$r/scripts"
+  r="$TMP/$1"; mkdir -p "$r/scripts" "$r/reviewers"
   cp "$ROOT/scripts/check-skill-contracts.py" "$r/scripts/"
   chmod +x "$r/scripts/check-skill-contracts.py"
   cp -R "$ROOT/skills" "$r/skills"
+  cp -R "$ROOT/reviewers/_shared" "$r/reviewers/_shared"
   echo "$r"
 }
 
@@ -7513,6 +7626,25 @@ case "$err" in *"define_subagent"*) c3=ok ;; *) c3=no ;; esac
 
 [ "$c0$c1$c2$c3" = "okokokok" ] && report "implement stripped of Antigravity reviewer invocation fails" ok \
   || report "implement stripped of Antigravity reviewer invocation fails" no \
+     "control=$c0 stripped-exit=$c1 names-file=$c2 names-needle=$c3"
+
+# 406. #329 AC3 — the shared reviewer contract stripped of its turn-end rule must fail. It is the
+#      first file CONTRACTS reads outside skills/, so this is also the case that shows the guard
+#      reads it at all. The mutation is a no-op on a contract without the rule, so the pre-fix red
+#      is the guard's, not the fixture's. c0 is 54b's control, which now holds the contract too.
+r=$(contracts_repo contracts-reviewer-stripped)
+python3 - "$r" <<'PYEOF'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1], "reviewers", "_shared", "reviewer-contract.md")
+needle = "and do not poll for the receipt"
+p.write_text(p.read_text().replace(needle, "and wait if you must"))
+PYEOF
+out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *"reviewers/_shared/reviewer-contract.md"*) c2=ok ;; *) c2=no ;; esac
+case "$err" in *"do not poll for the receipt"*) c3=ok ;; *) c3=no ;; esac
+[ "$c0$c1$c2$c3" = "okokokok" ] && report "the reviewer contract stripped of its turn-end rule fails" ok \
+  || report "the reviewer contract stripped of its turn-end rule fails" no \
      "control=$c0 stripped-exit=$c1 names-file=$c2 names-needle=$c3"
 
 
