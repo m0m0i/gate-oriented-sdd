@@ -1,6 +1,6 @@
 # Spec: a guard fix the plugin ships reaches every project by update
 
-- Slug: 340-a-shipped-guard-fix-reaches-the-project   Issue: 340   Type: bug   Status: draft
+- Slug: 340-a-shipped-guard-fix-reaches-the-project   Issue: 340   Type: bug   Status: approved
 - Author: m0m0i (Claude Code)   Date: 2026-11-01
 - **Depends on #309**, by the maintainer's decision (C5): it ships first, so that the document checks this spec arms in every project have a state a project installed before `- Mode:` can declare.
 
