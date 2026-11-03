@@ -173,7 +173,7 @@ Asked and answered 2026-11-01. Before asking, two read-only workflows mapped the
   - the timeout and signal blocks;
   - a re-run after a check, `- Docs:`, `- Mode:`, `- Target:` or `- Specs before bootstrap:` changes;
   - a path with a space.
-- [ ] T2 (AC4): cases for `check-locks.py` run from a plugin path against a project, from outside a repository, and with `--update`. Then the root and the messages.
+- [x] T2 (AC4): cases for `check-locks.py` run from a plugin path against a project, from outside a repository, and with `--update`. Then the root and the messages.
 - [ ] T3 (AC5, AC6): cases for remote Docs, a missing `- Mode:`, the flat Antigravity layout, and an Antigravity gate copy with no runner. Then those branches.
 - [ ] T4 (AC3, AC7): cases for the digest's runner line from the plugin, from this repository and from `.agents/hooks/`, and for its two notices. Then the digest.
 - [ ] T5 (AC1, AC3, AC8): `check-skill-contracts.py` entries for the load-bearing sentences, new and retired, failing against `b0a71bd`'s text, and a `check-reviewer-allow-list.py` case for the runner. Then the text in each of:

@@ -5334,6 +5334,8 @@ lock_repo() {
   cp "$ROOT/assets/check-locks.py" "$r/assets/"
   printf '# rules\n- **S-1** a shipped rule.\n' > "$r/reviewers/shipped/rules/s.md"
   write_lock "$r/reviewers/shipped" rules/s.md
+  # A repository: check-locks.py verifies the git toplevel of where it runs, and fails outside one (#340).
+  ( cd "$r" && git init -q -b main ) >/dev/null 2>&1
   echo "$r"
 }
 
@@ -11960,6 +11962,61 @@ run_hc "$p" >/dev/null; [ "$(hc_runs)" = "$want" ] || c13="no(re-skip: $(hc_runs
   && report "the quality gate runs the harness checks from its own tree, whatever the line names" ok \
   || report "the quality gate runs the harness checks from its own tree, whatever the line names" no \
      "stale-red=$c1 fix-shown=$c2 names-failed=$c3 empty-line=$c4 absent-line=$c5 absent-green=$c6 no-tech-passes=$c7 missing=$c8 own-lib=$c9 space=$c10 space-red=$c11 signal-numbered=$c12 fingerprint=$c13"
+
+# 412. #340 AC4 — check-locks.py verifies the repository it is run in, not the one it sits in.
+#
+# It took its root from its own location, `Path(__file__).resolve().parent.parent`, which was
+# right only while it was a copy in each project's scripts/. Run from the plugin's assets/ — as the
+# gate's runner now runs it — it hashed the plugin's own rulebooks and passed with the project's
+# never read: a pass about the wrong tree. So the root is the git toplevel of the working
+# directory, a run outside a repository fails closed, and `--update` writes that repository's
+# locks alone. The plugin here holds a drifted rulebook of its own, so a checker reading the wrong
+# tree cannot pass by accident in either direction.
+lk_plugin() { # lk_plugin <fixture dir> — plugin/assets/check-locks.py with a drifted plugin rulebook; project/ with a pinned one
+  _lk="$1"; mkdir -p "$_lk/plugin/assets" "$_lk/plugin/reviewers/shipped/rules" "$_lk/project/.claude/agents/proj/rules"
+  cp "$ROOT/assets/check-locks.py" "$_lk/plugin/assets/"
+  printf '# rules\n- **S-1** a shipped rule.\n' > "$_lk/plugin/reviewers/shipped/rules/s.md"
+  write_lock "$_lk/plugin/reviewers/shipped" rules/s.md; echo drift >> "$_lk/plugin/reviewers/shipped/rules/s.md"
+  printf '# rules\n- **P-1** a project rule.\n' > "$_lk/project/.claude/agents/proj/rules/p.md"
+  write_lock "$_lk/project/.claude/agents/proj" rules/p.md
+  ( cd "$_lk/project" && git init -q -b main ) >/dev/null 2>&1
+}
+run_lk() { ( cd "$1" && python3 "$2" ${3+"$3"} >"$TMP/lkout" 2>"$TMP/lkerr"; echo "exit=$?" ) }
+
+p="$TMP/lk-clean"; lk_plugin "$p"
+out=$(run_lk "$p/project" "$p/plugin/assets/check-locks.py")
+case "$out" in *exit=0*) c1=ok ;; *) c1="no($out $(cat "$TMP/lkerr"))" ;; esac
+case "$(cat "$TMP/lkout")" in *".claude/agents"*) c2=ok ;; *) c2="no($(cat "$TMP/lkout"))" ;; esac
+# From a subdirectory too: the toplevel, not the cwd.
+mkdir -p "$p/project/src/deep"
+out=$(run_lk "$p/project/src/deep" "$p/plugin/assets/check-locks.py"); case "$out" in *exit=0*) c3=ok ;; *) c3="no($out)" ;; esac
+
+# The project's drift is found from the plugin's copy, and the message names a re-pin command
+# that would run: this file, by its own path, from the project.
+p="$TMP/lk-drift"; lk_plugin "$p"; echo edit >> "$p/project/.claude/agents/proj/rules/p.md"
+out=$(run_lk "$p/project" "$p/plugin/assets/check-locks.py"); err=$(cat "$TMP/lkerr")
+case "$out:$err" in *exit=1*:*"proj"*"drifted"*) c4=ok ;; *) c4="no($out $err)" ;; esac
+# Resolved, as the checker resolves its own path: on macOS $TMP is a link into /private.
+lk_self="$(cd "$p/plugin/assets" && pwd -P)/check-locks.py"
+case "$err" in *"python3 $lk_self --update"*) c5=ok ;; *) c5="no($err)" ;; esac
+case "$err" in *"./scripts/check-locks.py"*) c6="no(names the old copy: $err)" ;; *) c6=ok ;; esac
+
+# `--update` from the plugin's copy re-pins the project's lock and leaves the plugin's alone.
+before=$(cat "$p/plugin/reviewers/shipped/rules-lock.json")
+run_lk "$p/project" "$p/plugin/assets/check-locks.py" --update >/dev/null
+out=$(run_lk "$p/project" "$p/plugin/assets/check-locks.py"); case "$out" in *exit=0*) c7=ok ;; *) c7="no($out $(cat "$TMP/lkerr"))" ;; esac
+[ "$(cat "$p/plugin/reviewers/shipped/rules-lock.json")" = "$before" ] && c8=ok || c8=no
+
+# Outside any repository there is no project to verify, and that is a failure, not "nothing
+# to verify": the vacuous pass is left only where a repository has no rulebook yet.
+p="$TMP/lk-norepo"; lk_plugin "$p"; mkdir -p "$TMP/lk-norepo-cwd"
+out=$( cd "$TMP/lk-norepo-cwd" && GIT_CEILING_DIRECTORIES="$TMP" python3 "$p/plugin/assets/check-locks.py" >/dev/null 2>"$TMP/lkerr"; echo "exit=$?" )
+case "$out:$(cat "$TMP/lkerr")" in *exit=1*:*"not inside a git repository"*) c9=ok ;; *) c9="no($out $(cat "$TMP/lkerr"))" ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] \
+  && report "check-locks.py verifies the repository it is run in, from any location" ok \
+  || report "check-locks.py verifies the repository it is run in, from any location" no \
+     "clean=$c1 names-project=$c2 subdir=$c3 drift=$c4 repin-command=$c5 no-old-copy=$c6 update=$c7 plugin-untouched=$c8 no-repo=$c9"
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
