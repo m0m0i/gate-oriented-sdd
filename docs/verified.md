@@ -588,6 +588,29 @@ The `Stop` hook's stdin on 1.4.7 is one JSON object with `artifactDirectoryPath`
 
 Q3's answer to the paragraph is one sample.
 
+## The harness checks reach a project by plugin update, on Claude Code (#340)
+
+**Run on 2026-11-03, Claude Code 2.1.316**, for #340's AC10, on the branch's `8967027` extracted with `git archive`. The sessions were headless (`-p`, stream-json, `--model sonnet --setting-sources project,local --strict-mcp-config`), with the plugin state isolated in a scratch `CLAUDE_CODE_PLUGIN_CACHE_DIR` and the user's own `~/.claude/plugins/known_marketplaces.json`, `installed_plugins.json` and `~/.claude/settings.json` unchanged by their timestamps.
+
+- **U1 — a two-version update.** A scratch marketplace whose plugin entry is a git source (`{"source":"url","url":"file://…/mkt.git"}`), installed at 0.41.0 into the cache. Version B, 0.41.1, changed only `assets/check-document-set.py` to print a marker and exit 1. `claude plugin marketplace update` and then `claude plugin update gate-sdd@…` printed `Plugin "gate-sdd" updated from 0.41.0 to 0.41.1 for scope user`; 0.41.0's directory stayed on disk without the marker. In a scratch project with no `scripts/` and no copy of any check, where A's runner had passed:
+  - **the gate**: the plugin's `Stop` hook, `…/0.41.1/hooks/plugin-gate.sh quality-gate.sh`, finished with status 2, and its feedback held `harness-checks: from …/0.41.1 (gate-sdd 0.41.1)`, B's marker and `harness-checks: failed: check-document-set.py`;
+  - **by hand**: the session's Bash saw `GATE_SDD_PLUGIN_ROOT=…/0.41.1`, set by the plugin's own `SessionStart`, and the runner run through it printed the same lines and exited 1;
+  - **a subagent**: an Agent-tool subagent's Bash saw the same root and printed the same lines.
+
+  No file in the project changed: every work-tree file's hash matched before and after, and the only write was the gate's own token under `.git/`.
+- **U2 — a local directory marketplace loads the plugin in place.** With a directory marketplace whose plugin source is `./`, `claude plugin list` reads `Read from: <marketplace dir>`, and the session's plugin path, hook commands and `GATE_SDD_PLUGIN_ROOT` all named the marketplace directory, not the cache copy `installPath` names. Editing that directory changes what runs with no update at all, so it cannot measure one; U1 used a git source for that reason. `hooks/plugin-gate.sh` already says a local marketplace loads a plugin in place.
+- **U3 — the variable form under an allow-list, headless.** A session allowed only `Bash(sh *)` was refused `sh "$GATE_SDD_PLUGIN_ROOT/hooks/harness-checks.sh"` with `A variable in this command can't be checked before it runs`; the same command wrapped as `sh -c '…'` ran. The digest's own form, with `${…:?…}`, and an interactive session, which may ask rather than refuse, were not run.
+- **U4 — a stale root, in a real session.** In the session that wrote #340, started before the user's install moved from 0.38.0 to 0.39.0, Bash held `GATE_SDD_PLUGIN_ROOT=…/gate-sdd/0.38.0` while `installed_plugins.json` recorded 0.39.0 at user scope, and the cache still held 0.24.1, 0.31.0–0.35.0 and 0.37.0–0.39.0. A by-hand run there reads the old tree; the runner's first line names the tree and version it ran from, so the output shows it. The turn-end verdict does not read the variable.
+- **M1 — a real migration.** A real consumer, a Python project on Claude Code installed at 0.31.0 with `check-locks.py`, `check-steering-anchors.sh` and `check-unreviewed-work.sh` in `scripts/`, the anchor check on its `- Validators:` line, and no `- Mode:` line. Before migrating, #340's runner failed it on the missing line and wrote out the adoption line for its six specs. Migrated on a branch as `init` states it: the three copies (byte-identical to 0.31.0's, so none was edited) removed, the entry dropped, `- Mode: bootstrap` and `- Specs before bootstrap:` added, CI's two check steps replaced by `sh .gate-sdd/hooks/harness-checks.sh` and the unreviewed-work job pointed at the checkout, the reviewer's allow-list given the harness checks. The run found the migration's missing sixth step: its contract's command list and re-pin step, and its `AGENTS.md`, still named the copies, which `init` now searches for. After it, the runner passed 4 of 4 and the quality gate passed with the runner and the project's four commands, in 11 s.
+
+### What this run does not support
+
+- **A GitHub or https marketplace**, and **the update pass a session runs at start** (#265, #274). U1's update was run by hand from the command line; the pass that delivers it unattended is measured in the sections above, on other versions.
+- **An update while a session is open.** U4 is that state seen, not produced.
+- **An interactive session**, for U1 and U3.
+- **M1's CI run.** The migration's pull request, with the plugin checkout pinned to #340's head, was not yet pushed when this was written.
+- **Antigravity.** Its copy set is tested by `scripts/test-gates.sh` only; no `agy` run refreshed `.agents/hooks/` with the runner.
+
 ## Still to verify
 
 - [x] The Antigravity run sheet from the 2026-10-11 deep review, A1–A14 in [`reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md): whether a gate blocks at all, the continuation cap, timeouts, digest timing, reviewer registration and `rules/AGENTS.md` — run on 2026-10-11 on CLI 1.3.3, section above.

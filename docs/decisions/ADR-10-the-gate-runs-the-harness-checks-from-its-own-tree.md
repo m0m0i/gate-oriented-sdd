@@ -32,7 +32,7 @@ This supersedes two of ADR-9's rejected alternatives, "Ship the checks from the 
 - A project's CI with the plugin checkout at `ref: main` runs a check fix with the next run. A checkout pinned to a release tag runs that tag's checks until the workflow moves it.
 - On Antigravity CAP-5 stays unmet for the guards as for the gates: both arrive by re-running `init`. `docs/fidelity.md` says so.
 - A project not yet migrated runs its old copies on the line beside the gate's checks until `init` re-runs. A stale copy can only add a block, and the digest says the line still names one.
-- After an update, a by-hand run in a session that started before it can read a stale `GATE_SDD_PLUGIN_ROOT` naming an old cache version, whose directory stays on disk; #340 observed 0.38.0 named with 0.39.0 installed. The runner prints the tree and version it ran from, so the run shows it. The turn-end verdict is unaffected.
+- After an update, a by-hand run in a session that started before it can read a stale `GATE_SDD_PLUGIN_ROOT` naming an old cache version, whose directory stays on disk; 0.38.0 was named with 0.39.0 installed (`docs/verified.md`, #340's U4). The runner prints the tree and version it ran from, so the run shows it. The turn-end verdict is unaffected.
 - This repository runs the checks from source through `hooks/harness-checks.sh` (ADR-6). Its line no longer names them, its reviewer's allow-list names the runner, and its CI keeps its separate steps.
 
 ## Alternatives considered
