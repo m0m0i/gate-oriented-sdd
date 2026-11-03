@@ -53,6 +53,7 @@ Backlog row 1's third issue, after #324 with #330, #302 and #329. It decides how
     3. drop each `- Validators:` entry that names a harness check, whatever its prefix, and list any entry it cannot match;
     4. point CI at the plugin checkout;
     5. propose the runner to every project reviewer whose allow-list names the validators, whether it copies the line or names it.
+    6. search the project for anything else that names a copy — CI workflows, context files, its contract's command list and re-pin step — and propose each change (found in T7's real migration, where `docs/CONTRACT.md` and `AGENTS.md` named the copies).
 
     WHEN `init` installs a project fresh THE SYSTEM SHALL copy no guard into `scripts/`.
   - [ ] **AC9:** every statement of where the guards live, or of what gates a turn, says what is true after this branch:
