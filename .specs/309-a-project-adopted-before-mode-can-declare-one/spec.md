@@ -1,6 +1,6 @@
 # Spec: a project that adopted the harness before `- Mode:` can declare a mode that passes
 
-- Slug: 309-a-project-adopted-before-mode-can-declare-one   Issue: 309   Type: bug   Status: draft
+- Slug: 309-a-project-adopted-before-mode-can-declare-one   Issue: 309   Type: bug   Status: approved
 - Author: m0m0i (Claude Code)   Date: 2026-11-03
 - **Ships before #340**, by the maintainer's decision at #340's C5: #340 runs both document checks in every project at turn end, and a project with no readable `- Mode:` line then blocks on a plugin update alone. This spec gives that project a state it can declare truthfully.
 
