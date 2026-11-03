@@ -165,7 +165,7 @@ Asked and answered 2026-11-01. Before asking, two read-only workflows mapped the
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
-- [ ] T1 (AC1, AC2, AC11): the cases AC11 names, then the runner, the gate's command list and the fingerprint. The cases cover:
+- [x] T1 (AC1, AC2, AC11): the cases AC11 names, then the runner, the gate's command list and the fingerprint. The cases cover:
   - a fixture plugin whose changed check blocks while the line's stale copy passes;
   - an empty and an absent line;
   - a missing check;

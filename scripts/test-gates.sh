@@ -76,6 +76,19 @@ report() { # report <name> <ok|no> <detail>
 skipped=0
 note_skip() { skipped=$((skipped+1)); printf '  skip %s — %s\n' "$1" "$2"; }
 
+# The harness checks a fixture's gate runs (#340). The quality gate runs hooks/harness-checks.sh
+# from its own directory before the `- Validators:` line, and fails closed on a missing check, so
+# every fixture that runs the gate carries the runner and four checks. Here they are stubs that
+# pass, in the flat layout — beside the runner, as Antigravity's `.agents/hooks/` holds them —
+# because these fixtures test the gate, not the checks; the cases under #340 test the checks.
+harness_stubs() { # harness_stubs <hooks dir> — the runner, and four checks that pass, beside it
+  cp "$ROOT/hooks/harness-checks.sh" "$1/" 2>/dev/null || return 0
+  printf 'exit 0\n' > "$1/check-steering-anchors.sh"
+  for _hs in check-locks.py check-document-set.py check-document-cascade.py; do
+    printf 'raise SystemExit(0)\n' > "$1/$_hs"
+  done
+}
+
 # A repo with the harness installed and one spec branch.
 #
 # Source lives one directory down, in src/, and the glob defaults to the quoted form the
@@ -2162,7 +2175,7 @@ fi
 
 qg_repo() { # qg_repo <name> <validators line, or empty to omit it>
   r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
-  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"; harness_stubs "$r/hooks"
   if [ -n "$2" ]; then printf -- '- Validators: %s\n' "$2" > "$r/.steering/tech.md"
   else printf -- '- Reviewer: test-reviewer\n' > "$r/.steering/tech.md"; fi
   echo "$r"
@@ -2236,7 +2249,7 @@ fi
 # --- quality gate: only pays when the source changed since the last pass ----------------
 qg_repo() { # $1 = name
   r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
-  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"; harness_stubs "$r/hooks"
   printf -- '- Validators: sh -c "echo RAN >&2; exit 1"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
   ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
     && echo one > src.txt && echo doc > NOTES.md && git add -A && git commit -qm init ) >/dev/null 2>&1
@@ -2313,7 +2326,7 @@ case "$err" in *RAN*) c3=ok ;; *) c3=no ;; esac
 #
 #      RED-CAPABLE under "drop the `set -f`". Measured in the spec's mutation record.
 r="$TMP/qg-subdir"; mkdir -p "$r/hooks" "$r/.steering" "$r/sub"
-cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"; harness_stubs "$r/hooks"
 printf -- '- Validators: sh -c "echo RAN >&2; exit 1"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
 ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
   && echo one > a.txt && echo two > sub/b.txt && echo doc > NOTES.md && git add -A && git commit -qm init ) >/dev/null 2>&1
@@ -2335,7 +2348,7 @@ case "$err" in *RAN*) c3=ok ;; *) c3=no ;; esac
 #
 #      RED-CAPABLE under "drop the `set +f`". Measured in the spec's mutation record.
 r="$TMP/qg-expand"; mkdir -p "$r/hooks" "$r/.steering" "$r/sub"
-cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"; harness_stubs "$r/hooks"
 printf -- '- Validators: ls sub/*.txt >/dev/null\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
 ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
   && echo one > a.txt && echo two > sub/b.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
@@ -2428,7 +2441,7 @@ fi
 # from a pass and a pass from a block.
 qgp_repo() { # $1 = name — the :1866 fixture with a validator that is red only on a marker
   r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
-  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"; harness_stubs "$r/hooks"
   printf -- '- Validators: sh -c "echo x >> ran.log; ! grep -q RED src.txt || { echo RAN-RED >&2; exit 1; }"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"
   ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
     && printf 'ran.log\n' > .git/info/exclude && echo one > src.txt && echo doc > NOTES.md \
@@ -2678,7 +2691,7 @@ run_qg "$r" >/dev/null; run_qg "$r" >/dev/null; n=$(qgp_runs "$r")
 #      runs every time. RED-CAPABLE under "not a work tree, so pass" — an early
 #      `[ "$(git rev-parse --is-inside-work-tree)" = true ] || gate_pass`: measured.
 r="$TMP/qgp-nogit"; mkdir -p "$r/hooks" "$r/.steering"
-cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/hooks/"; harness_stubs "$r/hooks"
 printf -- '- Validators: sh -c "echo x >> ran.log"\n- Source globs: *.txt\n' > "$r/.steering/tech.md"; echo one > "$r/src.txt"
 ( cd "$r" && GIT_CEILING_DIRECTORIES="$TMP" sh hooks/quality-gate.sh; GIT_CEILING_DIRECTORIES="$TMP" sh hooks/quality-gate.sh ) >/dev/null 2>&1
 n=$(qgp_runs "$r")
@@ -3045,7 +3058,7 @@ BS_GATES="quality-gate.sh review-gate.sh"
 
 bs_repo() { # bs_repo <name>
   r="$TMP/$1"; mkdir -p "$r/hooks" "$r/.steering"
-  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/review-gate.sh" "$r/hooks/"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/review-gate.sh" "$r/hooks/"; harness_stubs "$r/hooks"
   printf -- '- Validators: true\n- Reviewer: test-reviewer\n' > "$r/.steering/tech.md"
   ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
     && echo one > src.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
@@ -3616,6 +3629,7 @@ pg_repo() { # pg_repo <name> — prints the fixture root; plugin/ and project/ b
   for f in gate-lib.sh quality-gate.sh review-gate.sh steering-digest.sh plugin-gate.sh; do
     [ -f "$ROOT/hooks/$f" ] && cp "$ROOT/hooks/$f" "$_p/plugin/hooks/"
   done
+  harness_stubs "$_p/plugin/hooks"
   printf -- '- Validators: sh -c "test -f src.txt && echo RAN >&2; exit 1"\n- Source globs: *.txt\n- Reviewer: test-reviewer\n' > "$_p/project/.steering/tech.md"
   ( cd "$_p/project" && git init -q -b main && git config user.email t@t && git config user.name t \
     && echo one > src.txt && git add -A && git commit -qm init && echo more >> src.txt ) >/dev/null 2>&1
@@ -3657,7 +3671,7 @@ case "$(cat "$TMP/pgerr")" in *RAN*) c2=ok ;; *) c2=no ;; esac
 #      own .claude/settings.json runs its gates as `GATE_SDD_HARNESS=claude-code sh hooks/<gate>`, and
 #      the plugin's wrapper must still find the gate on that line and stand down, silent, or every
 #      gate here would run twice.
-p=$(pg_repo pg-sd-marker); mkdir -p "$p/project/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/hooks/"
+p=$(pg_repo pg-sd-marker); mkdir -p "$p/project/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/hooks/"; harness_stubs "$p/project/hooks"
 printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"[ -f hooks/quality-gate.sh ] || exit 0; GATE_SDD_HARNESS=claude-code sh hooks/quality-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"
 out=$(run_pg "$p" quality-gate.sh)
 case "$out" in *"exit=0"*) c1=ok ;; *) c1=no ;; esac
@@ -3686,12 +3700,12 @@ done
 #      (e) the settings name review-gate.sh under "Stop" — the quality gate still runs: the
 #          stand-down is per gate, not per event.
 sd='{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh"}]}]}}'
-with_copy() { mkdir -p "$1/project/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$1/project/.claude/hooks/"; }
+with_copy() { mkdir -p "$1/project/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$1/project/.claude/hooks/"; harness_stubs "$1/project/.claude/hooks"; }
 p=$(pg_repo pg-sd-a); with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
 case "$out" in *"exit=0"*) a=ok ;; *) a="no($out)" ;; esac; [ -s "$TMP/pgerr" ] && a="no(stderr)"
 p=$(pg_repo pg-sd-b); with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.local.json"; out=$(run_pg "$p" quality-gate.sh)
 case "$out" in *"exit=0"*) b=ok ;; *) b="no($out)" ;; esac; [ -s "$TMP/pgerr" ] && b="no(stderr)"
-p=$(pg_repo pg-sd-c); mkdir -p "$p/project/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/.claude/hooks/"; out=$(run_pg "$p" quality-gate.sh)
+p=$(pg_repo pg-sd-c); mkdir -p "$p/project/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$p/project/.claude/hooks/"; harness_stubs "$p/project/.claude/hooks"; out=$(run_pg "$p" quality-gate.sh)
 case "$out" in *"exit=2"*) c=ok ;; *) c="no($out)" ;; esac
 p=$(pg_repo pg-sd-d); printf '%s\n' '{"hooks":{"PostToolUse":[{"matcher":"Write","hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh"}]}]}}' > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh)
 case "$out" in *"exit=2"*) d=ok ;; *) d="no($out)" ;; esac
@@ -3849,7 +3863,7 @@ done
 #          repository's settings.local.json runs its own copy by a relative path. The launch
 #          never read it: the root whose local file a launch reads is CLAUDE_PROJECT_DIR's, not
 #          the start directory's. The gate runs (#262, review round 1).
-sub_copy() { mkdir -p "$1/project/sub/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$1/project/sub/.claude/hooks/"; }
+sub_copy() { mkdir -p "$1/project/sub/.claude/hooks"; cp "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/gate-lib.sh" "$1/project/sub/.claude/hooks/"; harness_stubs "$1/project/sub/.claude/hooks"; }
 p=$(pg_repo pg-sub-a); mkdir -p "$p/project/sub"; with_copy "$p"; printf '%s\n' "$sd" > "$p/project/.claude/settings.json"; out=$(run_pg "$p" quality-gate.sh sub)
 case "$out" in *"exit=2"*) a=ok ;; *) a="no($out)" ;; esac
 p=$(pg_repo pg-sub-b); sub_copy "$p"; on_event Stop 'sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-gate.sh' > "$p/project/.claude/settings.local.json"; out=$(run_pg "$p" quality-gate.sh sub)
@@ -4607,7 +4621,7 @@ case "$e:$o" in '0:{"decision":"continue","reason":"'*) ;; *) bad="$bad[antigrav
 t3d="$TMP/t3"; mkdir -p "$t3d"
 t3_repo() { # t3_repo <name> <validators> [<tech.md line>...] — a git fixture with the quality gate in hooks/; prints its root
   _r="$t3d/$1"; _v=$2; shift 2; mkdir -p "$_r/hooks" "$_r/.steering"
-  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$_r/hooks/"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$_r/hooks/"; harness_stubs "$_r/hooks"
   { printf -- '- Validators: %s\n' "$_v"; for _l in "$@"; do printf '%s\n' "$_l"; done; } > "$_r/.steering/tech.md"
   ( cd "$_r" && git init -q -b main && git config user.email t@t && git config user.name t \
     && printf 'ran.log\n*.flag\n' > .git/info/exclude && echo one > src.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
@@ -4640,9 +4654,9 @@ r_rec=$(t3_repo record "sh -c 'echo x >> ran.log'" '- Source globs: *.txt' '- Va
 # anything, which is not the state case 298 is about.
 mkdir -p "$t3d/mvshim"; printf '#!/bin/sh\n"%s" "$@" || exit\nfor a; do :; done\ncase "$a" in */quality-pass) exec sleep 20 ;; esac\n' "$(command -v mv)" > "$t3d/mvshim/mv"; chmod +x "$t3d/mvshim/mv"
 r_bg=$(t3_repo leftover "(sleep 20; echo late) &" '- Validator budget: 3')
-r_ag=$(t3_repo agents "sleep 20"); mkdir -p "$r_ag/.agents/hooks"; cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r_ag/.agents/hooks/"
+r_ag=$(t3_repo agents "sleep 20"); mkdir -p "$r_ag/.agents/hooks"; cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r_ag/.agents/hooks/"; harness_stubs "$r_ag/.agents/hooks"
 printf '%s\n' '{"gate-sdd":{"enabled":true,"Stop":[{"type":"command","command":"cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\"; [ -f .agents/hooks/quality-gate.sh ] || exit 0; sh .agents/hooks/quality-gate.sh","timeout":13}]}}' > "$r_ag/.agents/hooks.json"
-r_sd=$(t3_repo standdown "sleep 20"); mkdir -p "$r_sd/sub/.claude/hooks" "$r_sd/.claude"; cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r_sd/sub/.claude/hooks/"
+r_sd=$(t3_repo standdown "sleep 20"); mkdir -p "$r_sd/sub/.claude/hooks" "$r_sd/.claude"; cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r_sd/sub/.claude/hooks/"; harness_stubs "$r_sd/sub/.claude/hooks"
 printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/quality-gate.sh","timeout":13}]}]}}' > "$r_sd/sub/.claude/settings.json"
 printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"sh .claude/hooks/quality-gate.sh","timeout":600}]}]}}' > "$r_sd/.claude/settings.json"
 r_k0=$(t3_repo kill0 "kill 0" '- Validator budget: 3')
@@ -4650,7 +4664,7 @@ r_u1=$(t3_repo usr1 "kill -s USR1 0" '- Validator budget: 3')
 r_tp=$(t3_repo termpid "sh -c 'touch started.flag; exec sleep 20'" '- Validator budget: 3')
 r_nw=$(t3_repo nowalk "sleep 20" '- Validator budget: 2')
 r_rd=$(t3_repo rundir 'chmod 500 "$TMPDIR"/gate-sdd-run.*; sleep 20' '- Validator budget: 3'); mkdir -p "$t3d/rundir-tmp"
-r_tie=$(t3_repo tie "sleep 20" '- Validator budget: 3'); mkdir -p "$r_tie/.agents/hooks"; cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r_tie/.agents/hooks/"
+r_tie=$(t3_repo tie "sleep 20" '- Validator budget: 3'); mkdir -p "$r_tie/.agents/hooks"; cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r_tie/.agents/hooks/"; harness_stubs "$r_tie/.agents/hooks"
 printf '%s\n' '{"gate-sdd":{"enabled":true,"Stop":[{"type":"command","command":"sh .agents/hooks/quality-gate.sh","timeout":13}]}}' > "$r_tie/.agents/hooks.json"
 
 # The batch, with the suite catching TERM and USR1 as case 277's canary does: a group-wide send
@@ -9783,7 +9797,7 @@ else:
 
 antigravity_repo() {
   r="$TMP/$1"; mkdir -p "$r/.agents/hooks" "$r/.steering" "$r/.specs/9-feature" "$r/src"
-  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/review-gate.sh" "$r/.agents/hooks/"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$ROOT/hooks/review-gate.sh" "$r/.agents/hooks/"; harness_stubs "$r/.agents/hooks"
   sed -e 's|{{HOOKS_DIR}}|.agents/hooks|g' -e 's|{{FAST_CHECK}}|pwd > fast_check.txt|g' \
     "$ROOT/hooks/templates/antigravity.hooks.json" > "$r/.agents/hooks.json"
   printf -- '- Reviewer: test-reviewer\n- Source globs: :(glob)**/*.txt\n' > "$r/.steering/tech.md"
@@ -11860,6 +11874,92 @@ done
   && report "with no Mode line, an unreadable .specs/ names no declaration and still names the line" ok \
   || report "with no Mode line, an unreadable .specs/ names no declaration and still names the line" no \
      "red=$c1 cannot-be-named=$c2 names-mode=$c3"
+
+# 411. #340 AC1, AC2, AC11 — the quality gate runs the harness checks from its own tree, so a fix
+#      the plugin ships decides the verdict whatever copy the `- Validators:` line still names.
+#
+# The reproduction: `init` copied the guards into the project's scripts/ and named them on the
+# line, so a plugin update reached the gate and not the copies. The fixture is a plugin in the
+# layout the plugin cache, the release zip and this repository share — `.claude-plugin/plugin.json`
+# beside hooks/, the checks in assets/ — whose check-document-set.py now blocks this tree, and a
+# project whose line names a stale copy that passes. RED on b0a71bd, for that reason: the gate ran
+# the line alone, the stale copy passed, and the turn ended as a pass.
+hc_plugin() { # hc_plugin <fixture dir> — plugin/ in the shipped layout with passing checks, and project/
+  _hp="$1"; mkdir -p "$_hp/plugin/.claude-plugin" "$_hp/plugin/hooks" "$_hp/plugin/assets" "$_hp/project/.steering" "$_hp/project/scripts"
+  printf '{ "name": "gate-sdd", "version": "9.9.9" }\n' > "$_hp/plugin/.claude-plugin/plugin.json"
+  cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$_hp/plugin/hooks/"
+  [ ! -f "$ROOT/hooks/harness-checks.sh" ] || cp "$ROOT/hooks/harness-checks.sh" "$_hp/plugin/hooks/"
+  printf 'exit 0\n' > "$_hp/plugin/assets/check-steering-anchors.sh"
+  for _hn in check-locks.py check-document-set.py check-document-cascade.py; do printf 'raise SystemExit(0)\n' > "$_hp/plugin/assets/$_hn"; done
+  printf 'raise SystemExit(0)\n' > "$_hp/project/scripts/check-document-set.py"
+  printf -- '- Validators: python3 scripts/check-document-set.py\n' > "$_hp/project/.steering/tech.md"
+  ( cd "$_hp/project" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && printf 'ran.log\n' > .git/info/exclude && echo one > src.txt && git add -A && git commit -qm init ) >/dev/null 2>&1
+}
+hc_fix() { printf 'print("check-document-set: the shipped fix blocks this tree")\nraise SystemExit(1)\n' > "$1/plugin/assets/check-document-set.py"; }
+run_hc() { ( cd "$1/project" && sh "$1/plugin/hooks/quality-gate.sh" >/dev/null 2>"$TMP/hcerr" </dev/null; echo "exit=$?" ) }
+
+p="$TMP/hc-stale"; hc_plugin "$p"; hc_fix "$p"
+out=$(run_hc "$p"); err=$(cat "$TMP/hcerr")
+case "$out" in *exit=2*) c1=ok ;; *) c1="no($out)" ;; esac
+case "$err" in *"the shipped fix blocks this tree"*) c2=ok ;; *) c2="no($err)" ;; esac
+# The runner's last line names what failed, so a block that keeps only a tail still says.
+case "$err" in *"harness-checks: failed: check-document-set.py"*) c3=ok ;; *) c3="no($err)" ;; esac
+
+# An empty line, and an absent one, still run the runner: the line holds only the project's own
+# commands now, and a migration can leave it empty. No tech.md at all still passes: that is a
+# project that does not use the harness.
+p="$TMP/hc-empty"; hc_plugin "$p"; hc_fix "$p"; printf -- '- Validators:\n' > "$p/project/.steering/tech.md"
+out=$(run_hc "$p"); case "$out" in *exit=2*) c4=ok ;; *) c4="no($out)" ;; esac
+p="$TMP/hc-absent"; hc_plugin "$p"; hc_fix "$p"; printf -- '- Reviewer: r\n' > "$p/project/.steering/tech.md"
+out=$(run_hc "$p"); case "$out" in *exit=2*) c5=ok ;; *) c5="no($out)" ;; esac
+p="$TMP/hc-absent-green"; hc_plugin "$p"; printf -- '- Reviewer: r\n' > "$p/project/.steering/tech.md"
+out=$(run_hc "$p"); case "$out" in *exit=0*) c6=ok ;; *) c6="no($out $(cat "$TMP/hcerr"))" ;; esac
+p="$TMP/hc-notech"; hc_plugin "$p"; hc_fix "$p"; rm "$p/project/.steering/tech.md"
+out=$(run_hc "$p"); case "$out" in *exit=0*) c7=ok ;; *) c7="no($out)" ;; esac
+
+# A missing check fails closed and names its path: never the template's `[ -f x ] || exit 0`.
+p="$TMP/hc-missing"; hc_plugin "$p"; rm "$p/plugin/assets/check-locks.py"
+out=$(run_hc "$p"); err=$(cat "$TMP/hcerr")
+case "$out:$err" in *exit=2*:*"plugin/assets/check-locks.py is missing"*) c8=ok ;; *) c8="no($out $err)" ;; esac
+
+# A check reads its own tree's library, whatever GATE_SDD_HOOKS the environment exports.
+p="$TMP/hc-lib"; hc_plugin "$p"
+printf 'echo "lib=$GATE_SDD_HOOKS"\nexit 1\n' > "$p/plugin/assets/check-steering-anchors.sh"
+out=$( cd "$p/project" && GATE_SDD_HOOKS=/elsewhere/hooks sh "$p/plugin/hooks/quality-gate.sh" >/dev/null 2>"$TMP/hcerr" </dev/null; echo "exit=$?" ); err=$(cat "$TMP/hcerr")
+case "$err" in *"lib=$p/plugin/hooks"*) c9=ok ;; *) c9="no($err)" ;; esac
+
+# A plugin path holding a space: the runner's command is a literal `eval` expands, never re-read.
+p="$TMP/hc with space"; hc_plugin "$p"
+out=$(run_hc "$p"); case "$out" in *exit=0*) c10=ok ;; *) c10="no($out $(cat "$TMP/hcerr"))" ;; esac
+hc_fix "$p"; out=$(run_hc "$p"); case "$out" in *exit=2*) c11=ok ;; *) c11="no($out)" ;; esac
+
+# One list, three readers: the signal block names the command that was running, counted with the
+# runner first. A reader that numbered the line alone would name the command before it.
+p="$TMP/hc-sig"; hc_plugin "$p"
+printf -- "- Validators: true, sh -c 'kill -s HUP 0; sleep 1'\n" > "$p/project/.steering/tech.md"
+( cd "$p/project" && in_session sh "$p/plugin/hooks/quality-gate.sh" >/dev/null 2>"$TMP/hcerr" </dev/null ); err=$(cat "$TMP/hcerr")
+case "$err" in *"It was running: sh -c 'kill -s HUP 0; sleep 1'."*) c12=ok ;; *) c12="no($err)" ;; esac
+
+# A pass is not trusted across a change to a check the runner runs, or to a steering value one
+# reads: each edit below runs the line again, and nothing else does.
+p="$TMP/hc-fp"; hc_plugin "$p"
+printf -- '- Validators: sh -c "echo x >> ran.log"\n- Source globs: *.txt\n' > "$p/project/.steering/tech.md"
+hc_runs() { [ -f "$p/project/ran.log" ] && wc -l < "$p/project/ran.log" | tr -d ' ' || echo 0; }
+run_hc "$p" >/dev/null; run_hc "$p" >/dev/null; c13=ok; [ "$(hc_runs)" = 1 ] || c13="no(skip: $(hc_runs))"
+want=1
+printf '# fixed in place\nraise SystemExit(0)\n' > "$p/plugin/assets/check-locks.py"
+run_hc "$p" >/dev/null; want=$((want + 1)); [ "$(hc_runs)" = "$want" ] || c13="no(check edit: $(hc_runs))"
+for l in '- Docs: docs/' '- Mode: minimum' '- Target: full' '- Specs before bootstrap: 1-a'; do
+  printf '%s\n' "$l" >> "$p/project/.steering/tech.md"
+  run_hc "$p" >/dev/null; want=$((want + 1)); [ "$(hc_runs)" = "$want" ] || c13="no($l: $(hc_runs) of $want)"
+done
+run_hc "$p" >/dev/null; [ "$(hc_runs)" = "$want" ] || c13="no(re-skip: $(hc_runs))"
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13" = "okokokokokokokokokokokokok" ] \
+  && report "the quality gate runs the harness checks from its own tree, whatever the line names" ok \
+  || report "the quality gate runs the harness checks from its own tree, whatever the line names" no \
+     "stale-red=$c1 fix-shown=$c2 names-failed=$c3 empty-line=$c4 absent-line=$c5 absent-green=$c6 no-tech-passes=$c7 missing=$c8 own-lib=$c9 space=$c10 space-red=$c11 signal-numbered=$c12 fingerprint=$c13"
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
