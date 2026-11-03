@@ -11602,6 +11602,92 @@ case "$err" in *uncommitted*) c12=ok ;; *) c12=no ;; esac
   || report "check-document-cascade enforces reconciliation against PRD commit SHA across modes" no \
      "boot=$c0 min=$c1 full=$c2 miss-doc=$c3/$c4 miss-line=$c5/$c6 bad-sha=$c7/$c8 stale=$c9/$c10 dirty=$c11/$c12"
 
+# 407. #309 AC1, AC2 — a project adopted before `- Mode:` declares a `bootstrap` that passes, and
+#      its window ends at the first spec the adoption line does not name.
+#
+# A project installed before 0.6.0 has shipped specs and no inception documents, so case 69's
+# expiry closed its window before it could open: no mode was true for it. `- Specs before
+# bootstrap:` names the specs that predate the declaration, and only a spec it does not name
+# ends the window. The line is the whole of the anchor, so every way it could name something
+# other than what is on disk fails: a name with no directory of that exact name, a name in both
+# `.specs/` and `_archive/` (one of them is new), and an entry that is not a name at all. No git
+# is read, so a squash merge or a shallow clone cannot move the verdict.
+adopt() { printf -- '- Specs before bootstrap: %s\n' "$2" >> "$1/.steering/tech.md"; }
+adopted_tree() { # adopted_tree <name> — the issue's tree: three live specs, two archived, CONTRACT.md alone
+  r=$(init_tree "$1" bootstrap)
+  for s in 3-login 7-export 12-search; do spec_in "$r/.specs/$s"; done
+  for s in 15-audit 21-billing; do spec_in "$r/.specs/_archive/$s"; done
+  mkdir -p "$r/docs"; printf 'x\n' > "$r/docs/CONTRACT.md"
+  echo "$r"
+}
+ADOPTED='3-login, 7-export, 12-search, 15-audit, 21-billing'
+
+# RED before the fix, for the reproduction's reason: the line is unread, and five specs exist.
+r=$(adopted_tree ds-adopt-exact); adopt "$r" "$ADOPTED"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c1=ok || c1="no($(cat "$TMP/derr"))"
+# The success line says the window is a mid-life one, so a log shows it is not a fresh install.
+s=$(sout_docset "$r"); case "$s" in *"5 spec(s)"*"Specs before bootstrap"*) c2=ok ;; *) c2="no($s)" ;; esac
+# The cascade check defers under any `bootstrap`, this one included.
+cp "$ROOT/assets/check-document-cascade.py" "$r/scripts/"
+( cd "$r" && python3 scripts/check-document-cascade.py >/dev/null 2>&1 ) && c3=ok || c3=no
+
+# A new spec the line does not name ends the window: live, archived, and with only a spec.md on
+# disk (no git here, so "written" is the only state there is — committed or not is the same).
+r=$(adopted_tree ds-adopt-new); adopt "$r" "$ADOPTED"; spec_in "$r/.specs/30-new"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c4=ok || c4=no
+case "$err" in *"already exist"*30-new*) c5=ok ;; *) c5="no($err)" ;; esac
+# The remedy is the documents, never the line extended: no `- Specs before bootstrap: <names>`
+# is written out for the session to paste. C4.
+case "$err" in *"Specs before bootstrap: "*) c6="no($err)" ;; *) c6=ok ;; esac
+r=$(adopted_tree ds-adopt-new-arch); adopt "$r" "$ADOPTED"; spec_in "$r/.specs/_archive/30-new"
+out=$(run_docset "$r"); [ "$out" = "1" ] && c7=ok || c7=no
+
+# A name with no directory of that exact name fails, even on a tree with no spec at all —
+# which passes today, because the line is unread. The comparison is exact: on a case-insensitive
+# filesystem `7-Export` would find `7-export` through a path lookup.
+r=$(init_tree ds-adopt-ghost bootstrap); adopt "$r" "40-later"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c8=ok || c8=no
+case "$err" in *40-later*misspelt*) c9=ok ;; *) c9="no($err)" ;; esac
+r=$(adopted_tree ds-adopt-case); adopt "$r" '3-login, 7-Export, 12-search, 15-audit, 21-billing'
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c10=ok || c10=no
+# Both halves of a misspelling in ONE run: the unknown name and the real directory it missed.
+case "$err" in *7-Export*7-export*|*7-export*7-Export*) c11=ok ;; *) c11="no($err)" ;; esac
+
+# A named spec in both places is one name with two specs: one of them was written after the
+# declaration, or an archive sweep was left half done. Neither is a pass.
+r=$(adopted_tree ds-adopt-both); adopt "$r" "$ADOPTED"; spec_in "$r/.specs/15-audit"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c12=ok || c12=no
+case "$err" in *".specs/15-audit"*".specs/_archive/15-audit"*|*".specs/_archive/15-audit"*".specs/15-audit"*) c13=ok ;; *) c13="no($err)" ;; esac
+
+# An entry that is not a directory name fails and is named. Each passes today on an empty .specs/.
+c14=ok
+for v in '7-a,,8-b' '7-a,' '../7-a' '7-a/spec.md' '.' '..'; do
+  r=$(init_tree "ds-adopt-bad-$(printf '%s' "$v" | tr -c 'a-z0-9' '_')" bootstrap); adopt "$r" "$v"
+  out=$(run_docset "$r"); [ "$out" = "1" ] || c14="no($v)"
+done
+
+# Absent and empty are the same: no adoption, and today's verdicts. An empty value is the anchor
+# check's to fail, not this one's (case 409).
+r=$(init_tree ds-adopt-empty bootstrap); printf -- '- Specs before bootstrap:   \n' >> "$r/.steering/tech.md"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c15=ok || c15="no($(cat "$TMP/derr"))"
+r=$(init_tree ds-adopt-empty-spec bootstrap); printf -- '- Specs before bootstrap:\n' >> "$r/.steering/tech.md"
+spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); [ "$out" = "1" ] && c16=ok || c16=no
+
+# Spent: read only under `bootstrap`, as `- Target:` is. A settled project's old line changes
+# no verdict, even one that names nothing on disk.
+r=$(docset_repo ds-adopt-spent minimum); spec_in "$r/.specs/7-a-thing"; adopt "$r" "nothing-here"
+out=$(run_docset "$r"); [ "$out" = "0" ] && c17=ok || c17="no($(cat "$TMP/derr"))"
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17" = "okokokokokokokokokokokokokokokokok" ] \
+  && report "an adopted project's bootstrap passes, and ends at the first spec its line does not name" ok \
+  || report "an adopted project's bootstrap passes, and ends at the first spec its line does not name" no \
+     "exact=$c1 says-adopted=$c2 cascade-defers=$c3 new-red=$c4 names-new=$c5 no-append-text=$c6 new-archived-red=$c7 ghost-red=$c8 ghost-causes=$c9 case-red=$c10 both-halves=$c11 both-places-red=$c12 names-both=$c13 bad-entries=$c14 empty-is-absent=$c15 empty-still-expires=$c16 spent-unread=$c17"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 

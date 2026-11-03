@@ -15,6 +15,9 @@ time made every first install start red, which is CAP-4's falsifier exactly. `bo
 only the first and says so in its own success line; it is **declared**, not inferred from an
 empty `docs/`, for the same reason the other two are. It is also self-terminating: it stops
 passing once `.specs/` holds a spec, so it cannot become a gate switched off and left off.
+A project that adopted the harness with specs already shipped declares where its window
+starts instead (#309): `- Specs before bootstrap:` names those specs, and the first spec it
+does not name ends the window the same way.
 
 The mode is DECLARED on `.steering/tech.md`'s `- Mode:` line and verified here against the
 filesystem. Declared rather than derived on purpose: the mode is *almost* computable from
@@ -80,6 +83,11 @@ MODES = ("bootstrap", "minimum", "full")
 #: decided, and a project cannot sign up for that. Derived from MODES rather than written out
 #: so the two cannot drift into disagreeing about what a document set is called.
 TARGETS = tuple(m for m in MODES if m != "bootstrap")
+#: #309. The specs a project already had when it declared `bootstrap`, named on one line. A
+#: project installed before `- Mode:` existed had shipped specs before it could declare one,
+#: so the window that ends at the first spec had closed before it opened, and no mode was true
+#: for it. Naming them moves where the window starts, never whether it ends.
+ADOPTION = "Specs before bootstrap"
 
 
 def fail(message):
@@ -146,6 +154,66 @@ def steering_value(text, key):
         if m:
             return m.group(1)
     return ""
+
+
+def adoption_entries(value):
+    """`(names, bad)` from the adoption line's value, or `(None, [])` when there is none.
+
+    Empty after the strip is no line at all: the anchor check is what fails a line written so
+    that nothing can be read from it. An entry must be a directory name, since it is compared
+    with one, so an empty entry, a path, `.` and `..` are refused by name rather than dropped:
+    dropping one would make `7-a,,8-b` and `7-a, 8-b` the same declaration with no one told.
+    """
+    if not value:
+        return None, []
+    names, bad = [], []
+    for raw in value.split(","):
+        entry = raw.strip()
+        if not entry or "/" in entry or entry in (".", ".."):
+            bad.append(entry)
+        else:
+            names.append(entry)
+    return names, bad
+
+
+def specs_on_disk(unreadable_dir, unreadable_entries):
+    """`{name: [paths]}` for every spec under `.specs/` and `.specs/_archive/`.
+
+    The scan `bootstrap`'s expiry has always made, lifted out so the adoption line can be
+    compared with the same names. A name is the slug directory's own `entry.name`, compared as
+    a string — never through a path lookup, which a case-insensitive filesystem answers for a
+    misspelling. The two arguments finish the two fail-closed sentences, because what an
+    unreadable `.specs/` costs depends on the question being asked.
+    """
+    names = {}
+    unreadable = []
+    for directory in (SPECS, ARCHIVE):
+        # `Path.is_dir()` swallows OSError, and this is the one place that is safe —
+        # but only by an invariant worth writing down, because it lives elsewhere.
+        # `_archive` is itself an entry of `.specs`, so the scan above has already
+        # classified it with error-visible stats: unreadable in any way, it is in
+        # `unreadable` and we never reach a verdict. A dangling link is False in both
+        # places, which is honest. Skipping `_archive` by name in that loop — the natural
+        # way to stop it being listed twice — would activate this swallow with nothing
+        # left to catch it.
+        if directory is ARCHIVE and not ARCHIVE.is_dir():
+            continue
+        try:
+            found, unread = spec_slugs(directory)
+        except OSError as exc:
+            # The scanned directory, not always `.specs` — a failure in `_archive/` that
+            # sent the reader to the parent would be a diagnosis they cannot act on.
+            fail(f"{directory} cannot be read ({exc.strerror}), {unreadable_dir}")
+        for path in found:
+            names.setdefault(os.path.basename(path), []).append(path)
+        unreadable += unread
+    if unreadable:
+        listed = ", ".join(sorted(unreadable))
+        fail(
+            f"{len(unreadable)} director(ies) under {SPECS} cannot be read: {listed}. "
+            f"Whether they hold a spec is unknown, {unreadable_entries}"
+        )
+    return names
 
 
 def main():
@@ -221,6 +289,11 @@ def main():
             f"{', '.join(TARGETS)} — or remove the line, which is a supported state and means "
             f"the choice has not been made yet."
         )
+
+    # Read where `Target` is and for the same reason: only `bootstrap` has a window to start.
+    adopted, bad_entries = adoption_entries(
+        steering_value(text, ADOPTION).strip() if mode == "bootstrap" else ""
+    )
 
     docs_value = steering_value(text, "Docs").strip() or "docs/"
     if "://" in docs_value:
@@ -300,55 +373,79 @@ def main():
         # cited, and it is the first moment the harness is genuinely in use. The failure then
         # lands INSIDE the flow with the cause one command behind the user, which is what CAP-4
         # asks for: not "never block", but never block on a failure that predates them.
-        started = []
-        unreadable = []
-        for directory in (SPECS, ARCHIVE):
-            # `Path.is_dir()` swallows OSError, and this is the one place that is safe —
-            # but only by an invariant worth writing down, because it lives elsewhere.
-            # `_archive` is itself an entry of `.specs`, so the scan above has already
-            # classified it with error-visible stats: unreadable in any way, it is in
-            # `unreadable` and we never reach a verdict. A dangling link is False in both
-            # places, which is honest. Skipping `_archive` by name in that loop — the natural
-            # way to stop it being listed twice — would activate this swallow with nothing
-            # left to catch it.
-            if directory is ARCHIVE and not ARCHIVE.is_dir():
-                continue
-            try:
-                found, unread = spec_slugs(directory)
-            except OSError as exc:
-                # The scanned directory, not always `.specs` — a failure in `_archive/` that
-                # sent the reader to the parent would be a diagnosis they cannot act on.
+        names = specs_on_disk(
+            "so whether this project has begun building cannot be established — and "
+            "`bootstrap` is only true before it has.",
+            "and `bootstrap` is only true while none does — so this is neither `no specs` "
+            "nor `a spec`, and not a pass.",
+        )
+        if adopted is None:
+            if names:
+                started = sorted(p for paths in names.values() for p in paths)
                 fail(
-                    f"{directory} cannot be read ({exc.strerror}), so whether this project has "
-                    f"begun building cannot be established — and `bootstrap` is only true "
-                    f"before it has."
+                    f"mode is `bootstrap` — documents not yet authored — but {len(started)} "
+                    f"spec(s) already exist: {', '.join(started)}. A spec cites the documents "
+                    f"this mode says are unwritten. Write {owed}, and {declare} in {STEERING}."
                 )
-            started += found
-            unreadable += unread
-        if unreadable:
-            listed = ", ".join(sorted(unreadable))
-            fail(
-                f"{len(unreadable)} director(ies) under {SPECS} cannot be read: {listed}. "
-                f"Whether they hold a spec is unknown, and `bootstrap` is only true while none "
-                f"does — so this is neither `no specs` nor `a spec`, and not a pass."
-            )
-        if started:
-            listed = ", ".join(sorted(started))
-            fail(
-                f"mode is `bootstrap` — documents not yet authored — but {len(started)} spec(s) "
-                f"already exist: {listed}. A spec cites the documents this mode says are "
-                f"unwritten. Write {owed}, and {declare} in {STEERING}."
-            )
+        else:
+            # Every way the line can disagree with the disk, gathered into one run: a
+            # misspelling is an unknown name AND an unlisted directory, and fixing one half
+            # only to be told the other on the next run is a red gate twice for one typo.
+            problems = []
+            if bad_entries:
+                shown = ", ".join(repr(e) for e in bad_entries)
+                problems.append(
+                    f"`- {ADOPTION}:` holds {len(bad_entries)} entry(ies) that are not a spec "
+                    f"directory's name: {shown}. Each entry is one name, with no `/`, between "
+                    f"commas."
+                )
+            named = set(adopted)
+            unknown = sorted(n for n in named if n not in names)
+            if unknown:
+                problems.append(
+                    f"`- {ADOPTION}:` names {len(unknown)} spec(s) with no directory of that "
+                    f"exact name under {SPECS} or {ARCHIVE}: {', '.join(unknown)}. Each was "
+                    f"deleted, renamed, misspelt or not yet written; correct the name or remove "
+                    f"it, since the line names the specs that existed when `bootstrap` was "
+                    f"declared."
+                )
+            twice = sorted(p for n in named if len(names.get(n, ())) > 1 for p in names[n])
+            if twice:
+                problems.append(
+                    f"a named spec sits in both {SPECS} and {ARCHIVE}: {', '.join(twice)}. One "
+                    f"of each pair was written after the declaration, or an archive sweep was "
+                    f"left half done."
+                )
+            unlisted = sorted(p for n, paths in names.items() if n not in named for p in paths)
+            if unlisted:
+                # The remedy is the documents, as for any expired window. The names are
+                # listed as specs, never as text to append: extending the line is the one
+                # thing it must not be used for (#309's C4).
+                problems.append(
+                    f"mode is `bootstrap` — documents not yet authored — and `- {ADOPTION}:` "
+                    f"names {len(named)} spec(s), but {len(unlisted)} spec(s) it does not name "
+                    f"already exist: {', '.join(unlisted)}. The window ended at the first of "
+                    f"them: a spec cites the documents this mode says are unwritten. Write "
+                    f"{owed}, and {declare} in {STEERING}."
+                )
+            if problems:
+                fail(" ".join(problems))
 
         # A separate sentence, not the line below with a smaller number in it. G-1: "the
         # documents are present" and "the documents were not looked at" cannot share an
         # outcome, and exit 0 is already shared between them — so the words carry the whole
         # difference, and a count of documents this run never examined must not appear in them.
+        adoption_note = (
+            ""
+            if adopted is None
+            else f" {len(set(adopted))} spec(s) predate this declaration, named on "
+            f"`- {ADOPTION}:`; the next spec it does not name ends this window."
+        )
         print(
             f"check-document-set: mode `{mode}` — the harness is installed "
             f"({len(TEMPLATES)} issue template(s) and {len(MANDATORY_DIRS)} directory(ies) "
             f"present). {len(owed_docs)} document(s) not yet authored: {owed}. "
-            f"Then {declare} in {STEERING}."
+            f"Then {declare} in {STEERING}.{adoption_note}"
         )
         return
 
