@@ -269,10 +269,14 @@ def absent_mode_advice(text):
             f"A mode is declared, never assumed."
         )
     else:
-        names = specs_on_disk(
-            "so which declaration passes for this tree cannot be named.",
-            "so which declaration passes for this tree cannot be named.",
+        # The refusal is about the missing line; the read error is only why no remedy follows.
+        # A message naming the read error alone sends the reader to fix permissions and learn
+        # the real refusal one run later.
+        cannot_name = (
+            f"so which declaration passes for this tree cannot be named — and {STEERING} "
+            f"carries no readable `- Mode:` line. A mode is declared, never assumed."
         )
+        names = specs_on_disk(cannot_name, cannot_name)
     if not names:
         return (
             "Add `- Mode: bootstrap` on one physical line — the harness is installed and the "

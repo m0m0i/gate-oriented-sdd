@@ -11668,11 +11668,20 @@ out=$(run_docset "$r"); err=$(cat "$TMP/derr")
 case "$err" in *".specs/15-audit"*".specs/_archive/15-audit"*|*".specs/_archive/15-audit"*".specs/15-audit"*) c13=ok ;; *) c13="no($err)" ;; esac
 
 # An entry that is not a directory name fails and is named. Each passes today on an empty .specs/.
+# Exit 1 alone proves nothing here: every one of these is also a name no directory has, so the
+# unknown-name branch fails them too. The MESSAGE is the entry branch's, and the last tree names
+# every spec on disk exactly, so only the trailing empty entry can fail it (found in review).
 c14=ok
 for v in '7-a,,8-b' '7-a,' '../7-a' '7-a/spec.md' '.' '..'; do
   r=$(init_tree "ds-adopt-bad-$(printf '%s' "$v" | tr -c 'a-z0-9' '_')" bootstrap); adopt "$r" "$v"
-  out=$(run_docset "$r"); [ "$out" = "1" ] || c14="no($v)"
+  out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+  [ "$out" = "1" ] || c14="no($v: passed)"
+  case "$err" in *"not a spec directory's name"*) : ;; *) c14="no($v: $err)" ;; esac
 done
+r=$(adopted_tree ds-adopt-bad-only); adopt "$r" "$ADOPTED,"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+case "$out:$err" in 1:*"not a spec directory's name"*) : ;; *) c14="no(only-entry: $out $err)" ;; esac
+case "$err" in *"exact name"*|*"already exist"*) c14="no(only-entry fell through: $err)" ;; esac
 
 # Absent and empty are the same: no adoption, and today's verdicts. An empty value is the anchor
 # check's to fail, not this one's (case 409).
@@ -11826,6 +11835,31 @@ out=$(run_anchors "$r"); [ "$out" = "0" ] && c5=ok || c5=no
   && report "a bolded or empty Specs before bootstrap fails the anchor guard in any mode, an absent one is silent" ok \
   || report "a bolded or empty Specs before bootstrap fails the anchor guard in any mode, an absent one is silent" no \
      "bold-red=$c1 names-key=$c2 empty-red=$c3 plain-green=$c4 absent-green=$c5"
+
+# 410. #309 AC3 — with no `- Mode:` line, a `.specs/` that cannot be read is a refusal that says
+#      the declaration cannot be named, and still names the missing line (found in review).
+#
+# The advice depends on what `.specs/` holds, so an unreadable one leaves nothing true to
+# advise: neither `bootstrap` nor the adoption line. Both depths are covered, the directory
+# itself and an entry inside it, with symlink loops rather than `chmod 000` so that root cannot
+# make the case vacuous: no `note_skip` guard, and a filesystem without `ln -s` turns it red,
+# the safe direction, as case 14 is left.
+c1=ok; c2=ok; c3=ok
+r=$(nomode_tree ds-nm-loop-dir); rmdir "$r/.specs"; ln -s .specs "$r/.specs"
+r2=$(nomode_tree ds-nm-loop-entry); ln -s 7-a "$r2/.specs/7-a"
+for t in "$r" "$r2"; do
+  out=$(run_docset "$t"); err=$(cat "$TMP/derr")
+  [ "$out" = "1" ] || c1="no(${t##*/})"
+  case "$err" in *"cannot be named"*) : ;; *) c2="no(${t##*/}: $err)" ;; esac
+  # The refusal is about the missing line; the read error is why no remedy follows it.
+  case "$err" in *"no readable \`- Mode:\` line"*"never assumed"*) : ;; *) c3="no(${t##*/}: $err)" ;; esac
+  case "$err" in *"Mode: bootstrap"*|*"Specs before bootstrap: "*) c3="no(${t##*/} advised: $err)" ;; esac
+done
+
+[ "$c1$c2$c3" = "okokok" ] \
+  && report "with no Mode line, an unreadable .specs/ names no declaration and still names the line" ok \
+  || report "with no Mode line, an unreadable .specs/ names no declaration and still names the line" no \
+     "red=$c1 cannot-be-named=$c2 names-mode=$c3"
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
