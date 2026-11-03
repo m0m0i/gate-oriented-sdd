@@ -2,7 +2,7 @@
 
 - Slug: 340-a-shipped-guard-fix-reaches-the-project   Issue: 340   Type: bug   Status: approved
 - Author: m0m0i (Claude Code)   Date: 2026-11-01
-- **Depends on #309**, by the maintainer's decision (C5): it ships first, so that the document checks this spec arms in every project have a state a project installed before `- Mode:` can declare.
+- **Depends on #309**, by the maintainer's decision (C5): it ships first, so that the document checks this spec arms in every project have a state a project installed before `- Mode:` can declare. #309 shipped as #351, in 0.40.0: such a project declares `bootstrap` with `- Specs before bootstrap:`.
 
 Backlog row 1's third issue, after #324 with #330, #302 and #329. It decides how a project runs the guards `init` copies today, and what an existing install's copies become. #343, the row's last issue, re-runs `init` on Antigravity and follows this spec's answer (#343's AC5).
 
@@ -69,7 +69,7 @@ Backlog row 1's third issue, after #324 with #330, #302 and #329. It decides how
   - [ ] **AC11:** T1's first case fails against `b0a71bd` for the reason in the reproduction: the line names a stale copy that passes, while the plugin's changed check would block. Every other new case fails against `b0a71bd` and passes after.
 - **Out of scope:**
   - **The safe re-run.** Re-running `init` over `.agents/hooks/` and `.agents/hooks.json`, and telling a project's edit from an older version's text, are #343. AC8 fixes the order the guards move in, and #343 makes the re-run safe.
-  - **#309 itself.** It is a prerequisite (C5), not part of this branch.
+  - **#309 itself.** It is a prerequisite (C5), shipped as #351, not part of this branch.
   - **The cascade fixes themselves**, #308 and #338.
   - **Cloud sessions**, where no plugin loads: #261, parked.
   - **Antigravity's plugin update**, which CLI 1.2.16 does not have (`docs/verified.md:322`).
@@ -97,7 +97,7 @@ Asked and answered 2026-11-01. Before asking, two read-only workflows mapped the
   - **`hooks/quality-gate.sh`.**
     - **One command list.** One function returns the commands: `sh "$DIR/harness-checks.sh"`, expanded inside `eval` so a path holding a space or a `$` is never re-read as code, then the split line. Three readers read that list: the child's loop (`:568`), the timeout block (`:331`) and the signal block (`:354`). So all three still number every command alike.
     - **The empty-line pass moves.** The pass at `:403` gives way to the runner. With the line empty or absent, the list holds the runner alone, and the absent-`tech.md` pass at `:401` stays.
-    - **The fingerprint.** `qg_fingerprint` also hashes the runner, the four checks it resolves, and the `- Docs:` value the runner branches on. They are now the gate's own inputs, so the "toolchain not hashed" boundary keeps its meaning, and a fix in place, on a local marketplace, re-runs once.
+    - **The fingerprint.** `qg_fingerprint` also hashes the runner, the four checks it resolves, the `- Docs:` value the runner branches on, and the `- Mode:`, `- Target:` and `- Specs before bootstrap:` values the document checks read (#309). A pass then does not outlive an edit to any of them, as AC1 asks. `.specs/` stays outside the fingerprint, as documents are: a turn that only writes a spec can still skip at turn end, and CI is where that window closes. They are now the gate's own inputs, so the "toolchain not hashed" boundary keeps its meaning, and a fix in place, on a local marketplace, re-runs once.
   - **`assets/check-locks.py`.** ROOT becomes the git toplevel of the working directory. Outside a repository it fails closed, which removes the vacuous "nothing to verify" pass from anywhere but a repository. Its docstring drops "a COPY rather than a reference". Its drift message names the re-pin command for each place, and `init`'s reviewer bullet and `contract` give the same commands:
     - `python3 "${GATE_SDD_PLUGIN_ROOT:?…}/assets/check-locks.py" --update` in a Claude Code session;
     - `python3 .agents/hooks/check-locks.py --update` on Antigravity;
@@ -119,6 +119,7 @@ Asked and answered 2026-11-01. Before asking, two read-only workflows mapped the
     - the three reference reviewers' allow-lists (`:18`);
     - the template, whose `{{VALIDATOR_LIST}}` gains the runner.
   - **`init`.** Step 3's four guard bullets become one: the gate runs the harness checks, and nothing is copied on Claude Code. The Antigravity hooks bullet adds the runner and the five guards to `.agents/hooks/`. Step 4 times the runner with the validators, since both count against `- Validator budget:`.
+  - **#309's adoption route** compares the project's `scripts/` copies of the two document checks before writing the adoption line (`skills/init/SKILL.md:46`). On Claude Code there are no copies after this branch, so that clause applies to Antigravity's `.agents/hooks/` set and to an unmigrated project, and the migration below runs first.
   - **The migration bullet** follows AC8's order. The dual-target note at `:79` is rewritten to match.
     - An entry is matched by its last path component, a harness check's filename, with any `./`, `sh`, `python3` or directory before it.
     - Until a project migrates, its old entries run beside the gate's checks. A stale copy can only add a block, never remove one, and the digest notice says so.
@@ -170,7 +171,7 @@ Asked and answered 2026-11-01. Before asking, two read-only workflows mapped the
   - a missing check;
   - a check's library;
   - the timeout and signal blocks;
-  - a re-run after a check or `- Docs:` changes;
+  - a re-run after a check, `- Docs:`, `- Mode:`, `- Target:` or `- Specs before bootstrap:` changes;
   - a path with a space.
 - [ ] T2 (AC4): cases for `check-locks.py` run from a plugin path against a project, from outside a repository, and with `--update`. Then the root and the messages.
 - [ ] T3 (AC5, AC6): cases for remote Docs, a missing `- Mode:`, the flat Antigravity layout, and an Antigravity gate copy with no runner. Then those branches.
