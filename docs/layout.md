@@ -20,8 +20,9 @@ your-project/
 │   issues (1 item : N issues) — the issues are the record.
 │
 ├── .github/ISSUE_TEMPLATE/        ← init         feature.md, bug.md, chore.md, config.yml
-├── .github/workflows/             ← init         steps added to the project's CI: the copied checks, and on
-│                                                 Claude Code a checkout of the plugin, its hooks/ in GATE_SDD_HOOKS
+├── .github/workflows/             ← init         steps added to the project's CI: the harness checks and the
+│                                                 unreviewed-work check, and on Claude Code a checkout of the
+│                                                 plugin they run from, its hooks/ in GATE_SDD_HOOKS
 │   
 ├── .steering/                     ← init         persistent context, read by every skill
 │   ├── product.md                 ←   what this is, and `- Owns:` the quality anchor
@@ -54,10 +55,12 @@ your-project/
 │           ├── rules/*.md         ←   the rulebook — never enters a normal session
 │           └── rules-lock.json    ←   hashes, and what each rule is grounded in
 │
-├── .agents/                       ← init         Antigravity wiring — the gates are copies here
+├── .agents/                       ← init         Antigravity wiring — the gates and the checks are copies here
 │   ├── hooks.json                 ←   the hook layers (flat & matcher schema)
 │   ├── hooks/                     ←   gate-lib.sh, quality-gate.sh, review-gate.sh, steering-digest.sh,
-│   │                                  steering-digest-antigravity.sh
+│   │                                  steering-digest-antigravity.sh, harness-checks.sh, and flat beside
+│   │                                  them check-steering-anchors.sh, check-locks.py, check-document-set.py,
+│   │                                  check-document-cascade.py, check-unreviewed-work.sh
 │   └── agents/
 │       ├── _shared/reviewer-contract.md ←  severity, output format, the receipt
 │       ├── <name>-reviewer.md     ←   the project's reviewer
@@ -65,17 +68,12 @@ your-project/
 │           ├── rules/*.md         ←   the rulebook — never enters a normal session
 │           └── rules-lock.json    ←   hashes, and what each rule is grounded in
 │
-├── scripts/                       ← init         copied checks, in the project's own scripts directory:
-│                                                 check-steering-anchors.sh, check-document-set.py,
-│                                                 check-document-cascade.py, check-unreviewed-work.sh,
-│                                                 check-locks.py
-│
 └── <your source>                  ← untouched by the harness
 ```
 
 ### Where the gates run from
 
-On Claude Code the gates run from the installed plugin, so `init` writes no gate script. `.claude/settings.json` declares the marketplace with `"autoUpdate": true`, enables the plugin, sets `FORCE_AUTOUPDATE_PLUGINS=1` in its `env` and keeps the per-language fast check, and a gate fix arrives by plugin update, in the desktop app's sessions too, which run no pass without that line (#256, #274, ADR-8). On Antigravity a plugin hook runs with the plugin directory as its working directory, so `init` copies the five scripts into `.agents/hooks/`, and a fix arrives by running `init` again. A dual-target project gets both halves. On either harness, the copied checks in `scripts/` and the reviewer contract change only when someone copies them again or re-runs `init`; a plugin update does not reach them. The README's Install section says how to do each.
+On Claude Code the gates run from the installed plugin, so `init` writes no gate script. `.claude/settings.json` declares the marketplace with `"autoUpdate": true`, enables the plugin, sets `FORCE_AUTOUPDATE_PLUGINS=1` in its `env` and keeps the per-language fast check, and a gate fix arrives by plugin update, in the desktop app's sessions too, which run no pass without that line (#256, #274, ADR-8). On Antigravity a plugin hook runs with the plugin directory as its working directory, so `init` copies the gate scripts into `.agents/hooks/`, and a fix arrives by running `init` again. A dual-target project gets both halves. The harness checks go with the gates: the quality gate runs them through `harness-checks.sh` from its own directory, so on Claude Code a check fix arrives by plugin update, and on Antigravity `init` copies them into `.agents/hooks/` beside the gates, where a fix arrives the same way the gates' does (#340). `init` writes nothing into a project's `scripts/`. On either harness the reviewer contract in the agents directory changes only when someone copies it again or re-runs `init`, and the Claude Code digest says when it differs from the plugin's. The README's Install section says how to do each.
 
 ### The chain
 
@@ -117,7 +115,8 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
 │   └── <lang>-reviewer.md + <lang>-reviewer/rules/
 ├── hooks/
 │   ├── gate-lib.sh                ← emits both harnesses' blocking signals
-│   ├── quality-gate.sh            ← runs the validators named in .steering/tech.md
+│   ├── quality-gate.sh            ← runs harness-checks.sh, then the validators named in .steering/tech.md
+│   ├── harness-checks.sh          ← runs the harness checks from its own tree's assets/ (#340)
 │   ├── review-gate.sh
 │   ├── plugin-gate.sh             ← what .claude-plugin/hooks.json runs: silent without .steering/,
 │   │                                and standing down where a project still runs its own copy
@@ -129,7 +128,8 @@ gate-oriented-sdd/                 ← the repo root IS the plugin
 ├── rules/
 │   └── AGENTS.md                  ← symlink to ../AGENTS.md for Antigravity rule discovery
 ├── AGENTS.md                      ← canonical rulebook (imported here by .claude/CLAUDE.md, #237)
-├── assets/                        ← copied into the project by init: check scripts, issue templates, directory contracts
+├── assets/                        ← the harness checks the gate runs from here, copied into .agents/hooks/ on
+│                                    Antigravity; issue templates and directory contracts, copied by init
 │   ├── check-steering-anchors.sh
 │   ├── check-document-set.py
 │   ├── check-document-cascade.py

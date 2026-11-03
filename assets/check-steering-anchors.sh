@@ -142,7 +142,8 @@ for file in $files; do
   # and the reader both stat THROUGH it, so under a mode-000 .steering/ every anchor came back
   # absent, `present` stayed 0, and the run ended on "no steering files found — nothing was
   # checked": a sentence about having looked, printed by a check that could not look, on exit
-  # 0 — and this script is on the `- Validators:` line, so that is the turn's own verdict.
+  # 0 — and the quality gate runs this script among the harness checks, so that is the turn's
+  # own verdict.
   # Absent stays legitimate and silent, because this asset may be installed before init writes
   # steering; that door is the second half of the case beside this one.
   dir=${file%/*}
@@ -202,7 +203,7 @@ IFS=$old_ifs
 # `- Validator budget:` against the gates' own readers (#304, AC10). The quality gate reads the line
 # with gate_validator_budget and lowers it to the shortest `timeout` gate_hook_timeout finds, minus
 # its margin, so a value the gate rejects, or one a hook file cannot honour, is a line that does
-# not do what it says. A check on the `- Validators:` line cannot say so at turn end, from inside
+# not do what it says. A check the quality gate runs cannot say so at turn end, from inside
 # the run it would be protecting, so this says it in CI and by hand.
 #
 # The file set is not the one the gate reads, and on purpose. That one is the launch's: the

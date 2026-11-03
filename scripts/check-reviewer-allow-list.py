@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guards against silent drift between .steering/tech.md's - Validators: line and the reviewer's allow-list.
 
-#131: .steering/tech.md's - Validators: line is the authority on which commands gate a turn,
+#131: .steering/tech.md's - Validators: line names a project's own commands that gate a turn,
 and quality-gate.sh runs whatever that line names. The dogfood reviewer enumerates validators
 by hand in its ## Bash policy block, and that list drifted — three validators added to steering
 were never added to the reviewer, so the reviewer silently failed to re-run them during reviews.

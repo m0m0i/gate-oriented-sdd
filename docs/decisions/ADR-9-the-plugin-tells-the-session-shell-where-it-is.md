@@ -1,5 +1,5 @@
 # ADR-9: The plugin tells the session's shell where it is
-- Status: accepted
+- Status: accepted; partly superseded by ADR-10 (#340), which supersedes the rejected alternatives "Ship the checks from the plugin" and "The digest prints the path…" and the consequence "A copied check can still fall behind the plugin". The Decision stands.
 - Date: 2026-10-08; #263, #264
 
 ## Context

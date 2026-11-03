@@ -72,8 +72,8 @@ def main():
     if "://" in docs_value:
         fail(
             f"`- Docs: {docs_value}` names another repository, so the document cascade "
-            "cannot be verified from here. Remove this checker from `- Validators:` for a "
-            "multi-repo install, or point `- Docs:` at a local directory."
+            "cannot be verified from here. Run the harness checks through harness-checks.sh, "
+            "which skips this check for such a project, or point `- Docs:` at a local directory."
         )
 
     docs = pathlib.Path(docs_value)

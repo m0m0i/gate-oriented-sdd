@@ -40,7 +40,7 @@ A paragraph is one line, and the reader's app decides the width. This applies to
 
 It is written down because nothing enforces it and it was already inferred wrongly once: a reviewer twice cited "repo convention" for a wrap width it had taken from the file it was reading, which had been written minutes earlier in the same session. A convention nothing states gets enforced from whatever happens to be nearby.
 
-Tables and YAML front matter keep their line breaks — those are structure, not wrapping. So do the machine-read `- Validators:` / `- Reviewer:` / `- Source globs:` / `- Docs:` / `- Owns:` / `- Mode:` / `- Target:` / `- Validator budget:` lines in `.steering/`, which the gates read with `sed … | head -1` and which must each stay on one physical line for a different reason, and `- Specs before bootstrap:`, which no gate reads but the document-set check reads with the same expression.
+Tables and YAML front matter keep their line breaks — those are structure, not wrapping. So do the machine-read `- Validators:` / `- Reviewer:` / `- Source globs:` / `- Docs:` / `- Owns:` / `- Mode:` / `- Target:` / `- Validator budget:` lines in `.steering/`, which the gates read with `sed … | head -1` and which must each stay on one physical line for a different reason, and `- Specs before bootstrap:`, which the quality gate reads only to key its pass record on and the document-set check reads with the same expression.
 
 A fence keeps its line breaks when it holds literal code, output, or a line-sensitive format — and **the fence's language tag decides which, because the property that matters is the content and not the delimiter.** A ` ```markdown ` fence quotes Markdown, so the Markdown inside it follows this convention like every other Markdown in the repository. An untagged fence does not: `implement`'s `reviewed_sha=` receipt block and the reviewer contract's `[SEVERITY] <file>:<line>` format are formats where a line break is meaningful, and unwrapping either would destroy one. `scripts/check-markdown-fences.py` enforces exactly that split.
 
@@ -57,6 +57,8 @@ Stating the carve-out by delimiter instead is what #64 cost: the skills that gen
 ./scripts/check-skill-contracts.py  # skills still carry their load-bearing instructions
 ./scripts/check-templates.py        # no spec template splits a red step from its green step,
                                     # and no live spec sequences a task after the review
+sh hooks/harness-checks.sh          # the four harness checks, from source, as the quality gate
+                                    # runs them before the Validators line (#340)
 ./assets/check-steering-anchors.sh  # steering's machine-read lines still parse, and the
                                     # project's hook files can honour the validator budget
 ./assets/check-locks.py             # rulebooks match their locks and define the contract's
@@ -68,7 +70,7 @@ claude plugin validate . --strict
 
 If you edited a rulebook on purpose, re-pin it: `./assets/check-locks.py --update`.
 
-It sits in `assets/` rather than `scripts/` because projects need a copy of it, not a reference to it — `init` installs it so a project can re-pin its own rulebook. That also puts it on a shipped path, so a fix to it is covered by the version guard.
+It sits in `assets/` rather than `scripts/` because projects run it too: the quality gate runs it from the plugin through `hooks/harness-checks.sh`, an Antigravity project runs the copy `init` puts in `.agents/hooks/`, and a project re-pins its own rulebook with it (#340). That also puts it on a shipped path, so a fix to it is covered by the version guard.
 
 ## What this repo is not
 

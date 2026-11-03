@@ -13,17 +13,17 @@ POSIX `sh` for hooks, Python 3 standard library for guards, Markdown for everyth
 | | Command |
 | :-- | :-- |
 | test | `./scripts/test-gates.sh` |
-| lint | the commands on the `- Validators:` line of `.steering/tech.md`, run by the quality gate on turn end and by CI; and, CI-only, a consumer's `ruff` and `shellcheck` over `assets/` — the `lint` job, `M-16` |
+| lint | the harness checks, which the quality gate runs through `sh hooks/harness-checks.sh` before the commands on the `- Validators:` line of `.steering/tech.md` (#340), and those commands, all run on turn end and by CI; and, CI-only, a consumer's `ruff` and `shellcheck` over `assets/` — the `lint` job, `M-16` |
 | validate | `claude plugin validate . --strict` (CI) |
 | release check | `./scripts/check-version-bump.py <base>` (CI, pull requests only) |
 
 ## Style
 
-There is no formatter for the Markdown, which is most of the tree: `.vscode/settings.json` pins format-on-save off for it because Prettier reverted a spec twice (#66). The shipped Python under `assets/` is the one exception since #81 — CI holds it to `ruff format --check`, because a consumer's formatter will. What a formatter would own elsewhere is stated once instead:
+There is no formatter for the Markdown, which is most of the tree: `.vscode/settings.json` pins format-on-save off for it because Prettier reverted a spec twice (#66). The shipped Python under `assets/` is the one exception since #81 — CI holds it to `ruff format --check`, because a consumer's formatter will meet the copies a consumer carries (`M-16`). What a formatter would own elsewhere is stated once instead:
 
 - Markdown is not hand-wrapped — `CONTRIBUTING.md`, "Markdown is not hand-wrapped".
 - Hooks are POSIX `sh`: `#!/bin/sh`, `set -u`, no bashisms (`G-5`).
-- Guards are `#!/usr/bin/env python3` with a module docstring saying what the guard proves and why, paths from a `ROOT` derived from `__file__`, and no `assert` for a check that must survive `-O`.
+- Guards are `#!/usr/bin/env python3` with a module docstring saying what the guard proves and why, paths from a `ROOT` derived from `__file__` (a shipped check that verifies the project it runs in, as `check-locks.py` does since #340, takes the working directory's git toplevel instead), and no `assert` for a check that must survive `-O`.
 - Machine-read steering lines stay on one physical line (`G-7`).
 
 Naming, file placement and module boundaries are `.steering/structure.md`'s.
@@ -59,7 +59,7 @@ The rulebook is the source for every Judgment row and holds each rule's rational
 | M-13 | A finished spec branch cannot end a turn without a fresh CLEAN receipt | Mechanical | — | `hooks/review-gate.sh` |
 | M-14 | A spec branch's slug carries its issue number | Mechanical | — | `hooks/review-gate.sh` |
 | M-15 | No live spec sequences a task after the review | Mechanical | — | `check-templates.py`; `C-6`'s bump is a step of `implement`, not a task (#113) |
-| M-16 | Shipped assets are clean under a consumer's linter | Mechanical | — | CI's `lint` job — pinned `ruff check`, `ruff format --check` and `shellcheck -s sh` over `assets/`; deliberately not on the `- Validators:` line, `.steering/tech.md` says why (#81) |
+| M-16 | Shipped assets are clean under a consumer's linter | Mechanical | — | CI's `lint` job — pinned `ruff check`, `ruff format --check` and `shellcheck -s sh` over `assets/`. The copies a consumer's linter meets are an Antigravity project's: `init` copies the harness checks and `check-unreviewed-work.sh` into its `.agents/hooks/`, while a Claude Code project has carried none since #340 and runs them from the plugin; deliberately not on the `- Validators:` line, `.steering/tech.md` says why (#81) |
 | G-1 | A guard never exits 0 where it could not do its job | Judgment | BLOCKER | rulebook |
 | G-2 | A value interpolated into `git` reaches it intact | Judgment | BLOCKER | rulebook |
 | G-3 | A blocking gate speaks both channels | Judgment | BLOCKER | rulebook |

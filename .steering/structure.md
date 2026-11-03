@@ -7,8 +7,8 @@ The repository root is simultaneously a Claude Code plugin, a Claude Code market
 | `skills/<name>/SKILL.md` | one skill each, read by both harnesses | yes |
 | `reviewers/<name>.md` + `reviewers/<name>/rules/` | reference reviewers and their hash-pinned rulebooks, copied into a project by `init` and registered by neither harness | yes |
 | `reviewers/_shared/`, `reviewers/_template/` | the reviewer contract, and the starting point for an unrecognised stack | yes |
-| `hooks/*.sh` | the gates; `hooks/templates/` renders into projects | yes |
-| `assets/` | files copied into projects — issue templates, `check-locks.py` | yes |
+| `hooks/*.sh` | the gates, and `harness-checks.sh`, the quality gate's runner for the harness checks; `hooks/templates/` renders into projects | yes |
+| `assets/` | the harness checks, which the quality gate runs from here and `init` copies into an Antigravity project's `.agents/hooks/` (#340); `check-unreviewed-work.sh`, which a project's CI runs; and files copied into projects — issue templates, directory contracts | yes |
 | `scripts/` | this repo's own guards, run by CI | no |
 | `docs/` | the inception documents — north star, PRD, epics, backlog, contract, design — and fidelity, layout, verified behaviour | no |
 | `docs/decisions/ADR-<n>-<slug>.md` | one contested decision each, append-only | no |

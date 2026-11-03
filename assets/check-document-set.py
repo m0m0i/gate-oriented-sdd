@@ -25,9 +25,12 @@ which files exist, but derivation cannot distinguish a deliberate omission from 
 abandonment, which is the whole feature. Declaration plus verification is the same shape as
 `rules-lock.json` against its rulebook, and as `- Validators:` being declared and then run.
 
-This is a guard the project OWNS — copied into its `scripts/` and named on its `- Validators:`
-line, beside `check-steering-anchors.sh` and `check-locks.py`. No hook reads the mode. A gate
-that branched on mode would be a switch that turns enforcement down.
+This is one of the harness checks, beside `check-steering-anchors.sh` and `check-locks.py`.
+Since #340 it is no longer copied into a project's `scripts/` or named on its `- Validators:`
+line: the quality gate's runner, `harness-checks.sh`, runs it from the gate's own tree, before
+that line. On Antigravity that tree is the `.agents/hooks/` set `init` copies with the gates. The
+mode reaches the gate only through the harness checks that read it. The gate itself never
+branches on mode: a gate that did would be a switch that turns enforcement down.
 
 Run from the repository root. Exits 0 when the filesystem matches the declared mode.
 """
@@ -383,12 +386,12 @@ def main():
         # `- Docs:` may name a shared documentation repository in a multi-repo product. A URL
         # is not a directory, so every document would read as absent — a false RED — while
         # treating it as "nothing to check" would be a false GREEN. Neither is acceptable, so
-        # it is its own outcome and `init` does not put this checker on such a project's
-        # `- Validators:` line.
+        # it is its own outcome. The quality gate's runner reads the same value and skips this
+        # check, saying so; running it directly on such a project is the misuse refused here.
         fail(
             f"`- Docs: {docs_value}` names another repository, so the document set cannot be "
-            f"verified from here. Remove this checker from `- Validators:` for a multi-repo "
-            f"install, or point `- Docs:` at a local directory."
+            f"verified from here. Run the harness checks through harness-checks.sh, which "
+            f"skips this check for such a project, or point `- Docs:` at a local directory."
         )
 
     # The URL branch above stays AHEAD of this one in all three modes. A `- Docs:` value that is

@@ -4,8 +4,11 @@
 # The bottom row of this harness's table is the only one that is a guarantee: format,
 # lint, types, and tests, on turn end, not skippable. This is the script that holds it.
 #
-# The commands are NOT hardcoded. They come from the `- Validators:` line in
-# .steering/tech.md, which is what lets one copy of this script serve every project the
+# It runs two sets of commands, in order. First the harness checks, which check the harness's
+# own files: it runs harness-checks.sh from its own directory, so a check comes from the tree
+# this gate came from and a fix the plugin ships reaches every project that updates (#340).
+# Then the project's own commands, which are NOT hardcoded. They come from the `- Validators:`
+# line in .steering/tech.md, which is what lets one copy of this script serve every project the
 # harness is installed into — and what makes a project change its enforcement by editing
 # steering rather than by editing a hook. That line already exists and is already read by
 # steering-digest.sh; before this script, nothing acted on it.

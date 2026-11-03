@@ -42,7 +42,7 @@ _[English →](./README.md)_
 
 ### ゲートを狭くしている理由
 
-普通のターンで発火するゲートは、いずれ無効化されます。そして無効化されたゲートに守れるものはありません。そのため `review-gate.sh` が口を出すのは、タスクがすべて完了していて新しいクリーンなレビューが存在しない spec ブランチを、このリポジトリが抱えている場合だけです。マージ済みのブランチ、実装途中のターン、レビューの*後*に正当に入るドキュメントコミットでは何も言いません。一方で、いま立っていないブランチは見逃しません。狭さは条件の性質であって、HEAD がどこを指しているかの性質ではありません。#26 は、この違いをめぐる問題でした。もう半分が `quality-gate.sh` で、こちらは自前のコマンドを一切持ちません。`.steering/tech.md` の `- Validators:` 行をそのまま実行するので、何を強制するかはフックではなくプロジェクト側の性質になります。この行を走らせるのは、前回すべての validator が通ってから `- Source globs:` に当たるソースが変わったときで、コミット済みかどうかは問いません。そのソースが何も変わっていないターンは飛ばします。ただし実行が失敗したあとは、合格するまでターン終了のたびに実行します。前回の合格は worktree ごとに git ディレクトリの下（`gate-sdd/quality-pass`）に記録されるので、新しいクローンや worktree では最初に一度だけ実行されます。**どちらのゲートも自前の期限を持ちます**（#304）。どちらのハーネスも、タイムアウトした `Stop` フックをブロックとして扱わないからです。各ゲートはチェックをウォッチドッグの下で走らせ、自分が読めるフック設定の `timeout` のうち最短のものより少なくとも 10 秒早い予算が尽きた時点で、終わらなかったものを示してブロックします。こうして打ち切られた実行は合格を記録しません。品質ゲートの予算は 170 秒で、`.steering/tech.md` の `- Validator budget:` で最大 590 秒まで変えられます。レビューゲートの予算は 110 秒です。`init` はゲートを有効にする前に validator を一度実行してその時間を計り、85 秒を超えていれば、計った時間の 2 倍の値でこの行を書きます。glob の外にあるファイルを validator が読んでいても、そのファイルだけの変更は、ソースが変わるまで再チェックされません。常にこの行を実行する CI が、その穴を受け止めます。ゲートとガードの挙動は、モデルを介さず[決定的にテストしています](./scripts/test-gates.sh)。
+普通のターンで発火するゲートは、いずれ無効化されます。そして無効化されたゲートに守れるものはありません。そのため `review-gate.sh` が口を出すのは、タスクがすべて完了していて新しいクリーンなレビューが存在しない spec ブランチを、このリポジトリが抱えている場合だけです。マージ済みのブランチ、実装途中のターン、レビューの*後*に正当に入るドキュメントコミットでは何も言いません。一方で、いま立っていないブランチは見逃しません。狭さは条件の性質であって、HEAD がどこを指しているかの性質ではありません。#26 は、この違いをめぐる問題でした。もう半分が `quality-gate.sh` です。こちらが自前で持つコマンドは、ハーネス自身のファイルを確かめるハーネスチェック（`check-steering-anchors.sh`、`check-locks.py`、`check-document-set.py`、`check-document-cascade.py`）だけです。ゲート自身と同じツリーにある `harness-checks.sh` を通じてこれらを先に実行し（#340）、そのあとで `.steering/tech.md` の `- Validators:` 行を実行するので、それ以外に何を強制するかはフックではなくプロジェクト側の性質になります。これらを走らせるのは、前回すべての validator が通ってから `- Source globs:` に当たるソースが変わったときで、コミット済みかどうかは問いません。そのソースが何も変わっていないターンは飛ばします。ただし実行が失敗したあとは、合格するまでターン終了のたびに実行します。前回の合格は worktree ごとに git ディレクトリの下（`gate-sdd/quality-pass`）に記録されるので、新しいクローンや worktree では最初に一度だけ実行されます。**どちらのゲートも自前の期限を持ちます**（#304）。どちらのハーネスも、タイムアウトした `Stop` フックをブロックとして扱わないからです。各ゲートはチェックをウォッチドッグの下で走らせ、自分が読めるフック設定の `timeout` のうち最短のものより少なくとも 10 秒早い予算が尽きた時点で、終わらなかったものを示してブロックします。こうして打ち切られた実行は合格を記録しません。品質ゲートの予算は 170 秒で、`.steering/tech.md` の `- Validator budget:` で最大 590 秒まで変えられます。レビューゲートの予算は 110 秒です。`init` はゲートを有効にする前に validator を一度実行してその時間を計り、85 秒を超えていれば、計った時間の 2 倍の値でこの行を書きます。glob の外にあるファイルを validator が読んでいても、そのファイルだけの変更は、ソースが変わるまで再チェックされません。常にこの行を実行する CI が、その穴を受け止めます。ゲートとガードの挙動は、モデルを介さず[決定的にテストしています](./scripts/test-gates.sh)。
 
 ## 最小構成
 
@@ -72,7 +72,7 @@ skill:     prd   design-doc   backlog  sprint   spec implement worklog
 
 **skill はどれも、常に使えます。** `init` はアクティブなハーネス（Claude Code、Google Antigravity、または両方）を検出し、`.steering/`、`.specs/`、`.work_logs/`、issue テンプレート、適切なルールポインタ（`CLAUDE.md` / `GEMINI.md`）、reviewer、そして hook を設置します。skill 本体はプラグインに同梱されているので、設置しません。Claude Code ではゲートも同梱されているので設置せず、`init` が書くのはプラグインを有効にする設定と言語ごとの高速チェックだけです。ここでの選択が決めるのは、どのドキュメントを作るか、どの skill をフローに乗せるかであって、その skill を使えるかどうかではありません。
 
-**この選択は、推測ではなく記録されます。** `init` が `.steering/tech.md` に `- Mode: bootstrap`、`- Mode: minimum`、`- Mode: full` のいずれかを書き、`- Validators:` に載ったチェッカーが、品質ゲートの走るタイミングと CI とで、宣言とファイルの実態が合っているかを検証します。実際に効くのは CI のほうです。ゲートがこの行を走らせるのは前回の合格からソースが変わったときだけであり、ドキュメントはソースではないからです。どのファイルが存在するかから後づけで判断するのではなく、宣言する形にしてあります。存在から逆算しても「意図して作らなかった」のか「作りかけで放置された」のかは区別できないからで、その2つを見分けることこそ、この行が存在する唯一の理由です。
+**この選択は、推測ではなく記録されます。** `init` が `.steering/tech.md` に `- Mode: bootstrap`、`- Mode: minimum`、`- Mode: full` のいずれかを書き、品質ゲートが `- Validators:` 行より先に走らせるハーネスチェックが、ゲートの走るタイミングと CI とで、宣言とファイルの実態が合っているかを検証します。実際に効くのは CI のほうです。ゲートが走るのは前回の合格からソースが変わったときだけであり、ドキュメントはソースではないからです。どのファイルが存在するかから後づけで判断するのではなく、宣言する形にしてあります。存在から逆算しても「意図して作らなかった」のか「作りかけで放置された」のかは区別できないからで、その2つを見分けることこそ、この行が存在する唯一の理由です。
 
 **入れたばかりのプロジェクトは `bootstrap` です**。ハーネスは設置されているが、起点となるドキュメントはまだ書かれていない、という状態で、これは残り2つのどちらでもありません。以前はそのどちらかとして記録していたため、初回インストールはどれも自分でゲートを赤にしていました（#127）。この状態は最初の spec で失効します。ドキュメントが引用され始めるのがそこだからです。終わりの来ない状態は、注釈つきでゲートを切ってあるのと同じです。spec を出荷済みの状態でハーネスを入れたプロジェクト、つまり `- Mode:` 行ができる前に入れたものは、`bootstrap` と、その spec を並べた `- Specs before bootstrap:` 行をあわせて宣言します。この期間は、その行に名前のない最初の spec で終わります（#309）。
 
@@ -135,7 +135,7 @@ Issue、ブランチ、spec ディレクトリ、PR は同じ slug を共有し�
 | `worklog`    | 追記のみのセッション記録                                                   | 理由つきの決定                               |
 | `archive`    | 出荷済みの spec を `.specs/` の外へ、頼まれたときにまとめて                | `.specs/` が「生きている作業」を意味する状態 |
 
-加えて、読み取り専用の reviewer が3つ（TypeScript、Python、Dart/Flutter）と、どれにも当てはまらないスタック向けのテンプレートがあります。この3つは参照実装です。`init` がいちばん近いものをプロジェクトにコピーし、プラグインはどれもエージェントとして登録しません。各 reviewer の Bash ポリシー許可リストは、読み取り専用の証拠収集（diff/log、時計、インストール済みバージョン確認、プロジェクトのターン終了バリデータ、そして reviewer ファイルが理由を添えて名指しした情報源。たとえばロック確認のためのハッシュ）に厳格に限定されており、`.steering/tech.md` の `- Validators:` 行と reviewer の許可リストとの間で気づかないうちに生じる乖離を防ぐ専用ガードを備えています。
+加えて、読み取り専用の reviewer が3つ（TypeScript、Python、Dart/Flutter）と、どれにも当てはまらないスタック向けのテンプレートがあります。この3つは参照実装です。`init` がいちばん近いものをプロジェクトにコピーし、プラグインはどれもエージェントとして登録しません。各 reviewer の Bash ポリシー許可リストは、読み取り専用の証拠収集（diff/log、時計、インストール済みバージョン確認、ハーネスチェック、プロジェクトのターン終了バリデータ、そして reviewer ファイルが理由を添えて名指しした情報源。たとえばロック確認のためのハッシュ）に厳格に限定されており、`.steering/tech.md` の `- Validators:` 行と reviewer の許可リストとの間で気づかないうちに生じる乖離を防ぐ専用ガードを備えています。
 
 ## 配置
 
@@ -165,7 +165,7 @@ claude plugin install gate-sdd@gate-oriented-sdd
 }
 ```
 
-下のずれの表に挙げる場合を除き、これでリポジトリを開く全員の環境でハーネスが有効になります。ゲートはプラグインから実行されます（検証済み。[`docs/verified.md`](./docs/verified.md) の V1）。そのため、ゲートの修正はプラグインの更新でプロジェクトに届き、プロジェクトに pull request を出す必要はありません。更新が届くかどうか、届くならいつかは、「**ゲートを最新に保つ**」で説明します。`env` の行は、Claude デスクトップアプリから始めたセッションでも自動更新を有効に保ちます。この行がなければ、そのセッションでは自動更新が行われません（検証済み。U2 と、この行で自動更新が戻ることはデスクトップセッションのシェルから F2、アプリ自身が始めたセッションで F3。いずれも [`docs/verified.md`](./docs/verified.md)）。自分の環境でだけ無効にしたい場合は、自分の `.claude/settings.local.json` で同じキーに `"0"` を設定します。このファイルはプロジェクトのファイルより優先されます（ドキュメント記載、未実施）。`claude plugin install gate-sdd@gate-oriented-sdd --scope project` はこの宣言の代わりになりません。このコマンドが書き込むのは `enabledPlugins` の部分だけだからです（検証済み。[`docs/verified.md`](./docs/verified.md) の M1）。
+下のずれの表に挙げる場合を除き、これでリポジトリを開く全員の環境でハーネスが有効になります。ゲートはプラグインから実行されます（検証済み。[`docs/verified.md`](./docs/verified.md) の V1）。そのため、ゲートの修正も、品質ゲートが同じツリーから実行するハーネスチェックの修正も（#340）、プラグインの更新でプロジェクトに届き、プロジェクトに pull request を出す必要はありません。更新が届くかどうか、届くならいつかは、「**ゲートを最新に保つ**」で説明します。`env` の行は、Claude デスクトップアプリから始めたセッションでも自動更新を有効に保ちます。この行がなければ、そのセッションでは自動更新が行われません（検証済み。U2 と、この行で自動更新が戻ることはデスクトップセッションのシェルから F2、アプリ自身が始めたセッションで F3。いずれも [`docs/verified.md`](./docs/verified.md)）。自分の環境でだけ無効にしたい場合は、自分の `.claude/settings.local.json` で同じキーに `"0"` を設定します。このファイルはプロジェクトのファイルより優先されます（ドキュメント記載、未実施）。`claude plugin install gate-sdd@gate-oriented-sdd --scope project` はこの宣言の代わりになりません。このコマンドが書き込むのは `enabledPlugins` の部分だけだからです（検証済み。[`docs/verified.md`](./docs/verified.md) の M1）。
 
 **Google Antigravity**
 
@@ -208,7 +208,7 @@ agy plugin install ./gate-oriented-sdd
 | 0.23.0 より前のコピーが `.claude/hooks/` に残り、それを実行する `Stop` エントリもある | セッションが読み込んだ設定のエントリが、コピーを相対パスか絶対パス、または `$CLAUDE_PROJECT_DIR` 経由で指していて、そのコピーがディスク上にあれば、プラグイン側のゲートは動かず、古いコピーが動き続けます。`init` で移行するまでこの状態が続きます。それ以外の方法でコピーにたどり着くエントリでは、プラグイン側のゲートは止まらず、両方が動きます。エントリがなくコピーだけが残っている場合も、プラグイン側のゲートは止まりません。 | 検証済み（`test-gates.sh` の「plugin-gate stands down on a settings entry for the same gate and event, and on nothing less」「plugin-gate stands down on an entry that names the copy through `$CLAUDE_PROJECT_DIR`, and on nothing less」「plugin-gate reads the settings a launch below the git root reads, and resolves from where it was launched」）。`init` が書く、ファイルの存在を確かめてから実行する形は、そこからの推論でテストケースはない。実セッションでは未実施 |
 | フォルダが信頼されていない clone、または `.claude/settings.local.json` でプラグインがオフになっている clone | ターン終了時にゲートは動かず、それを知らせるものもありません。CI のバリデータと `check-unreviewed-work.sh` は、pull request 上で引き続き動きます。 | ドキュメント記載（[設定](https://code.claude.com/docs/en/settings-reference#extraknownmarketplaces)）。信頼されていないフォルダの宣言が無視されることは M2b で確認 |
 | クラウドセッション（claude.ai/code、`claude --cloud`、routine） | クラウドセッションはリポジトリ自身の設定にあるフックを実行しますが、リポジトリが有効にするプラグインはインストールしません。そのため、移行済みのプロジェクトではそこでゲートが動きません（#260）。 | ドキュメント記載（[クラウド環境](https://code.claude.com/docs/en/cloud-environments#what-carries-over-from-your-setup)）。未実施 |
-| Antigravity | 変更はありません。`init` がゲートを `.agents/hooks/` にコピーし、修正はコピーを更新することで届きます。 | 検証済み（コピーがブロックすること。`docs/verified.md` の Antigravity hooks）。`init` の再実行による更新は未実施 |
+| Antigravity | 変更はありません。`init` がゲートを `.agents/hooks/` にコピーし、その隣にハーネスチェックとそのランナーもコピーします。修正はコピーを更新することで届きます。 | 検証済み（コピーがブロックすること。`docs/verified.md` の Antigravity hooks）。`init` の再実行による更新は未実施 |
 
 **ピン留め。** プロジェクトをピン留めしないでください。`init` はピン留めなしの宣言を書きます。これは既定であると同時に、推奨する形でもあります。プロジェクトの宣言に `"ref"` を書いても、固定されるのはプロジェクトではなくマシンで、しかもその宣言でマーケットプレイスを初めて登録したマシンだけです（上の表のピン留めの2行）。その結果、同じコミットでも固定されるチームメンバーとされないメンバーに分かれ、固定されたマシンではほかのプロジェクトもすべて固定されます。また、すべてのリリースにタグが付いているわけではないので、ピン留めで指定できるのは `gate-sdd--v<version>` タグのあるリリースだけです。
 
@@ -221,24 +221,25 @@ agy plugin install ./gate-oriented-sdd
   ls .claude/hooks/ 2>/dev/null; grep -nE '"(Stop|SessionStart)"' .claude/settings.json
   ```
 
-  `init` をもう一度実行してください。`init` は `gate-lib.sh`、`quality-gate.sh`、`review-gate.sh`、`steering-digest.sh` と、それらの `Stop`・`SessionStart` エントリを削除し、`PostToolUse` の高速チェックは残したまま、`env` の行を含む宣言を書き込みます。ゲートの修正のためにそのプロジェクトで pull request が必要になるのは、これが最後です。0.25.0 より前に移行したプロジェクトの宣言には `env` の行がないので、手で加えるか、`init` をもう一度実行してください。あわせて、`check-steering-anchors.sh` と `check-unreviewed-work.sh` をコピーし直します。0.23.0 より前のコピーのままだと、ソースを変えるターンのたびに品質ゲートがブロックするからです。それらを実行する CI のジョブにはすべてプラグインの checkout と `GATE_SDD_HOOKS` を追加し、`.claude/hooks/` を読んでいたものがほかにないかをプロジェクトの中で探します。どの変更も、先に差分を見せてから行います（#263）。Claude Code のセッションの中でどちらかのチェックを手で実行すると、`GATE_SDD_PLUGIN_ROOT` を通じてプラグインが見つかります。この変数は、セッションの開始時にプラグインが設定します。セッションの外のターミナルでは、`GATE_SDD_HOOKS` にプラグインの `hooks/` を設定してください（#264）。`docs/verified.md` のために、実在する Claude Code のプロジェクトを1つ、この手順に沿って移行しました。`init` のスキル自体は実行していません。ゲート、手で実行したバリデータ、サブエージェントで実行したバリデータ、CI のどれも通っています。新しく加わった次の手順は、この実行で見つかったものです。CI がチェックアウトしたプラグインを `.gitignore` に入れておかないと、ツリー全体を走査するリンターがそのファイルで失敗します。移行済みのプロジェクトでは、クラウドセッションでゲートが動きません（#260）。この欠落は、現時点では対象外としています。
-- **Antigravity** には更新コマンドがありません。1.2.16 の `agy plugin` のコマンド一覧にありません（検証済み。`docs/verified.md` の #257 の節）。一度アンインストールしてから、新しい clone かリリースアーカイブからインストールし直します。この手順はここでは実行していません。そのあと、`init` の再実行か手作業でコピーを更新します。5つのファイルはまとめてコピーしてください。各ゲートは、自分より古い `gate-lib.sh` と一緒に使われるとブロックするからです。
+  `init` をもう一度実行してください。`init` は `gate-lib.sh`、`quality-gate.sh`、`review-gate.sh`、`steering-digest.sh` と、それらの `Stop`・`SessionStart` エントリを削除し、`PostToolUse` の高速チェックは残したまま、`env` の行を含む宣言を書き込みます。ゲートの修正のためにそのプロジェクトで pull request が必要になるのは、これが最後です。0.25.0 より前に移行したプロジェクトの宣言には `env` の行がないので、手で加えるか、`init` をもう一度実行してください。あわせて、次の項目のとおりガードを移行し、0.23.0 より前のチェックのコピーを `- Validators:` 行から外します。残したままだと、ソースを変えるターンのたびに品質ゲートがブロックするからです。ハーネスチェックか `check-unreviewed-work.sh` を実行する CI のジョブにはすべてプラグインの checkout と `GATE_SDD_HOOKS` を追加し、`.claude/hooks/` を読んでいたものがほかにないかをプロジェクトの中で探します。どの変更も、先に差分を見せてから行います（#263）。Claude Code のセッションの中では、ハーネスチェックを手で実行するコマンドを、セッションの steering digest が `- Harness checks:` 行に示します。このコマンドは `GATE_SDD_PLUGIN_ROOT` を通じてプラグインを見つけます。この変数は、セッションの開始時にプラグインが設定します。セッションの外のターミナルでは、`GATE_SDD_HOOKS` にプラグインの `hooks/` を設定し、`sh "$GATE_SDD_HOOKS/harness-checks.sh"` を実行してください（#264）。`docs/verified.md` のために、実在する Claude Code のプロジェクトを1つ、#263 の時点の手順に沿って移行しました。`init` のスキル自体は実行していません。ゲート、手で実行したバリデータ、サブエージェントで実行したバリデータ、CI のどれも通っています。新しく加わった次の手順は、この実行で見つかったものです。CI がチェックアウトしたプラグインを `.gitignore` に入れておかないと、ツリー全体を走査するリンターがそのファイルで失敗します。移行済みのプロジェクトでは、クラウドセッションでゲートが動きません（#260）。この欠落は、現時点では対象外としています。
+- **0.41.0 より前にインストールしたプロジェクト（両ハーネス共通）**では、ハーネスチェックと `check-unreviewed-work.sh` が `scripts/` にコピーされ、4つのハーネスチェックが `- Validators:` 行に載っています。`init` をもう一度実行してください。その移行手順（ここではまだ実行していません）は、どのゲートのコピーの隣にもランナーの `harness-checks.sh` があるようにし、`scripts/` のコピーを削除し（プロジェクトが手を入れたものは先に確認します）、ハーネスチェックを指す行のエントリを外し、CI がランナーを使うように変え（Claude Code ではプラグインの checkout、Antigravity では `.agents/hooks/`）、reviewer の許可リストにランナーを加えるよう提案します。移行するまでは、ランナーを持つゲートのチェックと並んで古いエントリも動きますが、古いコピーにできるのはブロックを増やすことだけで、そのことはセッションの steering digest が知らせます。
+- **Antigravity** には更新コマンドがありません。1.2.16 の `agy plugin` のコマンド一覧にありません（検証済み。`docs/verified.md` の #257 の節）。一度アンインストールしてから、新しい clone かリリースアーカイブからインストールし直します。この手順はここでは実行していません。そのあと、`init` の再実行か手作業でコピーを更新します。`hooks/` のゲートと `harness-checks.sh`、`assets/` の4つのハーネスチェックと `check-unreviewed-work.sh` は、ひとそろいでまとめてコピーしてください。各ゲートは、自分より古い `gate-lib.sh` と一緒に使われるとブロックし、ランナーは自分の隣にあるチェックを実行するからです。
 
   ```bash
   P=/path/to/gate-oriented-sdd   # インストール元の clone、または展開したアーカイブ
-  for f in gate-lib.sh quality-gate.sh review-gate.sh steering-digest.sh steering-digest-antigravity.sh; do
+  for f in gate-lib.sh quality-gate.sh review-gate.sh steering-digest.sh steering-digest-antigravity.sh harness-checks.sh; do
     cp "$P/hooks/$f" .agents/hooks/
+  done
+  for f in check-steering-anchors.sh check-locks.py check-document-set.py check-document-cascade.py check-unreviewed-work.sh; do
+    cp "$P/assets/$f" .agents/hooks/
   done
   ```
 
-- **プラグインを更新しても届かないもの（両ハーネス共通）。** `init` がプロジェクトの scripts ディレクトリにコピーした `check-steering-anchors.sh`、`check-document-set.py`、`check-document-cascade.py`、`check-unreviewed-work.sh`、`check-locks.py`、`_shared/reviewer-contract.md` にある reviewer の契約、そして reviewer とそのルールブックです。スクリプトと reviewer の契約は、プラグインのものと比べて違うものをコピーするか、`init` をもう一度実行してください。ただし、`init` によるアップグレードはまだ検証していません。reviewer は決して上書きしないでください。プロジェクトに合わせて調整されているので、必要な変更は手で取り込み、`check-locks.py --update` でピン留めし直してください。CI でのプラグインの checkout は、ワークフローが指定する `ref` までしか進みません。Antigravity では、`init` が書き出す `.agents/hooks.json` の `timeout` も届きません。180 秒と 30 秒で書き出したプロジェクトでは、`.agents/hooks/` のスクリプトだけを更新してもその値が残り、ゲートは自分を 170 秒と 20 秒に抑えます。それより遅いチェックは、合格ではなくブロックになります（#304）。600 と 120 で書き直すには、`init` をもう一度実行してください。Claude Code ではプラグイン自身のフックファイルにあるので、更新と一緒に届きます。ただし、`.claude/settings.json` がまだ 0.23.0 より前のコピーを実行しているプロジェクトは、移行するまで自分の `timeout` を持ち続けます。
+- **プラグインを更新しても届かないもの。** Claude Code では、`init` が `.claude/agents/_shared/reviewer-contract.md` にコピーした reviewer の契約と、reviewer とそのルールブックです。契約がプラグインのものと異なるときは、セッションの steering digest が知らせます。ハーネスチェックと `check-unreviewed-work.sh` は、もうここには含まれません。ゲートはチェックをプラグインから実行し、CI はどちらもプラグインの checkout から実行するからです。CI でのプラグインの checkout は、ワークフローが指定する `ref` までしか進みません。Antigravity では、`init` がコピーしたものは何も届きません。契約も、reviewer も、上の項目で更新する `.agents/hooks/` のひとそろいも同じです。reviewer の契約は、プラグインのものと比べて違えばコピーするか、`init` をもう一度実行してください。ただし、`init` によるアップグレードはまだ検証していません。reviewer は決して上書きしないでください。プロジェクトに合わせて調整されているので、必要な変更は手で取り込み、ピン留めし直してください。Claude Code のセッションでは `python3 "$GATE_SDD_PLUGIN_ROOT/assets/check-locks.py" --update`、Antigravity では `python3 .agents/hooks/check-locks.py --update` です。Antigravity では、`init` が書き出す `.agents/hooks.json` の `timeout` も届きません。180 秒と 30 秒で書き出したプロジェクトでは、`.agents/hooks/` のスクリプトだけを更新してもその値が残り、ゲートは自分を 170 秒と 20 秒に抑えます。それより遅いチェックは、合格ではなくブロックになります（#304）。600 と 120 で書き直すには、`init` をもう一度実行してください。Claude Code ではプラグイン自身のフックファイルにあるので、更新と一緒に届きます。ただし、`.claude/settings.json` がまだ 0.23.0 より前のコピーを実行しているプロジェクトは、移行するまで自分の `timeout` を持ち続けます。
 
   ```bash
   # P: Antigravity では上と同じ。Claude Code では ~/.claude/plugins/installed_plugins.json にある
   # gate-sdd@gate-oriented-sdd の installPath。Antigravity の契約は .agents/agents/ の下にある。
-  for f in check-steering-anchors.sh check-document-set.py check-document-cascade.py check-unreviewed-work.sh check-locks.py; do
-    [ -f "scripts/$f" ] && diff -q "$P/assets/$f" "scripts/$f"
-  done
   diff -q "$P/reviewers/_shared/reviewer-contract.md" .claude/agents/_shared/reviewer-contract.md
   ```
 
@@ -253,7 +254,7 @@ agy plugin install ./gate-oriented-sdd
 | ルール検出                      | プロジェクトのルートの `AGENTS.md`（`CLAUDE.md` の `@AGENTS.md` で読み込み。`docs/verified.md` の #239 の節で測定） | `AGENTS.md` へのシンボリックリンクにした `GEMINI.md` 経由でプロジェクトのルートの `AGENTS.md`（同じ節で測定）。加えてプラグインの `rules/AGENTS.md`（プラグインローダーが自動検出してマージ） |
 | ターン終了時の品質ゲート        | 完全（`Stop`, exit 2） | 完全（`Stop`, `{"decision":"continue"}`） |
 | review receipt のゲート         | 完全                   | 完全                                      |
-| ゲートの配布 | プラグインから（`.claude-plugin/hooks.json` がゲートを実行する。V1、V2）。修正はプラグインの更新で届く。デスクトップアプリから始めたセッションでは、`init` が書く `env` の行があるときだけ自動更新が行われる（#274）。移行済みのプロジェクトでの実セッションは検証済み（`docs/verified.md` の #263 の節）。更新が届くことの確認は未実施（#265）。この行で自動更新が戻ることはデスクトップセッションのシェルから検証（F2）、アプリ自身が始めたセッションでも検証（F3） | `init` が `.agents/hooks/` にコピー。修正はコピーの更新で届き、`.agents/hooks.json` に書き出した `timeout` は `init` の再実行でしか届かない（#304）。`init` の再実行による更新は未実施 |
+| ゲートの配布 | プラグインから（`.claude-plugin/hooks.json` がゲートを実行する。V1、V2）。品質ゲートはハーネスチェックを同じツリーから実行する（#340）。どちらの修正もプラグインの更新で届く。デスクトップアプリから始めたセッションでは、`init` が書く `env` の行があるときだけ自動更新が行われる（#274）。移行済みのプロジェクトでの実セッションは検証済み（`docs/verified.md` の #263 の節）。更新が届くことの確認は未実施（#265）。この行で自動更新が戻ることはデスクトップセッションのシェルから検証（F2）、アプリ自身が始めたセッションでも検証（F3） | `init` が `.agents/hooks/` にコピーし、ハーネスチェックとそのランナーも一緒にコピー。修正はコピーの更新で届き、`.agents/hooks.json` に書き出した `timeout` は `init` の再実行でしか届かない（#304）。`init` の再実行による更新は未実施 |
 | 編集ごとの高速フィードバック    | 完全（`PostToolUse`。失敗したチェックの出力を stderr に出して exit 2 で終える。Claude Code の hooks のページによればモデルに渡るが、セッションでの受け渡しは未検証。#324） | 部分的（`PostToolUse` は書き込みのたびに動くが観測のみで、出力はモデルに届かない。専用のグループにあり、ゲートを止めずにオフにできる。#324、#330） |
 | steering digest の注入          | 完全（`SessionStart`） | 完全（`PreInvocation`、ターン0のステップ注入） |
 | compaction 後の steering 再注入 | 完全（`SessionStart`） | **なし**（該当するイベントが存在しない）  |

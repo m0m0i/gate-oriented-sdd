@@ -16,8 +16,9 @@
 #   the gates' own candidate list, so a two-argument workflow keeps working. With no arguments
 #   it asks about the current branch, which is what is wanted when a person runs it by hand.
 #
-# Deliberately NOT a turn-end validator. `quality-gate.sh` runs the `- Validators:` line
-# whenever the source has changed since it last passed, and the review gate already asks this question there, in
+# Deliberately NOT a turn-end validator, and not one of the harness checks harness-checks.sh runs
+# (#340). `quality-gate.sh` runs those checks and the `- Validators:` line whenever the source has
+# changed since it last passed, and the review gate already asks this question there, in
 # a message written for the person whose turn it is. Running it twice per turn would buy
 # nothing and would put a second, differently worded block in the same place.
 set -u
