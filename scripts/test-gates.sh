@@ -12072,6 +12072,57 @@ r=$(anchor_repo anc-hc-none '- Owns: x'); out=$(run_anchors "$r"); [ "$out" = 0 
   || report "the runner skips only for remote Docs, reads either layout, and an old Antigravity gate copy fails the anchor check" no \
      "remote-pass=$c1 says-na=$c2 skips-only-docs=$c3 nomode-red=$c4 nomode-remedy=$c5 flat=$c6 flat-files=$c7 old-copy-red=$c8 with-runner-green=$c9 no-agents-silent=$c10"
 
+# 414. #340 AC3, AC7 — the digest names the runner command for the tree it ran from, and says,
+#      without blocking, when the contract copy or the line has fallen behind that tree.
+#
+# By hand the harness checks need a command, and the right one depends on where the digest ran:
+# the plugin's, through `plugin-gate.sh`, reachable from the session's shell only through
+# GATE_SDD_PLUGIN_ROOT, whose `:?` names the remedy when it is unset rather than running nothing;
+# a path inside the project, which is the command itself (this repository's hooks/, Antigravity's
+# `.agents/hooks/`). The two notices are facts, never imperatives: a reviewer contract copy that
+# differs from the one the digest's tree ships, and a line that still names a harness check.
+dg_tree() { # dg_tree <hooks dir> [plugin] — the digest, its library and the runner in <hooks dir>; with "plugin", the manifest above it
+  mkdir -p "$1"; cp "$ROOT/hooks/steering-digest.sh" "$ROOT/hooks/gate-lib.sh" "$1/"; harness_stubs "$1"
+  [ "${2-}" != plugin ] || { mkdir -p "$1/../.claude-plugin" "$1/../reviewers/_shared"; printf '{ "version": "9.9.9" }\n' > "$1/../.claude-plugin/plugin.json"; printf 'contract v2\n' > "$1/../reviewers/_shared/reviewer-contract.md"; }
+}
+dg_project() { # dg_project <dir> [<validators>]
+  mkdir -p "$1/.steering"; printf -- '- Validators: %s\n' "${2:-npm test}" > "$1/.steering/tech.md"
+  ( cd "$1" && git init -q -b main ) >/dev/null 2>&1
+}
+run_dg() { ( cd "$1" && sh "$2" 2>/dev/null ) }
+
+# From the plugin, outside the project.
+d="$TMP/dg-plugin"; dg_tree "$d/plugin/hooks" plugin; dg_project "$d/project"
+out=$(run_dg "$d/project" "$d/plugin/hooks/steering-digest.sh")
+case "$out" in *'- Harness checks:'*'sh "${GATE_SDD_PLUGIN_ROOT:?is unset; start a new Claude Code session}/hooks/harness-checks.sh"'*) c1=ok ;; *) c1="no($out)" ;; esac
+# From a path inside the project: this repository's shape, and Antigravity's.
+d="$TMP/dg-repo"; dg_project "$d"; dg_tree "$d/hooks" plugin
+out=$(run_dg "$d" "$d/hooks/steering-digest.sh"); case "$out" in *'- Harness checks:'*'`sh hooks/harness-checks.sh`'*) c2=ok ;; *) c2="no($out)" ;; esac
+d="$TMP/dg-agents"; dg_project "$d"; dg_tree "$d/.agents/hooks"
+out=$(run_dg "$d" "$d/.agents/hooks/steering-digest.sh"); case "$out" in *'`sh .agents/hooks/harness-checks.sh`'*) c3=ok ;; *) c3="no($out)" ;; esac
+
+# The contract notice: a copy that differs from the tree's, and none for one that matches.
+d="$TMP/dg-contract"; dg_tree "$d/plugin/hooks" plugin; dg_project "$d/project"
+mkdir -p "$d/project/.claude/agents/_shared"; printf 'contract v1\n' > "$d/project/.claude/agents/_shared/reviewer-contract.md"
+out=$(run_dg "$d/project" "$d/plugin/hooks/steering-digest.sh")
+case "$out" in *".claude/agents/_shared/reviewer-contract.md differs from the one gate-sdd 9.9.9 ships"*) c4=ok ;; *) c4="no($out)" ;; esac
+printf 'contract v2\n' > "$d/project/.claude/agents/_shared/reviewer-contract.md"
+out=$(run_dg "$d/project" "$d/plugin/hooks/steering-digest.sh"); case "$out" in *"reviewer-contract.md differs"*) c5="no($out)" ;; *) c5=ok ;; esac
+
+# The line notice: a harness check still named on the line, by any prefix; none otherwise.
+d="$TMP/dg-line"; dg_tree "$d/plugin/hooks" plugin; dg_project "$d/project" "npm test, ./scripts/check-locks.py, sh scripts/check-steering-anchors.sh"
+out=$(run_dg "$d/project" "$d/plugin/hooks/steering-digest.sh")
+case "$out" in *"Validators line still names check-steering-anchors.sh, check-locks.py"*) c6=ok ;; *) c6="no($out)" ;; esac
+d="$TMP/dg-line-clean"; dg_tree "$d/plugin/hooks" plugin; dg_project "$d/project"
+out=$(run_dg "$d/project" "$d/plugin/hooks/steering-digest.sh"); case "$out" in *"still names"*) c7="no($out)" ;; *) c7=ok ;; esac
+# Facts, never imperatives: no line the digest prints begins with a verb aimed at the reader.
+case "$out" in *"- Run "*|*"- Re-run "*|*"- Update "*) c8="no($out)" ;; *) c8=ok ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8" = "okokokokokokokok" ] \
+  && report "the digest names the runner for the tree it ran from, and notices a stale contract or line" ok \
+  || report "the digest names the runner for the tree it ran from, and notices a stale contract or line" no \
+     "plugin=$c1 repo=$c2 agents=$c3 contract-stale=$c4 contract-same=$c5 line-names=$c6 line-clean=$c7 facts=$c8"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 

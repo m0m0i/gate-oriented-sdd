@@ -37,7 +37,7 @@ if [ -f "$hc_dir/../.claude-plugin/plugin.json" ]; then
     exit 1
   }
   hc_checks=$hc_tree/assets
-  hc_version=$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$hc_tree/.claude-plugin/plugin.json" 2>/dev/null | head -1)
+  hc_version=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$hc_tree/.claude-plugin/plugin.json" 2>/dev/null | head -1)
 else
   hc_tree=$hc_dir
   hc_checks=$hc_dir
