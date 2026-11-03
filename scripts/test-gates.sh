@@ -11688,6 +11688,110 @@ out=$(run_docset "$r"); [ "$out" = "0" ] && c17=ok || c17="no($(cat "$TMP/derr")
   || report "an adopted project's bootstrap passes, and ends at the first spec its line does not name" no \
      "exact=$c1 says-adopted=$c2 cascade-defers=$c3 new-red=$c4 names-new=$c5 no-append-text=$c6 new-archived-red=$c7 ghost-red=$c8 ghost-causes=$c9 case-red=$c10 both-halves=$c11 both-places-red=$c12 names-both=$c13 bad-entries=$c14 empty-is-absent=$c15 empty-still-expires=$c16 spent-unread=$c17"
 
+# 408. #309 AC3, AC4, AC8 — every refusal names a declaration that passes for the tree it was
+#      printed on.
+#
+# The remediation text is part of the guard (#127). The absent-`Mode` refusal advised
+# `bootstrap` "if the inception documents are not written yet" whatever was on disk, and a
+# project with shipped specs that took the advice failed one run later: the checker
+# contradicting itself, which #127 ended for a fresh install and this issue found again for an
+# adopted one. So the refusal now looks at `.specs/` and `- Docs:` before advising, and the
+# matrix at the end takes each refusal's own words, applies them, and runs the check again.
+nomode_tree() { # nomode_tree <name> — init_tree with the `- Mode:` line removed
+  r=$(init_tree "$1" bootstrap)
+  grep -v '^- Mode:' "$r/.steering/tech.md" > "$r/.steering/tech.new" && mv "$r/.steering/tech.new" "$r/.steering/tech.md"
+  echo "$r"
+}
+inception_docs() { mkdir -p "$1/docs"; for f in PRD DESIGN BACKLOG; do printf 'x\n' > "$1/docs/$f.md"; done; }
+
+# No `.specs/` at all is no spec, not an unreadable directory: the advice is `bootstrap`, and
+# the refusal still names the missing line rather than a scan it never needed.
+r=$(nomode_tree ds-nm-nospecs); rmdir "$r/.specs"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c1=ok || c1=no
+case "$err" in *'`- Mode: bootstrap`'*"never assumed"*) c2=ok ;; *) c2="no($err)" ;; esac
+case "$err" in *"cannot be read"*) c3="no($err)" ;; *) c3=ok ;; esac
+
+# The issue's tree with no line: the adoption line, written out in full, or the documents.
+r=$(nomode_tree ds-nm-adopted)
+for s in 3-login 7-export 12-search; do spec_in "$r/.specs/$s"; done
+for s in 15-audit 21-billing; do spec_in "$r/.specs/_archive/$s"; done
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c4=ok || c4=no
+case "$err" in *'`- Specs before bootstrap: 12-search, 15-audit, 21-billing, 3-login, 7-export`'*) c5=ok ;; *) c5="no($err)" ;; esac
+case "$err" in *"PRD.md (via prd)"*"declare \`minimum\`"*) c6=ok ;; *) c6="no($err)" ;; esac
+
+# The documents written: `minimum`, never `bootstrap`, which would defer the cascade check
+# over documents that exist.
+r=$(nomode_tree ds-nm-docs); spec_in "$r/.specs/7-a-thing"; inception_docs "$r"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+case "$err" in *'`- Mode: minimum`'*) c7=ok ;; *) c7="no($err)" ;; esac
+case "$err" in *'`- Mode: bootstrap`'*|*"Specs before bootstrap: "*) c8="no($err)" ;; *) c8=ok ;; esac
+
+# A spec directory whose name would not survive the line's split is named, and the adoption line
+# is not offered: written out, it would fail one run later.
+r=$(nomode_tree ds-nm-comma); spec_in "$r/.specs/7-a,b"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+case "$err" in *"7-a,b"*) c9=ok ;; *) c9="no($err)" ;; esac
+case "$err" in *"Specs before bootstrap: "*) c10="no($err)" ;; *) c10=ok ;; esac
+
+# A remote `- Docs:` keeps today's text: the remote refusal follows whatever mode is declared.
+r=$(nomode_tree ds-nm-remote); spec_in "$r/.specs/7-a-thing"
+sed 's|^- Docs: .*|- Docs: https://example.invalid/docs|' "$r/.steering/tech.md" > "$r/.steering/t" && mv "$r/.steering/t" "$r/.steering/tech.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+[ "$out" = "1" ] && c11=ok || c11=no
+case "$err" in *"Specs before bootstrap"*) c12="no($err)" ;; *) c12=ok ;; esac
+
+# The cascade check refuses too, and points at the set check rather than restating its advice.
+cp "$ROOT/assets/check-document-cascade.py" "$r/scripts/"
+cerr=$( cd "$r" && python3 scripts/check-document-cascade.py 2>&1 >/dev/null ); crc=$?
+[ "$crc" = "1" ] && c13=ok || c13=no
+case "$cerr" in *check-document-set.py*) c14=ok ;; *) c14="no($cerr)" ;; esac
+
+# AC4. An expired `bootstrap` with no `- Target:` names `full` only after its opt-in set — and,
+# per #141, names that set as a group, not by file.
+r=$(init_tree ds-nm-expired bootstrap); spec_in "$r/.specs/7-a-thing"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+case "$err" in *"declare \`minimum\`"*"\`full\`"*opt-in*) c15=ok ;; *) c15="no($err)" ;; esac
+case "$err" in *"or \`full\` in"*) c16="no($err)" ;; *) c16=ok ;; esac
+# ...and `minimum` or `full` missing a document names the skill that writes it.
+r=$(docset_repo ds-nm-min-missing minimum); rm "$r/docs/DESIGN.md"
+out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+case "$err" in *"DESIGN.md (via design-doc)"*) c17=ok ;; *) c17="no($err)" ;; esac
+
+# THE MATRIX. Each absent-`Mode` refusal across specs (none, live, archived — the fixture has no
+# git, so every spec is also uncommitted) and documents (absent, present). The first `- Mode:`
+# the message writes out, and the adoption line if it writes one, are applied as written, and
+# the set check is run again. It must pass. The documents remedies are checked by text above.
+c18=ok
+for specs in none live archived; do
+  for docs in absent present; do
+    r=$(nomode_tree "ds-nm-mx-$specs-$docs")
+    case "$specs" in live) spec_in "$r/.specs/4-one"; spec_in "$r/.specs/9-two" ;; archived) spec_in "$r/.specs/_archive/4-one" ;; esac
+    [ "$docs" = present ] && inception_docs "$r"
+    out=$(run_docset "$r"); err=$(cat "$TMP/derr")
+    [ "$out" = "1" ] || { c18="no($specs/$docs: refusal passed)"; continue; }
+    adv=$(printf '%s' "$err" | python3 -c '
+import re, sys
+t = sys.stdin.read()
+m = re.search(r"`(- Mode: [a-z]+)`", t)
+a = re.search(r"`(- Specs before bootstrap: [^`]*)`", t)
+print(m.group(1) if m else "")
+print(a.group(1) if a else "")')
+    mline=$(printf '%s\n' "$adv" | sed -n 1p); aline=$(printf '%s\n' "$adv" | sed -n 2p)
+    [ -n "$mline" ] || { c18="no($specs/$docs: names no mode: $err)"; continue; }
+    printf '%s\n' "$mline" >> "$r/.steering/tech.md"
+    [ -n "$aline" ] && printf '%s\n' "$aline" >> "$r/.steering/tech.md"
+    out=$(run_docset "$r")
+    [ "$out" = "0" ] || c18="no($specs/$docs: '$mline' '$aline' then: $(cat "$TMP/derr"))"
+  done
+done
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17$c18" = "okokokokokokokokokokokokokokokokokok" ] \
+  && report "every document-set refusal names a declaration that passes for its tree" ok \
+  || report "every document-set refusal names a declaration that passes for its tree" no \
+     "nospecs-red=$c1 nospecs-bootstrap=$c2 nospecs-not-unreadable=$c3 adopted-red=$c4 writes-line=$c5 docs-alternative=$c6 docs-minimum=$c7 docs-not-bootstrap=$c8 names-unwritable=$c9 no-unwritable-line=$c10 remote-red=$c11 remote-today=$c12 cascade-red=$c13 cascade-points=$c14 expired-sets=$c15 no-bare-full=$c16 via-skill=$c17 matrix=$c18"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 
