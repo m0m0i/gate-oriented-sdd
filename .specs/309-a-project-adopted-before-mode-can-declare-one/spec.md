@@ -71,7 +71,7 @@ Backlog row 12's last issue, moved ahead of row 1's #340 by that decision.
 - **Fix approach, and why this rather than the narrower or wider fix.** The narrower fix is the messages alone: truthful, and after #340 a Stop loop that ends only when three inception documents exist (C1). The wider one is a new mode, which #127 and #148 argued against: a second name for "documents owed" would let two values disagree about the same state. This keeps one mode and changes only what its expiry counts from, and only for a project that declares where its window starts.
 
 - **The adoption line.** `- Specs before bootstrap: <name>, <name>, …` in `.steering/tech.md`, on one physical line.
-  - Read with `steering_value(text, "Specs before bootstrap")` and stripped, as `Target` and `Docs` are. No hook reads it. The anchor check's shell reader judges only presence and readability, and a whitespace-only value is empty to both readers.
+  - Read with `steering_value(text, "Specs before bootstrap")` and stripped, as `Target` and `Docs` are. No hook reads it. The anchor check's shell reader judges only presence and readability. A value of spaces is empty to both readers; a value holding a tab is not empty to `sed`'s ` *`, so the anchor check stays silent while the set check reads no line. That fails closed — an unnamed spec still expires the window with today's message — and costs only a less precise message.
   - An empty value after the strip is tested first and is the same as no line. Otherwise the value is split on commas and each entry stripped, and AC2's entry rules apply.
   - Read only when `- Mode:` is `bootstrap`, at the point `Target` is read (`:212`).
 
