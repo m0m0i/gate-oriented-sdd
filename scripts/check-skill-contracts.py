@@ -19,7 +19,7 @@ defend that sentence instead — "short" with no number attached is not a limit,
 grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
 with it, #26 the twenty-fourth, #79 the twenty-fifth, #256 the twenty-sixth without moving it, #263 the
 twenty-seventh and twenty-eighth, #262 the twenty-ninth, #166 the thirtieth, #84 the thirty-first to thirty-fourth
-and #239 the thirty-fifth and thirty-sixth, both without moving it, #304 the thirty-seventh, #320 the thirty-eighth and #329 the thirty-ninth to forty-first; a cap that is not moved with the entry reads as already exceeded, and the next author
+and #239 the thirty-fifth and thirty-sixth, both without moving it, #304 the thirty-seventh, #320 the thirty-eighth and #329 the thirty-ninth to forty-first, and #340 retired five and replaced them with five, without moving it; a cap that is not moved with the entry reads as already exceeded, and the next author
 cannot tell whether the list is at its limit or the sentence is stale — which is how this said twenty-five over twenty-six, and thirty over thirty-six.
 """
 
@@ -174,15 +174,13 @@ CONTRACTS = (
     ),
     (
         "skills/init/SKILL.md",
-        "Re-copy `assets/check-steering-anchors.sh` and `assets/check-unreviewed-work.sh` from the plugin over the project's copies",
-        "A Claude Code project's copies of the two checks predate the plugin lookup and look "
-        "for gate-lib.sh only in the directories the migration's first step empties, so a "
-        "migration without this sentence leaves the plugin's quality gate blocking every "
-        "turn that changes source, and CI red: the first-turn block init's step 4 exists "
-        "to prevent, whose usual cure is switching the gate off. That is #263, found in two "
-        "consumers' migrations. Review cannot defend it: this repository reads hooks/ from "
-        "source and has no copy to go stale, so the deletion reads as trimming a migration "
-        "detail, and the damage lands only in installs that never appear in its diffs.",
+        "Make sure every project-side gate copy carries a runner before any entry leaves the line",
+        "The order of #340's migration is the fix. A project whose harness checks leave the `- "
+        "Validators:` line while an Antigravity gate copy from before the runner still runs at "
+        "turn end has turn ends that run none of the harness checks, and nothing blocks: the "
+        "line is empty of them and the old gate never runs the runner. Review cannot defend "
+        "it: reordering the steps reads as tidying a list, and the damage lands only in "
+        "installs this repository never sees. #340 AC8.1.",
     ),
     (
         "skills/init/SKILL.md",
@@ -211,43 +209,45 @@ CONTRACTS = (
     ),
     (
         "skills/init/SKILL.md",
-        "copy `assets/check-document-set.py` to the project's `scripts/` directory and add it to the `- Validators:` line",
-        "This is the ONLY route by which the mode reaches a gate. Delete it and the mode "
-        "becomes a comment: declared, never checked. It must stay on the `- Validators:` "
-        "line rather than in a hook, because a gate that branches on mode is a switch that "
-        "turns enforcement down — #110's AC5. Review cannot defend it for the same reason "
-        "the check-steering-anchors entry exists: what the deletion removes is a check that "
-        "then says nothing, and a check saying nothing is indistinguishable from a check "
-        "passing.",
+        "On Claude Code, copy none of them into the project and put none on the `- Validators:` line",
+        "A copy in scripts/, named on the line, is where a guard fix stops: the plugin updates "
+        "and the copy does not, which is #340 and what CAP-5 and LV-5 rule out. An init that "
+        "copies again puts every new project back on the version it installed, and a copy left "
+        "on the line runs beside the gate's checks with nothing to say it is stale. Review "
+        "cannot defend it: copying the guard and adding it to the line reads as the thorough "
+        "install, and this repository runs its checks from source, so it has no copy to go "
+        "stale in its own diffs. #340 AC8.",
     ),
     (
         "skills/init/SKILL.md",
-        "copy `assets/check-document-cascade.py` to the project's `scripts/` directory and add it to the `- Validators:` line",
-        "The document cascade is checked by check-document-cascade.py, and this sentence in "
-        "init is the only route by which an install adds it to the project's validators. Delete "
-        "it and downstream documents drift from PRD.md silently — #166 AC8. Review cannot defend "
-        "it for the same reason the check-document-set entry exists: what the deletion removes "
-        "is a check that then says nothing, and a check saying nothing is indistinguishable "
-        "from a check passing.",
+        "On Claude Code that is `sh .gate-sdd/hooks/harness-checks.sh`",
+        "The turn-end gate runs only when source changed, and a document is never source, so "
+        "CI is the one place the document-set and cascade checks bite on a documents-only "
+        "change. Before #340 the route was each check's own CI line; now it is the runner from "
+        "the plugin checkout, and this sentence is the only place an install learns the "
+        "command. Review cannot defend it: a CI suggestion reads as optional, and its absence "
+        "is a check that says nothing. #340 AC1, AC3.",
     ),
     (
         "skills/init/SKILL.md",
-        "copy `assets/check-unreviewed-work.sh` to the project's `scripts/` directory and add it to the project's CI",
+        "run `check-unreviewed-work.sh` in the project's CI, on pull requests",
         "The only layer of #26's fix that cannot be stepped around is the CI one, and this "
-        "sentence is the only route by which an install gets it. Delete it and every new "
-        "project is back to a review gate that one `git checkout` silences, with nothing "
-        "failing here or there to say so. It must NOT join the `- Validators:` line: the "
-        "review gate already asks this question on turn end, and a second, differently "
-        "worded block in the same place buys nothing. Review cannot defend it — the "
-        "deletion reads as trimming an optional CI suggestion, and the damage lands in "
-        "installs that never appear in this repository's diffs.",
+        "sentence is the only route by which an install gets it. Since #340 it runs from the "
+        "plugin checkout on Claude Code, so a fix reaches it with the checkout, and nothing is "
+        "copied. Delete it and every new project is back to a review gate that one `git "
+        "checkout` silences. It must NOT join the `- Validators:` line: the review gate "
+        "already asks this question on turn end. Review cannot defend it: the deletion reads "
+        "as trimming an optional CI suggestion.",
     ),
     (
-        "skills/init/SKILL.md",
-        "copy `assets/check-steering-anchors.sh` to the project's `scripts/` directory and add it to the `- Validators:` line",
-        "Without it a project's steering anchors are unchecked, and an anchor written in a "
-        "form its reader cannot parse fails silently — the file looks right and the value "
-        "never arrives. That is #34, and it cost this repo its quality anchor for a week.",
+        "skills/implement/SKILL.md",
+        "run the validators named in `.steering/tech.md`, then the harness checks the digest names",
+        "Since #340 the `- Validators:` line no longer names the harness checks: the quality "
+        "gate runs them before it. implement's loop and its review step run what this skill "
+        "names, so without the clause a branch goes green by hand and blocks at turn end on a "
+        "harness check nobody ran, or a review reports validators passing that the gate then "
+        "fails. Review cannot defend it: the gate already runs them, so the clause reads as "
+        "redundant. #340 AC3.",
     ),
     (
         "skills/init/SKILL.md",

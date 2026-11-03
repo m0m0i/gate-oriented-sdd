@@ -176,7 +176,7 @@ Asked and answered 2026-11-01. Before asking, two read-only workflows mapped the
 - [x] T2 (AC4): cases for `check-locks.py` run from a plugin path against a project, from outside a repository, and with `--update`. Then the root and the messages.
 - [x] T3 (AC5, AC6): cases for remote Docs, a missing `- Mode:`, the flat Antigravity layout, and an Antigravity gate copy with no runner. Then those branches.
 - [x] T4 (AC3, AC7): cases for the digest's runner line from the plugin, from this repository and from `.agents/hooks/`, and for its two notices. Then the digest.
-- [ ] T5 (AC1, AC3, AC8): `check-skill-contracts.py` entries for the load-bearing sentences, new and retired, failing against `b0a71bd`'s text, and a `check-reviewer-allow-list.py` case for the runner. Then the text in each of:
+- [x] T5 (AC1, AC3, AC8): `check-skill-contracts.py` entries for the load-bearing sentences, new and retired, failing against `b0a71bd`'s text, and a `check-reviewer-allow-list.py` case for the runner. Then the text in each of:
   - `init` and its CI instructions, `implement` and `contract`;
   - the contract and its mirror;
   - the reviewers and the template;

@@ -25,10 +25,7 @@ Evidence gathering only:
   - `./scripts/check-receipt-schema.py`
   - `./scripts/check-skill-contracts.py`
   - `./scripts/check-templates.py`
-  - `./assets/check-steering-anchors.sh`
-  - `./assets/check-locks.py`
-  - `./assets/check-document-set.py`
-  - `./assets/check-document-cascade.py`
+  - `sh hooks/harness-checks.sh` — the harness checks (steering anchors, locks, document set, document cascade) from this repository's source, which the quality gate runs before the line and the digest names on its `Harness checks:` line
   - `./scripts/check-contract-path.py`
   - `./scripts/check-readme-claims.py`
   - `./scripts/check-reviewer-allow-list.py`

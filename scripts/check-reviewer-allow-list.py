@@ -13,6 +13,9 @@ This guard enforces:
 2. Categories (AC3, AC4, AC5): all four sanctioned categories from reviewer-contract.md
    (diff/log/commit, clock, installed version check, validators) appear on every reviewer's
    allow-list, with stack-specific variants or an explicit, reasoned N/A declaration accepted.
+3. The harness checks (#340): the quality gate runs them before the line, so the line no longer
+   names them, and a reviewer whose allow-list covers only the line could not re-run them. Every
+   reviewer names them, and the dogfood reviewer names this repository's runner command.
 
 Exits 0 when every validator is covered and all categories are respected.
 """
@@ -24,6 +27,8 @@ ROOT = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else pathlib.Path.cwd()
 
 STEERING = pathlib.Path(".steering/tech.md")
 DOGFOOD = pathlib.Path(".claude/agents/gate-sdd-reviewer.md")
+#: The runner command in this repository, which runs the harness checks from source (ADR-6).
+RUNNER = "sh hooks/harness-checks.sh"
 
 REVIEWERS = (
     "reviewers/ts-reviewer.md",
@@ -112,6 +117,9 @@ def check_categories(rel_path: str, policy: str) -> list[str]:
     has_validators = bool(re.search(r"\bvalidators\b", policy, re.IGNORECASE))
     if not has_validators:
         errors.append(f"{rel_path} is missing category 'validators'")
+    # ...and the harness checks beside them (#340), which the line no longer names.
+    if not re.search(r"harness checks|harness-checks\.sh", policy, re.IGNORECASE):
+        errors.append(f"{rel_path} does not name the harness checks the quality gate runs beside the validators")
 
     return errors
 
@@ -147,6 +155,9 @@ def main() -> None:
         if not any(span == v or span.startswith(v + " ") for span in spans)
     ]
 
+    if not any(span == RUNNER or span.startswith(RUNNER + " ") for span in spans):
+        missing.append(RUNNER)
+
     if missing:
         print(
             f"check-reviewer-allow-list FAILED — {DOGFOOD} is missing validators from {STEERING}",
@@ -154,7 +165,7 @@ def main() -> None:
         )
         for m in missing:
             print(f"  absent: {m}", file=sys.stderr)
-        print("  Every validator on the '- Validators:' line must appear on the reviewer's allow-list.", file=sys.stderr)
+        print(f"  Every validator on the '- Validators:' line, and {RUNNER}, must appear on the reviewer's allow-list.", file=sys.stderr)
         sys.exit(1)
 
     # Categories check across all REVIEWERS

@@ -16,6 +16,7 @@ Evidence gathering only:
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
 - `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
 - the validators named in `.steering/tech.md` — typically a formatter check, a linter, a type checker, a security scanner, and the test suite
+- the harness checks, by the command the session's digest names on its `Harness checks:` line
 - the environment's package listing, to check an installed version before claiming an API is wrong
 - `shasum -a 256 <rulebook file>`, for the lock check under Rulebook below — an addition to the contract's four general purposes, and read-only
 

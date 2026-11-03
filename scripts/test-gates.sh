@@ -8364,12 +8364,12 @@ out=$(run_docset "$r"); [ "$out" = "0" ] && c7=ok || c7=no
 # source comments and its output order have already diverged (G-9); this is the third
 # instance and it is deliberate rather than drift.
 #
-# Two entries, and the second is the load-bearing one: copying the checker onto the
-# `- Validators:` line is the ONLY route by which the mode reaches a gate. Delete that
-# sentence and the mode becomes a comment — declared on every install, checked on none — and
-# the deletion is invisible in review, because what it removes is a check that says nothing
-# rather than a behaviour anyone sees. That is the argument check-skill-contracts.py's own
-# docstring demands of a new entry.
+# Two entries. Until #340 the second was the sentence that copied the checker onto the
+# `- Validators:` line, the only route by which the mode reached a gate. Since #340 the gate
+# runs the checker itself, and the load-bearing sentence is the one that keeps `init` from
+# copying it back: a copy on the line is where a plugin fix stops, and its return reads as the
+# thorough install in review. That is the argument check-skill-contracts.py's own docstring
+# demands of an entry.
 #
 # The control runs first: a guard that failed on every input would satisfy the accusing half
 # on its own. Both mutations are no-ops if their target is already absent, deliberately — a
@@ -8393,8 +8393,8 @@ r=$(contracts_repo contracts-nowiring)
 python3 - "$r" <<'PYEOF'
 import pathlib, sys
 p = pathlib.Path(sys.argv[1], "skills", "init", "SKILL.md")
-needle = "copy `assets/check-document-set.py` to the project's `scripts/` directory and add it to the `- Validators:` line"
-p.write_text(p.read_text().replace(needle, "install the document-set checker"))
+needle = "On Claude Code, copy none of them into the project and put none on the `- Validators:` line"
+p.write_text(p.read_text().replace(needle, "install the harness checks"))
 PYEOF
 out=$(run_contracts "$r"); err=$(cat "$TMP/cerr")
 [ "$out" = "1" ] && c3=ok || c3=no
@@ -10971,6 +10971,7 @@ Evidence gathering only:
   - `./scripts/check-leakage.sh`
   - `./scripts/check-manifests.py`
   - `./scripts/test-gates.sh`
+  - `sh hooks/harness-checks.sh` — the harness checks
   - `./scripts/check-version-bump.py <base-sha>` — read-only, safe to run for evidence
 
 Nothing else. You do not edit, commit, or push.
@@ -10981,6 +10982,7 @@ EOF
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
 - `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
 - the validators named in `.steering/tech.md` — typically a type check, a lint, and a test run
+- the harness checks, by the command the session's digest names
 - the package manager's list command, to check an installed version before claiming an API is wrong
 EOF
   cat > "$r/reviewers/python-reviewer.md" << 'EOF'
@@ -10989,6 +10991,7 @@ EOF
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
 - `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
 - the validators named in `.steering/tech.md` — typically a formatter check, a linter, a type checker, a security scanner, and the test suite
+- the harness checks, by the command the session's digest names
 - the environment's package listing, to check an installed version before claiming an API is wrong
 EOF
   cat > "$r/reviewers/dart-flutter-reviewer.md" << 'EOF'
@@ -10997,6 +11000,7 @@ EOF
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
 - `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
 - the validators named in `.steering/tech.md` — typically a format check, the analyzer, and the test suite
+- the harness checks, by the command the session's digest names
 - the SDK version command, to check an API against the pinned SDK before claiming it is wrong
 EOF
   cat > "$r/reviewers/_template_reviewer.md" << 'EOF'
@@ -11007,6 +11011,7 @@ Evidence gathering only:
 - `git diff --stat <base>...HEAD`, `git diff <base>...HEAD`, `git log --oneline <base>...HEAD`, `git rev-parse HEAD`
 - `date -u +%Y-%m-%dT%H:%M:%SZ`, for the receipt's `reviewed_at` and nothing else
 - these validators, and no others:
+- the harness checks, by the command the session's digest names
 - the package manager's list command, to check an installed version before claiming an API is wrong
 EOF
   mkdir -p "$r/reviewers/_template"
@@ -11067,6 +11072,7 @@ Evidence gathering only:
   - `./scripts/check-leakage.sh`
   - `./scripts/check-manifests.py`
   - `./scripts/test-gates.sh`
+  - `sh hooks/harness-checks.sh` — the harness checks
 
 Nothing else. You do not edit, commit, or push.
 EOF
@@ -12122,6 +12128,24 @@ case "$out" in *"- Run "*|*"- Re-run "*|*"- Update "*) c8="no($out)" ;; *) c8=ok
   && report "the digest names the runner for the tree it ran from, and notices a stale contract or line" ok \
   || report "the digest names the runner for the tree it ran from, and notices a stale contract or line" no \
      "plugin=$c1 repo=$c2 agents=$c3 contract-stale=$c4 contract-same=$c5 line-names=$c6 line-clean=$c7 facts=$c8"
+
+
+# 415. #340 AC3 — the allow-list checker requires the harness checks beside the validators. The
+#      line no longer names them, so an allow-list that covers only the line leaves a reviewer
+#      unable to re-run what the gate runs first; the dogfood reviewer names this repository's
+#      runner command, and every reviewer names the checks.
+r=$(allowlist_repo al-hc-control); out=$(run_allowlist "$r"); [ "$out" = 0 ] && c1=ok || c1="no($(cat "$TMP/alerr"))"
+r=$(allowlist_repo al-hc-norunner)
+grep -v 'harness-checks.sh' "$r/.claude/agents/gate-sdd-reviewer.md" > "$r/g.md" && mv "$r/g.md" "$r/.claude/agents/gate-sdd-reviewer.md"
+out=$(run_allowlist "$r"); err=$(cat "$TMP/alerr")
+case "$out:$err" in 1:*"absent: sh hooks/harness-checks.sh"*) c2=ok ;; *) c2="no($out $err)" ;; esac
+r=$(allowlist_repo al-hc-noref)
+grep -v 'harness checks' "$r/reviewers/python-reviewer.md" > "$r/p.md" && mv "$r/p.md" "$r/reviewers/python-reviewer.md"
+out=$(run_allowlist "$r"); err=$(cat "$TMP/alerr")
+case "$out:$err" in 1:*"python-reviewer.md does not name the harness checks"*) c3=ok ;; *) c3="no($out $err)" ;; esac
+[ "$c1$c2$c3" = "okokok" ] \
+  && report "the reviewer allow-list checker requires the harness checks beside the validators" ok \
+  || report "the reviewer allow-list checker requires the harness checks beside the validators" no "control=$c1 dogfood-runner=$c2 reference-names=$c3"
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1

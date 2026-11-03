@@ -10,7 +10,7 @@ description: Execute an approved .specs/<slug>/spec.md through the TDD Red-Green
 - A spec exists at `.specs/<slug>/spec.md`. If `<slug>` is omitted, list the live specs and ask which one.
 - Its `Status` is `approved`. If it is `draft`, say so and ask before starting — implementing an unreviewed spec is how a misread requirement becomes a merged branch. If it is `done` or `archived`, this is a resume or a mistake; establish which.
 - The branch is `<slug>`. Offer to create it from the default branch.
-- `.steering/tech.md` names this project's validators and its reviewer. **Read it now; never assume commands.**
+- `.steering/tech.md` names this project's validators and its reviewer. **Read it now; never assume commands.** The quality gate also runs the harness checks before them, from its own tree, and the session's digest names the command that runs them by hand, on its `Harness checks:` line. Wherever this skill says to run the validators, run the validators named in `.steering/tech.md`, then the harness checks the digest names (#340).
 
 ## The loop
 
@@ -18,14 +18,14 @@ For each task in the spec's Tasks list, in order:
 
 1. **Red** — write the failing test the task names. Run it. Confirm it fails **for the stated reason**, not for a setup error. A test that fails because of a typo has proved nothing.
 2. **Green** — the smallest implementation that passes. Run the tests.
-3. **Refactor** — clean up under green tests. Re-run the validators.
+3. **Refactor** — clean up under green tests. Re-run the validators, then the harness checks the digest names.
 4. Tick the task, then make one commit scoped to that task, in this project's commit convention (see `.steering/tech.md`).
 
 ## Review gate — mandatory
 
 When every task is committed and the validators pass:
 
-1. Run the full validator set from `.steering/tech.md`. Set the spec `Status: done`.
+1. Run the full validator set from `.steering/tech.md`, then the harness checks the digest names. Set the spec `Status: done`.
 2. **Invoke the reviewer subagent** named in `.steering/tech.md`, asking it to review the branch diff against the default branch, and against `.specs/<slug>/spec.md`. **Invoke it and wait for its result in the same turn. Do not spawn it and carry on.** The review gate runs on turn end, so it assumes the review finished inside the turn. **If your harness returns from the invocation immediately and notifies you later, waiting means keeping the turn open** — keep issuing read-only calls until the result arrives, and emit no final message before it does. Completion normally arrives as a notification without being asked for; if your harness lists running agents, that listing can be polled instead. A turn that has not ended cannot trip a gate that fires on turn end. Announcing that you are waiting *is* ending the turn, and it re-arms the gate every time — that mistake cost twenty-five turns in the repository this harness was built in. Nothing useful can happen during a review anyway, because touching the files it is reading is exactly what must not happen.
 
    **How to invoke the reviewer depends on your harness:**
