@@ -129,6 +129,6 @@ Backlog row 12's last issue, moved ahead of row 1's #340 by that decision.
 
 - [x] **T1 (AC1, AC2, AC5's set-check half, AC8's red cases):** cases after `docset_repo` in `scripts/test-gates.sh`, with AC8's red-first cases and the AC2 controls. Then the scan function and the `bootstrap` branch.
 - [x] **T2 (AC3, AC4, AC8's matrix):** cases for each absent-`Mode` refusal and each documents remedy, and the matrix. Then the absent-`Mode` branch, AC4's wording in both places, and the cascade sentence.
-- [ ] **T3 (AC5's anchor half):** a case that a bolded `- Specs before bootstrap:` fails the anchor check in `bootstrap` and in `minimum`, and an absent one is silent. Then the `ANCHORS` row.
+- [x] **T3 (AC5's anchor half):** a case that a bolded `- Specs before bootstrap:` fails the anchor check in `bootstrap` and in `minimum`, and an absent one is silent. Then the `ANCHORS` row.
 - [ ] **T4 (AC6, AC7):** `init` step 3, its template and its Rules, and `spec` step 1. `check-skill-contracts.py` and the test-gates mutation cases stay green.
 - [ ] **T5 (AC9):** the documents and the backlog edit. The version bump is not a task.

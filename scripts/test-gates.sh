@@ -11792,6 +11792,37 @@ done
   || report "every document-set refusal names a declaration that passes for its tree" no \
      "nospecs-red=$c1 nospecs-bootstrap=$c2 nospecs-not-unreadable=$c3 adopted-red=$c4 writes-line=$c5 docs-alternative=$c6 docs-minimum=$c7 docs-not-bootstrap=$c8 names-unwritable=$c9 no-unwritable-line=$c10 remote-red=$c11 remote-today=$c12 cascade-red=$c13 cascade-points=$c14 expired-sets=$c15 no-bare-full=$c16 via-skill=$c17 matrix=$c18"
 
+# 409. #309 AC5 — `- Specs before bootstrap:` joins the anchors, in every mode, as `- Target:` did.
+#
+# The set check reads the line only under `bootstrap`, but it reads it with the same exact
+# expression as every other anchor. `- **Specs before bootstrap: 3-login**` yields nothing, the
+# window reads as undeclared, and the project is told its specs expired it: #34's silent discard
+# in the line meant to stop a false block. The form is held in every mode, as `- Target:`'s is,
+# because a line nobody can read is wrong whichever mode it sits beside.
+c1=ok; c2=ok
+for m in bootstrap minimum; do
+  r=$(anchor_repo "anc-sbb-bold-$m" '- Owns: x')
+  printf -- '- Mode: %s\n- **Specs before bootstrap: 3-login**\n' "$m" >> "$r/.steering/tech.md"
+  out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+  [ "$out" = "1" ] || c1="no($m)"
+  case "$err" in *"Specs before bootstrap"*) : ;; *) c2="no($m: $err)" ;; esac
+done
+# An empty value is the anchor check's to fail: the set check reads it as no line at all.
+r=$(anchor_repo anc-sbb-empty '- Owns: x')
+printf -- '- Mode: bootstrap\n- Specs before bootstrap:\n' >> "$r/.steering/tech.md"
+out=$(run_anchors "$r"); [ "$out" = "1" ] && c3=ok || c3=no
+# Correctly written passes, and absent is silent: every install without specs has no such line.
+r=$(anchor_repo anc-sbb-ok '- Owns: x')
+printf -- '- Mode: bootstrap\n- Specs before bootstrap: 3-login, 7-export\n' >> "$r/.steering/tech.md"
+out=$(run_anchors "$r"); [ "$out" = "0" ] && c4=ok || c4="no($(cat "$TMP/aerr"))"
+r=$(anchor_repo anc-sbb-absent '- Owns: x')
+out=$(run_anchors "$r"); [ "$out" = "0" ] && c5=ok || c5=no
+
+[ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
+  && report "a bolded or empty Specs before bootstrap fails the anchor guard in any mode, an absent one is silent" ok \
+  || report "a bolded or empty Specs before bootstrap fails the anchor guard in any mode, an absent one is silent" no \
+     "bold-red=$c1 names-key=$c2 empty-red=$c3 plain-green=$c4 absent-green=$c5"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 
