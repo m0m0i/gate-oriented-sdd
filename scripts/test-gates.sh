@@ -12018,6 +12018,60 @@ case "$out:$(cat "$TMP/lkerr")" in *exit=1*:*"not inside a git repository"*) c9=
   || report "check-locks.py verifies the repository it is run in, from any location" no \
      "clean=$c1 names-project=$c2 subdir=$c3 drift=$c4 repin-command=$c5 no-old-copy=$c6 update=$c7 plugin-untouched=$c8 no-repo=$c9"
 
+# 413. #340 AC5, AC6 — the runner's two layouts, its one skip, and the state where a turn end could
+#      run a gate copy with no harness checks.
+#
+# Remote Docs: the condition `init` has always used to leave the document checks uninstalled, so
+# the runner skips those two and says so, and nothing else. A missing `- Mode:` blocks with the
+# document-set check's own remedy, which #309 made one a project with shipped specs can follow.
+# Flat: Antigravity's `.agents/hooks/` holds the runner and the checks side by side, with no
+# plugin manifest above, and the runner reads its checks from beside itself. And an Antigravity
+# gate copy from before the runner existed runs only the line, which after a migration names no
+# harness check, so the anchor check fails it wherever it runs: at a Claude Code turn end in a
+# dual-target project, and in CI.
+p="$TMP/hc-remote"; hc_plugin "$p"; hc_fix "$p"
+printf -- '- Validators:\n- Docs: https://example.invalid/docs\n' > "$p/project/.steering/tech.md"
+out=$(run_hc "$p"); case "$out" in *exit=0*) c1=ok ;; *) c1="no($out $(cat "$TMP/hcerr"))" ;; esac
+hout=$( cd "$p/project" && sh "$p/plugin/hooks/harness-checks.sh" 2>&1 )
+case "$hout" in *"check-document-set.py: not applicable"*"check-document-cascade.py: not applicable"*) c2=ok ;; *) c2="no($hout)" ;; esac
+case "$hout" in *"--- check-locks.py"*) c3=ok ;; *) c3="no(skipped more: $hout)" ;; esac
+
+# A missing `- Mode:`, through the real checks: the runner blocks, and the block carries the
+# document-set check's remedy for this tree — `bootstrap` with the adoption line written out.
+p="$TMP/hc-nomode"; hc_plugin "$p"
+cp "$ROOT/assets/check-steering-anchors.sh" "$ROOT/assets/check-locks.py" "$ROOT/assets/check-document-set.py" "$ROOT/assets/check-document-cascade.py" "$p/plugin/assets/"
+mkdir -p "$p/project/.github/ISSUE_TEMPLATE" "$p/project/.specs/3-login" "$p/project/.work_logs"
+for t in feature bug chore; do printf 'x\n' > "$p/project/.github/ISSUE_TEMPLATE/$t.md"; done
+printf '# Spec\n' > "$p/project/.specs/3-login/spec.md"
+printf -- '- Validators:\n- Docs: docs/\n' > "$p/project/.steering/tech.md"
+out=$(run_hc "$p"); err=$(cat "$TMP/hcerr")
+case "$out" in *exit=2*) c4=ok ;; *) c4="no($out)" ;; esac
+case "$err" in *"no readable \`- Mode:\` line"*"- Specs before bootstrap: 3-login"*) c5=ok ;; *) c5="no($err)" ;; esac
+
+# Flat: the checks beside the runner, and the runner reads them there.
+r="$TMP/hc-flat"; mkdir -p "$r/.agents/hooks" "$r/.steering"
+cp "$ROOT/hooks/gate-lib.sh" "$ROOT/hooks/quality-gate.sh" "$r/.agents/hooks/"; harness_stubs "$r/.agents/hooks"
+printf 'print("flat cascade ran")\nraise SystemExit(1)\n' > "$r/.agents/hooks/check-document-cascade.py"
+printf -- '- Validators:\n' > "$r/.steering/tech.md"
+( cd "$r" && git init -q -b main ) >/dev/null 2>&1
+out=$( cd "$r" && sh .agents/hooks/quality-gate.sh >/dev/null 2>"$TMP/hcerr"; echo "exit=$?" ); err=$(cat "$TMP/hcerr")
+case "$out:$err" in *exit=2*:*"flat cascade ran"*"failed: check-document-cascade.py"*) c6=ok ;; *) c6="no($out $err)" ;; esac
+case "$(sh "$r/.agents/hooks/harness-checks.sh" --files)" in *"$r/.agents/hooks/check-locks.py"*) c7=ok ;; *) c7=no ;; esac
+
+# The anchor check fails an Antigravity gate copy with no runner beside it, and only that.
+r=$(anchor_repo anc-hc-norunner '- Owns: x'); mkdir -p "$r/.agents/hooks"; ( cd "$r" && git init -q -b main ) >/dev/null 2>&1
+cp "$ROOT/hooks/quality-gate.sh" "$r/.agents/hooks/"
+out=$(run_anchors "$r"); err=$(cat "$TMP/aerr" 2>/dev/null)
+case "$out:$err" in 1:*".agents/hooks/quality-gate.sh"*"harness-checks.sh"*) c8=ok ;; *) c8="no($out $err)" ;; esac
+cp "$ROOT/hooks/harness-checks.sh" "$r/.agents/hooks/"
+out=$(run_anchors "$r"); [ "$out" = 0 ] && c9=ok || c9="no($(cat "$TMP/aerr"))"
+r=$(anchor_repo anc-hc-none '- Owns: x'); out=$(run_anchors "$r"); [ "$out" = 0 ] && c10=ok || c10=no
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10" = "okokokokokokokokokok" ] \
+  && report "the runner skips only for remote Docs, reads either layout, and an old Antigravity gate copy fails the anchor check" ok \
+  || report "the runner skips only for remote Docs, reads either layout, and an old Antigravity gate copy fails the anchor check" no \
+     "remote-pass=$c1 says-na=$c2 skips-only-docs=$c3 nomode-red=$c4 nomode-remedy=$c5 flat=$c6 flat-files=$c7 old-copy-red=$c8 with-runner-green=$c9 no-agents-silent=$c10"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 

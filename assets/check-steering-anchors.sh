@@ -303,6 +303,30 @@ $(printf '%s\n' "$hs" | sed 's/^/  /')" ;;
   esac
 done
 
+# An Antigravity gate copy with no harness checks beside it (#340, AC6). Since #340 the quality gate
+# runs harness-checks.sh from its own directory, before the `- Validators:` line, and a migration
+# takes the harness checks off the line. A copy of the gate made before then has no runner: it runs
+# the line alone, so after the migration a turn end there runs none of the harness checks, and this
+# is the one place that can say so — at a Claude Code turn end in a dual-target project, where the
+# plugin's runner runs this check, and in CI. The root's .agents/ is checked, and the directory of
+# every .agents/hooks.json in the set above.
+hc_dirs=.agents
+for f in "$@"; do
+  case "$f" in */.agents/hooks.json) hc_dirs="$hc_dirs$NL${f%/hooks.json}" ;; esac
+done
+IFS=$NL
+set -f
+for d in $hc_dirs; do
+  if [ -f "$hroot/$d/hooks/quality-gate.sh" ] && [ ! -f "$hroot/$d/hooks/harness-checks.sh" ]; then
+    failed="${failed}
+  $d/hooks/quality-gate.sh: has no harness-checks.sh beside it, so a turn end there runs the
+      '- Validators:' line alone and none of the harness checks. Re-run init, which copies the
+      runner and the checks into $d/hooks/ with the gates."
+  fi
+done
+set +f
+IFS=$old_ifs
+
 if [ -n "$failed" ]; then
   echo "check-steering-anchors FAILED$failed" >&2
   exit 1
