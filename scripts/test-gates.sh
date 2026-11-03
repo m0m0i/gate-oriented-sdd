@@ -8024,7 +8024,9 @@ case "$err" in *"cannot be verified"*) c11=ok ;; *) c11=no ;; esac
 # gets cited and a spec is the first moment the harness is genuinely in use. That puts the
 # failure inside the flow, with the cause one command behind the user, rather than on their
 # first turn, which is the distinction CAP-4 actually draws — it is not "never block", it is
-# "never block on a failure that predates them".
+# "never block on a failure that predates them". A project that adopted the harness with specs
+# already on disk moves where its window starts, never whether it ends: the first spec its
+# `- Specs before bootstrap:` line does not name ends it the same way (#309, case 407).
 spec_in() { mkdir -p "$1"; printf '# Spec\n' > "$1/spec.md"; }
 
 # Control FIRST: the directories init creates, empty, plus the README it will hold. A checker
@@ -8147,7 +8149,9 @@ out=$(run_docset "$r"); [ "$out" = "0" ] && c9=ok || c9=no
 target_in() { printf -- '- Target: %s\n' "$2" >> "$1/.steering/tech.md"; }
 
 # Control FIRST, and it is the whole no-regression half: with no `- Target:` line the message
-# must be byte-for-byte what it is today. Every accusing half below is satisfiable by a
+# must name no opt-in document, as before #141. (#309 reworded how it offers `full` — after the
+# opt-in three, named as a group — and this control is why they stay unnamed.) Every accusing
+# half below is satisfiable by a
 # checker that simply prints all six documents always.
 r=$(init_tree ds-tgt-absent bootstrap); spec_in "$r/.specs/7-a-thing"
 out=$(run_docset "$r"); base_err=$(cat "$TMP/derr")
