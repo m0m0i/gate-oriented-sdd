@@ -33,6 +33,7 @@ ANCHORS="
 .steering/tech.md|Mode
 .steering/tech.md|Target
 .steering/tech.md|Validator budget
+.steering/tech.md|Specs before bootstrap
 "
 
 # gate-lib.sh is `hooks/` in the harness repo, `.agents/hooks/` in an Antigravity project, and

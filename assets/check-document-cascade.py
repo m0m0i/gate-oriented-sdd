@@ -49,7 +49,8 @@ def main():
     if not mode:
         fail(
             f"{STEERING} carries no readable `- Mode:` line. Add one of "
-            f"{', '.join(f'`- Mode: {m}`' for m in MODES)} on one physical line. "
+            f"{', '.join(f'`- Mode: {m}`' for m in MODES)} on one physical line; "
+            f"check-document-set.py names the one that passes for this tree. "
             f"A mode is declared, never assumed."
         )
     if mode not in MODES:
