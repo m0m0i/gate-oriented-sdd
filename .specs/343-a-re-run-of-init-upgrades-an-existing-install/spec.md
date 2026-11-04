@@ -1,6 +1,6 @@
 # Spec: a re-run of `init` upgrades an existing Antigravity install without losing the project's edits
 
-- Slug: 343-a-re-run-of-init-upgrades-an-existing-install   Issue: 343   Type: feature   Status: approved
+- Slug: 343-a-re-run-of-init-upgrades-an-existing-install   Issue: 343   Type: feature   Status: done
 - Author: m0m0i (Claude Code)   Date: 2026-11-04
 
 Backlog row 1's last issue, after #340 shipped as #353 in 0.41.0. On Antigravity a plugin-shipped hook runs with the plugin directory as its working directory (A12), so `init` renders `.agents/hooks.json` and copies eleven files into `.agents/hooks/` (`skills/init/SKILL.md:77`). That line names a re-run of `init` as the only way a fix to any of them reaches an existing install. This spec defines that re-run and measures it.
