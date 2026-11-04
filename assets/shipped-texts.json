@@ -11,7 +11,8 @@
  "contract": {
   "copies": [
    ".claude/agents/_shared/reviewer-contract.md",
-   ".agents/agents/_shared/reviewer-contract.md"
+   ".agents/agents/_shared/reviewer-contract.md",
+   ".agents/_shared/reviewer-contract.md"
   ],
   "source": "reviewers/_shared/reviewer-contract.md"
  },

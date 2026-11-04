@@ -12408,11 +12408,20 @@ else
   out=$( cd "$TMP" && python3 "$UP" --project "$pa" --project "$pb" --write >/dev/null 2>"$TMP/uperr"; echo "exit=$?" )
   case "$out:$(cat "$TMP/uperr")" in exit=1:*"--write takes exactly one --project"*) ;; *) c16="no(batch write: $out $(cat "$TMP/uperr"))" ;; esac
 
-  r="$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16"
-  [ "$r" = "okokokokokokokokokokokokokokokok" ] \
+  # A contract copy where init put it up to v0.10.0, `.agents/_shared/`, is classified too: found
+  # on a real install of that era, whose re-run would otherwise have left it stale.
+  p="$TMP/up-oldcontract"; up_v036 "$p"; mkdir -p "$p/.agents/_shared"
+  git -C "$ROOT" show "gate-sdd--v0.10.0:agents/_shared/reviewer-contract.md" > "$p/.agents/_shared/reviewer-contract.md"
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  case "$o" in *"shipped  .agents/_shared/reviewer-contract.md"*) c17=ok ;; *) c17="no($o)" ;; esac
+  out=$(run_up "$p" --project . --write)
+  cmp -s "$p/.agents/_shared/reviewer-contract.md" "$ROOT/reviewers/_shared/reviewer-contract.md" || c17="no(old-path contract not replaced: $out)"
+
+  r="$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17"
+  [ "$r" = "okokokokokokokokokokokokokokokokok" ] \
     && report "a re-run classifies each copy, judges the set whole, and writes only what the answers allow" ok \
     || report "a re-run classifies each copy, judges the set whole, and writes only what the answers allow" no \
-       "report=$c1 write=$c2 again=$c3 modes=$c4 edited=$c5 kept=$c6 replace=$c7 kept-qg=$c8 symlink=$c9 unreadable=$c10 partial=$c11 claude-code=$c12 install=$c13 refusals=$c14 stale-table=$c15 batch=$c16"
+       "report=$c1 write=$c2 again=$c3 modes=$c4 edited=$c5 kept=$c6 replace=$c7 kept-qg=$c8 symlink=$c9 unreadable=$c10 partial=$c11 claude-code=$c12 install=$c13 refusals=$c14 stale-table=$c15 batch=$c16 old-contract=$c17"
 fi
 
 # 419. #343 AC2, AC4, AC6, AC7 — the hooks file is re-rendered from the template that wrote it,
