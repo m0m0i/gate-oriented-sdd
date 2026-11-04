@@ -130,7 +130,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
   - **`assets/**/*.json` joins `- Source globs:`**, so a table change is reviewed source.
 - **Targets and the install** (AC8).
   - **Antigravity** is a target when `.agents/hooks.json` or `.agents/hooks/` exists.
-  - **Each contract copy** is classified in each of `.claude/agents/` and `.agents/agents/` that holds one.
+  - **Each contract copy** is classified in each of `.claude/agents/` and `.agents/agents/` that holds one, and in `.agents/_shared/`, where `init` put it up to v0.10.0 (found in T6 on a real install of that era).
   - **Nothing else is touched:** no `.claude/settings.json`, and nothing under `.agents/` in a project with no Antigravity install.
   - **With no target found,** the script exits 4, "no install", unless `--install` asks it to make an Antigravity install. `init`'s fresh Antigravity install uses `--install --fast-check <command>`.
   - **`init` always passes `--project <dir>`.** The project is that directory's git toplevel, and a run outside a repository, or inside the plugin's own tree, is a refusal.
