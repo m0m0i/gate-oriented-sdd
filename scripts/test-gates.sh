@@ -12561,6 +12561,43 @@ EOF
 case "$hj_out" in *"=no("*|"") report "the hooks file is re-rendered from the template that wrote it, keeping the project's values" no "$hj_out" ;;
   *) report "the hooks file is re-rendered from the template that wrote it, keeping the project's values" ok ;; esac
 
+# 420. #343 AC8 — the copy set has one statement, the table's `copy_set`. `init`, both READMEs and
+#      the templates README listed the eleven files by hand, so a twelfth copied file had five
+#      places to be added and none that failed when one was missed. Each now cites the table or
+#      the script that reads it, and none names eight or more of the set's eleven files on one
+#      line or in one fenced block. Fewer is a different set: the four harness checks, or the
+#      four gates a Claude Code migration removes.
+cs_out=$(cd "$ROOT" && python3 - <<'EOF'
+import json, pathlib
+BT = chr(96)  # a backtick: bash scans one even inside this quoted heredoc, within $(...)
+names = sorted({pathlib.Path(k).name for k in json.load(open("assets/shipped-texts.json"))["copy_set"]})
+bad = []
+for f in ("skills/init/SKILL.md", "README.md", "README.ja.md", "hooks/templates/README.md"):
+    text = open(f, encoding="utf-8").read()
+    if "shipped-texts.json" not in text and "upgrade-install.py" not in text:
+        bad.append(f"{f} cites neither the table nor the script")
+    units, block, start = [], None, 0
+    for n, line in enumerate(text.splitlines(), 1):
+        if line.lstrip().startswith(BT * 3):
+            if block is None:
+                block, start = [], n
+            else:
+                units.append((start, "\n".join(block))); block = None
+            continue
+        if block is not None:
+            block.append(line)
+        else:
+            units.append((n, line))
+    for n, unit in units:
+        hit = [x for x in names if BT + x + BT in unit or " " + x in unit or "/" + x in unit]
+        if len(hit) >= 8:
+            bad.append(f"{f}:{n} lists {len(hit)} of the copy set's files")
+print("ok" if not bad else "no(" + "; ".join(bad) + ")")
+EOF
+)
+[ "$cs_out" = ok ] && report "the copy set is stated once, in the table, and cited elsewhere" ok \
+  || report "the copy set is stated once, in the table, and cited elsewhere" no "$cs_out"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 

@@ -269,7 +269,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
   - copies pending with the hooks proposal declined, so nothing is written;
   - every written proposal passing `gate_hook_switches`, and none holding `{{`;
   - a whitespace-only difference reading as current.
-- [ ] T4 (AC1–AC8, the prose): failing pin and citation cases, then:
+- [x] T4 (AC1–AC8, the prose): failing pin and citation cases, then:
   - `init`'s hooks bullet and fresh install;
   - the Rule at `:114`, and the contract sentences at `:75` and `:80`;
   - #340's migration steps 2 and 3;
