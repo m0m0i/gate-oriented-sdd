@@ -26,7 +26,7 @@ Backlog row 1's last issue, after #340 shipped as #353 in 0.41.0. On Antigravity
   - [ ] **AC1:** WHEN `init` runs on a project with an Antigravity install that an earlier version made THE SYSTEM SHALL:
     - replace each file of the copy set whose text is one the plugin shipped and differs from the current one;
     - copy each file that is missing;
-    - name each file it replaced or added, with the plugin versions that shipped the text it replaced.
+    - name each file it replaced or added.
   - [ ] **AC2:** WHEN `init` re-renders `.agents/hooks.json` over an existing one THE SYSTEM SHALL identify the template that wrote the file by its whole structure.
     - It SHALL take the current template's own values: the gate and digest commands, the `timeout`s, the groups and event shapes, and the `GATE_SDD_HARNESS` marker.
     - It SHALL keep the values the project chose: the fast check command, a matcher that differs from the identified template's, the fast-check group's `enabled` where that group existed, and every group and entry the template does not carry.
@@ -117,12 +117,13 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
 - **Approach.** A stdlib Python script, `assets/upgrade-install.py`, and a shipped table, `assets/shipped-texts.json`. `init` runs the script from the plugin directory it installs from. It shows the report, asks the report's questions, and runs the script again with the answers to write. The script decides nothing a person must decide, and `init` computes nothing the script can.
 - **The table** (C2, C3).
   - **`"copy_set"`** maps each file under `.agents/hooks/` to its source in the plugin: today the eleven files of `skills/init/SKILL.md:77`. It is the copy set's one machine-read statement. `init`, `hooks/templates/README.md` and both READMEs cite it or the script, and list no files.
-  - **`"texts"`** maps each source path to every text that path has had: `{sha256: [first version, last version]}`, the versions read from `.claude-plugin/plugin.json` at the commits that held the text. History follows a source across moves:
+  - **`"texts"`** maps each source path to the sha256 of every text that path has had. History follows a source across moves:
     - `agents/_shared/` to `reviewers/_shared/` (#235);
     - `scripts/check-locks.py` to `assets/` (v0.2.3).
 
     The keys cover the copy set's sources and `reviewers/_shared/reviewer-contract.md`. A pre-0.41.0 `scripts/<guard>` and a contract copy look up their source's texts.
-  - **`"templates"`** holds, verbatim and keyed by sha256, every text `hooks/templates/antigravity.hooks.json` has had from the commit tagged `gate-sdd--v0.2.3` on: six today, each with its version range.
+  - **`"templates"`** holds, verbatim and keyed by sha256, every text `hooks/templates/antigravity.hooks.json` has had from the commit tagged `gate-sdd--v0.2.3` on: six today. The table names that commit by its sha, so the build needs no tag.
+  - **No version per text** (amended in implement, T1). A text first enters the table on its branch, before its release has a version or a tag. A recorded version would therefore go stale at every bump and every release, and since the bump lands after the review, it would also re-stale the receipt. The report calls a `shipped` text "an earlier text of this plugin". The hand-kept keys (`copy_set`, the contract's copies, the source moves, the pre-0.41.0 guards, the template cut) are preserved by the builder, which derives only `texts` and `templates`.
   - **The history** is the first-parent chain of the merge-base of `HEAD` and the default branch's remote-tracking ref (`origin/main`). In CI that is the pull request's base. The working tree's current texts are added to it. A commit only a branch held is never in the table, so the table is the same at a branch's tip and at its merge.
   - **`scripts/build-shipped-texts.py`**, which is not shipped, writes the table. `--check` tests it as two sets: the history's texts ⊆ the table ⊆ the history's texts ∪ the working tree. So a table left behind by a moved `main` fails with "merge the default branch and rebuild", not with a byte diff.
   - **A case in `scripts/test-gates.sh`** runs `--check`, and checks everywhere that every current text is in the table. Where the history or the ref is missing, it runs the second check alone and reports a named skip for the first, never a pass. CI's guards job already checks out with `fetch-depth: 0`, so `ci.yml` does not change. So a change to a copied file cannot merge without the table naming its new text, just as a shipped change cannot merge without a bump.
@@ -135,7 +136,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
   - **`init` always passes `--project <dir>`.** The project is that directory's git toplevel, and a run outside a repository, or inside the plugin's own tree, is a refusal.
 - **Classifying the copies** (AC1, AC3, AC4). Each file is hashed and read as one of four states:
   - `current`: the hash is the current text's.
-  - `shipped`: the hash is another text in the table. The plugin wrote it, so it is replaced, and the report names its version range.
+  - `shipped`: the hash is another text in the table. The plugin wrote it, so it is replaced.
   - `missing`: absent, so it is added.
   - `edited`: any other hash. The report shows a unified diff against the current text, and the file is replaced only when named with `--replace <path>`.
 
@@ -176,7 +177,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
   6. **Already current** is decided on the parsed structure, so another whitespace or key order is current and nothing is written.
 - **Interface.** `python3 <plugin>/assets/upgrade-install.py --project <dir>` reports and writes nothing.
   - **The report:**
-    - each file's class with its diff and version range;
+    - each file's class, with its diff where it is `edited`;
     - the hooks-file proposal as a diff;
     - the unplaced values;
     - the questions;
@@ -238,7 +239,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
   - a fixture branch that changes a copied file in two commits gives the same table at its tip and at a merge of it;
   - a missing history or ref reports a named skip, never a pass.
 - [ ] T2 (AC1, AC3, AC4, AC5, AC7, AC8, AC10): failing cases for the copies, then the script's targets, classes, set judgement and writing. The fixtures are built from `gate-sdd--v0.36.0`'s texts with `git show`, behind a reported skip when the tag is absent. The cases cover:
-  - `shipped` replaced, with its version range;
+  - `shipped` replaced;
   - the runner and the checks added as `missing`;
   - an `edited` gate kept without `--replace` and replaced with it;
   - a kept edited quality gate reported with the checks it would stop running;
