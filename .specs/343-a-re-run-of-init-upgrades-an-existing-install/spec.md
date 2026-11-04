@@ -49,10 +49,12 @@ Backlog row 1's last issue, after #340 shipped as #353 in 0.41.0. On Antigravity
   - [ ] **AC8:** WHEN `init` installs Antigravity into a project with no install THE SYSTEM SHALL copy the set and render the hooks file through the same script, so the copy set has one machine-read statement and one renderer. WHEN the script finds no install and was not asked to make one THE SYSTEM SHALL exit with a code distinct from both a refusal and a pass. It SHALL never create an Antigravity install in a project that has none unless asked.
   - [ ] **AC9:** WHEN this ships THE SYSTEM SHALL have two recorded runs in `docs/verified.md`, each in a real `agy` session in a trusted folder. Each SHALL record which files changed and which edit survived, and SHALL show the re-rendered gates blocking a seeded failure in a later turn.
     - **The fixture:** installed as `init` at `gate-sdd--v0.36.0` writes it, with a hand edit to the fast check, then re-run after the plugin is refreshed by an `agy plugin uninstall` and `install`, which is also recorded.
-    - **A real consumer** that the maintainer names, where nothing is pushed without the maintainer's go.
+    - **A real consumer** that the maintainer names (C6), where nothing is pushed without the maintainer's go.
 
     `README.md:203`, `:218`, `:230` and `:249`, their Japanese counterparts, and `docs/verified.md:641` then say what was run.
+  - [ ] **AC10:** WHEN the script is given more than one `--project` THE SYSTEM SHALL report on each in turn and write nothing. Its last line SHALL name every project that is behind, and every project it refused. It SHALL exit 3 if any project has changes or questions pending, 1 if any was refused, and 0 only when every project is current. `--write` SHALL take exactly one project.
 - **Out of scope:**
+  - A notice at session start saying a project's install is behind the plugin. On Antigravity that means the copied digest reading the installed plugin's directory, which has been observed only on CLI 1.3.3, and #340's C2 rejected relying on it. It is a follow-up after row 2's probe (C5).
   - A fix reaching an Antigravity project with no re-run: A12 rules it out while plugin hooks run from the plugin directory.
   - An `agy plugin update` command. CLI 1.2.16 has none (`docs/verified.md:322`), and row 2's probe re-checks that on a current CLI. AC9 records the uninstall-and-install refresh, but does not change it.
   - Claude Code's `.claude/settings.json` declaration and fast-check entry. The Claude Code pre-0.23.0 migration (`skills/init/SKILL.md:78-86`) and the Rule's Claude Code half stay as they are, except that the contract copy goes through AC3.
@@ -84,6 +86,16 @@ Backlog row 1's last issue, after #340 shipped as #353 in 0.41.0. On Antigravity
   - one real re-run on a real Antigravity consumer the maintainer names, as #340's M1 was. Nothing is pushed there without the maintainer's go.
 
   → AC9.
+- **C5. What is in scope beyond the re-run?** Two things, the maintainer's choice:
+  - A fresh install goes through the same script (AC8).
+  - A batch report: one run after a plugin update lists every project that is behind (AC10).
+
+  The maintainer asked whether the check could run once on every project when the plugin updates. Antigravity has no update event and runs each project's own copies, so an automatic check would need a notice in the copied digest. That rests on a plugin path seen only on CLI 1.3.3, so it is a follow-up. Writes stay per project, because the answers about edited files are per project. → AC8, AC10.
+- **C6. Which real consumer?** The maintainer named one, a project whose real Antigravity install was made in 2026-09. That install has never been re-run, and its last commit holds:
+  - the v0.2.3–v0.10.0 hooks shape: one group, matcher `.*`, `exit 0` as the fast check, and 180/30 timeouts;
+  - four gate copies, and no turn-0 digest.
+
+  That is the oldest shape C3 supports. The run is on a branch from that commit, so the maintainer may install the current plugin there in the meantime. The other consumers considered run Claude Code only and have no Antigravity install to upgrade. → AC9.
 
 A four-lens critique of the first draft (fail-open, feasibility, repository rules, Antigravity in practice) with adversarial verifiers raised 47 findings, and 41 survived. This draft takes them all.
 - **The HIGH.** Identifying the template by its gate commands, newest first, matched every v0.21.0 to v0.36.0 render to v0.37.0, because those commands are byte-identical. The template is now identified by its whole structure.
@@ -169,6 +181,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
     - the unplaced values;
     - the questions;
     - a last-line verdict: `nothing to upgrade`, `N change(s) proposed, M question(s)`, `N edit(s) kept, set mixed`, `no install`, or a refusal.
+  - **Batch** (AC10). `--project` may repeat in report mode. Each project's report is headed by its path, and the last line names the projects that are behind and the ones refused. The exit code is the worst of them: 1 over 3 over 4 over 0. `--write` with more than one `--project` is a refusal.
   - **Answers:**
     - `--replace <path>`, which may be repeated;
     - `--hooks-json`, to accept the hooks-file proposal;
@@ -224,7 +237,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
   - a seeded change to a copied file without a rebuild fails;
   - a fixture branch that changes a copied file in two commits gives the same table at its tip and at a merge of it;
   - a missing history or ref reports a named skip, never a pass.
-- [ ] T2 (AC1, AC3, AC4, AC5, AC7, AC8): failing cases for the copies, then the script's targets, classes, set judgement and writing. The fixtures are built from `gate-sdd--v0.36.0`'s texts with `git show`, behind a reported skip when the tag is absent. The cases cover:
+- [ ] T2 (AC1, AC3, AC4, AC5, AC7, AC8, AC10): failing cases for the copies, then the script's targets, classes, set judgement and writing. The fixtures are built from `gate-sdd--v0.36.0`'s texts with `git show`, behind a reported skip when the tag is absent. The cases cover:
   - `shipped` replaced, with its version range;
   - the runner and the checks added as `missing`;
   - an `edited` gate kept without `--replace` and replaced with it;
@@ -236,6 +249,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
   - the `scripts/` guards reported and never written;
   - a Claude Code-only project getting its contract line only, and nothing under `.agents/`;
   - no install exiting 4, and `--install` making one;
+  - a batch of three projects (one current, one behind, one unreadable) naming the behind and the refused, exiting 1 and writing nothing; `--write` with two projects refused;
   - a stale table in the plugin refused;
   - a second run changing nothing.
 - [ ] T3 (AC2, AC4, AC6, AC7): failing cases for the hooks file, then identification, classification, the proposal and the checks. The fixtures are built from the table's own templates, which needs no git. The cases cover:
@@ -266,6 +280,6 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
 - [ ] T5 (records): ADR-11, `docs/fidelity.md`, `CONTRIBUTING.md`, `.steering/structure.md`, and `.steering/tech.md`'s `- Source globs:`. Every validator stays green, and so do the pinned linters on `assets/`.
 - [ ] T6 (AC9): the two real `agy` runs, recorded in `docs/verified.md`:
   - **The fixture,** in a trusted folder, installed as `init` at v0.36.0 writes it, with a hand-edited fast check. The plugin is refreshed by `agy plugin uninstall` and `install` to the branch head. Then `init` is re-run, and a later turn shows the gates blocking a seeded failure.
-  - **The maintainer-named consumer,** with nothing pushed without the maintainer's go.
+  - **The maintainer's consumer (C6),** on a branch from the commit that holds its install, with nothing pushed without the maintainer's go.
 
   Then `README.md:203`, `:218`, `:230` and `:249`, their Japanese counterparts, and `docs/verified.md:641` say what was run.
