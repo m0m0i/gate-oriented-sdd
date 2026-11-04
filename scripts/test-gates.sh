@@ -12006,6 +12006,8 @@ case "$out:$err" in *exit=1*:*"proj"*"drifted"*) c4=ok ;; *) c4="no($out $err)" 
 lk_self="$(cd "$p/plugin/assets" && pwd -P)/check-locks.py"
 case "$err" in *"python3 $lk_self --update"*) c5=ok ;; *) c5="no($err)" ;; esac
 case "$err" in *"./scripts/check-locks.py"*) c6="no(names the old copy: $err)" ;; *) c6=ok ;; esac
+# Its Claude Code form names the remedy when the variable is unset, as the digest's command does.
+case "$err" in *'python3 "${GATE_SDD_PLUGIN_ROOT:?is unset; start a new Claude Code session}/assets/check-locks.py" --update'*) c10=ok ;; *) c10="no($err)" ;; esac
 
 # `--update` from the plugin's copy re-pins the project's lock and leaves the plugin's alone.
 before=$(cat "$p/plugin/reviewers/shipped/rules-lock.json")
@@ -12019,10 +12021,10 @@ p="$TMP/lk-norepo"; lk_plugin "$p"; mkdir -p "$TMP/lk-norepo-cwd"
 out=$( cd "$TMP/lk-norepo-cwd" && GIT_CEILING_DIRECTORIES="$TMP" python3 "$p/plugin/assets/check-locks.py" >/dev/null 2>"$TMP/lkerr"; echo "exit=$?" )
 case "$out:$(cat "$TMP/lkerr")" in *exit=1*:*"not inside a git repository"*) c9=ok ;; *) c9="no($out $(cat "$TMP/lkerr"))" ;; esac
 
-[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] \
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10" = "okokokokokokokokokok" ] \
   && report "check-locks.py verifies the repository it is run in, from any location" ok \
   || report "check-locks.py verifies the repository it is run in, from any location" no \
-     "clean=$c1 names-project=$c2 subdir=$c3 drift=$c4 repin-command=$c5 no-old-copy=$c6 update=$c7 plugin-untouched=$c8 no-repo=$c9"
+     "clean=$c1 names-project=$c2 subdir=$c3 drift=$c4 repin-command=$c5 no-old-copy=$c6 update=$c7 plugin-untouched=$c8 no-repo=$c9 remedy=$c10"
 
 # 413. #340 AC5, AC6 — the runner's two layouts, its one skip, and the state where a turn end could
 #      run a gate copy with no harness checks.
@@ -12146,6 +12148,40 @@ case "$out:$err" in 1:*"python-reviewer.md does not name the harness checks"*) c
 [ "$c1$c2$c3" = "okokok" ] \
   && report "the reviewer allow-list checker requires the harness checks beside the validators" ok \
   || report "the reviewer allow-list checker requires the harness checks beside the validators" no "control=$c1 dogfood-runner=$c2 reference-names=$c3"
+
+# 416. #340 AC3 — a command a reader pastes names its remedy when the variable it reads is unset.
+#      `sh "$GATE_SDD_HOOKS/harness-checks.sh"` with the variable unset is `sh /harness-checks.sh`,
+#      a "No such file" that says nothing about the variable, and `python3 "$GATE_SDD_PLUGIN_ROOT/…"`
+#      the same. The Design gives each the `${VAR:?remedy}` form the digest already prints, so the
+#      shell itself names the fix. Scanned: every Markdown statement a reader copies from, and
+#      check-locks.py's drift message. docs/verified.md is left out, because it quotes the commands
+#      as they were run.
+hv_files=$(cd "$ROOT" && { ls README.md README.ja.md AGENTS.md CONTRIBUTING.md hooks/templates/README.md assets/check-locks.py; find skills reviewers docs -name '*.md' ! -path docs/verified.md; } 2>/dev/null)
+hv_bare=$(cd "$ROOT" && printf '%s\n' "$hv_files" | while IFS= read -r f; do grep -nE '"\$(GATE_SDD_HOOKS|GATE_SDD_PLUGIN_ROOT)/' "$f" /dev/null; done)
+[ -z "$hv_bare" ] && c1=ok || c1="no($hv_bare)"
+# The remedy holds no apostrophe: inside "${…:?…}" bash, and so macOS's sh, reads one as an
+# opening quote, and the command is a syntax error that runs nothing.
+hv_run='sh "${GATE_SDD_HOOKS:?set it to the hooks/ of a plugin checkout}/harness-checks.sh"'
+hv_pin='python3 "${GATE_SDD_PLUGIN_ROOT:?is unset; start a new Claude Code session}/assets/check-locks.py" --update'
+c2=ok; for f in skills/init/SKILL.md README.md README.ja.md; do grep -qF "$hv_run" "$ROOT/$f" || c2="no(runner in $f)"; done
+c3=ok; for f in skills/init/SKILL.md skills/contract/SKILL.md README.md README.ja.md; do grep -qF "$hv_pin" "$ROOT/$f" || c3="no(re-pin in $f)"; done
+# The form does what it says: unset, the shell names the remedy and runs nothing; set, it runs.
+# Under every shell present, because CI's sh is dash, which accepted the apostrophe bash refuses.
+c4=ok
+for hv_sh in sh bash dash zsh; do
+  command -v "$hv_sh" >/dev/null 2>&1 || continue
+  hv_err=$( (unset GATE_SDD_HOOKS; "$hv_sh" -c "$hv_run") 2>&1 >/dev/null ); hv_rc=$?
+  case "$hv_rc:$hv_err" in
+    0:*) c4="no($hv_sh exit 0: $hv_err)" ;;
+    *:*"GATE_SDD_HOOKS: set it to the hooks/ of a plugin checkout"*) ;;
+    *) c4="no($hv_sh $hv_rc $hv_err)" ;;
+  esac
+done
+mkdir -p "$TMP/hv-hooks"; printf 'echo stub-runner-ran\n' > "$TMP/hv-hooks/harness-checks.sh"
+case "$(GATE_SDD_HOOKS="$TMP/hv-hooks" sh -c "$hv_run" 2>&1)" in stub-runner-ran) c5=ok ;; *) c5=no ;; esac
+[ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
+  && report "a pasted command names its remedy when the gate-sdd variable it reads is unset" ok \
+  || report "a pasted command names its remedy when the gate-sdd variable it reads is unset" no "no-bare-form=$c1 runner-form=$c2 repin-form=$c3 unset-names-remedy=$c4 set-runs=$c5"
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1

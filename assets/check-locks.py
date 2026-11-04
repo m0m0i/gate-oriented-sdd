@@ -151,8 +151,9 @@ for lock_path in lock_paths:
                         f"      locked {meta.get('computedHash')}\n"
                         f"      actual {actual}\n"
                         f"      If the edit was deliberate, re-pin from the project: {REPIN}\n"
-                        f'      (in a Claude Code session: python3 "$GATE_SDD_PLUGIN_ROOT/assets/'
-                        f'check-locks.py" --update; on Antigravity: python3 '
+                        "      (in a Claude Code session: python3 "
+                        '"${GATE_SDD_PLUGIN_ROOT:?is unset; start a new Claude Code session}'
+                        '/assets/check-locks.py" --update; on Antigravity: python3 '
                         f".agents/hooks/check-locks.py --update)"
                     )
 

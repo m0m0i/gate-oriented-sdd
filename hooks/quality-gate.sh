@@ -77,9 +77,10 @@ command -v gate_block >/dev/null 2>&1 || _gate_bootstrap_block "$_gate_name: gat
 
 # The validator list is read through gate_steering_read. If this hooks/ directory is a mix of
 # versions the function is undefined — and `set -u` does not catch an undefined FUNCTION, so
-# the read yields empty, the "no validators configured" branch below fires, and the gate exits
-# 0 having run nothing. That is a fail-open created by the migration to a shared reader, so the
-# migration has to carry the check. The asset guards itself this way; the gate is the half that
+# the read yields empty. Before #340 an empty line passed, and the gate exited 0 having run
+# nothing. That was a fail-open created by the migration to a shared reader, so the migration
+# carried the check, and it stays: a list read by a function that does not exist is not a list
+# that is empty. The asset guards itself this way; the gate is the half that
 # matters more, because its failure is silent.
 command -v gate_steering_read >/dev/null 2>&1 || gate_block "Quality gate: gate-lib.sh predates the shared steering reader, so this gate cannot read its validator list. Re-copy the plugin's hooks/ into this project and run again rather than treating this as a pass."
 
@@ -405,13 +406,13 @@ if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
 fi
 
 # Absent and unreadable are opposite answers, and this gate gave them the same one. `[ -f ]`
-# passes for a mode-000 file, the read came back empty, and the "no validators configured"
-# branch below exited 0 having verified nothing — .steering/product.md's own BLOCKER shape,
-# in the gate .steering/tech.md calls the one guarantee. #39.
+# passes for a mode-000 file, the read came back empty, and the gate, which then passed an empty
+# list, exited 0 having verified nothing — .steering/product.md's own BLOCKER shape, in the gate
+# .steering/tech.md calls the one guarantee. #39.
 #
-# Absent still passes, and that is not the same judgment made twice: a project that has not
-# declared its validators is not one whose turns should be blocked, which is what the case
-# beside this one pins. A project that declared them in a file nobody can open is.
+# A missing .steering/tech.md still passes, and that is not the same judgment made twice: a
+# project with no steering is not a harness project, and its turns are not this gate's to block,
+# which is what the case beside this one pins. A project whose steering nobody can open is.
 validators=$(gate_steering_read .steering/tech.md Validators); rc=$?
 [ "$rc" -eq 1 ] && gate_pass
 [ "$rc" -eq 2 ] && gate_block "Quality gate: .steering/tech.md exists and cannot be read, so this gate cannot find out which validators it is supposed to run. Fix the file's permissions rather than treating this as a pass — a gate that could not look is not a gate that found nothing."
