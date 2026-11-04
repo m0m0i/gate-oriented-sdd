@@ -629,7 +629,7 @@ Q3's answer to the paragraph is one sample.
   All four v0.36.0 guards passed on it. Asked to run `init` as a re-run limited to the hooks install, with the answers given in advance, the agent:
   - **read and reported.** It read the installed plugin's `skills/init/SKILL.md` and ran `python3 ~/.gemini/config/plugins/gate-sdd/assets/upgrade-install.py --project .`, which exited 3 with twelve changes:
     - six `missing`: the runner and five checks;
-    - four `shipped` gates and `steering-digest.sh`;
+    - four `shipped`: `gate-lib.sh`, the two gates and `steering-digest.sh`;
     - the contract `shipped`;
     - `steering-digest-antigravity.sh` `current`;
     - the five `scripts/` guards reported `shipped` and left alone;
@@ -650,7 +650,13 @@ Q3's answer to the paragraph is one sample.
   - **The dry run found a gap.** Run by hand before the session, the script did not classify the `.agents/_shared/` copy. That was fixed in `16006e4` and `6644cec`, and the plugin was reinstalled.
   - **The agent read the vendored copy first.** In the session it first read `.agents/plugins/gate-sdd/skills/init/SKILL.md` and searched for about thirty steps before it found the installed plugin's `init` and the script.
   - **The script then reported fourteen changes**, and identified the hooks file as `written by the template b528d5740466`, the v0.2.3–v0.10.0 text. The sandbox refused the first write and the retry bypassed it, as in R2.
-  - **The upgrade completed.** It applied fourteen changes, both contract copies included, and a second report said `nothing to upgrade`.
+  - **The upgrade completed.** It applied fourteen changes, and a second report said `nothing to upgrade`. The fourteen were:
+    - seven `missing` files added: the runner, the five checks and `steering-digest-antigravity.sh`;
+    - four `shipped` replaced: `gate-lib.sh`, the two gates and `steering-digest.sh`;
+    - both contract copies, `.agents/agents/_shared/` and `.agents/_shared/`;
+    - `.agents/hooks.json`.
+
+    No copy was `edited`. The project's one chosen value in the hooks file, its fast check `exit 0`, survived as `( exit 0 ) 1>&2; echo '{}'` in the new `gate-sdd-fast-check` group. The three `scripts/` guards stayed where they were, and that second report counted them as nothing to upgrade.
   - **The upgraded checks fail this project.** The agent ran the copied `harness-checks.sh`, which failed `check-document-set.py` (`mode is full and 1 required item(s) are not found: docs/ROADMAP.md`) and `check-document-cascade.py` (four documents without a reconciliation stamp, `docs/ROADMAP.md` among them). Those are checks the 2026-09 copies never ran: its old `scripts/` guards still passed. Its final answer reported neither the refused write nor this failure.
   - **In a later turn the gate blocked.** Asked to add a comment to a source file, the agent was blocked by the re-rendered quality gate, whose message ran the runner's output and named those two checks. It removed the comment as asked, and the gate kept blocking each continuation until the print timeout, so `agy` exited 3. The tree was left as it was.
 
@@ -661,6 +667,7 @@ Q3's answer to the paragraph is one sample.
 - **The guard migration of `scripts/` copies.** The prompt left it out.
 - **An install made by the `init` skill itself at v0.36.0.** R2's fixture was hand-built from that version's texts.
 - **The fresh-install path, `--install`,** which `scripts/test-gates.sh` covers.
+- **A seeded failure on the real consumer.** R4's later-turn block came from document checks that were already failing, not from a failure seeded for the run as in R3.
 - **A consumer's re-run that is pushed and passes its CI.**
 - **What to do about a vendored plugin copy.** Nothing `init` ships reaches the copy under `.agents/plugins/`, so a session can read its older skills. R4 shows it, and nothing here changes it.
 
