@@ -12415,6 +12415,152 @@ else
        "report=$c1 write=$c2 again=$c3 modes=$c4 edited=$c5 kept=$c6 replace=$c7 kept-qg=$c8 symlink=$c9 unreadable=$c10 partial=$c11 claude-code=$c12 install=$c13 refusals=$c14 stale-table=$c15 batch=$c16"
 fi
 
+# 419. #343 AC2, AC4, AC6, AC7 — the hooks file is re-rendered from the template that wrote it,
+#      identified by its whole structure, keeping what the project chose and asking about what it
+#      cannot place. The gate commands are byte-identical from v0.21.0 to v0.37.0, so a matcher
+#      on the gate commands alone took every v0.33.0 to v0.36.0 render for v0.37.0, kept its old
+#      fast check verbatim in `gate-sdd` and left the new group with nothing (the spec's HIGH).
+#      The fixtures are the six templates the table ships, rendered, so the case needs no git.
+hj_out=$(TMP="$TMP" ROOT="$ROOT" python3 - <<'EOF'
+import json, os, pathlib, shutil, subprocess
+ROOT = pathlib.Path(os.environ["ROOT"]); TMP = pathlib.Path(os.environ["TMP"])
+UP = ROOT / "assets" / "upgrade-install.py"
+table = json.loads((ROOT / "assets" / "shipped-texts.json").read_text())
+def shape(text):
+    o = json.loads(text); g = o["gate-sdd"]; q = g["Stop"][0]["command"]
+    if "GATE_SDD_HARNESS" in q: return "v0.38"
+    if "gate-sdd-fast-check" in o: return "v0.37"
+    if "PreInvocation" in g: return "v0.33" if g["Stop"][0]["timeout"] == 600 else "v0.21"
+    return "cd-only" if "rev-parse" in q else "v0.2.3"
+T = {shape(v): (k, v) for k, v in table["templates"].items()}
+def render(name, fast):
+    def walk(v):
+        if isinstance(v, dict): return {k: walk(x) for k, x in v.items()}
+        if isinstance(v, list): return [walk(x) for x in v]
+        if isinstance(v, str): return v.replace("{{HOOKS_DIR}}", ".agents/hooks").replace("{{FAST_CHECK}}", fast)
+        return v
+    return walk(json.loads(T[name][1]))
+n = [0]
+def project(obj, text=None):
+    n[0] += 1; d = TMP / f"hj-{n[0]}"; (d / ".agents" / "hooks").mkdir(parents=True)
+    for rel, src in table["copy_set"].items():
+        shutil.copy2(ROOT / src, d / rel)
+    (d / ".agents" / "hooks.json").write_text(text if text is not None else json.dumps(obj, indent=2) + "\n")
+    subprocess.run(["git", "init", "-q", "-b", "main", str(d)], check=True)
+    return d
+def run(d, *a):
+    r = subprocess.run(["python3", str(UP), "--project", str(d), *a], capture_output=True, text=True)
+    return r.returncode, r.stdout + r.stderr
+def hooks(d): return json.loads((d / ".agents" / "hooks.json").read_text())
+def switches_ok(d):
+    r = subprocess.run(["sh", "-c", '. "$1/hooks/gate-lib.sh"; gate_hook_switches "$2"', "sh", str(ROOT), str(d / ".agents/hooks.json")], capture_output=True, text=True)
+    return r.returncode == 0 and "{{" not in (d / ".agents/hooks.json").read_text()
+res = {}
+def check(name, cond, why=""):
+    res[name] = "ok" if cond else f"no({why})"
+FAST_ENV = "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && ( {} ) 1>&2; echo '{{}}'"
+
+# Each of the six templates, rendered, identifies itself.
+bad = []
+for name, (k, _t) in T.items():
+    d = project(render(name, "ruff check ."))
+    rc, out = run(d)
+    want = "current  .agents/hooks.json" if name == "v0.38" else f"written by the template {k[:12]}"
+    if want not in out: bad.append(f"{name}: {out[-300:]}")
+check("identify", not bad, "; ".join(bad))
+
+# A v0.33-v0.36 render: the fast check holding & and a quote, kept and escaped, its .* becoming
+# the write-tool list, no PostToolUse left in gate-sdd, the marker and the timeouts the template's.
+fast = "ruff check . && echo \"it's\""
+d = project(render("v0.33", fast)); rc, out = run(d, "--write", "--hooks-json"); h = hooks(d)
+cur = render("v0.38", fast)
+check("v036", rc == 0 and h == cur and "PostToolUse" not in h["gate-sdd"] and switches_ok(d), f"{rc} {out[-400:]}")
+
+# A project matcher on a v0.38 render is kept; so are a project group and a project Stop entry
+# placed before the gates; so is the fast-check group's enabled false.
+o = render("v0.38", "true"); o["gate-sdd-fast-check"]["PostToolUse"][0]["matcher"] = "write_file"
+o["gate-sdd-fast-check"]["enabled"] = False
+o["my-hooks"] = {"enabled": True, "Stop": [{"type": "command", "command": "echo mine", "timeout": 5}]}
+o["gate-sdd"]["Stop"].insert(0, {"type": "command", "command": "echo first", "timeout": 5})
+d = project(o); rc, out = run(d)
+check("kept-current", rc == 0 and "nothing to upgrade" in out, f"{rc} {out[-300:]}")
+o2 = render("v0.37", "true"); o2["gate-sdd-fast-check"]["PostToolUse"][0]["matcher"] = "write_file"
+o2["gate-sdd-fast-check"]["enabled"] = False; o2["my-hooks"] = o["my-hooks"]; o2["gate-sdd"]["Stop"].insert(0, o["gate-sdd"]["Stop"][0])
+d = project(o2); rc, out = run(d, "--write", "--hooks-json"); h = hooks(d)
+check("kept", rc == 0 and h == o and switches_ok(d), f"{rc} {out[-300:]} {json.dumps(h)[:300]}")
+
+# A one-group enabled false switched the gates and the fast check off together: unplaced, not
+# written, then written through --fast-check-enabled with the gates on and the fast check off.
+o = render("v0.33", "true"); o["gate-sdd"]["enabled"] = False
+d = project(o); before = (d / ".agents/hooks.json").read_text()
+rc, out = run(d, "--write", "--hooks-json")
+ok1 = rc == 3 and "off together" in out and (d / ".agents/hooks.json").read_text() == before
+rc, out = run(d, "--write", "--hooks-json", "--fast-check-enabled", "false"); h = hooks(d)
+check("one-group-off", ok1 and rc == 0 and h["gate-sdd"]["enabled"] is True and h["gate-sdd-fast-check"]["enabled"] is False and switches_ok(d), f"{ok1} {rc} {out[-300:]}")
+# A later gate-sdd enabled false: unplaced, and the proposal turns the gates on.
+o = render("v0.38", "true"); o["gate-sdd"]["enabled"] = False
+d = project(o); rc, out = run(d)
+ok1 = rc == 3 and "gate-sdd group is switched off" in out
+rc, out = run(d, "--write", "--hooks-json")
+check("later-off", ok1 and rc == 0 and hooks(d)["gate-sdd"]["enabled"] is True and switches_ok(d), f"{ok1} {rc} {out[-300:]}")
+
+# An edited gate command is asked about, and written only with --replace .agents/hooks.json.
+o = render("v0.38", "true"); o["gate-sdd"]["Stop"][0]["command"] = o["gate-sdd"]["Stop"][0]["command"].replace("GATE_SDD_HARNESS=", "MY=1 GATE_SDD_HARNESS=")
+d = project(o); rc, out = run(d, "--write", "--hooks-json")
+ok1 = rc == 3 and "edited gate entry" in out and hooks(d) == o
+rc, out = run(d, "--write", "--hooks-json", "--replace", ".agents/hooks.json")
+check("edited-gate", ok1 and rc == 0 and hooks(d) == render("v0.38", "true"), f"{ok1} {rc} {out[-300:]}")
+
+# A fast check outside the envelope cannot be captured: unplaced, then written through --fast-check.
+o = render("v0.38", "true"); o["gate-sdd-fast-check"]["PostToolUse"][0]["hooks"][0]["command"] = "my-own-check"
+d = project(o); rc, out = run(d, "--write", "--hooks-json")
+ok1 = rc == 3 and "fast check does not fit" in out and FAST_ENV.format("my-own-check") in out
+rc, out = run(d, "--write", "--hooks-json", "--fast-check", "my-own-check")
+check("fast-uncaptured", ok1 and rc == 0 and hooks(d) == render("v0.38", "my-own-check"), f"{ok1} {rc} {out[-300:]}")
+
+# A deleted template entry is unplaced; accepting the proposal restores it. (Deleting v0.33's
+# PreInvocation would not do: that file is also the cd-only template with raised timeouts.)
+o = render("v0.38", "true"); del o["gate-sdd-fast-check"]
+d = project(o); rc, out = run(d)
+ok1 = rc == 3 and "deleted" in out
+rc, out = run(d, "--write", "--hooks-json")
+check("deleted", ok1 and rc == 0 and hooks(d) == render("v0.38", "true"), f"{ok1} {rc} {out[-300:]}")
+
+# An empty capture becomes true, and the report says so.
+d = project(render("v0.33", "")); rc, out = run(d)
+ok1 = "rendered as `true`" in out
+rc, out = run(d, "--write", "--hooks-json")
+check("empty", ok1 and rc == 0 and hooks(d) == render("v0.38", "true"), f"{ok1} {rc} {out[-300:]}")
+
+# A v0.2.0 render, whose quality gate is the validator commands inlined, fits no template; a file
+# that is not JSON is unplaced too. Both are written only once --fast-check answers.
+o = {"gate-sdd": {"enabled": True, "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "true", "timeout": 60}]}],
+     "Stop": [{"type": "command", "command": "ruff check . && pytest", "timeout": 180}, {"type": "command", "command": "sh .agents/hooks/review-gate.sh", "timeout": 30}]}}
+d = project(o); rc, out = run(d, "--write", "--hooks-json")
+ok1 = rc == 3 and "fits no template" in out and hooks(d) == o
+rc, out = run(d, "--write", "--hooks-json", "--fast-check", "true")
+ok2 = rc == 0 and hooks(d) == render("v0.38", "true")
+d = project(None, text="{ not json\n"); rc, out = run(d, "--write", "--hooks-json")
+ok3 = rc == 3 and "is not JSON" in out
+rc, out = run(d, "--write", "--hooks-json", "--fast-check", "true")
+check("nofit-nonjson", ok1 and ok2 and ok3 and rc == 0 and hooks(d) == render("v0.38", "true"), f"{ok1} {ok2} {ok3} {rc} {out[-300:]}")
+
+# Copies pending and the hooks proposal not accepted: nothing is written.
+d = project(render("v0.33", "true")); (d / ".agents/hooks/harness-checks.sh").unlink()
+rc, out = run(d, "--write")
+check("declined", rc == 3 and not (d / ".agents/hooks/harness-checks.sh").exists() and "nothing written" in out, f"{rc} {out[-300:]}")
+
+# Another whitespace and key order is current, and nothing is written.
+o = render("v0.38", "true"); o = {k: dict(reversed(list(v.items()))) for k, v in reversed(list(o.items()))}
+d = project(None, text=json.dumps(o, indent=4)); before = (d / ".agents/hooks.json").read_text()
+rc, out = run(d, "--write")
+check("whitespace", rc == 0 and (d / ".agents/hooks.json").read_text() == before, f"{rc} {out[-300:]}")
+print(" ".join(f"{k}={v}" for k, v in res.items()))
+EOF
+)
+case "$hj_out" in *"=no("*|"") report "the hooks file is re-rendered from the template that wrote it, keeping the project's values" no "$hj_out" ;;
+  *) report "the hooks file is re-rendered from the template that wrote it, keeping the project's values" ok ;; esac
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 

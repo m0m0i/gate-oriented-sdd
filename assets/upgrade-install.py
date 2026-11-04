@@ -148,96 +148,309 @@ def dump(obj):
     return json.dumps(obj, indent=2, ensure_ascii=False) + "\n"
 
 
-def fast_commands(template_obj):
-    """(group, event, entry index, hook index) of every command that holds {{FAST_CHECK}}."""
-    sites = []
-    for g, group in template_obj.items():
+GATES = {
+    "quality-gate.sh": "quality",
+    "review-gate.sh": "review",
+    "steering-digest-antigravity.sh": "digest",
+}
+FAST_GROUP = "gate-sdd-fast-check"
+
+
+def hooks_of(entry):
+    """An entry's hook dicts: a tool event nests them under `hooks`, the others are flat."""
+    if not isinstance(entry, dict):
+        return []
+    inner = entry.get("hooks")
+    return [h for h in inner if isinstance(h, dict)] if isinstance(inner, list) else [entry]
+
+
+def entry_key(event, entry):
+    """What an entry runs: a gate or the digest by the script its command names, else the fast
+    check by being a PostToolUse entry. Entries are aligned by this, never by position."""
+    for h in hooks_of(entry):
+        cmd = h.get("command", "")
+        for script, key in GATES.items():
+            if isinstance(cmd, str) and script in cmd:
+                return key
+    return "fast" if event == "PostToolUse" else None
+
+
+def slots(obj):
+    """(group, event, key) to (index, entry), for the first entry of each key in each list."""
+    out = {}
+    for g, group in obj.items():
+        if not isinstance(group, dict):
+            continue
         for ev, entries in group.items():
             if not isinstance(entries, list):
                 continue
             for i, e in enumerate(entries):
-                for j, h in enumerate(e.get("hooks", [e])):
-                    if "{{FAST_CHECK}}" in h.get("command", ""):
-                        sites.append((g, ev, i, j))
-    return sites
+                k = entry_key(ev, e)
+                if k and (g, ev, k) not in out:
+                    out[(g, ev, k)] = (i, e)
+    return out
 
 
-def at(obj, site):
-    g, ev, i, j = site
-    e = obj[g][ev][i]
-    return e["hooks"][j] if "hooks" in e else e
+def capture(pattern, cmd):
+    """The fast check inside `cmd`, read through the template's envelope `pattern`, or None."""
+    if not isinstance(cmd, str):
+        return None
+    head, _, tail = pattern.replace("{{HOOKS_DIR}}", HOOKS_DIR).partition("{{FAST_CHECK}}")
+    m = re.fullmatch(re.escape(head) + "(.*)" + re.escape(tail), cmd, re.S)
+    return m.group(1) if m else None
 
 
-def capture_fast(template_obj, project_obj):
-    """The project's fast check, read through the template's envelope, or None."""
-    for site in fast_commands(template_obj):
-        try:
-            pattern, cmd = at(template_obj, site)["command"], at(project_obj, site)["command"]
-        except (KeyError, IndexError, TypeError):
-            return None
-        pattern = pattern.replace("{{HOOKS_DIR}}", HOOKS_DIR)
-        head, _, tail = pattern.partition("{{FAST_CHECK}}")
-        m = re.fullmatch(re.escape(head) + "(.*)" + re.escape(tail), cmd, re.S)
-        if not m:
-            return None
-        return m.group(1)
-    return None
+def fit(template, project):
+    """How `template` explains `project`: a dict, or None when a gate's entry has no place in it.
+
+    Every value the template owns is compared: equal, captured by `{{FAST_CHECK}}`, or recorded
+    as a difference. A template-owned entry the project lacks is recorded as deleted. The score
+    is what the fit leaves unexplained, so the template that wrote a file scores lowest."""
+    tslots, pslots = slots(template), slots(project)
+    deleted = [s for s in tslots if s not in pslots]
+    if any(s[2] in ("quality", "review") for s in deleted):
+        return None
+    diffs, fast, fast_cmd, edited_gates = [], None, None, []
+    for s, (_ti, te) in tslots.items():
+        if s not in pslots:
+            continue
+        _pi, pe = pslots[s]
+        if "matcher" in te and pe.get("matcher") != te["matcher"]:
+            diffs.append((s, "matcher"))
+        th, ph = hooks_of(te), hooks_of(pe)
+        if not ph:
+            diffs.append((s, "shape"))
+            continue
+        for key, tval in th[0].items():
+            pval = ph[0].get(key)
+            if key == "command" and s[2] == "fast":
+                fast_cmd = pval
+                fast = capture(tval.replace("{{HOOKS_DIR}}", HOOKS_DIR), pval)
+                if fast is None:
+                    diffs.append((s, "command"))
+            elif key == "command":
+                if pval != tval.replace("{{HOOKS_DIR}}", HOOKS_DIR):
+                    diffs.append((s, "command"))
+                    edited_gates.append(s[2])
+            elif pval != tval:
+                diffs.append((s, key))
+    for g, group in template.items():
+        pg = project.get(g)
+        if isinstance(pg, dict) and pg.get("enabled") is not group.get("enabled"):
+            diffs.append(((g, None, None), "enabled"))
+    # An entry the project runs under a key the template owns, in a place the template does not
+    # carry, is unexplained by it: the untagged cd-only template has no PreInvocation, so without
+    # this a v0.21.0 render's digest entry would read as the project's and the two would tie.
+    unexplained = [s for s in pslots if s not in tslots and s[0] in template]
+    return {
+        "score": len(diffs) + len(unexplained) + 100 * len(deleted),
+        "diffs": diffs,
+        "deleted": deleted,
+        "fast": fast,
+        "fast_cmd": fast_cmd,
+        "edited_gates": edited_gates,
+        "tslots": tslots,
+        "pslots": pslots,
+    }
 
 
-def hooks_plan(root, args):
-    """The hooks file's state: a dict with state, proposal and questions."""
+def identify(project, templates):
+    """The (sha, template, fit) that wrote `project`, or None when no single template fits best."""
+    fits = []
+    for k, text in templates.items():
+        tpl = json.loads(text)
+        f = fit(tpl, project)
+        if f is not None:
+            fits.append((f["score"], k, tpl, f))
+    if not fits:
+        return None, "fits no template this plugin shipped since v0.2.3"
+    fits.sort(key=lambda x: x[0])
+    if len(fits) > 1 and fits[0][0] == fits[1][0]:
+        return None, f"fits two templates equally ({fits[0][1][:12]} and {fits[1][1][:12]})"
+    _score, k, tpl, f = fits[0]
+    return (k, tpl, f), None
+
+
+def merge_project_values(cur, project, tpl, f, args, out):
+    """Carry what the project chose onto the current template's rendering `cur`."""
+    cslots = slots(cur)
+    # The fast check's matcher, where it differs from the identifying template's own.
+    tfast = [s for s in f["tslots"] if s[2] == "fast"]
+    cfast = [s for s in cslots if s[2] == "fast"]
+    if tfast and cfast and tfast[0] in f["pslots"]:
+        pm = f["pslots"][tfast[0]][1].get("matcher")
+        tm = f["tslots"][tfast[0]][1].get("matcher")
+        if pm is not None and pm != tm:
+            cslots[cfast[0]][1]["matcher"] = pm
+    # Keys the project added to a template-owned hook are kept.
+    for s, (_ti, te) in f["tslots"].items():
+        if s not in f["pslots"]:
+            continue
+        cs = [c for c in cslots if c[2] == s[2] and (c[1] == s[1])]
+        if not cs:
+            continue
+        th, ph, ch = hooks_of(te), hooks_of(f["pslots"][s][1]), hooks_of(cslots[cs[0]][1])
+        if th and ph and ch:
+            for key, val in ph[0].items():
+                if key not in th[0]:
+                    ch[0][key] = val
+    # Every entry the template does not own is the project's, kept where it stood.
+    owned = {(s[0], s[1], f["pslots"][s][0]) for s in f["tslots"] if s in f["pslots"]}
+    for g, group in project.items():
+        if not isinstance(group, dict):
+            continue
+        if g not in tpl:
+            cur.setdefault(g, group)
+            continue
+        for ev, entries in group.items():
+            if not isinstance(entries, list):
+                if ev != "enabled" and ev not in tpl[g]:
+                    cur.setdefault(g, {})[ev] = entries
+                continue
+            first_owned = min([i for (og, oe, i) in owned if og == g and oe == ev], default=None)
+            for i, e in enumerate(entries):
+                if (g, ev, i) in owned:
+                    continue
+                target = cur.setdefault(g, {"enabled": True}).setdefault(ev, [])
+                if first_owned is not None and i < first_owned:
+                    target.insert(i, e)
+                else:
+                    target.append(e)
+    # The fast-check group's `enabled`, where the identifying template had that group.
+    pfast = project.get(FAST_GROUP)
+    if FAST_GROUP in tpl and isinstance(pfast, dict) and FAST_GROUP in cur:
+        cur[FAST_GROUP]["enabled"] = pfast.get("enabled")
+    gate_group = "gate-sdd"
+    off = gate_group in project and project[gate_group].get("enabled") is not True
+    if off and FAST_GROUP not in tpl:
+        if args.fast_check_enabled is None:
+            out["blocking"].append(
+                f"{HOOKS_JSON}: its one `gate-sdd` group has `enabled` false, which switched the "
+                "gates and the fast check off together. The proposal turns the gates on and the "
+                "fast check off; answer with --fast-check-enabled true|false"
+            )
+        if FAST_GROUP in cur:
+            cur[FAST_GROUP]["enabled"] = args.fast_check_enabled == "true"
+    elif off:
+        out["asks"].append(
+            f"{HOOKS_JSON}: the gate-sdd group is switched off, so neither gate runs; "
+            "the proposal switches it back on"
+        )
+    if args.fast_check_enabled is not None and FAST_GROUP in cur:
+        cur[FAST_GROUP]["enabled"] = args.fast_check_enabled == "true"
+
+
+def check_proposal(obj):
+    """No group running a gate or the digest is off, both gates run, and no placeholder is left."""
+    running = set()
+    for g, group in obj.items():
+        if not isinstance(group, dict):
+            continue
+        keys = {
+            entry_key(ev, e)
+            for ev, entries in group.items()
+            if isinstance(entries, list)
+            for e in entries
+        } & {"quality", "review", "digest"}
+        if keys and group.get("enabled") is not True:
+            raise Refusal(f"the proposal for {HOOKS_JSON} would leave the group {g!r} switched off")
+        running |= keys
+    if not {"quality", "review"} <= running:
+        raise Refusal(f"the proposal for {HOOKS_JSON} would not run both gates")
+    if "{{" in dump(obj):
+        raise Refusal(f"the proposal for {HOOKS_JSON} still holds a placeholder")
+
+
+def hooks_plan(root, args, table):
+    """The hooks file's state, its proposal, and what must be answered before it is written.
+
+    `blocking` questions need a flag's answer; `asks` are settled by accepting the proposal; an
+    edited gate entry also needs --replace .agents/hooks.json."""
     template_text = TEMPLATE.read_text(encoding="utf-8")
     path = root / HOOKS_JSON
+    out = {"blocking": [], "asks": [], "notes": [], "needs_replace": False, "old": None}
     if path.is_symlink():
-        return {
-            "state": "question",
-            "questions": [
-                f"{HOOKS_JSON} is a symlink to {os.readlink(path)}; nothing is written through it"
-            ],
-        }
+        out.update(state="symlink", target=os.readlink(path))
+        return out
     if not os.path.lexists(path):
-        fast = args.fast_check if args.fast_check is not None else "true"
-        q = (
-            []
-            if args.fast_check is not None
-            else [
-                f"{HOOKS_JSON} is missing and no --fast-check was given: the proposal runs `true`"
-            ]
-        )
-        return {
-            "state": "missing",
-            "proposal": render(template_text, fast),
-            "old": None,
-            "questions": q,
-        }
+        if args.fast_check is None:
+            out["blocking"].append(
+                f"{HOOKS_JSON} is missing: name its fast check with --fast-check"
+            )
+        out.update(state="missing", proposal=render(template_text, args.fast_check or "true"))
+        check_proposal(out["proposal"])
+        return out
     try:
         old_text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError) as e:
         raise Refusal(f"{HOOKS_JSON} cannot be read: {e}") from e
+    out["old"] = old_text
     try:
         project = json.loads(old_text)
+        if not isinstance(project, dict):
+            raise ValueError("not an object")
     except ValueError:
-        return {
-            "state": "question",
-            "old": old_text,
-            "proposal": render(template_text, args.fast_check or "true"),
-            "questions": [
-                f"{HOOKS_JSON} is not JSON, so no value of the project's can be read from it"
-            ],
-        }
-    template = json.loads(template_text)
-    fast = capture_fast(template, project)
-    if fast is not None and render(template_text, fast) == project:
-        return {"state": "current"}
-    return {
-        "state": "question",
-        "old": old_text,
-        "proposal": render(template_text, args.fast_check or fast or "true"),
-        "questions": [
-            f"{HOOKS_JSON} is not in the current template's shape, "
-            "and this version reads no other shape"
-        ],
-    }
+        project = None
+    found, why = (
+        (None, f"{HOOKS_JSON} is not JSON")
+        if project is None
+        else identify(project, table["templates"])
+    )
+    if found is None:
+        if args.fast_check is None:
+            out["blocking"].append(
+                f"{why}, so no value of the project's can be placed in the current shape. "
+                "The proposal is the current template; name the fast check with --fast-check"
+            )
+        cur = render(template_text, args.fast_check or "true")
+        for g, group in (project or {}).items():
+            if g not in ("gate-sdd", FAST_GROUP):
+                cur.setdefault(g, group)
+        out.update(state="proposal", proposal=cur, template=None)
+        check_proposal(cur)
+        return out
+    k, tpl, f = found
+    fast = f["fast"]
+    if args.fast_check is not None:
+        fast = args.fast_check
+    elif fast is None and f["fast_cmd"] is not None:
+        wrapped = [
+            h["command"]
+            for _s, (_i, e) in slots(render(template_text, f["fast_cmd"])).items()
+            if _s[2] == "fast"
+            for h in hooks_of(e)
+        ]
+        out["blocking"].append(
+            f"{HOOKS_JSON}: its fast check does not fit the envelope of the template that wrote "
+            f"the file, so it cannot be read out of it. Yours: {f['fast_cmd']}  Proposed: "
+            f"{wrapped[0] if wrapped else f['fast_cmd']}  Answer with --fast-check <command>"
+        )
+        fast = f["fast_cmd"]
+    elif fast is None:
+        fast = "true"
+    elif not fast.strip():
+        out["notes"].append(f"{HOOKS_JSON}: an empty fast check, rendered as `true`")
+        fast = "true"
+    cur = render(template_text, fast)
+    if f["edited_gates"]:
+        out["needs_replace"] = True
+        out["asks"].append(
+            f"{HOOKS_JSON}: an edited gate entry ({', '.join(sorted(set(f['edited_gates'])))}): "
+            "the proposal takes the template's command; "
+            f"replace it only with --replace {HOOKS_JSON}"
+        )
+    for s in f["deleted"]:
+        out["asks"].append(
+            f"{HOOKS_JSON}: the template's {s[2]} entry in {s[0]}.{s[1]} was deleted; the proposal "
+            "restores it (to keep the fast check off, answer --fast-check-enabled false)"
+        )
+    merge_project_values(cur, project, tpl, f, args, out)
+    check_proposal(cur)
+    if cur == project and not (out["blocking"] or out["asks"]):
+        out.update(state="current")
+        return out
+    out.update(state="proposal", proposal=cur, template=k)
+    return out
 
 
 def plan_project(root, args, table, current):
@@ -269,7 +482,7 @@ def plan_project(root, args, table, current):
             plan["copies"].append(
                 (rel, src, "symlink" if dir_link and cls != "symlink" else cls, detail)
             )
-        plan["hooks"] = hooks_plan(root, args)
+        plan["hooks"] = hooks_plan(root, args, table)
     for rel in contracts:
         cls, detail = classify(root, rel, table["contract"]["source"], table, current)
         plan["contracts"].append((rel, table["contract"]["source"], cls, detail))
@@ -308,14 +521,19 @@ def pending(plan, args):
             questions.append(f"{rel} is a symlink; nothing is written through it")
     h = plan["hooks"]
     hooks_write = False
-    if h and h["state"] != "current":
-        accepted = args.hooks_json and "proposal" in h
-        if accepted or (h["state"] == "missing" and args.install):
+    if h and h["state"] == "symlink":
+        questions.append(
+            f"{HOOKS_JSON} is a symlink to {h['target']}; nothing is written through it"
+        )
+    elif h and h["state"] != "current":
+        replaced = not h["needs_replace"] or HOOKS_JSON in args.replace
+        accepted = args.hooks_json or (h["state"] == "missing" and args.install)
+        if accepted and not h["blocking"] and replaced:
             hooks_write = True
         else:
-            questions.extend(
-                h["questions"] or [f"{HOOKS_JSON} has a proposal: accept it with --hooks-json"]
-            )
+            questions.extend(h["blocking"] + h["asks"])
+            if not accepted and not h["blocking"]:
+                questions.append(f"{HOOKS_JSON} has a proposal: accept it with --hooks-json")
     return changes, questions, kept, hooks_write
 
 
@@ -416,7 +634,15 @@ def report(root, plan, args):
         if h["state"] == "current":
             print(f"  current  {HOOKS_JSON}")
         elif "proposal" in h:
-            print(f"  proposed {HOOKS_JSON}  (accept with --hooks-json)")
+            if h["state"] == "missing":
+                origin = "missing"
+            elif h.get("template"):
+                origin = f"written by the template {h['template'][:12]}"
+            else:
+                origin = "no template identified"
+            print(f"  proposed {HOOKS_JSON}  ({origin}; accept with --hooks-json)")
+            for note in h["notes"]:
+                print(f"  note     {note}")
             old = (h.get("old") or "").splitlines(keepends=True)
             sys.stdout.writelines(
                 difflib.unified_diff(

@@ -253,7 +253,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
   - a batch of three projects (one current, one behind, one unreadable) naming the behind and the refused, exiting 1 and writing nothing; `--write` with two projects refused;
   - a stale table in the plugin refused;
   - a second run changing nothing.
-- [ ] T3 (AC2, AC4, AC6, AC7): failing cases for the hooks file, then identification, classification, the proposal and the checks. The fixtures are built from the table's own templates, which needs no git. The cases cover:
+- [x] T3 (AC2, AC4, AC6, AC7): failing cases for the hooks file, then identification, classification, the proposal and the checks. The fixtures are built from the table's own templates, which needs no git. The cases cover:
   - each of the six templates, rendered, identifying itself;
   - a v0.36.0 render with a fast check holding `&` and a quote, kept and escaped, with no `PostToolUse` left in `gate-sdd`;
   - its `.*` becoming the write-tool list;
