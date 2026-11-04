@@ -279,7 +279,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
 
   A case fails when any of them lists the copy set's files instead of citing the table.
 - [x] T5 (records): ADR-11, `docs/fidelity.md`, `CONTRIBUTING.md`, `.steering/structure.md`, and `.steering/tech.md`'s `- Source globs:`. Every validator stays green, and so do the pinned linters on `assets/`.
-- [ ] T6 (AC9): the two real `agy` runs, recorded in `docs/verified.md`:
+- [x] T6 (AC9): the two real `agy` runs, recorded in `docs/verified.md`:
   - **The fixture,** in a trusted folder, installed as `init` at v0.36.0 writes it, with a hand-edited fast check. The plugin is refreshed by `agy plugin uninstall` and `install` to the branch head. Then `init` is re-run, and a later turn shows the gates blocking a seeded failure.
   - **The maintainer's consumer (C6),** on a branch from the commit that holds its install, with nothing pushed without the maintainer's go.
 
