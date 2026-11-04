@@ -12270,6 +12270,151 @@ out=$(st_build "$p" --check); case "$out" in exit=1) c9=ok ;; *) c9="no(no ref, 
   || report "the shipped-texts table names every text each copied file has had on main" no \
      "repo=$c1 current-texts=$c2 branch-texts=$c3 tip=$c4 merge=$c5 stale=$c6 extra=$c7 no-ref-skip=$c8 no-ref-current=$c9"
 
+# 418. #343 AC1, AC3, AC4, AC5, AC7, AC8, AC10 — a re-run classifies each copy, judges the set
+#      whole, and writes only what the answers allow. The fixture is an Antigravity install as
+#      init wrote it at gate-sdd--v0.36.0, built from that tag's own texts: five gates in
+#      .agents/hooks/, the five guards in scripts/, the contract in .agents/agents/_shared/, and a
+#      hooks file already in the current shape, so the copies can be written (T3 is the hooks file).
+UP="$ROOT/assets/upgrade-install.py"
+run_up() { _d="$1"; shift; ( cd "$_d" && python3 "$UP" "$@" >"$TMP/upout" 2>"$TMP/uperr"; echo "exit=$?" ) }
+up_render() { # up_render <out> <fast check> — the current template, substituted in its parsed structure
+  python3 - "$ROOT/hooks/templates/antigravity.hooks.json" "$1" "$2" <<'EOF'
+import json, sys
+def walk(v):
+    if isinstance(v, dict): return {k: walk(x) for k, x in v.items()}
+    if isinstance(v, list): return [walk(x) for x in v]
+    if isinstance(v, str): return v.replace("{{HOOKS_DIR}}", ".agents/hooks").replace("{{FAST_CHECK}}", sys.argv[3])
+    return v
+open(sys.argv[2], "w").write(json.dumps(walk(json.load(open(sys.argv[1]))), indent=2) + "\n")
+EOF
+}
+up_v036() { # up_v036 <dir> — init's Antigravity install at v0.36.0
+  _u="$1"; mkdir -p "$_u/.agents/hooks" "$_u/scripts" "$_u/.agents/agents/_shared"
+  for _n in gate-lib quality-gate review-gate steering-digest steering-digest-antigravity; do
+    git -C "$ROOT" show "gate-sdd--v0.36.0:hooks/$_n.sh" > "$_u/.agents/hooks/$_n.sh"; chmod 755 "$_u/.agents/hooks/$_n.sh"
+  done
+  for _n in check-steering-anchors.sh check-locks.py check-document-set.py check-document-cascade.py check-unreviewed-work.sh; do
+    git -C "$ROOT" show "gate-sdd--v0.36.0:assets/$_n" > "$_u/scripts/$_n"
+  done
+  git -C "$ROOT" show "gate-sdd--v0.36.0:reviewers/_shared/reviewer-contract.md" > "$_u/.agents/agents/_shared/reviewer-contract.md"
+  up_render "$_u/.agents/hooks.json" true
+  ( cd "$_u" && git init -q -b main && git add -A && git -c user.email=t@t -c user.name=t commit -qm install ) >/dev/null 2>&1
+}
+up_tree() { ( cd "$1" && find . -path ./.git -prune -o -type f -print | LC_ALL=C sort | xargs shasum -a 256 ) }
+
+if ! git -C "$ROOT" rev-parse -q --verify 'gate-sdd--v0.36.0^{commit}' >/dev/null; then
+  note_skip "a re-run classifies each copy and writes only what the answers allow" "no gate-sdd--v0.36.0 tag in this clone"
+else
+  # The report: shipped, missing, current and the guards, and nothing written.
+  p="$TMP/up-report"; up_v036 "$p"; before=$(up_tree "$p")
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  c1=ok
+  case "$out" in exit=3) ;; *) c1="no(exit: $out $(cat "$TMP/uperr"))" ;; esac
+  for want in "shipped  .agents/hooks/quality-gate.sh" "missing  .agents/hooks/harness-checks.sh" "missing  .agents/hooks/check-locks.py" \
+              "current  .agents/hooks/steering-digest-antigravity.sh" "shipped  .agents/agents/_shared/reviewer-contract.md" \
+              "guard    scripts/check-locks.py: shipped" "current  .agents/hooks.json"; do
+    case "$o" in *"$want"*) ;; *) c1="no(report lacks '$want': $o)" ;; esac
+  done
+  [ "$(up_tree "$p")" = "$before" ] || c1="no(the report wrote a file)"
+
+  # --write: shipped replaced, missing added, guards untouched, then a second run changes nothing.
+  out=$(run_up "$p" --project . --write)
+  c2=ok
+  case "$out" in exit=0) ;; *) c2="no(write: $out $(cat "$TMP/upout" "$TMP/uperr"))" ;; esac
+  cmp -s "$p/.agents/hooks/quality-gate.sh" "$ROOT/hooks/quality-gate.sh" || c2="no(quality gate not replaced)"
+  cmp -s "$p/.agents/hooks/harness-checks.sh" "$ROOT/hooks/harness-checks.sh" || c2="no(runner not added)"
+  cmp -s "$p/.agents/agents/_shared/reviewer-contract.md" "$ROOT/reviewers/_shared/reviewer-contract.md" || c2="no(contract not replaced)"
+  [ "$(git -C "$ROOT" show gate-sdd--v0.36.0:assets/check-locks.py | shasum -a 256)" = "$(shasum -a 256 < "$p/scripts/check-locks.py")" ] || c2="no(a guard in scripts/ was written)"
+  mid=$(up_tree "$p"); out=$(run_up "$p" --project .)
+  case "$out:$(cat "$TMP/upout")" in exit=0:*"nothing to upgrade"*) c3=ok ;; *) c3="no(second run: $out $(cat "$TMP/upout"))" ;; esac
+  [ "$(up_tree "$p")" = "$mid" ] || c3="no(the second run wrote)"
+  # Modes: an existing copy keeps its own, a missing one takes the source's.
+  [ -x "$p/.agents/hooks/quality-gate.sh" ] && [ -x "$p/.agents/hooks/check-locks.py" ] && c4=ok || c4="no(modes: $(ls -l "$p/.agents/hooks" | tr '\n' ' '))"
+
+  # An edited gate: shown with its diff, kept without --replace, and the set reported mixed.
+  p="$TMP/up-edited"; up_v036 "$p"; printf '# our local note\n' >> "$p/.agents/hooks/review-gate.sh"; cp "$p/.agents/hooks/review-gate.sh" "$TMP/up-mine"
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  case "$out:$o" in exit=3:*"edited   .agents/hooks/review-gate.sh"*"+++ .agents/hooks/review-gate.sh (plugin)"*"-# our local note"*) c5=ok ;; *) c5="no($out $o)" ;; esac
+  out=$(run_up "$p" --project . --write); o=$(cat "$TMP/upout")
+  case "$out:$o" in exit=3:*"1 edit(s) kept, set mixed"*) c6=ok ;; *) c6="no($out $o $(cat "$TMP/uperr"))" ;; esac
+  cmp -s "$p/.agents/hooks/review-gate.sh" "$TMP/up-mine" || c6="no(the edit was overwritten)"
+  out=$(run_up "$p" --project . --write --replace .agents/hooks/review-gate.sh)
+  case "$out" in exit=0) cmp -s "$p/.agents/hooks/review-gate.sh" "$ROOT/hooks/review-gate.sh" && c7=ok || c7="no(not replaced)" ;; *) c7="no($out $(cat "$TMP/upout"))" ;; esac
+
+  # A kept edited quality gate that predates the runner names the checks it would stop running.
+  p="$TMP/up-kept-qg"; up_v036 "$p"; printf '# ours\n' >> "$p/.agents/hooks/quality-gate.sh"
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  case "$o" in *"does not run harness-checks.sh"*"check-steering-anchors.sh, check-locks.py, check-document-set.py, check-document-cascade.py"*"- Validators:"*) c8=ok ;; *) c8="no($o)" ;; esac
+
+  # A symlinked copy is a question, and nothing is written through it.
+  p="$TMP/up-link"; up_v036 "$p"; cp "$p/.agents/hooks/gate-lib.sh" "$TMP/up-elsewhere.sh"
+  rm "$p/.agents/hooks/gate-lib.sh"; ln -s "$TMP/up-elsewhere.sh" "$p/.agents/hooks/gate-lib.sh"; before=$(shasum -a 256 < "$TMP/up-elsewhere.sh")
+  out=$(run_up "$p" --project . --write); o=$(cat "$TMP/upout")
+  case "$o" in *"gate-lib.sh is a symlink"*) c9=ok ;; *) c9="no($out $o)" ;; esac
+  [ "$(shasum -a 256 < "$TMP/up-elsewhere.sh")" = "$before" ] && [ -L "$p/.agents/hooks/gate-lib.sh" ] || c9="no(written through the link)"
+
+  # An unreadable copy is a refusal, never a class.
+  p="$TMP/up-unread"; up_v036 "$p"; chmod 000 "$p/.agents/hooks/review-gate.sh"
+  if [ -r "$p/.agents/hooks/review-gate.sh" ]; then
+    note_skip "upgrade/unreadable-copy" "permissions not enforced here (running as root?)"; c10=ok
+  else
+    out=$(run_up "$p" --project .); case "$out:$(cat "$TMP/uperr")" in exit=1:*"review-gate.sh cannot be read"*) c10=ok ;; *) c10="no($out $(cat "$TMP/uperr"))" ;; esac
+  fi
+  chmod 644 "$p/.agents/hooks/review-gate.sh"
+
+  # A write that fails part-way exits 1 and names what it already wrote.
+  p="$TMP/up-partial"; up_v036 "$p"; chmod 555 "$p/.agents/agents/_shared"
+  if : 2>/dev/null > "$p/.agents/agents/_shared/probe"; then
+    note_skip "upgrade/partial-write" "permissions not enforced here (running as root?)"; c11=ok; rm -f "$p/.agents/agents/_shared/probe"
+  else
+    out=$(run_up "$p" --project . --write); e=$(cat "$TMP/uperr")
+    case "$out:$e" in exit=1:*"write failed at .agents/agents/_shared/reviewer-contract.md"*"Already written: .agents/hooks/"*) c11=ok ;; *) c11="no($out $e)" ;; esac
+  fi
+  chmod 755 "$p/.agents/agents/_shared"
+
+  # A Claude Code-only project: its contract line only, and nothing created under .agents/.
+  p="$TMP/up-cc"; mkdir -p "$p/.claude/agents/_shared"; git -C "$ROOT" show "gate-sdd--v0.36.0:reviewers/_shared/reviewer-contract.md" > "$p/.claude/agents/_shared/reviewer-contract.md"
+  ( cd "$p" && git init -q -b main ) >/dev/null 2>&1
+  out=$(run_up "$p" --project . --write); o=$(cat "$TMP/upout")
+  case "$out" in exit=0) ;; *) c12="no($out $o $(cat "$TMP/uperr"))" ;; esac
+  [ -e "$p/.agents" ] && c12="no(.agents/ created on a Claude Code project)" || c12=${c12:-ok}
+  cmp -s "$p/.claude/agents/_shared/reviewer-contract.md" "$ROOT/reviewers/_shared/reviewer-contract.md" || c12="no(contract not refreshed)"
+
+  # No install: exit 4, never a pass; --install makes one, and it is then current.
+  p="$TMP/up-none"; mkdir -p "$p"; ( cd "$p" && git init -q -b main ) >/dev/null 2>&1
+  out=$(run_up "$p" --project .); case "$out:$(cat "$TMP/upout")" in exit=4:*"no install"*) c13=ok ;; *) c13="no($out $(cat "$TMP/upout"))" ;; esac
+  out=$(run_up "$p" --project . --install --fast-check 'ruff check . && echo "ok"' --write)
+  case "$out" in exit=0) ;; *) c13="no(install: $out $(cat "$TMP/upout" "$TMP/uperr"))" ;; esac
+  out=$(run_up "$p" --project .); case "$out:$(cat "$TMP/upout")" in exit=0:*"nothing to upgrade"*) ;; *) c13="no(after install: $out $(cat "$TMP/upout"))" ;; esac
+  grep -qF 'ruff check . && echo \"ok\"' "$p/.agents/hooks.json" || c13="no(fast check not escaped into the file)"
+
+  # Outside a repository, and inside the plugin's own tree: refusals.
+  mkdir -p "$TMP/up-norepo"
+  out=$( cd "$TMP/up-norepo" && GIT_CEILING_DIRECTORIES="$TMP" python3 "$UP" --project . 2>"$TMP/uperr" >/dev/null; echo "exit=$?" )
+  case "$out:$(cat "$TMP/uperr")" in exit=1:*"not inside a git repository"*) c14=ok ;; *) c14="no($out $(cat "$TMP/uperr"))" ;; esac
+  out=$(run_up "$ROOT" --project .); case "$out:$(cat "$TMP/uperr")" in exit=1:*"plugin's own tree"*) ;; *) c14="no(plugin tree: $out $(cat "$TMP/uperr"))" ;; esac
+
+  # A stale table in the plugin is refused before any project is read.
+  sp="$TMP/up-plugin"; mkdir -p "$sp"; cp -R "$ROOT/assets" "$ROOT/hooks" "$ROOT/reviewers" "$sp/"
+  printf '# drift\n' >> "$sp/hooks/gate-lib.sh"
+  out=$( cd "$TMP/up-report" && python3 "$sp/assets/upgrade-install.py" --project . 2>"$TMP/uperr" >/dev/null; echo "exit=$?" )
+  case "$out:$(cat "$TMP/uperr")" in exit=1:*"table is stale: hooks/gate-lib.sh"*) c15=ok ;; *) c15="no($out $(cat "$TMP/uperr"))" ;; esac
+
+  # A batch: one current, one behind, one refused — named, the worst code, and nothing written.
+  pa="$TMP/up-report"; pb="$TMP/up-b"; up_v036 "$pb"; before=$(up_tree "$pb")
+  out=$( cd "$TMP" && python3 "$UP" --project "$pa" --project "$pb" --project "$TMP/up-norepo" >"$TMP/upout" 2>"$TMP/uperr"; echo "exit=$?" )
+  case "$out:$(cat "$TMP/upout")" in exit=1:*"behind: $pb; refused: $TMP/up-norepo"*) c16=ok ;; *) c16="no($out $(tail -2 "$TMP/upout") $(cat "$TMP/uperr"))" ;; esac
+  [ "$(up_tree "$pb")" = "$before" ] || c16="no(the batch wrote)"
+  out=$( cd "$TMP" && python3 "$UP" --project "$pa" --project "$pb" --write >/dev/null 2>"$TMP/uperr"; echo "exit=$?" )
+  case "$out:$(cat "$TMP/uperr")" in exit=1:*"--write takes exactly one --project"*) ;; *) c16="no(batch write: $out $(cat "$TMP/uperr"))" ;; esac
+
+  r="$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16"
+  [ "$r" = "okokokokokokokokokokokokokokokok" ] \
+    && report "a re-run classifies each copy, judges the set whole, and writes only what the answers allow" ok \
+    || report "a re-run classifies each copy, judges the set whole, and writes only what the answers allow" no \
+       "report=$c1 write=$c2 again=$c3 modes=$c4 edited=$c5 kept=$c6 replace=$c7 kept-qg=$c8 symlink=$c9 unreadable=$c10 partial=$c11 claude-code=$c12 install=$c13 refusals=$c14 stale-table=$c15 batch=$c16"
+fi
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 

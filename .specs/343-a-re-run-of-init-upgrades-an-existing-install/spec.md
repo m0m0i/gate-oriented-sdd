@@ -238,7 +238,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
   - a seeded change to a copied file without a rebuild fails;
   - a fixture branch that changes a copied file in two commits gives the same table at its tip and at a merge of it;
   - a missing history or ref reports a named skip, never a pass.
-- [ ] T2 (AC1, AC3, AC4, AC5, AC7, AC8, AC10): failing cases for the copies, then the script's targets, classes, set judgement and writing. The fixtures are built from `gate-sdd--v0.36.0`'s texts with `git show`, behind a reported skip when the tag is absent. The cases cover:
+- [x] T2 (AC1, AC3, AC4, AC5, AC7, AC8, AC10): failing cases for the copies, then the script's targets, classes, set judgement and writing. The fixtures are built from `gate-sdd--v0.36.0`'s texts with `git show`, behind a reported skip when the tag is absent. The cases cover:
   - `shipped` replaced;
   - the runner and the checks added as `missing`;
   - an `edited` gate kept without `--replace` and replaced with it;
