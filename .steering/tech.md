@@ -6,7 +6,7 @@ Machine-read lines. Each must stay on ONE physical line — the gates read them 
 
 - Validators: ./scripts/check-leakage.sh, ./scripts/check-manifests.py, ./scripts/check-markdown-fences.py, ./scripts/check-receipt-schema.py, ./scripts/check-skill-contracts.py, ./scripts/check-templates.py, ./scripts/check-contract-path.py, ./scripts/check-readme-claims.py, ./scripts/check-reviewer-allow-list.py, ./scripts/test-gates.sh
 - Reviewer: gate-sdd-reviewer
-- Source globs: :(glob)rules/**/*.md :(glob)skills/**/*.md :(glob)reviewers/**/*.md :(glob)hooks/**/*.sh :(glob)assets/**/*.py :(glob)assets/**/*.sh :(glob)assets/**/*.md :(glob)scripts/**/*.py :(glob)scripts/**/*.sh :(glob).claude-plugin/hooks.json
+- Source globs: :(glob)rules/**/*.md :(glob)skills/**/*.md :(glob)reviewers/**/*.md :(glob)hooks/**/*.sh :(glob)assets/**/*.py :(glob)assets/**/*.sh :(glob)assets/**/*.md :(glob)assets/**/*.json :(glob)scripts/**/*.py :(glob)scripts/**/*.sh :(glob).claude-plugin/hooks.json
 - Docs: docs/
 - Mode: full
 - Validator budget: 336

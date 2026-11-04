@@ -8,8 +8,8 @@ The repository root is simultaneously a Claude Code plugin, a Claude Code market
 | `reviewers/<name>.md` + `reviewers/<name>/rules/` | reference reviewers and their hash-pinned rulebooks, copied into a project by `init` and registered by neither harness | yes |
 | `reviewers/_shared/`, `reviewers/_template/` | the reviewer contract, and the starting point for an unrecognised stack | yes |
 | `hooks/*.sh` | the gates, and `harness-checks.sh`, the quality gate's runner for the harness checks; `hooks/templates/` renders into projects | yes |
-| `assets/` | the harness checks, which the quality gate runs from here and `init` copies into an Antigravity project's `.agents/hooks/` (#340); `check-unreviewed-work.sh`, which a project's CI runs; and files copied into projects — issue templates, directory contracts | yes |
-| `scripts/` | this repo's own guards, run by CI | no |
+| `assets/` | the harness checks, which the quality gate runs from here and `init` copies into an Antigravity project's `.agents/hooks/` (#340); `check-unreviewed-work.sh`, which a project's CI runs; `upgrade-install.py`, which makes and upgrades an Antigravity install, and `shipped-texts.json`, its table of every text each copied file has had (#343, ADR-11), which a change to a copied file rebuilds with `scripts/build-shipped-texts.py`; and files copied into projects — issue templates, directory contracts | yes |
+| `scripts/` | this repo's own guards, run by CI, and `build-shipped-texts.py`, which builds `assets/shipped-texts.json` from this repository's history | no |
 | `docs/` | the inception documents — north star, PRD, epics, backlog, contract, design — and fidelity, layout, verified behaviour | no |
 | `docs/decisions/ADR-<n>-<slug>.md` | one contested decision each, append-only | no |
 | `evals/` | under development — authored, unverified | no |
