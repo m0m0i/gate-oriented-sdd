@@ -112,7 +112,7 @@ Asked and answered 2026-11-01. Before asking, two read-only workflows mapped the
   - **CI, as `init` prescribes it to a project.**
     - On Claude Code, `sh .gate-sdd/hooks/harness-checks.sh` runs with the existing checkout at `ref: main`, which keeps the document checks on document-only pull requests. The unreviewed-work check runs as `sh .gate-sdd/assets/check-unreviewed-work.sh <head ref> <head sha> <base sha>` with `GATE_SDD_HOOKS=.gate-sdd/hooks`.
     - On Antigravity, CI runs the `.agents/hooks/` copies.
-    - In a terminal, the command is `sh "${GATE_SDD_HOOKS:?set it to a plugin checkout's hooks/}/harness-checks.sh"`.
+    - In a terminal, the command is `sh "${GATE_SDD_HOOKS:?set it to the hooks/ of a plugin checkout}/harness-checks.sh"`. The remedy holds no apostrophe: inside `"${…:?…}"`, bash, and so macOS's `sh`, reads one as an opening quote, and the command is a syntax error that runs nothing (zsh and dash accept it).
     - This repository's `.github/workflows/ci.yml` changes no job.
   - **Text.** Every place that tells an agent which checks to run gets the same addition: "the validators named in `.steering/tech.md`, then the harness checks the digest names". That covers:
     - `implement` (`:13`, `:21`, `:28`);
