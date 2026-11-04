@@ -51,13 +51,15 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# TWENTY-NINE sites: twenty-three until #297 added four, and twenty-seven until #304 added two. The first cut converted ten and said
+# TWENTY-NINE sites as of #304: twenty-three until #297 added four, and twenty-seven until #304 added two. The recipe at the
+# end of this paragraph is the authority, and the figure drifted after #304: it gave thirty on `main` at 0.41.0, and thirty-one
+# once #343 added its shipped-texts guard, the one site below that is about missing history rather than permissions. The first cut converted ten and said
 # seven; the recount that caught that said twelve and nine, in the paragraph whose subject is not counting. Two of the three the
 # first cut missed were worse than any half: they called `report ... ok` on the skip path,
 # manufacturing a pass and incrementing the counter. Those two are whole cases and now report
 # nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
 #
-# How to get twenty-nine: count the GUARDS, not the `chmod 000` lines. There are twenty-three of
+# How to get twenty-nine, as of #304: count the GUARDS, not the `chmod 000` lines. There are twenty-three of
 # those and TWENTY-TWO guards among them, because case 14 has no self-disabling branch — under
 # root it goes red rather than skipping, which is the safe direction and deliberately left
 # alone. Do not "fix" that asymmetry: `docs/BACKLOG.md` row 1 asked for it and was corrected
@@ -12182,6 +12184,91 @@ case "$(GATE_SDD_HOOKS="$TMP/hv-hooks" sh -c "$hv_run" 2>&1)" in stub-runner-ran
 [ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
   && report "a pasted command names its remedy when the gate-sdd variable it reads is unset" ok \
   || report "a pasted command names its remedy when the gate-sdd variable it reads is unset" no "no-bare-form=$c1 runner-form=$c2 repin-form=$c3 unset-names-remedy=$c4 set-runs=$c5"
+
+# 417. #343 C2 — the shipped-texts table names every text each copied file has had on main.
+#      A re-run of `init` tells a text the plugin shipped from the project's edit by this table, so
+#      a copied file whose current text is missing from it would read as the project's edit on
+#      every install, and one whose old text is missing would be overwritten without a question.
+#      The builder walks the first-parent chain of the merge-base of HEAD and origin/main, plus the
+#      working tree, so a branch's own intermediate commits are never in it and the table is the
+#      same at a branch's tip and at its merge.
+st_build() { ( cd "$1" && python3 "$ROOT/scripts/build-shipped-texts.py" ${2+"$2"} >"$TMP/stout" 2>"$TMP/sterr"; echo "exit=$?" ) }
+st_repo() { # st_repo <dir> — a plugin-shaped repo with one copied file, a contract and a template, on main
+  _s="$1"; mkdir -p "$_s/hooks/templates" "$_s/reviewers/_shared" "$_s/assets"
+  printf 'echo a1\n' > "$_s/hooks/a.sh"; printf 'contract 1\n' > "$_s/reviewers/_shared/reviewer-contract.md"
+  printf '{"t": 1}\n' > "$_s/hooks/templates/antigravity.hooks.json"
+  ( cd "$_s" && git init -q -b main && git add -A && git -c user.email=t@t -c user.name=t commit -qm one ) >/dev/null 2>&1
+  _first=$(git -C "$_s" rev-parse HEAD)
+  printf '{"format": 1, "copy_set": {".agents/hooks/a.sh": "hooks/a.sh"}, "contract": {"source": "reviewers/_shared/reviewer-contract.md", "copies": [".agents/agents/_shared/reviewer-contract.md"]}, "aliases": {}, "legacy_guards": {}, "templates_from": "%s"}\n' "$_first" > "$_s/assets/shipped-texts.json"
+  ( cd "$_s" && git add -A && git -c user.email=t@t -c user.name=t commit -qm seed && git update-ref refs/remotes/origin/main HEAD ) >/dev/null 2>&1
+}
+st_commit() { ( cd "$1" && git add -A && git -c user.email=t@t -c user.name=t commit -qm "$2" ) >/dev/null 2>&1; }
+
+# This repository's own table is current, and every current text is in it.
+if [ -f "$ROOT/scripts/build-shipped-texts.py" ]; then
+  out=$(st_build "$ROOT" --check)
+  case "$out:$(cat "$TMP/stout")" in
+    exit=0:*"history check skipped"*) c1=ok; note_skip "shipped-texts history check on this repository" "$(grep 'skipped' "$TMP/stout" | head -1)" ;;
+    exit=0:*) c1=ok ;;
+    *) c1="no($out $(cat "$TMP/stout" "$TMP/sterr"))" ;;
+  esac
+  c2=$(cd "$ROOT" && python3 - <<'EOF'
+import hashlib, json
+t = json.load(open("assets/shipped-texts.json"))
+srcs = sorted(set(t["copy_set"].values()) | {t["contract"]["source"]} | set(t["legacy_guards"].values()))
+h = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
+miss = [p for p in srcs if h(p) not in t["texts"].get(p, [])]
+if h("hooks/templates/antigravity.hooks.json") not in t["templates"]: miss.append("template")
+if len(t["copy_set"]) != 11: miss.append("copy_set has %d files, not 11" % len(t["copy_set"]))
+print("ok" if not miss else "no(%s)" % miss)
+EOF
+)
+else
+  c1="no(scripts/build-shipped-texts.py is missing)"; c2="no(no table)"
+fi
+
+# A branch that changes the copied file twice: the table built at its tip holds main's text and
+# the tip's, never the intermediate one, and the same table passes at a merge of the branch.
+p="$TMP/st-branch"; st_repo "$p"
+( cd "$p" && git checkout -qb 9-feature ) >/dev/null 2>&1
+printf 'echo a2\n' > "$p/hooks/a.sh"; st_commit "$p" two
+printf 'echo a3\n' > "$p/hooks/a.sh"; st_commit "$p" three
+out=$(st_build "$p"); st_commit "$p" table
+c3=$(cd "$p" && python3 -c '
+import hashlib, json
+t = json.load(open("assets/shipped-texts.json"))["texts"]["hooks/a.sh"]
+h = lambda b: hashlib.sha256(b).hexdigest()
+want = {h(b"echo a1\n"), h(b"echo a3\n")}
+print("ok" if set(t) == want else "no(%s)" % t)')
+out=$(st_build "$p" --check); case "$out" in exit=0) c4=ok ;; *) c4="no(tip: $out $(cat "$TMP/stout" "$TMP/sterr"))" ;; esac
+( cd "$p" && git checkout -q main && git -c user.email=t@t -c user.name=t merge -q --no-ff -m merge 9-feature ) >/dev/null 2>&1
+out=$(st_build "$p" --check); case "$out" in exit=0) c5=ok ;; *) c5="no(merge: $out $(cat "$TMP/stout" "$TMP/sterr"))" ;; esac
+
+# A change to a copied file without a rebuild fails, naming the file and the remedy.
+printf 'echo a4\n' > "$p/hooks/a.sh"
+out=$(st_build "$p" --check)
+case "$out:$(cat "$TMP/stout" "$TMP/sterr")" in exit=1:*"hooks/a.sh"*"build-shipped-texts.py"*) c6=ok ;; *) c6="no($out $(cat "$TMP/stout" "$TMP/sterr"))" ;; esac
+# A table holding a text neither the history nor the tree has fails too.
+git -C "$p" checkout -q -- hooks/a.sh
+python3 - "$p/assets/shipped-texts.json" <<'EOF'
+import json, sys
+t = json.load(open(sys.argv[1])); t["texts"]["hooks/a.sh"].append("0" * 64); json.dump(t, open(sys.argv[1], "w"))
+EOF
+out=$(st_build "$p" --check); case "$out" in exit=1) c7=ok ;; *) c7="no(extra text passed: $out)" ;; esac
+git -C "$p" checkout -q -- assets/shipped-texts.json
+
+# With no origin/main the history half cannot run: a named skip, never a silent pass, and the
+# current-text half still runs.
+git -C "$p" update-ref -d refs/remotes/origin/main
+out=$(st_build "$p" --check)
+case "$out:$(cat "$TMP/stout")" in exit=0:*"history check skipped"*"origin/main"*) c8=ok ;; *) c8="no($out $(cat "$TMP/stout" "$TMP/sterr"))" ;; esac
+printf 'echo a5\n' > "$p/hooks/a.sh"
+out=$(st_build "$p" --check); case "$out" in exit=1) c9=ok ;; *) c9="no(no ref, stale current passed: $out)" ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] \
+  && report "the shipped-texts table names every text each copied file has had on main" ok \
+  || report "the shipped-texts table names every text each copied file has had on main" no \
+     "repo=$c1 current-texts=$c2 branch-texts=$c3 tip=$c4 merge=$c5 stale=$c6 extra=$c7 no-ref-skip=$c8 no-ref-current=$c9"
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1

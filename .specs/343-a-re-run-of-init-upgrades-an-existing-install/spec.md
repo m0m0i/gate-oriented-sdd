@@ -232,7 +232,7 @@ A four-lens critique of the first draft (fail-open, feasibility, repository rule
 
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 
-- [ ] T1 (C2, C3): a failing case for the table, which does not exist yet. Then `scripts/build-shipped-texts.py`, the generated `assets/shipped-texts.json` and the case. The case covers:
+- [x] T1 (C2, C3): a failing case for the table, which does not exist yet. Then `scripts/build-shipped-texts.py`, the generated `assets/shipped-texts.json` and the case. The case covers:
   - `--check` passes on the repository;
   - every current text of the copy set, the contract and the template is present;
   - a seeded change to a copied file without a rebuild fails;
