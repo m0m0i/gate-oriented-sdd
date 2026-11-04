@@ -603,12 +603,14 @@ Q3's answer to the paragraph is one sample.
 - **U4 — a stale root, in a real session.** In the session that wrote #340, started before the user's install moved from 0.38.0 to 0.39.0, Bash held `GATE_SDD_PLUGIN_ROOT=…/gate-sdd/0.38.0` while `installed_plugins.json` recorded 0.39.0 at user scope, and the cache still held 0.24.1, 0.31.0–0.35.0 and 0.37.0–0.39.0. A by-hand run there reads the old tree; the runner's first line names the tree and version it ran from, so the output shows it. The turn-end verdict does not read the variable.
 - **M1 — a real migration.** A real consumer, a Python project on Claude Code installed at 0.31.0 with `check-locks.py`, `check-steering-anchors.sh` and `check-unreviewed-work.sh` in `scripts/`, the anchor check on its `- Validators:` line, and no `- Mode:` line. Before migrating, #340's runner failed it on the missing line and wrote out the adoption line for its six specs. Migrated on a branch as `init` states it: the three copies (byte-identical to 0.31.0's, so none was edited) removed, the entry dropped, `- Mode: bootstrap` and `- Specs before bootstrap:` added, CI's two check steps replaced by `sh .gate-sdd/hooks/harness-checks.sh` and the unreviewed-work job pointed at the checkout, the reviewer's allow-list given the harness checks. The run found the migration's missing sixth step: its contract's command list and re-pin step, and its `AGENTS.md`, still named the copies, which `init` now searches for. After it, the runner passed 4 of 4 and the quality gate passed with the runner and the project's four commands, in 11 s.
 
+  On 2026-11-04 the migration's pull request ran the project's CI, with both plugin checkouts pinned to `ref: 896702761481bab8c58eceefe3cdb3ec67707243`. Each of its two Python jobs fetched that commit and ran `sh .gate-sdd/hooks/harness-checks.sh`. The runner printed `harness-checks: from …/.gate-sdd (gate-sdd 0.40.0)` and the four checks in order, and ended with `harness-checks: 4 check(s) passed`. The unreviewed-work job ran `.gate-sdd/assets/check-unreviewed-work.sh` from the same checkout and passed. All five of the project's checks passed. The version reads 0.40.0 because the bump to 0.41.0 lands after this record.
+
 ### What this run does not support
 
 - **A GitHub or https marketplace**, and **the update pass a session runs at start** (#265, #274). U1's update was run by hand from the command line; the pass that delivers it unattended is measured in the sections above, on other versions.
 - **An update while a session is open.** U4 is that state seen, not produced.
 - **An interactive session**, for U1 and U3.
-- **M1's CI run.** The migration's pull request, with the plugin checkout pinned to #340's head, was not yet pushed when this was written.
+- **A merged migration.** M1's CI ran on the migration's pull request, pinned to #340's head. The project's `main` keeps its copies until that request merges, and its pins go back to `ref: main` once #340 does.
 - **Antigravity.** Its copy set is tested by `scripts/test-gates.sh` only; no `agy` run refreshed `.agents/hooks/` with the runner.
 
 ## Still to verify

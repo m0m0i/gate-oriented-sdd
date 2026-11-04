@@ -183,4 +183,4 @@ Asked and answered 2026-11-01. Before asking, two read-only workflows mapped the
   - the reviewers and the template;
   - this repository's line and allow-list.
 - [x] T6 (AC9): ADR-10 and the documents AC9 lists, with `check-readme-claims` and the leakage check green.
-- [ ] T7 (AC10): the three recorded runs in `docs/verified.md`, the real migration on the project the maintainer names.
+- [x] T7 (AC10): the three recorded runs in `docs/verified.md`, the real migration on the project the maintainer names.
