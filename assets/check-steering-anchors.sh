@@ -142,7 +142,8 @@ for file in $files; do
   # and the reader both stat THROUGH it, so under a mode-000 .steering/ every anchor came back
   # absent, `present` stayed 0, and the run ended on "no steering files found — nothing was
   # checked": a sentence about having looked, printed by a check that could not look, on exit
-  # 0 — and this script is on the `- Validators:` line, so that is the turn's own verdict.
+  # 0 — and the quality gate runs this script among the harness checks, so that is the turn's
+  # own verdict.
   # Absent stays legitimate and silent, because this asset may be installed before init writes
   # steering; that door is the second half of the case beside this one.
   dir=${file%/*}
@@ -202,7 +203,7 @@ IFS=$old_ifs
 # `- Validator budget:` against the gates' own readers (#304, AC10). The quality gate reads the line
 # with gate_validator_budget and lowers it to the shortest `timeout` gate_hook_timeout finds, minus
 # its margin, so a value the gate rejects, or one a hook file cannot honour, is a line that does
-# not do what it says. A check on the `- Validators:` line cannot say so at turn end, from inside
+# not do what it says. A check the quality gate runs cannot say so at turn end, from inside
 # the run it would be protecting, so this says it in CI and by hand.
 #
 # The file set is not the one the gate reads, and on purpose. That one is the launch's: the
@@ -302,6 +303,30 @@ $(printf '%s\n' "$hs" | sed 's/^/  /')" ;;
   ${hs:-gate_hook_switches exited $hsrc for $f, so its switches were not checked}." ;; esac ;;
   esac
 done
+
+# An Antigravity gate copy with no harness checks beside it (#340, AC6). Since #340 the quality gate
+# runs harness-checks.sh from its own directory, before the `- Validators:` line, and a migration
+# takes the harness checks off the line. A copy of the gate made before then has no runner: it runs
+# the line alone, so after the migration a turn end there runs none of the harness checks, and this
+# is the one place that can say so — at a Claude Code turn end in a dual-target project, where the
+# plugin's runner runs this check, and in CI. The root's .agents/ is checked, and the directory of
+# every .agents/hooks.json in the set above.
+hc_dirs=.agents
+for f in "$@"; do
+  case "$f" in */.agents/hooks.json) hc_dirs="$hc_dirs$NL${f%/hooks.json}" ;; esac
+done
+IFS=$NL
+set -f
+for d in $hc_dirs; do
+  if [ -f "$hroot/$d/hooks/quality-gate.sh" ] && [ ! -f "$hroot/$d/hooks/harness-checks.sh" ]; then
+    failed="${failed}
+  $d/hooks/quality-gate.sh: has no harness-checks.sh beside it, so a turn end there runs the
+      '- Validators:' line alone and none of the harness checks. Re-run init, which copies the
+      runner and the checks into $d/hooks/ with the gates."
+  fi
+done
+set +f
+IFS=$old_ifs
 
 if [ -n "$failed" ]; then
   echo "check-steering-anchors FAILED$failed" >&2

@@ -82,7 +82,7 @@ jobs:
         run: ./scripts/check-contract-path.py
 
       # The document set is the one validator the turn-end gate structurally cannot cover:
-      # quality-gate.sh runs the `- Validators:` line only when the source matching
+      # quality-gate.sh runs the harness checks and the `- Validators:` line only when the source matching
       # `- Source globs:` has changed since it last passed, and a document is never source — the two sets are disjoint
       # by construction, because one line points at documents and the other at code. So the
       # guard ran on every turn where nothing it checks could have changed, and was absent on
@@ -95,8 +95,9 @@ jobs:
       - name: Downstream documents reconcile against PRD
         run: ./assets/check-document-cascade.py
 
-      # .steering/tech.md's - Validators: line is the authority on which commands gate a turn;
-      # the reviewer's allow-list must cover it, and all 5 reviewers must respect the category rule.
+      # .steering/tech.md's - Validators: line names this repository's own commands that gate a
+      # turn, and quality-gate.sh runs the harness checks before them (#340); the reviewer's
+      # allow-list must cover both, and all 5 reviewers must respect the category rule.
       - name: Reviewer allow-list covers steering validators and respects categories
         run: ./scripts/check-reviewer-allow-list.py
 
@@ -142,8 +143,9 @@ jobs:
         if: github.event_name == 'pull_request'
         run: ./scripts/check-version-bump.py "${{ github.event.pull_request.base.sha }}"
 
-  # `assets/` is the one shipped path whose files are COPIED into a consumer's tree and then
-  # named on that consumer's `- Validators:` line, so their cleanliness is judged by a toolchain
+  # `assets/` is the one shipped path whose files a consumer's tree has carried as COPIES: in its
+  # `scripts/`, named on its `- Validators:` line, until #340, and in `.agents/hooks/` with the
+  # gates on Antigravity still. So their cleanliness can be judged by a toolchain
   # this repository never ran: the `guard` job above runs this repository's own guards and no
   # linter on any path. #81 is what that costs — `init` armed a real consumer's gate red on its
   # first turn with `check-locks.py`, and `check-document-set.py` arrived two weeks after the
@@ -184,7 +186,8 @@ jobs:
 
       # G-5 says the shipped shell is POSIX `sh`, and until now the claim was read, never run.
       # `-s sh` rather than trusting the shebang, so a bashism is a finding even if a shebang
-      # drifts. Only `assets/` for now: `hooks/` is copied into every project too, by `init`, and
+      # drifts. Only `assets/` for now: `hooks/` is copied into every Antigravity project too, by
+      # `init`, `harness-checks.sh` included (#340), and
       # waits on the findings `.steering/tech.md`'s `lint` section names. #207.
       - name: Every shipped shell file passes shellcheck as POSIX sh
         run: shellcheck -s sh assets/*.sh

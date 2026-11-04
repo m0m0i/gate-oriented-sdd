@@ -20,7 +20,7 @@ A refactor that loads the rulebook into normal sessions, or turns an enforced ga
 | Artifact | Claude Code | Antigravity |
 | :-- | :-- | :-- |
 | Manifest | `.claude-plugin/plugin.json` | `plugin.json` |
-| Hooks | the gates ship from `.claude-plugin/hooks.json`, which runs `hooks/plugin-gate.sh`; `hooks/templates/claude-code.settings.json`, rendered into the project by `init`, carries the marketplace declaration and the fast check only (#256, ADR-8) | `hooks/templates/antigravity.hooks.json`, rendered the same way (plugin-named groups, each with its own `enabled` flag: `gate-sdd` for the digest and the gates, `gate-sdd-fast-check` for the fast check), with the gates copied beside it |
+| Hooks | the gates ship from `.claude-plugin/hooks.json`, which runs `hooks/plugin-gate.sh`; `hooks/templates/claude-code.settings.json`, rendered into the project by `init`, carries the marketplace declaration and the fast check only (#256, ADR-8) | `hooks/templates/antigravity.hooks.json`, rendered the same way (plugin-named groups, each with its own `enabled` flag: `gate-sdd` for the digest and the gates, `gate-sdd-fast-check` for the fast check), with the gates and the harness checks copied beside it (#340) |
 | Skills | `skills/<name>/SKILL.md` | same path, same format |
 | Reviewers | `reviewers/<name>.md`, copied by `init` into `.claude/agents/` | the same file, copied into `.agents/agents/` |
 | Rules | `AGENTS.md` | `rules/AGENTS.md` (symlinked, auto-discovered by plugin loader) |
@@ -38,7 +38,7 @@ Antigravity has five hook events: `PreToolUse`, `PostToolUse`, `PreInvocation`, 
 
 ## Working on this repo
 
-Run these before every commit. The `- Validators:` line in `.steering/tech.md` is the authority on which commands gate a turn, and `.github/workflows/ci.yml` on what CI runs — this block is a contributor's short list, not a third definition of the set:
+Run these before every commit. The quality gate runs `sh hooks/harness-checks.sh` and then the `- Validators:` line in `.steering/tech.md`, and those two are the authority on which commands gate a turn, as `.github/workflows/ci.yml` is on what CI runs — this block is a contributor's short list, not another definition of the set:
 
 ```bash
 ./scripts/check-leakage.sh          # no private context
@@ -49,6 +49,8 @@ Run these before every commit. The `- Validators:` line in `.steering/tech.md` i
 ./scripts/check-skill-contracts.py  # skills still carry their load-bearing instructions
 ./scripts/check-templates.py        # no spec template splits a red step from its green step,
                                     # and no live spec sequences a task after the review
+sh hooks/harness-checks.sh          # the four harness checks below, from source, as the quality
+                                    # gate runs them before the Validators line (#340)
 ./assets/check-steering-anchors.sh  # steering's machine-read lines still parse, and the
                                     # project's hook files can honour the validator budget
 ./assets/check-locks.py             # rulebooks match their locks and define the contract's
@@ -79,7 +81,7 @@ Run these before every commit. The `- Validators:` line in `.steering/tech.md` i
 
 Two things are deliberately unlike a normal install, and both would look like mistakes:
 
-- **The hooks are not copied, and not run from the installed plugin either.** `.claude/settings.json` points at the repository's own `hooks/*.sh`. Every Antigravity project copies them, because a gate must run with the project as its working directory, and every Claude Code project runs them from the plugin, whose gates stand down here on exactly those settings entries (#256) — here the project *is* the source, so a copy would only create drift, and a drifted copy means this repo tests a stale version of its own enforcement.
+- **The hooks are not copied, and not run from the installed plugin either.** `.claude/settings.json` points at the repository's own `hooks/*.sh`. Every Antigravity project copies them, because a gate must run with the project as its working directory, and every Claude Code project runs them from the plugin, whose gates stand down here on exactly those settings entries (#256) — here the project *is* the source, so a copy would only create drift, and a drifted copy means this repo tests a stale version of its own enforcement. The same holds for the harness checks: the gate's runner, `hooks/harness-checks.sh`, runs them from this repository's `assets/`, so its `- Validators:` line does not name them (#340).
 - **`.claude/agents/gate-sdd-reviewer/` has no `rules-lock.json`.** `assets/check-locks.py --update` can refresh a lock but cannot create one (#19). The rulebook stays unpinned until #19 ships a bootstrap, and `docs/decisions/ADR-6` records why.
 
 The project reviewer is `gate-sdd-reviewer` and is unrelated to the three reference reviewers in `reviewers/`, which are the product. Its anchor is **gates never fail open**.

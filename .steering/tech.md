@@ -4,7 +4,7 @@ Shell (POSIX `sh`), Python 3 (stdlib only, no dependency file anywhere), and Mar
 
 Machine-read lines. Each must stay on ONE physical line — the gates read them with `sed ... | head -1`, so a wrapped value is truncated at the first newline without complaint.
 
-- Validators: ./scripts/check-leakage.sh, ./scripts/check-manifests.py, ./scripts/check-markdown-fences.py, ./scripts/check-receipt-schema.py, ./scripts/check-skill-contracts.py, ./scripts/check-templates.py, ./assets/check-steering-anchors.sh, ./assets/check-locks.py, ./assets/check-document-set.py, ./assets/check-document-cascade.py, ./scripts/check-contract-path.py, ./scripts/check-readme-claims.py, ./scripts/check-reviewer-allow-list.py, ./scripts/test-gates.sh
+- Validators: ./scripts/check-leakage.sh, ./scripts/check-manifests.py, ./scripts/check-markdown-fences.py, ./scripts/check-receipt-schema.py, ./scripts/check-skill-contracts.py, ./scripts/check-templates.py, ./scripts/check-contract-path.py, ./scripts/check-readme-claims.py, ./scripts/check-reviewer-allow-list.py, ./scripts/test-gates.sh
 - Reviewer: gate-sdd-reviewer
 - Source globs: :(glob)rules/**/*.md :(glob)skills/**/*.md :(glob)reviewers/**/*.md :(glob)hooks/**/*.sh :(glob)assets/**/*.py :(glob)assets/**/*.sh :(glob)assets/**/*.md :(glob)scripts/**/*.py :(glob)scripts/**/*.sh :(glob).claude-plugin/hooks.json
 - Docs: docs/
@@ -58,8 +58,9 @@ It is also the one guard here deliberately **not** shipped. The shipped form nee
 ## Why the `lint` job is not on the Validators line either
 
 A fourth exclusion, for a reason none of the three above give. `.github/workflows/ci.yml`'s `lint`
-job holds `assets/` — the one shipped path whose files are copied into a consumer's tree and then
-named on that consumer's `- Validators:` line — to a consumer's toolchain: `ruff check` and
+job holds `assets/` — the one shipped path whose files are copies in a consumer's tree, in an
+Antigravity project's `.agents/hooks/`, and were in every project's `scripts/`, named on its
+`- Validators:` line, until #340 — to a consumer's toolchain: `ruff check` and
 `ruff format --check` under a common configuration, and `shellcheck -s sh`. Neither tool is
 installed on the machine this repository is developed on, and the first paragraph of this file is
 why nothing here installs one. A `- Validators:` entry for a command that is absent locally would
@@ -72,7 +73,7 @@ So it runs in CI, on pull requests and on pushes to `main`, as its own job rathe
 the job's and move by hand. By hand it is the job's three commands with the same pins — on #81 they
 were run through `uvx`, which installs nothing into the repository. The subject is narrow on
 purpose, for two different reasons. `scripts/` is never copied anywhere, so nothing a consumer
-runs is in it. `hooks/` reaches consumers — `init` copies all five hooks into every Antigravity project, and a
+runs is in it. `hooks/` reaches consumers — `init` copies the gate scripts and `harness-checks.sh` into every Antigravity project, and a
 Claude Code project runs them from the plugin since #256 — and is not yet linted because its
 entry hooks still carry the findings counted before #256 under the same pin (`plugin-gate.sh`
 added a fifth `CDPATH= cd` and a fourth bare `cd "$repo_root"` since): `SC1007` ×4,

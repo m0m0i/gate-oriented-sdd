@@ -19,7 +19,7 @@ Some harnesses run the project's turn-end hooks in a subagent's turn as well as 
 Reviewers get shell access because a reviewer that can run the type checker finds things a reviewer reading files cannot. That access is scoped by an allow-list in each reviewer file, and it is for **gathering evidence only**:
 
 - reading the diff, the log, and the current commit
-- running the project's own validators, as named in `.steering/tech.md`
+- running the project's own validators, as named in `.steering/tech.md`, then the harness checks the digest names
 - checking an installed version before claiming an API is wrong
 - reading the clock, for the receipt's `reviewed_at` and nothing else
 

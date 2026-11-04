@@ -4,8 +4,11 @@
 # The bottom row of this harness's table is the only one that is a guarantee: format,
 # lint, types, and tests, on turn end, not skippable. This is the script that holds it.
 #
-# The commands are NOT hardcoded. They come from the `- Validators:` line in
-# .steering/tech.md, which is what lets one copy of this script serve every project the
+# It runs two sets of commands, in order. First the harness checks, which check the harness's
+# own files: it runs harness-checks.sh from its own directory, so a check comes from the tree
+# this gate came from and a fix the plugin ships reaches every project that updates (#340).
+# Then the project's own commands, which are NOT hardcoded. They come from the `- Validators:`
+# line in .steering/tech.md, which is what lets one copy of this script serve every project the
 # harness is installed into — and what makes a project change its enforcement by editing
 # steering rather than by editing a hook. That line already exists and is already read by
 # steering-digest.sh; before this script, nothing acted on it.
@@ -74,9 +77,10 @@ command -v gate_block >/dev/null 2>&1 || _gate_bootstrap_block "$_gate_name: gat
 
 # The validator list is read through gate_steering_read. If this hooks/ directory is a mix of
 # versions the function is undefined — and `set -u` does not catch an undefined FUNCTION, so
-# the read yields empty, the "no validators configured" branch below fires, and the gate exits
-# 0 having run nothing. That is a fail-open created by the migration to a shared reader, so the
-# migration has to carry the check. The asset guards itself this way; the gate is the half that
+# the read yields empty. Before #340 an empty line passed, and the gate exited 0 having run
+# nothing. That was a fail-open created by the migration to a shared reader, so the migration
+# carried the check, and it stays: a list read by a function that does not exist is not a list
+# that is empty. The asset guards itself this way; the gate is the half that
 # matters more, because its failure is silent.
 command -v gate_steering_read >/dev/null 2>&1 || gate_block "Quality gate: gate-lib.sh predates the shared steering reader, so this gate cannot read its validator list. Re-copy the plugin's hooks/ into this project and run again rather than treating this as a pass."
 
@@ -106,6 +110,18 @@ qg_split() {
 }
 qg_nl='
 '
+
+# Every command this gate runs, one per line: first the harness checks, from this gate's own tree
+# (#340), then the `- Validators:` line's. The checks were copies in each project's scripts/, named
+# on the line, so a fix the plugin shipped reached no project that updated. Run from $DIR, a check
+# comes from the tree this gate came from, at a turn end, with no variable to find it by. The
+# runner's command is a literal that `eval` expands, so a $DIR holding a space or a `$` is never
+# re-read as code. The child's loop, the timeout block and the signal block all read this list,
+# so the three cannot disagree about which command was number n.
+qg_cmds() {
+  printf '%s\n' 'sh "$DIR/harness-checks.sh"  # the harness checks this gate ships with'
+  qg_split
+}
 
 # The order of runs in this worktree (#331). One record per worktree, written by whichever run
 # FINISHED last, let a run that started before a later one failed record its pass after that
@@ -327,7 +343,7 @@ The last pass record at $_qb_r could not be removed, so the next turn end may sk
       [ -z "$_tb_t" ] || _tb_body="$_tb_body
 $_tb_t"
     done <<EOF
-$(qg_split)
+$(qg_cmds)
 EOF
     [ -z "$_tb_body" ] || printf '\n%s' "$_tb_body"
     printf '%s' "$qg_nw"
@@ -351,7 +367,7 @@ EOF
 This host's process listing did not show the check's process tree, so only the check itself was killed, and a validator's own children may still be running."
   if [ -n "$qg_sig" ]; then
     validators=$(gate_steering_value .steering/tech.md Validators)
-    qg_c=$(qg_open); [ -z "$qg_c" ] || qg_c=$(qg_split | sed -n "${qg_c}p")
+    qg_c=$(qg_open); [ -z "$qg_c" ] || qg_c=$(qg_cmds | sed -n "${qg_c}p")
     qg_block "Quality gate: this gate received $qg_sig before it reached a verdict, so this turn is blocked rather than passed.${qg_c:+ It was running: $qg_c.} A validator that runs 'kill 0', or ends with the common trap 'kill 0' EXIT, sends its signal to the whole process group, this gate included. If the harness sent it at its timeout this block is discarded, which costs nothing; if it repeats, look for a validator that signals its process group.$qg_nw"
   fi
   gate_replay "$run" "$qg_rc"
@@ -390,17 +406,21 @@ if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
 fi
 
 # Absent and unreadable are opposite answers, and this gate gave them the same one. `[ -f ]`
-# passes for a mode-000 file, the read came back empty, and the "no validators configured"
-# branch below exited 0 having verified nothing — .steering/product.md's own BLOCKER shape,
-# in the gate .steering/tech.md calls the one guarantee. #39.
+# passes for a mode-000 file, the read came back empty, and the gate, which then passed an empty
+# list, exited 0 having verified nothing — .steering/product.md's own BLOCKER shape, in the gate
+# .steering/tech.md calls the one guarantee. #39.
 #
-# Absent still passes, and that is not the same judgment made twice: a project that has not
-# declared its validators is not one whose turns should be blocked, which is what the case
-# beside this one pins. A project that declared them in a file nobody can open is.
+# A missing .steering/tech.md still passes, and that is not the same judgment made twice: a
+# project with no steering is not a harness project, and its turns are not this gate's to block,
+# which is what the case beside this one pins. A project whose steering nobody can open is.
 validators=$(gate_steering_read .steering/tech.md Validators); rc=$?
 [ "$rc" -eq 1 ] && gate_pass
 [ "$rc" -eq 2 ] && gate_block "Quality gate: .steering/tech.md exists and cannot be read, so this gate cannot find out which validators it is supposed to run. Fix the file's permissions rather than treating this as a pass — a gate that could not look is not a gate that found nothing."
-[ -n "$validators" ] || gate_pass
+# An empty or absent `- Validators:` line no longer passes here (#340): the harness checks still
+# run. A project that keeps steering is a harness project, and the line now holds only its own
+# commands, so a line emptied by a migration, or written so the reader cannot see it, would
+# otherwise pass having run nothing — the second of those is #34's shape, and the anchor check
+# among the harness checks is what names it.
 
 # Skip when the source has not changed since the validators last passed.
 #
@@ -437,8 +457,12 @@ validators=$(gate_steering_read .steering/tech.md Validators); rc=$?
 #     them into the copy without writing an object.
 #   - Hashed in with the listing: a format tag; the Validators and Source globs lines, so adding
 #     a validator runs it; the plugin-root variables, so a pass in one of #264's two
-#     environments is not trusted by the other; and this gate's own files, so an upgrade by
-#     re-copy runs once.
+#     environments is not trusted by the other; this gate's own files, so an upgrade by
+#     re-copy runs once; and, since #340, the harness checks it runs, which are its own inputs
+#     now, with the steering values they branch on: `- Docs:`, `- Mode:`, `- Target:` and
+#     `- Specs before bootstrap:`. A fix to a check, or an edit to one of those lines, runs once.
+#     `.specs/` is not hashed, as documents are not: a turn that only writes a spec can still
+#     skip here, and CI is where that window closes.
 #   - Not hashed: the toolchain the validators call. A linter replaced by a script that always
 #     passes, as an agent did to quiet #324's parse error, changes nothing listed here, so a pass
 #     recorded under that shim outlives it until the source changes. The gate trusts the commands
@@ -455,8 +479,11 @@ qg_fingerprint() {  # <pathspec>...
   git ls-files -z -c -o --exclude-standard -- "$@" > "$qg_tmp.list" || { qg_step="git ls-files"; return 1; }
   GIT_INDEX_FILE="$qg_tmp.idx" git update-index -z --add --remove --info-only --stdin < "$qg_tmp.list" \
     || { qg_step="git update-index"; return 1; }
-  { printf 'gate-sdd quality-pass 1\n%s\n%s\n%s\n%s\n' "$validators" "$globs" "${CLAUDE_PLUGIN_ROOT-}" "${GATE_SDD_PLUGIN_ROOT-}" \
+  sh "$DIR/harness-checks.sh" --files > "$qg_tmp.hc" || { qg_step="listing the harness checks"; return 1; }
+  { printf 'gate-sdd quality-pass 2\n%s\n%s\n%s\n%s\n' "$validators" "$globs" "${CLAUDE_PLUGIN_ROOT-}" "${GATE_SDD_PLUGIN_ROOT-}" \
+    && for _qf_k in Docs Mode Target 'Specs before bootstrap'; do printf '%s: %s\n' "$_qf_k" "$(gate_steering_value .steering/tech.md "$_qf_k")"; done \
     && git hash-object --no-filters -- "$DIR/quality-gate.sh" "$DIR/gate-lib.sh" \
+    && git hash-object --no-filters --stdin-paths < "$qg_tmp.hc" \
     && GIT_INDEX_FILE="$qg_tmp.idx" git ls-files -s -- "$@"; } > "$qg_tmp.fp" || { qg_step="listing the source"; return 1; }
   fp=$(git hash-object --stdin < "$qg_tmp.fp") || { fp=""; qg_step="git hash-object"; return 1; }
 }
@@ -565,7 +592,7 @@ failed=""
 # by its number, not its command, since two validators may share one: that is what the parent's
 # timeout block reads when the deadline cuts this run short.
 n=0
-cmds=$(qg_split)
+cmds=$(qg_cmds)
 old_ifs=$IFS
 IFS=$qg_nl
 set -f
@@ -624,5 +651,5 @@ fi
 
 [ -z "$failed" ] && gate_pass
 
-gate_block "Quality gate: a gating validator failed. These are the commands on the '- Validators:' line in .steering/tech.md, and they gate CI too — fix the failure rather than working around the gate.
+gate_block "Quality gate: a gating validator failed. These are the harness checks this gate ships with, then the commands on the '- Validators:' line in .steering/tech.md, and they gate CI too — fix the failure rather than working around the gate.
 $failed$qg_unordered$qg_unrec"

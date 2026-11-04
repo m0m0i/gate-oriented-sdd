@@ -41,6 +41,34 @@ echo "- Live specs are .specs/<slug>/spec.md; shipped ones are under .specs/_arc
 echo "- Archiving a shipped spec into .specs/_archive/ is a sweep run on request, not a step in that flow."
 echo "- A Stop hook enforces the quality gate and the freshness of the review receipt."
 
+# The harness checks (#340). The quality gate runs them from its own tree, before the line, and a
+# by-hand run needs a command for the tree this digest ran from. Inside the project, the path is the
+# command: hooks/ in the harness repository, .agents/hooks/ on Antigravity. From the plugin, through
+# plugin-gate.sh, the session's shell reaches it only through GATE_SDD_PLUGIN_ROOT, and the `:?`
+# says what to do when that is unset rather than running nothing. Facts only, as every line here.
+# Both physical, since git's toplevel is: a link on the way (macOS's /var) would read as outside.
+dg_top=$(git rev-parse --show-toplevel 2>/dev/null) || dg_top=$(pwd -P)
+dg_dir=$(CDPATH='' cd -- "$DIR" && pwd -P) || dg_dir=$DIR
+case "$dg_dir/" in
+  "$dg_top"/*) dg_cmd="sh ${dg_dir#"$dg_top"/}/harness-checks.sh" ;;
+  *) dg_cmd='sh "${GATE_SDD_PLUGIN_ROOT:?is unset; start a new Claude Code session}/hooks/harness-checks.sh"' ;;
+esac
+echo "- Harness checks: the quality gate runs them first at turn end; by hand, beside the Validators line, \`$dg_cmd\` runs them."
+# A tree that ships the reviewer contract (the plugin, or this repository) is one a project's copy
+# can fall behind. Antigravity's copy set and its contract come from the same init run, so there is
+# nothing newer to compare against there.
+if [ -f "$DIR/../.claude-plugin/plugin.json" ] && [ -f .claude/agents/_shared/reviewer-contract.md ] \
+  && [ -f "$DIR/../reviewers/_shared/reviewer-contract.md" ] \
+  && ! cmp -s .claude/agents/_shared/reviewer-contract.md "$DIR/../reviewers/_shared/reviewer-contract.md"; then
+  dg_ver=$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$DIR/../.claude-plugin/plugin.json" | head -1)
+  echo "- The project's .claude/agents/_shared/reviewer-contract.md differs from the one gate-sdd ${dg_ver:-this version} ships; init copies the shipped one over it when re-run."
+fi
+dg_named=""
+for dg_n in check-steering-anchors.sh check-locks.py check-document-set.py check-document-cascade.py; do
+  case "$v" in *"$dg_n"*) dg_named="${dg_named:+$dg_named, }$dg_n" ;; esac
+done
+[ -z "$dg_named" ] || echo "- The Validators line still names $dg_named, which the quality gate runs itself, so a copy there runs a second time and a stale one can only add a block; init's migration takes them off the line."
+
 # By its own name, never git's short form, which lengthens to `heads/<name>` when a tag shares
 # it — and then this line denied a spec that exists. Status 1 is a detached HEAD, printed as the
 # literal `HEAD` as it always was; an unborn branch is named, where `rev-parse` used to print

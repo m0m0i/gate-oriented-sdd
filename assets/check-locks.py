@@ -8,9 +8,12 @@ while the text underneath has changed. This makes that state a build failure.
   ./assets/check-locks.py            verify   (CI)
   ./assets/check-locks.py --update   re-pin   (after deliberately editing a rulebook)
 
-It lives in assets/ because it is one of the few files a project needs a COPY of rather
-than a reference to: `init` copies it in so the project can re-pin its own rulebook. That
-also puts it on a shipped path, so a fix to it cannot go out unreachable.
+It verifies the repository it is RUN in, the git toplevel of the working directory, not the
+one it sits in (#340). It used to take its root from its own location, which was right only
+while `init` copied it into each project's scripts/: run from the plugin's assets/, as the
+quality gate's harness checks run it now, it hashed the plugin's own rulebooks and passed
+with the project's never read. Outside a repository there is no project, and it fails. The
+re-pin command it names is its own path, which is the copy that is running.
 
 The reviewer directory differs between the harness repo (`reviewers/`) and a project using it
 (`.claude/agents/`), so it is discovered rather than hardcoded — otherwise every install
@@ -38,10 +41,39 @@ import json
 import os
 import pathlib
 import re
+import subprocess
 import sys
 import time
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+def _project_root() -> pathlib.Path:
+    """The git toplevel of the working directory. Fails closed: no repository, no verdict."""
+    try:
+        top = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=False
+        )
+    except OSError as exc:
+        print(
+            f"check-locks: git could not be run ({exc.strerror}), so the repository whose "
+            "rulebooks to verify is unknown — and that is not a pass.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1) from None
+    if top.returncode != 0 or not top.stdout.strip():
+        print(
+            f"check-locks: {os.getcwd()} is not inside a git repository, so there is no project "
+            "whose rulebooks to verify. Run it from the project — and that is not a pass.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    return pathlib.Path(top.stdout.strip())
+
+
+ROOT = _project_root()
+#: The command that re-pins with the copy that is running, from the project. A copy's own path
+#: is the one command that is true wherever it was started from, which a fixed
+#: `./scripts/check-locks.py` stopped being once no project held that copy.
+REPIN = f"python3 {pathlib.Path(__file__).resolve()} --update"
 
 
 #: Every place a repository may keep reviewers. `reviewers/` is the harness repo's own; the
@@ -118,7 +150,11 @@ for lock_path in lock_paths:
                         f"{reviewer.name}: {rel} has drifted from its lock\n"
                         f"      locked {meta.get('computedHash')}\n"
                         f"      actual {actual}\n"
-                        f"      If the edit was deliberate: ./scripts/check-locks.py --update"
+                        f"      If the edit was deliberate, re-pin from the project: {REPIN}\n"
+                        "      (in a Claude Code session: python3 "
+                        '"${GATE_SDD_PLUGIN_ROOT:?is unset; start a new Claude Code session}'
+                        '/assets/check-locks.py" --update; on Antigravity: python3 '
+                        f".agents/hooks/check-locks.py --update)"
                     )
 
     # A derived rule cites sources; without them "first-party grounding" is a claim
