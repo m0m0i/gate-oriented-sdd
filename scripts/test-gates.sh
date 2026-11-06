@@ -12390,7 +12390,8 @@ else
 
   # A directory that refuses writes is found before anything is written.
   p="$TMP/up-partial"; up_v036 "$p"; chmod 555 "$p/.agents/agents/_shared"
-  if : 2>/dev/null > "$p/.agents/agents/_shared/probe"; then
+  # In a subshell: a failed redirection on the special built-in `:` ends dash, CI's sh, outright.
+  if ( : > "$p/.agents/agents/_shared/probe" ) 2>/dev/null; then
     note_skip "upgrade/partial-write" "permissions not enforced here (running as root?)"; c11=ok; rm -f "$p/.agents/agents/_shared/probe"
   else
     before=$(up_tree "$p"); out=$(run_up "$p" --project . --write); e=$(cat "$TMP/uperr")
