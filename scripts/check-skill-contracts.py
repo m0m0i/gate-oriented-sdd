@@ -14,12 +14,12 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Forty-one today. A forty-second needs an argument, in the spec that proposes it, for why review cannot
+Forty-two today. A forty-third needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
 with it, #26 the twenty-fourth, #79 the twenty-fifth, #256 the twenty-sixth without moving it, #263 the
 twenty-seventh and twenty-eighth, #262 the twenty-ninth, #166 the thirtieth, #84 the thirty-first to thirty-fourth
-and #239 the thirty-fifth and thirty-sixth, both without moving it, #304 the thirty-seventh, #320 the thirty-eighth and #329 the thirty-ninth to forty-first, and #340 retired five and replaced them with five, without moving it; a cap that is not moved with the entry reads as already exceeded, and the next author
+and #239 the thirty-fifth and thirty-sixth, both without moving it, #304 the thirty-seventh, #320 the thirty-eighth and #329 the thirty-ninth to forty-first, #340 retired five and replaced them with five, without moving it, and #343 the forty-second; a cap that is not moved with the entry reads as already exceeded, and the next author
 cannot tell whether the list is at its limit or the sentence is stale — which is how this said twenty-five over twenty-six, and thirty over thirty-six.
 """
 
@@ -171,6 +171,15 @@ CONTRACTS = (
         "project back on yesterday's gate with nothing to say so. Review cannot defend it: "
         "restoring the copy reads as making a project self-contained, which is the "
         "argument that held for Antigravity and still does there. #256 AC4.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "On a re-run, run `upgrade-install.py` before copying anything",
+        "The re-run is where a project's edit to a copied gate or hooks file is lost: a copy "
+        "made over it replaces the edit silently, which #343's AC3 forbids, and only the script "
+        "can tell an edited copy from a text this plugin shipped. Review cannot defend it: "
+        "dropping the step reads as simplifying the upgrade to 'copy the set again', which is "
+        "what the bullet said before #343. #343 AC1, AC3.",
     ),
     (
         "skills/init/SKILL.md",

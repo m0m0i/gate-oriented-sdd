@@ -26,6 +26,8 @@ The gates are the reason this repo exists. A change to `hooks/` must:
 
 This used to be a habit. It is now a check: `scripts/check-version-bump.py` fails a pull request that touches `skills/`, `reviewers/`, `hooks/`, `assets/`, `rules/`, or a manifest without moving the version, and `scripts/check-manifests.py` still fails when the two manifests disagree about what that version is. Six commits shipped before the guard existed and none of them reached anyone, including a fix to the reviewer template (`reviewers/_template/reviewer.md` now) that every non-TS/Python/Dart project needed.
 
+**A change to a file `init` copies rebuilds the shipped-texts table.** Run `python3 scripts/build-shipped-texts.py` and commit `assets/shipped-texts.json` with the change. A re-run of `init` reads that table to tell a text this plugin shipped from a project's edit, so a copied file whose new text is missing from it would read as an edit on every install. `scripts/test-gates.sh` fails until it is rebuilt, and asks for a rebuild after merging the default branch when the branch's table fell behind it (#343, ADR-11).
+
 **A `#non-breaking` change still needs a bump.** Semver describes compatibility; the updater cares about reachability. An unreachable fix is not a fix, and the marker is about the first thing while the problem is the second.
 
 Editing `docs/`, `evals/`, `scripts/`, CI, or the READMEs does not require a release, and the guard stays quiet for those. That exemption is what keeps it from firing on most PRs — a guard that cries wolf gets deleted, which is the same argument `rules-lock.json` makes about hashing live documentation.

@@ -1,0 +1,177 @@
+{
+ "about": "Every text each file init copies has had on the default branch, by sha256, so a re-run of init tells a text this plugin shipped from a project's edit (#343). Built by scripts/build-shipped-texts.py, which keeps copy_set, contract, aliases, legacy_guards and templates_from as written and derives texts and templates.",
+ "aliases": {
+  "assets/check-locks.py": [
+   "scripts/check-locks.py"
+  ],
+  "reviewers/_shared/reviewer-contract.md": [
+   "agents/_shared/reviewer-contract.md"
+  ]
+ },
+ "contract": {
+  "copies": [
+   ".claude/agents/_shared/reviewer-contract.md",
+   ".agents/agents/_shared/reviewer-contract.md",
+   ".agents/_shared/reviewer-contract.md"
+  ],
+  "source": "reviewers/_shared/reviewer-contract.md"
+ },
+ "copy_set": {
+  ".agents/hooks/check-document-cascade.py": "assets/check-document-cascade.py",
+  ".agents/hooks/check-document-set.py": "assets/check-document-set.py",
+  ".agents/hooks/check-locks.py": "assets/check-locks.py",
+  ".agents/hooks/check-steering-anchors.sh": "assets/check-steering-anchors.sh",
+  ".agents/hooks/check-unreviewed-work.sh": "assets/check-unreviewed-work.sh",
+  ".agents/hooks/gate-lib.sh": "hooks/gate-lib.sh",
+  ".agents/hooks/harness-checks.sh": "hooks/harness-checks.sh",
+  ".agents/hooks/quality-gate.sh": "hooks/quality-gate.sh",
+  ".agents/hooks/review-gate.sh": "hooks/review-gate.sh",
+  ".agents/hooks/steering-digest-antigravity.sh": "hooks/steering-digest-antigravity.sh",
+  ".agents/hooks/steering-digest.sh": "hooks/steering-digest.sh"
+ },
+ "format": 1,
+ "legacy_guards": {
+  "scripts/check-document-cascade.py": "assets/check-document-cascade.py",
+  "scripts/check-document-set.py": "assets/check-document-set.py",
+  "scripts/check-locks.py": "assets/check-locks.py",
+  "scripts/check-steering-anchors.sh": "assets/check-steering-anchors.sh",
+  "scripts/check-unreviewed-work.sh": "assets/check-unreviewed-work.sh"
+ },
+ "templates": {
+  "4541f27147a6e4b8f74cf00bcf226b80124d7ae220c1c22316373b4f34efebb1": "{\n  \"gate-sdd\": {\n    \"enabled\": true,\n    \"PreInvocation\": [\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/steering-digest-antigravity.sh ] || exit 0; sh {{HOOKS_DIR}}/steering-digest-antigravity.sh\",\n        \"timeout\": 15\n      }\n    ],\n    \"Stop\": [\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/quality-gate.sh ] || exit 0; GATE_SDD_HARNESS=antigravity sh {{HOOKS_DIR}}/quality-gate.sh\",\n        \"timeout\": 600\n      },\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; GATE_SDD_HARNESS=antigravity sh {{HOOKS_DIR}}/review-gate.sh\",\n        \"timeout\": 120\n      }\n    ]\n  },\n  \"gate-sdd-fast-check\": {\n    \"enabled\": true,\n    \"PostToolUse\": [\n      {\n        \"matcher\": \"write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\" && ( {{FAST_CHECK}} ) 1>&2; echo '{}'\",\n            \"timeout\": 60\n          }\n        ]\n      }\n    ]\n  }\n}\n",
+  "778b72e5bf7ffc670a20b898cb9560c0005fcdd0550269410dcae2dd50943ad1": "{\n  \"gate-sdd\": {\n    \"enabled\": true,\n    \"PostToolUse\": [\n      {\n        \"matcher\": \".*\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\" && {{FAST_CHECK}}\",\n            \"timeout\": 60\n          }\n        ]\n      }\n    ],\n    \"Stop\": [\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/quality-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/quality-gate.sh\",\n        \"timeout\": 180\n      },\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh\",\n        \"timeout\": 30\n      }\n    ]\n  }\n}\n",
+  "7b68b2c4a4d4b87266f069e81e29738d0e47659ca205c31f64284b43ba225d7a": "{\n  \"gate-sdd\": {\n    \"enabled\": true,\n    \"PreInvocation\": [\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/steering-digest-antigravity.sh ] || exit 0; sh {{HOOKS_DIR}}/steering-digest-antigravity.sh\",\n        \"timeout\": 15\n      }\n    ],\n    \"Stop\": [\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/quality-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/quality-gate.sh\",\n        \"timeout\": 600\n      },\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh\",\n        \"timeout\": 120\n      }\n    ]\n  },\n  \"gate-sdd-fast-check\": {\n    \"enabled\": true,\n    \"PostToolUse\": [\n      {\n        \"matcher\": \"write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\" && ( {{FAST_CHECK}} ) 1>&2; echo '{}'\",\n            \"timeout\": 60\n          }\n        ]\n      }\n    ]\n  }\n}\n",
+  "b528d5740466e3625f6e653241196c99f24a51a4b919114a56fa84567f300e84": "{\n  \"gate-sdd\": {\n    \"enabled\": true,\n    \"PostToolUse\": [\n      {\n        \"matcher\": \".*\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"{{FAST_CHECK}}\",\n            \"timeout\": 60\n          }\n        ]\n      }\n    ],\n    \"Stop\": [\n      {\n        \"type\": \"command\",\n        \"command\": \"[ -f {{HOOKS_DIR}}/quality-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/quality-gate.sh\",\n        \"timeout\": 180\n      },\n      {\n        \"type\": \"command\",\n        \"command\": \"[ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh\",\n        \"timeout\": 30\n      }\n    ]\n  }\n}\n",
+  "d2d359d13bbe9a6000f5af2adf4f25c7c951005677400df26900a140a93c1b6c": "{\n  \"gate-sdd\": {\n    \"enabled\": true,\n    \"PreInvocation\": [\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/steering-digest-antigravity.sh ] || exit 0; sh {{HOOKS_DIR}}/steering-digest-antigravity.sh\",\n        \"timeout\": 15\n      }\n    ],\n    \"PostToolUse\": [\n      {\n        \"matcher\": \".*\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\" && {{FAST_CHECK}}\",\n            \"timeout\": 60\n          }\n        ]\n      }\n    ],\n    \"Stop\": [\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/quality-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/quality-gate.sh\",\n        \"timeout\": 180\n      },\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh\",\n        \"timeout\": 30\n      }\n    ]\n  }\n}\n",
+  "d75cc8abc49994abf2e96a0855578ec0e92650b672a33439bfd5bee7628a18c7": "{\n  \"gate-sdd\": {\n    \"enabled\": true,\n    \"PreInvocation\": [\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/steering-digest-antigravity.sh ] || exit 0; sh {{HOOKS_DIR}}/steering-digest-antigravity.sh\",\n        \"timeout\": 15\n      }\n    ],\n    \"PostToolUse\": [\n      {\n        \"matcher\": \".*\",\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\" && {{FAST_CHECK}}\",\n            \"timeout\": 60\n          }\n        ]\n      }\n    ],\n    \"Stop\": [\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/quality-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/quality-gate.sh\",\n        \"timeout\": 600\n      },\n      {\n        \"type\": \"command\",\n        \"command\": \"cd \\\"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\\\"; [ -f {{HOOKS_DIR}}/review-gate.sh ] || exit 0; sh {{HOOKS_DIR}}/review-gate.sh\",\n        \"timeout\": 120\n      }\n    ]\n  }\n}\n"
+ },
+ "templates_from": "b36a3c301b1395d4e76cd76d0785db203a7cdb88",
+ "texts": {
+  "assets/check-document-cascade.py": [
+   "019a2c4f4a81b92f51abc0cfe190004b5f13f276d8fdc805761ecb31a9960a24",
+   "2b2f1ecd16ea9c46e6b05aa87edd0857cc4fde0c98791175b4d581b7df258952",
+   "3347fddc84890c3e6845131f29b711996b9494085286aa632d44d75909ded3a3"
+  ],
+  "assets/check-document-set.py": [
+   "0c20977a3b1407020538928961ed4b4a41894a02bab0b284b9da89b1b950b508",
+   "43614d74d9949edb2ef3059bdf50b2fb123178c8d6138c25e577615c099a1bca",
+   "63a8607eb97bc4e038a628d5cb495609b00606da97bca3f64adb49252734945d",
+   "8d174b3ed04b1cb87a21afd0d811a7a55fd27be39a049b602ade4b0eb985b096",
+   "9171b26a4881ebe214b85bcf5bf70e5a5fb6ee783cd5661c134913d8b73ea010",
+   "96f9b571ab0446e80629de209994316c083ee38355a5365b531fcaab73832147",
+   "c7123257e816aa0effcb54b36a044c18ff0945fcabbca09ce8b7aa33d76f6743",
+   "d1b47e159475e054c78888537a3aecf3cef602b0a80cd06ff17edc932ab6ac95"
+  ],
+  "assets/check-locks.py": [
+   "06a4d3c68256fc7ee9855add93585932fd83d3faddffae0b05e6717f0ea4ea47",
+   "094f0636ba4068e1fb5b07664f7d51c6a3c53c6edb13584d3fdab704c84f1932",
+   "4124e1dfd2bff095c56309bb679f9fc0eb966a5c83c5421f709007468964b882",
+   "baf52fc352fb7e1ea62f1c93a8722f2cc6748551db0cdfae52f7d67fbd7e696f",
+   "e277aa990fc2c5821fc1e6041e58847fab08e0966c94d77d0f84186ad6e1e69c",
+   "e722961207e33f4ca4ac9bcdcb00ecbad001cd4c878ad2c547e52f8ca0716af0",
+   "e79e140c9407fa25012e6fc897bd3b05ba29a27904cf4b21079c42913e47892b"
+  ],
+  "assets/check-steering-anchors.sh": [
+   "1dbdf43b38ec89938b2239b8f2dcdef7875830166dcfbfbf425521c6cf660902",
+   "4a1c3de33a3d50cc2ae72da7b9898d8472973d6421a414d90bb88da14b85d100",
+   "76317a576aa2b4fb603772b151406d57a9a42816bfdfd43cd5239c3fa9b21728",
+   "91d9184f943db1a11c75bd836c7051d105876bfd3e07f567c1d736a004bd9ca7",
+   "acf35f9fedd626c84feb92c68baf75e5b3aad0de0baea406cd0de81ddbe9b097",
+   "b391c43dab3b364af662984b965d50428a158e9041699565d7874da8ef0ded38",
+   "b81c01565baff67cd4f4eadfb1501768ed0cc72e1b1bbfaf5ffa1d90669fd904",
+   "bdfa224d3fe0b9a144215acc3a55b7d1d9b6afc92b38bb46a4bd1046d5e342fd",
+   "cfa4a448693cf293becc2140bb66f1f9cb42d9449912268d6ef8d67bf865b9a3",
+   "eb0bc54d6b6931f18c8e3d99c53e315584b9de2b7e91179010986de34b3dc3af"
+  ],
+  "assets/check-unreviewed-work.sh": [
+   "1076af40a278e016cc3b4b1d344e2e163b589323b9d76cdcb2e047e3be09e811",
+   "1f7ecdc3ec99965d906c34170e353a5719235d0f1907b569f0364f09de389202",
+   "3082efcd30aa7ec61ce2612d46a61ae48ad40f8706a3ddcca5cf42275a5906c1",
+   "6cc9140c1246d568ffd6f4c96b6fb140e4bcba281a56cfbb6a69e23cf352c68a",
+   "91a92f53457118e736d4ec3bbfea2fb22b9144a8b31727b58803e0aad9582ff8",
+   "92e3058705018e2cfb09ca9bf6f53144bee48ec9f33faf49f3b743035b3ea846",
+   "b301d6995f97a742d36b249fc6c2d01faff30f8580fc3152a454288436bc529f",
+   "f73a4f16396f92b9468f2748a0e0e550583b813dc7248ad3b0aaf1b62774b370"
+  ],
+  "hooks/gate-lib.sh": [
+   "0f91efff88d9557acc54a2101f520b03414b24464ced238246ce648faebb741d",
+   "23e06696204a298e92de3c7408d082b2afe21df51edd9be502e4aca9b58189ef",
+   "2816427668e9710f858a52ad92903420994560e0518f67bec293ba9dd4b3c93d",
+   "35cc1f36497c513a33f34475806f2cf6ebc7b90b2e385c1b9d0c416ec1d59507",
+   "411052a3c1efd3066676bb7a89c4ca6325f2faf76eebde270820340966d2021f",
+   "593cd913631591ee14b757ebc917c89ef53650d765d39d9370dea44651f25884",
+   "5a0d3f28c1d84db8dadb8d4bffcc40fc7b1b657dc74f5057f1be998b66bd663f",
+   "5b6a61b9447bd4964895d6cb2f30d8ffe907bf68724aff9f2109a33bc91a0acc",
+   "740fbf7b007f8da95b0a3d53ff700ea065802e29d458804f47b60eedf7b7f40f",
+   "8738f9ffacff827b930e020f8d56e13257c1af0a86add5cb47686cc5aae5fc9a",
+   "932afa946e10aa09b19f5048f046b2e4be1f0e7e520dc612a07cd136c3a24674",
+   "b07c59d48853fe938585dcb087179f396a35a0816d730db423320f90368726f0",
+   "b6e633eeeb7239606698fe6c4b41dbd1c7cfb580ed7e70aba53fa399fe883cb6",
+   "f8d2a59db5981cf70c51ddc9e19088f599162f3a7cfd83a942e384ddc4871982",
+   "fa753e7e561e72d9ebd7ae32d27532eb6e71cafa01c3f23b78653d13c44c371b"
+  ],
+  "hooks/harness-checks.sh": [
+   "4948e9f84038b8c41c2c2e8ad09f1718b871c9deb881ff1a4bad69aa86c1bc51"
+  ],
+  "hooks/quality-gate.sh": [
+   "013abb3f65226edfe123910a217b5f03d17608b19d2df63ef9d22e2416a75695",
+   "1d24bdd23087382f049c86dbbb76dab6bb89f532c0d81ca0d86df9130eb9d989",
+   "1f3f7ca04dea9c8c8d76be3b922d50fafd61769375e3a67af73365f68e5e3a3a",
+   "2332e16d2e6b5d347afc864c8a913c12e3e7142a608881c16c1dbc84573bc245",
+   "439b75bc4163950a40032f95afc378d8a7a56fa7c5099b1f3fd16617c73f4c94",
+   "516de3bdb1b57df44882450e790be76f5398f2b96eee91168123f9515f6b783c",
+   "7588593de16ab76fb295e7a2736e47bcf6903e7e9a25f848dc043d6dc242c3b0",
+   "7a25c6556b62723808e054a501bfc9d4b8b901adc3f341de1396efe20d16ee7e",
+   "8011a7a23f416201e2d4743f4f50bdd2776dd54ff415ecb370395fe99cb7c6e8",
+   "90a9a0bca4b65902b37f8fb0f73e823a0e85ceebd59f62789975556200567834",
+   "9e67b05f92fd7db72f898ef0bc34feb0a36026844f2bcf7c2158a8e53303d9ea",
+   "a88f052aad920c27fdd778703906d48ec8dff619080064a06a8c164a0a14ccc4",
+   "b66a26f384df3e738ee68842eab9a3f68aaa568ddee8ee6df3e3a5a3a3c185ee",
+   "b890bc73f5cd2dca87beae1c8fcdcf99121d61966fce4c9cf30f6f346f275dbc",
+   "bf2b1e0e05cbf36129f988a457b9e9d3d86c6a414e9232df521c47c462322e05",
+   "f7cb39a0847ff3de0334bda25f8de8585ec9eb37340e949e241106a9b00fa647"
+  ],
+  "hooks/review-gate.sh": [
+   "0697938e5aa0bdfd97e6767d3750e1aa3dd042388d02ad8429aeff2fb7c84eca",
+   "152fdb1956aa75733addf00f25f21ab28fa1739e9a3ad9f7c7215caba1b85bb2",
+   "383acaf79793c7d849c7909ac59cebda65996572bbc392e0459776508dff6fe9",
+   "3929cc5deacf7b1caf551f070f9cee0b7ab296714dfe21a00d174367508a3c35",
+   "4c6fb805e29a53751910ae4b0ca1f4d6e4ee816161f3cabccd1967b09a76b1d6",
+   "4d623562e9dc888189a025d79d9ce532805d52da409dc0bec7e485d46d044873",
+   "6cd992dcd782183f7e1605e4a5dec3f3c958cf7804cc76c299cf98009ae53db3",
+   "70dcad2ad01a79b14195727eeced1ac019f8c9005bb2523ac3649c177a90387e",
+   "725935acdf961398793e86650c29a586b0548f76a2f92f55935ace59d4f466a5",
+   "73e1de99ab1355c70b6b715cdc362aaeeb9819e8385d05bc6d74372ac23c49c1",
+   "8c760df8d8d403f24672f0c053d161acb8c5b55ea22ca339d9a428010e8956f3",
+   "8cb2105e86b49039fd8888dfebad74c4708a3afba52cedbc2c861962e6312f3d",
+   "8dae7cefff47f922b8a5784f9c7cf3684dd6f5bd8a8d8c2ff1f5e0fcafa265d6",
+   "8e1e051ad12ed65c9cc9157a67bc2217159a50d6e7aa9b4d9d7dcc56359ddfde",
+   "a585fc867a2f546ff2f9630110a0dc55a8065770bcd28d96fd3aa8aa90c6478f",
+   "ae388ed39d5e0919bb73f7de6bde138e142d72ad464e23022c91d518e33cedc6",
+   "b17a0601f44c8e8704d8e36e67d5bef267dba293ccbb7c9200f2363412c5e479",
+   "c2a8abc21aa93e7fb25586880ce6178a5506d5cc7c48283401de62050d870d78",
+   "d9cf3f9ee64296ee16a9d8e822b663b37ac311211d535dccdde07ff6e391e53a"
+  ],
+  "hooks/steering-digest-antigravity.sh": [
+   "303e38c4bd88e5a168fa8037152bfb745a09d1f1f546d2755fffaff1ed47665c",
+   "b197d3905a493409c9630a4cd6e6b2246f72cf9b55c9ccdc0c992eb463f80b61"
+  ],
+  "hooks/steering-digest.sh": [
+   "05d4a3aa27b6629672cb082ce37ecd278153b8afe9f06ae2a8dae0576f257c08",
+   "4172e096ce27134cef87a83e4a44279edc6349049e6dc982188cd9de69440792",
+   "67ffcb7aa6088ebee7efd85670748e7ab8d6d9b9c001c9482c95f5a69cc318b5",
+   "7434c4aaa4a9f5f7579dee4619c40ec9c72fc91aa006c2f508666d1673d7f968",
+   "ae6573c21decd18b61914c187be374ee4448879a6a00235c2a18f8ca2ac508d8",
+   "d310d2c50f8c31329c1cf0ae7f12ca160d898e792142302d35bbfd123c924cbe"
+  ],
+  "reviewers/_shared/reviewer-contract.md": [
+   "1a2a6eb35ac2fc6063b213237d5584a3843e42f15e869c3c427ce0796c3eff15",
+   "4c61f1a19cca0da07335a8a8d77a51ca4daad9b25d46e9f6a5206bdc37739f54",
+   "4df6f23ae0d31f1ff475fd8779fa2edc64b4389923c67a3ce6f7f84b87dc3f60",
+   "7d216e1924293d94af57ef1dc50a865b0aeb307328c6bc0c69d91008f932474f",
+   "8ea0a2e554b188f7f725feee807bc3ad6bec922f23f1de7dbb09437396626afd",
+   "986a95c3ab5b9fce6609addba7df07d9331ca6e56e83d020317eec63210b3208",
+   "9b766d8747a9f609d6600712234708b836b915e40a53f8270f3986b5500d0a91"
+  ]
+ }
+}

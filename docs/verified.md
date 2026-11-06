@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-10-26 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity CLI rows below reflect the 2026-10-11 verification run (A1–A14), and the #324 section re-ran `PostToolUse` and named groups on CLI 1.4.7. Antigravity IDE has been discontinued and is removed from the active target matrix.
+Last **updated**: 2026-11-04 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity CLI rows below reflect the 2026-10-11 verification run (A1–A14), and the #324 section re-ran `PostToolUse` and named groups on CLI 1.4.7. Antigravity IDE has been discontinued and is removed from the active target matrix.
 
 The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The Antigravity CLI row carries the date it was verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
@@ -613,6 +613,65 @@ Q3's answer to the paragraph is one sample.
 - **A merged migration.** M1's CI ran on the migration's pull request, pinned to #340's head. The project's `main` keeps its copies until that request merges, and its pins go back to `ref: main` once #340 does.
 - **Antigravity.** Its copy set is tested by `scripts/test-gates.sh` only; no `agy` run refreshed `.agents/hooks/` with the runner.
 
+## A re-run of `init` upgrades an Antigravity install, on Antigravity CLI 1.4.12 (#343)
+
+**Run on 2026-11-04, Antigravity CLI 1.4.12**, for #343's AC9. Every session was headless: `agy --sandbox --mode accept-edits --effort low -p`, with stream-json output, in a project under `~/agent-work-dir`, which `trustedWorkspaces` lists. Each was started with `CLAUDECODE`, `CLAUDE_CODE_*`, `GATE_SDD_*`, `ANTIGRAVITY_CONVERSATION_ID` and `ANTIGRAVITY_AGENT` unset. A first attempt with `--dangerously-skip-permissions` was refused by this session's own permission classifier and never ran. No gate-sdd plugin was installed in `agy` before the runs, and the v0.41.0 release was installed after them, at the maintainer's request.
+
+- **R1 — the plugin refresh.** `agy plugin install <an extract of gate-sdd--v0.36.0>` printed `Installed to ~/.gemini/config/plugins/gate-sdd`, and `agy plugin list` showed `gate-sdd (enabled, 0.36.0)`, `Source: antigravity`. `agy plugin uninstall gate-sdd` printed `Uninstalled plugin "gate-sdd"` and removed the directory. `agy plugin install <an extract of the branch head>` then put the branch's tree there, with `assets/upgrade-install.py` and `assets/shipped-texts.json`. The same uninstall and install was run twice more, once to move to a later branch head and once to the v0.41.0 release. That is the refresh `README.md` describes, which no earlier run had made.
+- **R2 — a fixture installed at v0.36.0, re-run at the branch head.** The fixture was built by hand from `gate-sdd--v0.36.0`'s own texts, as that version's `init` writes an Antigravity install:
+  - in `.agents/hooks/`, its five gate copies;
+  - in `scripts/`, its five guards, four of them on the `- Validators:` line beside one project validator, `sh check.sh`;
+  - the reviewer and its contract;
+  - its issue templates and directory contracts;
+  - `.agents/hooks.json` rendered from its template (the v0.33.0–v0.36.0 shape);
+  - then a hand edit making the fast check `sh check.sh`.
+
+  All four v0.36.0 guards passed on it. Asked to run `init` as a re-run limited to the hooks install, with the answers given in advance, the agent:
+  - **read and reported.** It read the installed plugin's `skills/init/SKILL.md` and ran `python3 ~/.gemini/config/plugins/gate-sdd/assets/upgrade-install.py --project .`, which exited 3 with twelve changes:
+    - six `missing`: the runner and five checks;
+    - four `shipped`: `gate-lib.sh`, the two gates and `steering-digest.sh`;
+    - the contract `shipped`;
+    - `steering-digest-antigravity.sh` `current`;
+    - the five `scripts/` guards reported `shipped` and left alone;
+    - `.agents/hooks.json` `written by the template d75cc8abc499`, the v0.33.0–v0.36.0 text.
+  - **was refused once by the sandbox.** Its `--write --hooks-json` exited 1: `write failed at .agents/hooks/check-document-cascade.py: [Errno 1] Operation not permitted` on the temporary file beside it, `Already written: nothing`. The CLI's terminal sandbox refused the write into `.agents/hooks/`.
+  - **wrote on the retry.** It ran the same command with `BypassSandbox: true`, which the session granted, and the script wrote the twelve files and printed `applied 12 change(s)`.
+
+  Its final answer did not mention the refused attempt. Afterwards, exactly those twelve files differed by hash. `.steering/`, `scripts/` and the reviewer were unchanged. The modes were kept. The hand edit survived as `( sh check.sh ) 1>&2; echo '{}'` in the new `gate-sdd-fast-check` group, under the write-tool matcher. Both `Stop` commands gained `GATE_SDD_HARNESS=antigravity`, and `gate_hook_switches` exited 0 on the file.
+  The script was changed after the review that followed these runs: it now reports each `scripts/` guard as a question until #340's migration removes it, so this write would exit 3 with the five guards as its questions.
+- **R3 — the re-rendered gates block, in a later turn.** Asked to append `BAD` to `src/app.txt` and end its turn, the agent was blocked by the re-rendered quality gate. It quoted the block: `Quality gate: a gating validator failed. These are the harness checks this gate ships with, then the commands on the '- Validators:' line…`, then `--- sh check.sh` and `check.sh: src/app.txt holds BAD`. It then removed the line and ended its turn.
+- **R4 — a real consumer.** The consumer is a project whose real Antigravity install was made in 2026-09 and never re-run. It holds:
+  - the v0.2.3–v0.10.0 hooks shape: one group, matcher `.*`, `exit 0` as the fast check, and 180/30 timeouts;
+  - four gate copies and no turn-0 digest;
+  - three guards in `scripts/`;
+  - a reviewer contract both at `.agents/agents/_shared/` and at `.agents/_shared/`, where v0.10.0's `init` put it;
+  - a whole vendored copy of the plugin, of that era, under `.agents/plugins/gate-sdd/`.
+
+  It ran on a local clone, on a branch from the commit that holds that install, and nothing was pushed.
+  - **The dry run found a gap.** Run by hand before the session, the script did not classify the `.agents/_shared/` copy. That was fixed in `16006e4` and `6644cec`, and the plugin was reinstalled.
+  - **The agent read the vendored copy first.** In the session it first read `.agents/plugins/gate-sdd/skills/init/SKILL.md` and searched for about thirty steps before it found the installed plugin's `init` and the script.
+  - **The script then reported fourteen changes**, and identified the hooks file as `written by the template b528d5740466`, the v0.2.3–v0.10.0 text. The sandbox refused the first write and the retry bypassed it, as in R2.
+  - **The upgrade completed.** It applied fourteen changes, and a second report said `nothing to upgrade`. The fourteen were:
+    - seven `missing` files added: the runner, the five checks and `steering-digest-antigravity.sh`;
+    - four `shipped` replaced: `gate-lib.sh`, the two gates and `steering-digest.sh`;
+    - both contract copies, `.agents/agents/_shared/` and `.agents/_shared/`;
+    - `.agents/hooks.json`.
+
+    No copy was `edited`. The project's one chosen value in the hooks file, its fast check `exit 0`, survived as `( exit 0 ) 1>&2; echo '{}'` in the new `gate-sdd-fast-check` group. The three `scripts/` guards stayed where they were, and that second report counted them as nothing to upgrade. The review after these runs found that verdict wrong: the script now reports each pre-0.41.0 guard as a question until #340's migration removes it, so such an install exits 3 and a batch names it as behind.
+  - **The upgraded checks fail this project.** The agent ran the copied `harness-checks.sh`, which failed `check-document-set.py` (`mode is full and 1 required item(s) are not found: docs/ROADMAP.md`) and `check-document-cascade.py` (four documents without a reconciliation stamp, `docs/ROADMAP.md` among them). Those are checks the 2026-09 copies never ran: its old `scripts/` guards still passed. Its final answer reported neither the refused write nor this failure.
+  - **In a later turn the gate blocked.** Asked to add a comment to a source file, the agent was blocked by the re-rendered quality gate, whose message ran the runner's output and named those two checks. It removed the comment as asked, and the gate kept blocking each continuation until the print timeout, so `agy` exited 3. The tree was left as it was.
+
+### What these runs do not support
+
+- **An interactive session.** How it asks for `BypassSandbox`, which the accept-edits print-mode sessions here granted, was not observed.
+- **A run without the CLI's terminal sandbox.**
+- **The guard migration of `scripts/` copies.** The prompt left it out.
+- **An install made by the `init` skill itself at v0.36.0.** R2's fixture was hand-built from that version's texts.
+- **The fresh-install path, `--install`,** which `scripts/test-gates.sh` covers.
+- **A seeded failure on the real consumer.** R4's later-turn block came from document checks that were already failing, not from a failure seeded for the run as in R3.
+- **A consumer's re-run that is pushed and passes its CI.**
+- **What to do about a vendored plugin copy.** Nothing `init` ships reaches the copy under `.agents/plugins/`, so a session can read its older skills. R4 shows it, and nothing here changes it.
+
 ## Still to verify
 
 - [x] The Antigravity run sheet from the 2026-10-11 deep review, A1–A14 in [`reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md): whether a gate blocks at all, the continuation cap, timeouts, digest timing, reviewer registration and `rules/AGENTS.md` — run on 2026-10-11 on CLI 1.3.3, section above.
@@ -638,6 +697,7 @@ Q3's answer to the paragraph is one sample.
 - [ ] Whether a reviewer reaches `docs/decisions/` through `structure.md` when its rulebook and the repository conflict.
 - [ ] `backlog` on a project with a walking skeleton to start from, and a refinement that reorders against the author's stated preference — every call here was accepted.
 - [ ] `sprint` on a backlog item that decomposes into a feature and a chore, and on an iteration with unplanned work to label.
-- [ ] `init` on a project that already has a harness install — the diff-and-upgrade path — including an existing `CONTRACT.md` whose compiled rules the installed rulebook must keep.
+- [x] `init` on an Antigravity project that already has a harness install — the re-run through `assets/upgrade-install.py` — run on 2026-11-04 on CLI 1.4.12 for #343, on a v0.36.0 fixture and a real 2026-09 install, section above.
+- [ ] `init` on a project that already has a harness install, beyond the hooks install and the contract copy: an existing `CONTRACT.md` whose compiled rules the installed rulebook must keep, and the guard migration run by the skill (#343's runs left both out).
 - [ ] The known-failing validator path at `init` step 1, and the omit and record-as-known-failing answers at step 4.
 - [ ] `init` step 3's merge paths with something to merge: issue templates that differ from the plugin's, and an `AGENTS.md` that needs a diff shown before it is touched. On #76 both were byte-identical or already canonical, so neither path ran.

@@ -51,13 +51,15 @@ report() { # report <name> <ok|no> <detail>
 # anything and the output is identical. So the skip is spoken, and the count is printed at the
 # end beside the passes.
 #
-# TWENTY-NINE sites: twenty-three until #297 added four, and twenty-seven until #304 added two. The first cut converted ten and said
+# TWENTY-NINE sites as of #304: twenty-three until #297 added four, and twenty-seven until #304 added two. The recipe at the
+# end of this paragraph is the authority, and the figure drifted after #304: it gave thirty on `main` at 0.41.0, and thirty-one
+# once #343 added its shipped-texts guard, the one site below that is about missing history rather than permissions. The first cut converted ten and said
 # seven; the recount that caught that said twelve and nine, in the paragraph whose subject is not counting. Two of the three the
 # first cut missed were worse than any half: they called `report ... ok` on the skip path,
 # manufacturing a pass and incrementing the counter. Those two are whole cases and now report
 # nothing at all, which is why the summary says `skipped` rather than `half-case(s) skipped`.
 #
-# How to get twenty-nine: count the GUARDS, not the `chmod 000` lines. There are twenty-three of
+# How to get twenty-nine, as of #304: count the GUARDS, not the `chmod 000` lines. There are twenty-three of
 # those and TWENTY-TWO guards among them, because case 14 has no self-disabling branch — under
 # root it goes red rather than skipping, which is the safe direction and deliberately left
 # alone. Do not "fix" that asymmetry: `docs/BACKLOG.md` row 1 asked for it and was corrected
@@ -12182,6 +12184,555 @@ case "$(GATE_SDD_HOOKS="$TMP/hv-hooks" sh -c "$hv_run" 2>&1)" in stub-runner-ran
 [ "$c1$c2$c3$c4$c5" = "okokokokok" ] \
   && report "a pasted command names its remedy when the gate-sdd variable it reads is unset" ok \
   || report "a pasted command names its remedy when the gate-sdd variable it reads is unset" no "no-bare-form=$c1 runner-form=$c2 repin-form=$c3 unset-names-remedy=$c4 set-runs=$c5"
+
+# 417. #343 C2 — the shipped-texts table names every text each copied file has had on main.
+#      A re-run of `init` tells a text the plugin shipped from the project's edit by this table, so
+#      a copied file whose current text is missing from it would read as the project's edit on
+#      every install, and one whose old text is missing would be overwritten without a question.
+#      The builder walks the first-parent chain of the merge-base of HEAD and origin/main, plus the
+#      working tree, so a branch's own intermediate commits are never in it and the table is the
+#      same at a branch's tip and at its merge.
+st_build() { ( cd "$1" && python3 "$ROOT/scripts/build-shipped-texts.py" ${2+"$2"} >"$TMP/stout" 2>"$TMP/sterr"; echo "exit=$?" ) }
+st_repo() { # st_repo <dir> — a plugin-shaped repo with one copied file, a contract and a template, on main
+  _s="$1"; mkdir -p "$_s/hooks/templates" "$_s/reviewers/_shared" "$_s/assets"
+  printf 'echo a1\n' > "$_s/hooks/a.sh"; printf 'contract 1\n' > "$_s/reviewers/_shared/reviewer-contract.md"
+  printf '{"t": 1}\n' > "$_s/hooks/templates/antigravity.hooks.json"
+  ( cd "$_s" && git init -q -b main && git add -A && git -c user.email=t@t -c user.name=t commit -qm one ) >/dev/null 2>&1
+  _first=$(git -C "$_s" rev-parse HEAD)
+  printf '{"format": 1, "copy_set": {".agents/hooks/a.sh": "hooks/a.sh"}, "contract": {"source": "reviewers/_shared/reviewer-contract.md", "copies": [".agents/agents/_shared/reviewer-contract.md"]}, "aliases": {}, "legacy_guards": {}, "templates_from": "%s"}\n' "$_first" > "$_s/assets/shipped-texts.json"
+  ( cd "$_s" && git add -A && git -c user.email=t@t -c user.name=t commit -qm seed && git update-ref refs/remotes/origin/main HEAD ) >/dev/null 2>&1
+}
+st_commit() { ( cd "$1" && git add -A && git -c user.email=t@t -c user.name=t commit -qm "$2" ) >/dev/null 2>&1; }
+
+# This repository's own table is current, and every current text is in it.
+if [ -f "$ROOT/scripts/build-shipped-texts.py" ]; then
+  out=$(st_build "$ROOT" --check)
+  case "$out:$(cat "$TMP/stout")" in
+    exit=0:*"history check skipped"*) c1=ok; note_skip "shipped-texts history check on this repository" "$(grep 'skipped' "$TMP/stout" | head -1)" ;;
+    exit=0:*) c1=ok ;;
+    *) c1="no($out $(cat "$TMP/stout" "$TMP/sterr"))" ;;
+  esac
+  c2=$(cd "$ROOT" && python3 - <<'EOF'
+import hashlib, json
+t = json.load(open("assets/shipped-texts.json"))
+srcs = sorted(set(t["copy_set"].values()) | {t["contract"]["source"]} | set(t["legacy_guards"].values()))
+h = lambda p: hashlib.sha256(open(p, "rb").read()).hexdigest()
+miss = [p for p in srcs if h(p) not in t["texts"].get(p, [])]
+if h("hooks/templates/antigravity.hooks.json") not in t["templates"]: miss.append("template")
+if len(t["copy_set"]) != 11: miss.append("copy_set has %d files, not 11" % len(t["copy_set"]))
+print("ok" if not miss else "no(%s)" % miss)
+EOF
+)
+else
+  c1="no(scripts/build-shipped-texts.py is missing)"; c2="no(no table)"
+fi
+
+# A branch that changes the copied file twice: the table built at its tip holds main's text and
+# the tip's, never the intermediate one, and the same table passes at a merge of the branch.
+p="$TMP/st-branch"; st_repo "$p"
+( cd "$p" && git checkout -qb 9-feature ) >/dev/null 2>&1
+printf 'echo a2\n' > "$p/hooks/a.sh"; st_commit "$p" two
+printf 'echo a3\n' > "$p/hooks/a.sh"; st_commit "$p" three
+out=$(st_build "$p"); st_commit "$p" table
+c3=$(cd "$p" && python3 -c '
+import hashlib, json
+t = json.load(open("assets/shipped-texts.json"))["texts"]["hooks/a.sh"]
+h = lambda b: hashlib.sha256(b).hexdigest()
+want = {h(b"echo a1\n"), h(b"echo a3\n")}
+print("ok" if set(t) == want else "no(%s)" % t)')
+out=$(st_build "$p" --check); case "$out" in exit=0) c4=ok ;; *) c4="no(tip: $out $(cat "$TMP/stout" "$TMP/sterr"))" ;; esac
+( cd "$p" && git checkout -q main && git -c user.email=t@t -c user.name=t merge -q --no-ff -m merge 9-feature ) >/dev/null 2>&1
+out=$(st_build "$p" --check); case "$out" in exit=0) c5=ok ;; *) c5="no(merge: $out $(cat "$TMP/stout" "$TMP/sterr"))" ;; esac
+
+# A change to a copied file without a rebuild fails, naming the file and the remedy.
+printf 'echo a4\n' > "$p/hooks/a.sh"
+out=$(st_build "$p" --check)
+case "$out:$(cat "$TMP/stout" "$TMP/sterr")" in exit=1:*"hooks/a.sh"*"build-shipped-texts.py"*) c6=ok ;; *) c6="no($out $(cat "$TMP/stout" "$TMP/sterr"))" ;; esac
+# A table holding a text neither the history nor the tree has fails too.
+git -C "$p" checkout -q -- hooks/a.sh
+python3 - "$p/assets/shipped-texts.json" <<'EOF'
+import json, sys
+t = json.load(open(sys.argv[1])); t["texts"]["hooks/a.sh"].append("0" * 64); json.dump(t, open(sys.argv[1], "w"))
+EOF
+out=$(st_build "$p" --check); case "$out" in exit=1) c7=ok ;; *) c7="no(extra text passed: $out)" ;; esac
+git -C "$p" checkout -q -- assets/shipped-texts.json
+
+# With no origin/main the history half cannot run: a named skip, never a silent pass, and the
+# current-text half still runs.
+git -C "$p" update-ref -d refs/remotes/origin/main
+out=$(st_build "$p" --check)
+case "$out:$(cat "$TMP/stout")" in exit=0:*"history check skipped"*"origin/main"*) c8=ok ;; *) c8="no($out $(cat "$TMP/stout" "$TMP/sterr"))" ;; esac
+printf 'echo a5\n' > "$p/hooks/a.sh"
+out=$(st_build "$p" --check); case "$out" in exit=1) c9=ok ;; *) c9="no(no ref, stale current passed: $out)" ;; esac
+
+[ "$c1$c2$c3$c4$c5$c6$c7$c8$c9" = "okokokokokokokokok" ] \
+  && report "the shipped-texts table names every text each copied file has had on main" ok \
+  || report "the shipped-texts table names every text each copied file has had on main" no \
+     "repo=$c1 current-texts=$c2 branch-texts=$c3 tip=$c4 merge=$c5 stale=$c6 extra=$c7 no-ref-skip=$c8 no-ref-current=$c9"
+
+# 418. #343 AC1, AC3, AC4, AC5, AC7, AC8, AC10 — a re-run classifies each copy, judges the set
+#      whole, and writes only what the answers allow. The fixture is an Antigravity install as
+#      init wrote it at gate-sdd--v0.36.0, built from that tag's own texts: five gates in
+#      .agents/hooks/, the five guards in scripts/, the contract in .agents/agents/_shared/, and a
+#      hooks file already in the current shape, so the copies can be written (T3 is the hooks file).
+UP="$ROOT/assets/upgrade-install.py"
+run_up() { _d="$1"; shift; ( cd "$_d" && python3 "$UP" "$@" >"$TMP/upout" 2>"$TMP/uperr"; echo "exit=$?" ) }
+up_render() { # up_render <out> <fast check> — the current template, substituted in its parsed structure
+  python3 - "$ROOT/hooks/templates/antigravity.hooks.json" "$1" "$2" <<'EOF'
+import json, sys
+def walk(v):
+    if isinstance(v, dict): return {k: walk(x) for k, x in v.items()}
+    if isinstance(v, list): return [walk(x) for x in v]
+    if isinstance(v, str): return v.replace("{{HOOKS_DIR}}", ".agents/hooks").replace("{{FAST_CHECK}}", sys.argv[3])
+    return v
+open(sys.argv[2], "w").write(json.dumps(walk(json.load(open(sys.argv[1]))), indent=2) + "\n")
+EOF
+}
+up_v036() { # up_v036 <dir> — init's Antigravity install at v0.36.0
+  _u="$1"; mkdir -p "$_u/.agents/hooks" "$_u/scripts" "$_u/.agents/agents/_shared"
+  for _n in gate-lib quality-gate review-gate steering-digest steering-digest-antigravity; do
+    git -C "$ROOT" show "gate-sdd--v0.36.0:hooks/$_n.sh" > "$_u/.agents/hooks/$_n.sh"; chmod 755 "$_u/.agents/hooks/$_n.sh"
+  done
+  for _n in check-steering-anchors.sh check-locks.py check-document-set.py check-document-cascade.py check-unreviewed-work.sh; do
+    git -C "$ROOT" show "gate-sdd--v0.36.0:assets/$_n" > "$_u/scripts/$_n"
+  done
+  git -C "$ROOT" show "gate-sdd--v0.36.0:reviewers/_shared/reviewer-contract.md" > "$_u/.agents/agents/_shared/reviewer-contract.md"
+  up_render "$_u/.agents/hooks.json" true
+  ( cd "$_u" && git init -q -b main && git add -A && git -c user.email=t@t -c user.name=t commit -qm install ) >/dev/null 2>&1
+}
+up_tree() { ( cd "$1" && find . -path ./.git -prune -o -type f -print | LC_ALL=C sort | xargs shasum -a 256 ) }
+
+if ! git -C "$ROOT" rev-parse -q --verify 'gate-sdd--v0.36.0^{commit}' >/dev/null; then
+  note_skip "a re-run classifies each copy and writes only what the answers allow" "no gate-sdd--v0.36.0 tag in this clone"
+else
+  # The report: shipped, missing, current and the guards, and nothing written.
+  p="$TMP/up-report"; up_v036 "$p"; before=$(up_tree "$p")
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  c1=ok
+  case "$out" in exit=3) ;; *) c1="no(exit: $out $(cat "$TMP/uperr"))" ;; esac
+  for want in "shipped  .agents/hooks/quality-gate.sh" "missing  .agents/hooks/harness-checks.sh" "missing  .agents/hooks/check-locks.py" \
+              "current  .agents/hooks/steering-digest-antigravity.sh" "shipped  .agents/agents/_shared/reviewer-contract.md" \
+              "guard    scripts/check-locks.py: shipped" "current  .agents/hooks.json"; do
+    case "$o" in *"$want"*) ;; *) c1="no(report lacks '$want': $o)" ;; esac
+  done
+  [ "$(up_tree "$p")" = "$before" ] || c1="no(the report wrote a file)"
+
+  # --write: shipped replaced, missing added, guards untouched, then a second run changes nothing.
+  # Written, it still exits 3: the scripts/ guards are left for #340's migration, and they are
+  # the only questions it leaves.
+  out=$(run_up "$p" --project . --write); o=$(cat "$TMP/upout")
+  c2=ok
+  case "$out" in exit=3) ;; *) c2="no(write: $out $o $(cat "$TMP/uperr"))" ;; esac
+  printf '%s\n' "$o" | grep '^  question' | grep -qv 'pre-0.41.0 guard' && c2="no(a question beyond the guards: $o)"
+  cmp -s "$p/.agents/hooks/quality-gate.sh" "$ROOT/hooks/quality-gate.sh" || c2="no(quality gate not replaced)"
+  cmp -s "$p/.agents/hooks/harness-checks.sh" "$ROOT/hooks/harness-checks.sh" || c2="no(runner not added)"
+  cmp -s "$p/.agents/agents/_shared/reviewer-contract.md" "$ROOT/reviewers/_shared/reviewer-contract.md" || c2="no(contract not replaced)"
+  [ "$(git -C "$ROOT" show gate-sdd--v0.36.0:assets/check-locks.py | shasum -a 256)" = "$(shasum -a 256 < "$p/scripts/check-locks.py")" ] || c2="no(a guard in scripts/ was written)"
+  # The guards #340's migration removes still count: an install holding them is not current, so
+  # a batch names it as behind. Once they are gone, a second run changes nothing.
+  mid=$(up_tree "$p"); out=$(run_up "$p" --project .)
+  case "$out:$(cat "$TMP/upout")" in exit=3:*"scripts/check-locks.py is a pre-0.41.0 guard"*"#340"*) c3=ok ;; *) c3="no(guards left: $out $(cat "$TMP/upout"))" ;; esac
+  [ "$(up_tree "$p")" = "$mid" ] || c3="no(the guard report wrote)"
+  rm "$p"/scripts/check-*; mid=$(up_tree "$p"); out=$(run_up "$p" --project .)
+  case "$out:$(cat "$TMP/upout")" in exit=0:*"nothing to upgrade"*) ;; *) c3="no(second run: $out $(cat "$TMP/upout"))" ;; esac
+  [ "$(up_tree "$p")" = "$mid" ] || c3="no(the second run wrote)"
+  # Modes: an existing copy keeps its own, a missing one takes the source's.
+  [ -x "$p/.agents/hooks/quality-gate.sh" ] && [ -x "$p/.agents/hooks/check-locks.py" ] && c4=ok || c4="no(modes: $(ls -l "$p/.agents/hooks" | tr '\n' ' '))"
+
+  # An edited gate: shown with its diff, kept without --replace, and the set reported mixed.
+  p="$TMP/up-edited"; up_v036 "$p"; printf '# our local note\n' >> "$p/.agents/hooks/review-gate.sh"; cp "$p/.agents/hooks/review-gate.sh" "$TMP/up-mine"
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  case "$out:$o" in exit=3:*"edited   .agents/hooks/review-gate.sh"*"+++ .agents/hooks/review-gate.sh (plugin)"*"-# our local note"*) c5=ok ;; *) c5="no($out $o)" ;; esac
+  out=$(run_up "$p" --project . --write); o=$(cat "$TMP/upout")
+  case "$out:$o" in exit=3:*"1 edit(s) kept, set mixed"*) c6=ok ;; *) c6="no($out $o $(cat "$TMP/uperr"))" ;; esac
+  cmp -s "$p/.agents/hooks/review-gate.sh" "$TMP/up-mine" || c6="no(the edit was overwritten)"
+  out=$(run_up "$p" --project . --write --replace .agents/hooks/review-gate.sh)
+  case "$out" in exit=3) cmp -s "$p/.agents/hooks/review-gate.sh" "$ROOT/hooks/review-gate.sh" && c7=ok || c7="no(not replaced)" ;; *) c7="no($out $(cat "$TMP/upout"))" ;; esac
+
+  # A kept edited quality gate that predates the runner names the checks it would stop running.
+  p="$TMP/up-kept-qg"; up_v036 "$p"; printf '# ours\n' >> "$p/.agents/hooks/quality-gate.sh"
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  case "$o" in *"does not run harness-checks.sh"*"check-steering-anchors.sh, check-locks.py, check-document-set.py, check-document-cascade.py"*"- Validators:"*) c8=ok ;; *) c8="no($o)" ;; esac
+  # A gate that names the runner only in comments does not run it either.
+  sed 's/^\(.*harness-checks\.sh.*\)$/# \1/' "$ROOT/hooks/quality-gate.sh" > "$p/.agents/hooks/quality-gate.sh"
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  case "$o" in *"does not run harness-checks.sh"*) ;; *) c8="no(comment-only runner cleared the question: $o)" ;; esac
+
+  # A symlinked copy is a question, and nothing is written through it.
+  p="$TMP/up-link"; up_v036 "$p"; cp "$p/.agents/hooks/gate-lib.sh" "$TMP/up-elsewhere.sh"
+  rm "$p/.agents/hooks/gate-lib.sh"; ln -s "$TMP/up-elsewhere.sh" "$p/.agents/hooks/gate-lib.sh"; before=$(shasum -a 256 < "$TMP/up-elsewhere.sh")
+  out=$(run_up "$p" --project . --write); o=$(cat "$TMP/upout")
+  case "$o" in *"gate-lib.sh is a symlink to $TMP/up-elsewhere.sh"*) c9=ok ;; *) c9="no($out $o)" ;; esac
+  [ "$(shasum -a 256 < "$TMP/up-elsewhere.sh")" = "$before" ] && [ -L "$p/.agents/hooks/gate-lib.sh" ] || c9="no(written through the link)"
+
+  # So is a symlink anywhere on a contract copy's path: .agents/agents/_shared here.
+  p="$TMP/up-shared-link"; up_v036 "$p"; mv "$p/.agents/agents/_shared" "$TMP/up-shared-real"; ln -s "$TMP/up-shared-real" "$p/.agents/agents/_shared"
+  before=$(shasum -a 256 < "$TMP/up-shared-real/reviewer-contract.md")
+  out=$(run_up "$p" --project . --write); o=$(cat "$TMP/upout")
+  case "$o" in *".agents/agents/_shared is a symlink to $TMP/up-shared-real"*) ;; *) c9="no(_shared link: $out $o)" ;; esac
+  [ "$(shasum -a 256 < "$TMP/up-shared-real/reviewer-contract.md")" = "$before" ] || c9="no(written through the _shared link)"
+
+  # A symlinked .agents/ is a question too: everything under it would be written through the link.
+  p="$TMP/up-agents-link"; up_v036 "$p"; mv "$p/.agents" "$TMP/up-agents-real"; ln -s "$TMP/up-agents-real" "$p/.agents"
+  before=$( cd "$TMP/up-agents-real" && find . -type f | LC_ALL=C sort | xargs shasum -a 256 )
+  out=$(run_up "$p" --project . --write --hooks-json); o=$(cat "$TMP/upout")
+  case "$o" in *".agents is a symlink to $TMP/up-agents-real"*) ;; *) c9="no(.agents link: $out $o)" ;; esac
+  [ "$( cd "$TMP/up-agents-real" && find . -type f | LC_ALL=C sort | xargs shasum -a 256 )" = "$before" ] || c9="no(written through the .agents link)"
+
+  # An unreadable copy is a refusal, never a class.
+  p="$TMP/up-unread"; up_v036 "$p"; chmod 000 "$p/.agents/hooks/review-gate.sh"
+  if [ -r "$p/.agents/hooks/review-gate.sh" ]; then
+    note_skip "upgrade/unreadable-copy" "permissions not enforced here (running as root?)"; c10=ok
+  else
+    out=$(run_up "$p" --project .); case "$out:$(cat "$TMP/uperr")" in exit=1:*"review-gate.sh cannot be read"*) c10=ok ;; *) c10="no($out $(cat "$TMP/uperr"))" ;; esac
+  fi
+  chmod 644 "$p/.agents/hooks/review-gate.sh"
+
+  # A directory that refuses writes is found before anything is written.
+  p="$TMP/up-partial"; up_v036 "$p"; chmod 555 "$p/.agents/agents/_shared"
+  # In a subshell: a failed redirection on the special built-in `:` ends dash, CI's sh, outright.
+  if ( : > "$p/.agents/agents/_shared/probe" ) 2>/dev/null; then
+    note_skip "upgrade/partial-write" "permissions not enforced here (running as root?)"; c11=ok; rm -f "$p/.agents/agents/_shared/probe"
+  else
+    before=$(up_tree "$p"); out=$(run_up "$p" --project . --write); e=$(cat "$TMP/uperr")
+    case "$out:$e" in exit=1:*".agents/agents/_shared"*"cannot be written"*"nothing was written"*) c11=ok ;; *) c11="no($out $e)" ;; esac
+    [ "$(up_tree "$p")" = "$before" ] || c11="no(a file was written before the refusal)"
+  fi
+  chmod 755 "$p/.agents/agents/_shared"
+
+  # A Claude Code-only project: its contract line only, and nothing created under .agents/.
+  p="$TMP/up-cc"; mkdir -p "$p/.claude/agents/_shared"; git -C "$ROOT" show "gate-sdd--v0.36.0:reviewers/_shared/reviewer-contract.md" > "$p/.claude/agents/_shared/reviewer-contract.md"
+  ( cd "$p" && git init -q -b main ) >/dev/null 2>&1
+  out=$(run_up "$p" --project . --write); o=$(cat "$TMP/upout")
+  case "$out" in exit=0) ;; *) c12="no($out $o $(cat "$TMP/uperr"))" ;; esac
+  [ -e "$p/.agents" ] && c12="no(.agents/ created on a Claude Code project)" || c12=${c12:-ok}
+  cmp -s "$p/.claude/agents/_shared/reviewer-contract.md" "$ROOT/reviewers/_shared/reviewer-contract.md" || c12="no(contract not refreshed)"
+
+  # No install: exit 4, never a pass; --install makes one, and it is then current.
+  p="$TMP/up-none"; mkdir -p "$p"; ( cd "$p" && git init -q -b main ) >/dev/null 2>&1
+  out=$(run_up "$p" --project .); case "$out:$(cat "$TMP/upout")" in exit=4:*"no install"*) c13=ok ;; *) c13="no($out $(cat "$TMP/upout"))" ;; esac
+  out=$(run_up "$p" --project . --install --fast-check 'ruff check . && echo "ok"' --write)
+  case "$out" in exit=0) ;; *) c13="no(install: $out $(cat "$TMP/upout" "$TMP/uperr"))" ;; esac
+  out=$(run_up "$p" --project .); case "$out:$(cat "$TMP/upout")" in exit=0:*"nothing to upgrade"*) ;; *) c13="no(after install: $out $(cat "$TMP/upout"))" ;; esac
+  grep -qF 'ruff check . && echo \"ok\"' "$p/.agents/hooks.json" || c13="no(fast check not escaped into the file)"
+
+  # Outside a repository, and inside the plugin's own tree: refusals.
+  mkdir -p "$TMP/up-norepo"
+  out=$( cd "$TMP/up-norepo" && GIT_CEILING_DIRECTORIES="$TMP" python3 "$UP" --project . 2>"$TMP/uperr" >/dev/null; echo "exit=$?" )
+  case "$out:$(cat "$TMP/uperr")" in exit=1:*"not inside a git repository"*) c14=ok ;; *) c14="no($out $(cat "$TMP/uperr"))" ;; esac
+  out=$(run_up "$ROOT" --project .); case "$out:$(cat "$TMP/uperr")" in exit=1:*"plugin's own tree"*) ;; *) c14="no(plugin tree: $out $(cat "$TMP/uperr"))" ;; esac
+
+  # A stale table in the plugin is refused before any project is read.
+  sp="$TMP/up-plugin"; mkdir -p "$sp"; cp -R "$ROOT/assets" "$ROOT/hooks" "$ROOT/reviewers" "$sp/"
+  printf '# drift\n' >> "$sp/hooks/gate-lib.sh"
+  out=$( cd "$TMP/up-report" && python3 "$sp/assets/upgrade-install.py" --project . 2>"$TMP/uperr" >/dev/null; echo "exit=$?" )
+  case "$out:$(cat "$TMP/uperr")" in exit=1:*"table is stale: hooks/gate-lib.sh"*) c15=ok ;; *) c15="no($out $(cat "$TMP/uperr"))" ;; esac
+  # The template is one of the plugin's own sources too.
+  cp "$ROOT/hooks/gate-lib.sh" "$sp/hooks/gate-lib.sh"; printf ' \n' >> "$sp/hooks/templates/antigravity.hooks.json"
+  out=$( cd "$TMP/up-report" && python3 "$sp/assets/upgrade-install.py" --project . 2>"$TMP/uperr" >/dev/null; echo "exit=$?" )
+  case "$out:$(cat "$TMP/uperr")" in exit=1:*"table is stale: hooks/templates/antigravity.hooks.json"*) ;; *) c15="no(stale template: $out $(cat "$TMP/uperr"))" ;; esac
+
+  # A batch: one current, one behind, one refused — named, the worst code, and nothing written.
+  pa="$TMP/up-report"; pb="$TMP/up-b"; up_v036 "$pb"; before=$(up_tree "$pb")
+  out=$( cd "$TMP" && python3 "$UP" --project "$pa" --project "$pb" --project "$TMP/up-norepo" >"$TMP/upout" 2>"$TMP/uperr"; echo "exit=$?" )
+  case "$out:$(cat "$TMP/upout")" in exit=1:*"behind: $pb; refused: $TMP/up-norepo"*) c16=ok ;; *) c16="no($out $(tail -2 "$TMP/upout") $(cat "$TMP/uperr"))" ;; esac
+  [ "$(up_tree "$pb")" = "$before" ] || c16="no(the batch wrote)"
+  out=$( cd "$TMP" && python3 "$UP" --project "$pa" --project "$pb" --write >/dev/null 2>"$TMP/uperr"; echo "exit=$?" )
+  case "$out:$(cat "$TMP/uperr")" in exit=1:*"--write takes exactly one --project"*) ;; *) c16="no(batch write: $out $(cat "$TMP/uperr"))" ;; esac
+
+  # A contract copy where init put it up to v0.10.0, `.agents/_shared/`, is classified too: found
+  # on a real install of that era, whose re-run would otherwise have left it stale.
+  p="$TMP/up-oldcontract"; up_v036 "$p"; mkdir -p "$p/.agents/_shared"
+  git -C "$ROOT" show "gate-sdd--v0.10.0:agents/_shared/reviewer-contract.md" > "$p/.agents/_shared/reviewer-contract.md"
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  case "$o" in *"shipped  .agents/_shared/reviewer-contract.md"*) c17=ok ;; *) c17="no($o)" ;; esac
+  out=$(run_up "$p" --project . --write)
+  cmp -s "$p/.agents/_shared/reviewer-contract.md" "$ROOT/reviewers/_shared/reviewer-contract.md" || c17="no(old-path contract not replaced: $out)"
+
+  # An edited guard is shown with its diff, so the migration's question shows the edit it asks about.
+  p="$TMP/up-guard-edit"; up_v036 "$p"; printf '# our guard tweak\n' >> "$p/scripts/check-locks.py"
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  case "$o" in *"guard    scripts/check-locks.py: edited"*"-# our guard tweak"*) c18=ok ;; *) c18="no($o)" ;; esac
+
+  # A write that fails part way, after the pre-check passed, exits 1 and names what it already
+  # wrote: the state T6's sandbox produced, where the check passes and the temporary file is
+  # refused. Here the rename onto the contract copy is refused, so the copies are written first.
+  p="$TMP/up-partway"; up_v036 "$p"
+  out=$( cd "$p" && python3 - "$UP" >"$TMP/upout" 2>"$TMP/uperr" <<'EOF'
+import os, runpy, sys
+real = os.replace
+def refuse_the_contract(src, dst, *a, **k):
+    if str(dst).endswith("_shared/reviewer-contract.md"):
+        raise PermissionError(1, "Operation not permitted", str(dst))
+    return real(src, dst, *a, **k)
+os.replace = refuse_the_contract
+script = sys.argv[1]
+sys.argv = [script, "--project", ".", "--write"]
+runpy.run_path(script, run_name="__main__")
+EOF
+  echo "exit=$?" )
+  e=$(cat "$TMP/uperr")
+  case "$out:$e" in exit=1:*"write failed at .agents/agents/_shared/reviewer-contract.md"*"Already written: .agents/hooks/"*) c19=ok ;; *) c19="no($out $e)" ;; esac
+  ls -a "$p/.agents/agents/_shared" | grep -q '^\.reviewer-contract' && c19="no(a temporary file was left behind)"
+
+  r="$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17$c18$c19"
+  [ "$r" = "okokokokokokokokokokokokokokokokokokok" ] \
+    && report "a re-run classifies each copy, judges the set whole, and writes only what the answers allow" ok \
+    || report "a re-run classifies each copy, judges the set whole, and writes only what the answers allow" no \
+       "report=$c1 write=$c2 again=$c3 modes=$c4 edited=$c5 kept=$c6 replace=$c7 kept-qg=$c8 symlink=$c9 unreadable=$c10 partial=$c11 claude-code=$c12 install=$c13 refusals=$c14 stale-table=$c15 batch=$c16 old-contract=$c17 edited-guard=$c18 part-way=$c19"
+fi
+
+# 419. #343 AC2, AC4, AC6, AC7 — the hooks file is re-rendered from the template that wrote it,
+#      identified by its whole structure, keeping what the project chose and asking about what it
+#      cannot place. The gate commands are byte-identical from v0.21.0 to v0.37.0, so a matcher
+#      on the gate commands alone took every v0.33.0 to v0.36.0 render for v0.37.0, kept its old
+#      fast check verbatim in `gate-sdd` and left the new group with nothing (the spec's HIGH).
+#      The fixtures are the six templates the table ships, rendered, so the case needs no git.
+hj_out=$(TMP="$TMP" ROOT="$ROOT" python3 - <<'EOF'
+import json, os, pathlib, shutil, subprocess
+ROOT = pathlib.Path(os.environ["ROOT"]); TMP = pathlib.Path(os.environ["TMP"])
+UP = ROOT / "assets" / "upgrade-install.py"
+table = json.loads((ROOT / "assets" / "shipped-texts.json").read_text())
+def shape(text):
+    o = json.loads(text); g = o["gate-sdd"]; q = g["Stop"][0]["command"]
+    if "GATE_SDD_HARNESS" in q: return "v0.38"
+    if "gate-sdd-fast-check" in o: return "v0.37"
+    if "PreInvocation" in g: return "v0.33" if g["Stop"][0]["timeout"] == 600 else "v0.21"
+    return "cd-only" if "rev-parse" in q else "v0.2.3"
+T = {shape(v): (k, v) for k, v in table["templates"].items()}
+def render(name, fast):
+    def walk(v):
+        if isinstance(v, dict): return {k: walk(x) for k, x in v.items()}
+        if isinstance(v, list): return [walk(x) for x in v]
+        if isinstance(v, str): return v.replace("{{HOOKS_DIR}}", ".agents/hooks").replace("{{FAST_CHECK}}", fast)
+        return v
+    return walk(json.loads(T[name][1]))
+n = [0]
+def project(obj, text=None):
+    n[0] += 1; d = TMP / f"hj-{n[0]}"; (d / ".agents" / "hooks").mkdir(parents=True)
+    for rel, src in table["copy_set"].items():
+        shutil.copy2(ROOT / src, d / rel)
+    (d / ".agents" / "hooks.json").write_text(text if text is not None else json.dumps(obj, indent=2) + "\n")
+    subprocess.run(["git", "init", "-q", "-b", "main", str(d)], check=True)
+    return d
+def run(d, *a):
+    r = subprocess.run(["python3", str(UP), "--project", str(d), *a], capture_output=True, text=True)
+    return r.returncode, r.stdout + r.stderr
+def hooks(d): return json.loads((d / ".agents" / "hooks.json").read_text())
+def switches_ok(d):
+    r = subprocess.run(["sh", "-c", '. "$1/hooks/gate-lib.sh"; gate_hook_switches "$2"', "sh", str(ROOT), str(d / ".agents/hooks.json")], capture_output=True, text=True)
+    return r.returncode == 0 and "{{" not in (d / ".agents/hooks.json").read_text()
+res = {}
+def check(name, cond, why=""):
+    res[name] = "ok" if cond else f"no({why})"
+# Each template keyed once: two sharing a key would leave "each identifies itself" testing five.
+check("distinct", len(T) == len(table["templates"]) == 6, f"shape() keyed {len(T)} of {len(table['templates'])}")
+FAST_ENV = "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && ( {} ) 1>&2; echo '{{}}'"
+
+# Each of the six templates, rendered, identifies itself.
+bad = []
+for name, (k, _t) in T.items():
+    d = project(render(name, "ruff check ."))
+    rc, out = run(d)
+    want = "current  .agents/hooks.json" if name == "v0.38" else f"written by the template {k[:12]}"
+    if want not in out: bad.append(f"{name}: {out[-300:]}")
+check("identify", not bad, "; ".join(bad))
+
+# A v0.33-v0.36 render: the fast check holding & and a quote, kept and escaped, its .* becoming
+# the write-tool list, no PostToolUse left in gate-sdd, the marker and the timeouts the template's.
+fast = "ruff check . && echo \"it's\""
+d = project(render("v0.33", fast)); rc, out = run(d, "--write", "--hooks-json"); h = hooks(d)
+cur = render("v0.38", fast)
+check("v036", rc == 0 and h == cur and "PostToolUse" not in h["gate-sdd"] and switches_ok(d), f"{rc} {out[-400:]}")
+
+# A project matcher on a v0.38 render is kept; so are a project group and a project Stop entry
+# placed before the gates; so is the fast-check group's enabled false.
+o = render("v0.38", "true"); o["gate-sdd-fast-check"]["PostToolUse"][0]["matcher"] = "write_file"
+o["gate-sdd-fast-check"]["enabled"] = False
+o["my-hooks"] = {"enabled": True, "Stop": [{"type": "command", "command": "echo mine", "timeout": 5}]}
+o["gate-sdd"]["Stop"].insert(0, {"type": "command", "command": "echo first", "timeout": 5})
+d = project(o); rc, out = run(d)
+check("kept-current", rc == 0 and "nothing to upgrade" in out, f"{rc} {out[-300:]}")
+o2 = render("v0.37", "true"); o2["gate-sdd-fast-check"]["PostToolUse"][0]["matcher"] = "write_file"
+o2["gate-sdd-fast-check"]["enabled"] = False; o2["my-hooks"] = o["my-hooks"]; o2["gate-sdd"]["Stop"].insert(0, o["gate-sdd"]["Stop"][0])
+d = project(o2); rc, out = run(d, "--write", "--hooks-json"); h = hooks(d)
+check("kept", rc == 0 and h == o and switches_ok(d), f"{rc} {out[-300:]} {json.dumps(h)[:300]}")
+
+# A one-group enabled false switched the gates and the fast check off together: unplaced, not
+# written, then written through --fast-check-enabled with the gates on and the fast check off.
+o = render("v0.33", "true"); o["gate-sdd"]["enabled"] = False
+d = project(o); before = (d / ".agents/hooks.json").read_text()
+rc, out = run(d, "--write", "--hooks-json")
+ok1 = rc == 3 and "off together" in out and (d / ".agents/hooks.json").read_text() == before
+rc, out = run(d, "--write", "--hooks-json", "--fast-check-enabled", "false"); h = hooks(d)
+check("one-group-off", ok1 and rc == 0 and h["gate-sdd"]["enabled"] is True and h["gate-sdd-fast-check"]["enabled"] is False and switches_ok(d), f"{ok1} {rc} {out[-300:]}")
+# A later gate-sdd enabled false: unplaced, and the proposal turns the gates on.
+o = render("v0.38", "true"); o["gate-sdd"]["enabled"] = False
+d = project(o); rc, out = run(d)
+ok1 = rc == 3 and "gate-sdd group is switched off" in out
+rc, out = run(d, "--write", "--hooks-json")
+check("later-off", ok1 and rc == 0 and hooks(d)["gate-sdd"]["enabled"] is True and switches_ok(d), f"{ok1} {rc} {out[-300:]}")
+
+# An edited gate command is asked about, and written only with --replace .agents/hooks.json.
+o = render("v0.38", "true"); o["gate-sdd"]["Stop"][0]["command"] = o["gate-sdd"]["Stop"][0]["command"].replace("GATE_SDD_HARNESS=", "MY=1 GATE_SDD_HARNESS=")
+d = project(o); rc, out = run(d, "--write", "--hooks-json")
+ok1 = rc == 3 and "edited gate entry" in out and hooks(d) == o
+rc, out = run(d, "--write", "--hooks-json", "--replace", ".agents/hooks.json")
+check("edited-gate", ok1 and rc == 0 and hooks(d) == render("v0.38", "true"), f"{ok1} {rc} {out[-300:]}")
+
+# A fast check outside the envelope cannot be captured: unplaced, then written through --fast-check.
+o = render("v0.38", "true"); o["gate-sdd-fast-check"]["PostToolUse"][0]["hooks"][0]["command"] = "my-own-check"
+d = project(o); rc, out = run(d, "--write", "--hooks-json")
+ok1 = rc == 3 and "fast check does not fit" in out and FAST_ENV.format("my-own-check") in out
+rc, out = run(d, "--write", "--hooks-json", "--fast-check", "my-own-check")
+check("fast-uncaptured", ok1 and rc == 0 and hooks(d) == render("v0.38", "my-own-check"), f"{ok1} {rc} {out[-300:]}")
+
+# A deleted template entry is unplaced; accepting the proposal restores it. (Deleting v0.33's
+# PreInvocation would not do: that file is also the cd-only template with raised timeouts.)
+o = render("v0.38", "true"); del o["gate-sdd-fast-check"]
+d = project(o); rc, out = run(d)
+ok1 = rc == 3 and "deleted" in out
+rc, out = run(d, "--write", "--hooks-json")
+check("deleted", ok1 and rc == 0 and hooks(d) == render("v0.38", "true"), f"{ok1} {rc} {out[-300:]}")
+
+# An empty capture becomes true, and the report says so.
+d = project(render("v0.33", "")); rc, out = run(d)
+ok1 = "rendered as `true`" in out
+rc, out = run(d, "--write", "--hooks-json")
+check("empty", ok1 and rc == 0 and hooks(d) == render("v0.38", "true"), f"{ok1} {rc} {out[-300:]}")
+
+# A v0.2.0 render, whose quality gate is the validator commands inlined, fits no template; a file
+# that is not JSON is unplaced too. Both are written only once --fast-check answers.
+o = {"gate-sdd": {"enabled": True, "PostToolUse": [{"matcher": ".*", "hooks": [{"type": "command", "command": "true", "timeout": 60}]}],
+     "Stop": [{"type": "command", "command": "ruff check . && pytest", "timeout": 180}, {"type": "command", "command": "sh .agents/hooks/review-gate.sh", "timeout": 30}]}}
+d = project(o); rc, out = run(d, "--write", "--hooks-json")
+ok1 = rc == 3 and "fits no template" in out and hooks(d) == o
+rc, out = run(d, "--write", "--hooks-json", "--fast-check", "true")
+ok2 = rc == 0 and hooks(d) == render("v0.38", "true")
+d = project(None, text="{ not json\n"); rc, out = run(d, "--write", "--hooks-json")
+ok3 = rc == 3 and "is not JSON" in out
+rc, out = run(d, "--write", "--hooks-json", "--fast-check", "true")
+check("nofit-nonjson", ok1 and ok2 and ok3 and rc == 0 and hooks(d) == render("v0.38", "true"), f"{ok1} {ok2} {ok3} {rc} {out[-300:]}")
+
+# Copies pending and the hooks proposal not accepted: nothing is written.
+d = project(render("v0.33", "true")); (d / ".agents/hooks/harness-checks.sh").unlink()
+rc, out = run(d, "--write")
+check("declined", rc == 3 and not (d / ".agents/hooks/harness-checks.sh").exists() and "nothing written" in out, f"{rc} {out[-300:]}")
+
+# Another whitespace and key order is current, and nothing is written.
+o = render("v0.38", "true"); o = {k: dict(reversed(list(v.items()))) for k, v in reversed(list(o.items()))}
+d = project(None, text=json.dumps(o, indent=4)); before = (d / ".agents/hooks.json").read_text()
+rc, out = run(d, "--write")
+check("whitespace", rc == 0 and (d / ".agents/hooks.json").read_text() == before, f"{rc} {out[-300:]}")
+# A fast check that holds braces of its own is the project's, not a placeholder left behind.
+d = project(render("v0.33", "jq '{{.a}}' x.json")); rc, out = run(d, "--write", "--hooks-json")
+check("braces", rc == 0 and hooks(d) == render("v0.38", "jq '{{.a}}' x.json"), f"{rc} {out[-300:]}")
+# An entry that is not an object would invalidate Antigravity's whole hooks file if carried into
+# the proposal, and it crashed the reader before: it is a refusal naming the file, and a batch
+# carries on to the next project.
+o = render("v0.38", "true"); o["gate-sdd-fast-check"]["PostToolUse"].append("x")
+d = project(o); d2 = project(render("v0.33", "true"))
+r = subprocess.run(["python3", str(UP), "--project", str(d), "--project", str(d2)], capture_output=True, text=True)
+out = r.stdout + r.stderr
+check("malformed", r.returncode == 1 and "is not an object" in out and "Traceback" not in out and f"behind: {d2}" in out, f"{r.returncode} {out[-400:]}")
+# So is every other shape Antigravity rejects: a tool event takes the nested {matcher, hooks: [...]}
+# form and every other event the flat form (docs/verified.md, scripts/check-manifests.py), and one
+# entry of the wrong form makes it drop the whole file.
+bad = []
+nested = {"matcher": "", "hooks": [{"type": "command", "command": "sh mine.sh"}]}
+flat = {"type": "command", "command": "sh mine.sh", "timeout": 5}
+for name, mutate in [
+    ("nested-stop", lambda o: o["gate-sdd"]["Stop"].append(nested)),
+    ("flat-posttooluse", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append(flat)),
+    ("hooks-not-objects", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append({"matcher": "x", "hooks": ["y"]})),
+    ("group-not-object", lambda o: o.__setitem__("my-hooks", "x")),
+    ("event-not-list", lambda o: o["gate-sdd"].__setitem__("Stop", {"type": "command"})),
+    # The rejection docs/verified.md records word for word: a command hook must specify 'command'.
+    ("missing-command-flat", lambda o: o.__setitem__("my-hooks", {"enabled": True, "Stop": [{"type": "command", "timeout": 5}]})),
+    ("missing-command-nested", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append({"matcher": "x", "hooks": [{"type": "command"}]})),
+    # Refused conservatively: shapes whose handling docs/verified.md does not record.
+    ("type-not-command", lambda o: o.__setitem__("my-hooks", {"enabled": True, "Stop": [{"type": "http", "command": "x"}]})),
+    ("empty-hooks", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append({"matcher": "x", "hooks": []})),
+    ("no-matcher", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append({"hooks": [{"type": "command", "command": "x"}]})),
+]:
+    o = render("v0.38", "true"); mutate(o); d = project(o); rc, out = run(d)
+    if rc != 1 or "Traceback" in out or "Antigravity rejects" not in out: bad.append(f"{name}: {rc} {out[-200:]}")
+check("malformed-shapes", not bad, "; ".join(bad))
+# Text that is not JSON though Python's reader takes it: NaN, Infinity, a number that overflows to
+# infinity, and a key given twice (which gate_hook_switches reads differently). Each would be
+# called current or written back as a file Antigravity drops whole. A lone surrogate cannot be
+# written at all. All are refusals that name the file, never a traceback.
+cur_text = json.dumps(render("v0.38", "true"), indent=2)
+bad = []
+for name, text in [
+    ("nan", cur_text.replace('"timeout": 600', '"timeout": NaN', 1)),
+    ("infinity", cur_text.replace('"timeout": 600', '"timeout": Infinity', 1)),
+    ("overflow", cur_text.replace('"timeout": 600', '"timeout": 1e400', 1)),
+    ("duplicate-key", cur_text.replace('"enabled": true', '"enabled": false, "enabled": true', 1)),
+    ("lone-surrogate", cur_text[:-2] + ', "my-hooks": {"enabled": true, "Stop": [{"type": "command", "command": "echo \\ud800"}]}\n}'),
+]:
+    d = project(None, text=text); rc, out = run(d, "--write", "--hooks-json")
+    if rc != 1 or "Traceback" in out or ".agents/hooks.json" not in out: bad.append(f"{name}: {rc} {out[-200:]}")
+check("not-json", not bad, "; ".join(bad))
+# What the project added in or beside a template-owned entry is kept: a second inner hook, a key
+# beside the matcher. A project group bearing the fast-check group's name on a file older than that
+# group cannot be told from the plugin's: refused. A fast-check group with no enabled stays on.
+o = render("v0.37", "true"); fe = o["gate-sdd-fast-check"]["PostToolUse"][0]
+fe["hooks"].append({"type": "command", "command": "echo second", "timeout": 5}); fe["note"] = "ours"
+del o["gate-sdd-fast-check"]["enabled"]
+d = project(o); rc, out = run(d, "--write", "--hooks-json"); h = hooks(d)
+he = h["gate-sdd-fast-check"]["PostToolUse"][0]
+check("kept-inner", rc == 0 and len(he["hooks"]) == 2 and he["hooks"][1]["command"] == "echo second" and he.get("note") == "ours" and h["gate-sdd-fast-check"]["enabled"] is True, f"{rc} {out[-300:]} {json.dumps(he)[:200]}")
+o = render("v0.21", "true"); o["gate-sdd-fast-check"] = {"enabled": True, "PreToolUse": [{"matcher": "x", "hooks": [{"type": "command", "command": "sh mine.sh"}]}]}
+d = project(o); rc, out = run(d, "--write", "--hooks-json")
+check("own-fast-group", rc == 1 and "gate-sdd-fast-check" in out and hooks(d) == o, f"{rc} {out[-300:]}")
+# A symlinked hooks file with copies pending: nothing written, and the reason is the link.
+d = project(render("v0.38", "true")); (d / ".agents/hooks/harness-checks.sh").unlink()
+real = d / "real-hooks.json"; (d / ".agents/hooks.json").rename(real); (d / ".agents/hooks.json").symlink_to(real)
+rc, out = run(d, "--write", "--hooks-json")
+check("symlink-hooks", rc == 3 and "symlink" in out and "accept its proposal" not in out and not (d / ".agents/hooks/harness-checks.sh").exists(), f"{rc} {out[-300:]}")
+print(" ".join(f"{k}={v}" for k, v in res.items()))
+EOF
+)
+case "$hj_out" in *"=no("*|"") report "the hooks file is re-rendered from the template that wrote it, keeping the project's values" no "$hj_out" ;;
+  *) report "the hooks file is re-rendered from the template that wrote it, keeping the project's values" ok ;; esac
+
+# 420. #343 AC8 — the copy set has one statement, the table's `copy_set`. `init`, both READMEs and
+#      the templates README listed the eleven files by hand, so a twelfth copied file had five
+#      places to be added and none that failed when one was missed. Each now cites the table or
+#      the script that reads it, and none names eight or more of the set's eleven files on one
+#      line or in one fenced block. Fewer is a different set: the four harness checks, or the
+#      four gates a Claude Code migration removes.
+cs_out=$(cd "$ROOT" && python3 - <<'EOF'
+import json, pathlib
+BT = chr(96)  # a backtick: bash scans one even inside this quoted heredoc, within $(...)
+names = sorted({pathlib.Path(k).name for k in json.load(open("assets/shipped-texts.json"))["copy_set"]})
+bad = []
+for f in ("skills/init/SKILL.md", "README.md", "README.ja.md", "hooks/templates/README.md"):
+    text = open(f, encoding="utf-8").read()
+    if "shipped-texts.json" not in text and "upgrade-install.py" not in text:
+        bad.append(f"{f} cites neither the table nor the script")
+    units, block, start = [], None, 0
+    for n, line in enumerate(text.splitlines(), 1):
+        if line.lstrip().startswith(BT * 3):
+            if block is None:
+                block, start = [], n
+            else:
+                units.append((start, "\n".join(block))); block = None
+            continue
+        if block is not None:
+            block.append(line)
+        else:
+            units.append((n, line))
+    for n, unit in units:
+        hit = [x for x in names if BT + x + BT in unit or " " + x in unit or "/" + x in unit]
+        if len(hit) >= 8:
+            bad.append(f"{f}:{n} lists {len(hit)} of the copy set's files")
+print("ok" if not bad else "no(" + "; ".join(bad) + ")")
+EOF
+)
+[ "$cs_out" = ok ] && report "the copy set is stated once, in the table, and cited elsewhere" ok \
+  || report "the copy set is stated once, in the table, and cited elsewhere" no "$cs_out"
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
