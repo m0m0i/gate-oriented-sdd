@@ -12374,7 +12374,7 @@ else
   fi
   chmod 644 "$p/.agents/hooks/review-gate.sh"
 
-  # A write that fails part-way exits 1 and names what it already wrote.
+  # A directory that refuses writes is found before anything is written.
   p="$TMP/up-partial"; up_v036 "$p"; chmod 555 "$p/.agents/agents/_shared"
   if : 2>/dev/null > "$p/.agents/agents/_shared/probe"; then
     note_skip "upgrade/partial-write" "permissions not enforced here (running as root?)"; c11=ok; rm -f "$p/.agents/agents/_shared/probe"
@@ -12435,11 +12435,32 @@ else
   out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
   case "$o" in *"guard    scripts/check-locks.py: edited"*"-# our guard tweak"*) c18=ok ;; *) c18="no($o)" ;; esac
 
-  r="$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17$c18"
-  [ "$r" = "okokokokokokokokokokokokokokokokokok" ] \
+  # A write that fails part way, after the pre-check passed, exits 1 and names what it already
+  # wrote: the state T6's sandbox produced, where the check passes and the temporary file is
+  # refused. Here the rename onto the contract copy is refused, so the copies are written first.
+  p="$TMP/up-partway"; up_v036 "$p"
+  out=$( cd "$p" && python3 - "$UP" >"$TMP/upout" 2>"$TMP/uperr" <<'EOF'
+import os, runpy, sys
+real = os.replace
+def refuse_the_contract(src, dst, *a, **k):
+    if str(dst).endswith("_shared/reviewer-contract.md"):
+        raise PermissionError(1, "Operation not permitted", str(dst))
+    return real(src, dst, *a, **k)
+os.replace = refuse_the_contract
+script = sys.argv[1]
+sys.argv = [script, "--project", ".", "--write"]
+runpy.run_path(script, run_name="__main__")
+EOF
+  echo "exit=$?" )
+  e=$(cat "$TMP/uperr")
+  case "$out:$e" in exit=1:*"write failed at .agents/agents/_shared/reviewer-contract.md"*"Already written: .agents/hooks/"*) c19=ok ;; *) c19="no($out $e)" ;; esac
+  ls -a "$p/.agents/agents/_shared" | grep -q '^\.reviewer-contract' && c19="no(a temporary file was left behind)"
+
+  r="$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17$c18$c19"
+  [ "$r" = "okokokokokokokokokokokokokokokokokokok" ] \
     && report "a re-run classifies each copy, judges the set whole, and writes only what the answers allow" ok \
     || report "a re-run classifies each copy, judges the set whole, and writes only what the answers allow" no \
-       "report=$c1 write=$c2 again=$c3 modes=$c4 edited=$c5 kept=$c6 replace=$c7 kept-qg=$c8 symlink=$c9 unreadable=$c10 partial=$c11 claude-code=$c12 install=$c13 refusals=$c14 stale-table=$c15 batch=$c16 old-contract=$c17 edited-guard=$c18"
+       "report=$c1 write=$c2 again=$c3 modes=$c4 edited=$c5 kept=$c6 replace=$c7 kept-qg=$c8 symlink=$c9 unreadable=$c10 partial=$c11 claude-code=$c12 install=$c13 refusals=$c14 stale-table=$c15 batch=$c16 old-contract=$c17 edited-guard=$c18 part-way=$c19"
 fi
 
 # 419. #343 AC2, AC4, AC6, AC7 — the hooks file is re-rendered from the template that wrote it,
@@ -12587,6 +12608,14 @@ check("whitespace", rc == 0 and (d / ".agents/hooks.json").read_text() == before
 # A fast check that holds braces of its own is the project's, not a placeholder left behind.
 d = project(render("v0.33", "jq '{{.a}}' x.json")); rc, out = run(d, "--write", "--hooks-json")
 check("braces", rc == 0 and hooks(d) == render("v0.38", "jq '{{.a}}' x.json"), f"{rc} {out[-300:]}")
+# An entry that is not an object would invalidate Antigravity's whole hooks file if carried into
+# the proposal, and it crashed the reader before: it is a refusal naming the file, and a batch
+# carries on to the next project.
+o = render("v0.38", "true"); o["gate-sdd-fast-check"]["PostToolUse"].append("x")
+d = project(o); d2 = project(render("v0.33", "true"))
+r = subprocess.run(["python3", str(UP), "--project", str(d), "--project", str(d2)], capture_output=True, text=True)
+out = r.stdout + r.stderr
+check("malformed", r.returncode == 1 and "is not an object" in out and "Traceback" not in out and f"behind: {d2}" in out, f"{r.returncode} {out[-400:]}")
 # A symlinked hooks file with copies pending: nothing written, and the reason is the link.
 d = project(render("v0.38", "true")); (d / ".agents/hooks/harness-checks.sh").unlink()
 real = d / "real-hooks.json"; (d / ".agents/hooks.json").rename(real); (d / ".agents/hooks.json").symlink_to(real)

@@ -362,6 +362,28 @@ def check_proposal(obj):
         raise Refusal(f"the proposal for {HOOKS_JSON} still holds a placeholder")
 
 
+def malformed(project):
+    """Refuse a hooks file holding an entry that is not an object. Antigravity drops the whole
+    file over one malformed entry, so carrying it into a proposal would switch every gate off,
+    and reading past it is how the reader once crashed."""
+    for g, group in project.items():
+        if not isinstance(group, dict):
+            continue
+        for ev, entries in group.items():
+            if not isinstance(entries, list):
+                continue
+            for i, e in enumerate(entries):
+                inner = e.get("hooks") if isinstance(e, dict) else None
+                if not isinstance(e, dict) or (
+                    inner is not None
+                    and not (isinstance(inner, list) and all(isinstance(h, dict) for h in inner))
+                ):
+                    raise Refusal(
+                        f"{HOOKS_JSON} holds an entry that is not an object at {g}.{ev}[{i}], "
+                        "and Antigravity rejects the whole file for one; fix it by hand first"
+                    )
+
+
 def hooks_plan(root, args, table):
     """The hooks file's state, its proposal, and what must be answered before it is written.
 
@@ -392,6 +414,8 @@ def hooks_plan(root, args, table):
             raise ValueError("not an object")
     except ValueError:
         project = None
+    if project is not None:
+        malformed(project)
     found, why = (
         (None, f"{HOOKS_JSON} is not JSON")
         if project is None

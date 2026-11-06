@@ -638,6 +638,7 @@ Q3's answer to the paragraph is one sample.
   - **wrote on the retry.** It ran the same command with `BypassSandbox: true`, which the session granted, and the script wrote the twelve files and printed `applied 12 change(s)`.
 
   Its final answer did not mention the refused attempt. Afterwards, exactly those twelve files differed by hash. `.steering/`, `scripts/` and the reviewer were unchanged. The modes were kept. The hand edit survived as `( sh check.sh ) 1>&2; echo '{}'` in the new `gate-sdd-fast-check` group, under the write-tool matcher. Both `Stop` commands gained `GATE_SDD_HARNESS=antigravity`, and `gate_hook_switches` exited 0 on the file.
+  The script was changed after the review that followed these runs: it now reports each `scripts/` guard as a question until #340's migration removes it, so this write would exit 3 with the five guards as its questions.
 - **R3 — the re-rendered gates block, in a later turn.** Asked to append `BAD` to `src/app.txt` and end its turn, the agent was blocked by the re-rendered quality gate. It quoted the block: `Quality gate: a gating validator failed. These are the harness checks this gate ships with, then the commands on the '- Validators:' line…`, then `--- sh check.sh` and `check.sh: src/app.txt holds BAD`. It then removed the line and ended its turn.
 - **R4 — a real consumer.** The consumer is a project whose real Antigravity install was made in 2026-09 and never re-run. It holds:
   - the v0.2.3–v0.10.0 hooks shape: one group, matcher `.*`, `exit 0` as the fast check, and 180/30 timeouts;
@@ -662,7 +663,7 @@ Q3's answer to the paragraph is one sample.
 
 ### What these runs do not support
 
-- **An interactive session.** There, `BypassSandbox` asks the user instead of being granted in accept-edits print mode.
+- **An interactive session.** How it asks for `BypassSandbox`, which the accept-edits print-mode sessions here granted, was not observed.
 - **A run without the CLI's terminal sandbox.**
 - **The guard migration of `scripts/` copies.** The prompt left it out.
 - **An install made by the `init` skill itself at v0.36.0.** R2's fixture was hand-built from that version's texts.
