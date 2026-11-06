@@ -12362,7 +12362,7 @@ else
   p="$TMP/up-link"; up_v036 "$p"; cp "$p/.agents/hooks/gate-lib.sh" "$TMP/up-elsewhere.sh"
   rm "$p/.agents/hooks/gate-lib.sh"; ln -s "$TMP/up-elsewhere.sh" "$p/.agents/hooks/gate-lib.sh"; before=$(shasum -a 256 < "$TMP/up-elsewhere.sh")
   out=$(run_up "$p" --project . --write); o=$(cat "$TMP/upout")
-  case "$o" in *"gate-lib.sh is a symlink"*) c9=ok ;; *) c9="no($out $o)" ;; esac
+  case "$o" in *"gate-lib.sh is a symlink to $TMP/up-elsewhere.sh"*) c9=ok ;; *) c9="no($out $o)" ;; esac
   [ "$(shasum -a 256 < "$TMP/up-elsewhere.sh")" = "$before" ] && [ -L "$p/.agents/hooks/gate-lib.sh" ] || c9="no(written through the link)"
 
   # An unreadable copy is a refusal, never a class.
@@ -12616,6 +12616,22 @@ d = project(o); d2 = project(render("v0.33", "true"))
 r = subprocess.run(["python3", str(UP), "--project", str(d), "--project", str(d2)], capture_output=True, text=True)
 out = r.stdout + r.stderr
 check("malformed", r.returncode == 1 and "is not an object" in out and "Traceback" not in out and f"behind: {d2}" in out, f"{r.returncode} {out[-400:]}")
+# So is every other shape Antigravity rejects: a tool event takes the nested {matcher, hooks: [...]}
+# form and every other event the flat form (docs/verified.md, scripts/check-manifests.py), and one
+# entry of the wrong form makes it drop the whole file.
+bad = []
+nested = {"matcher": "", "hooks": [{"type": "command", "command": "sh mine.sh"}]}
+flat = {"type": "command", "command": "sh mine.sh", "timeout": 5}
+for name, mutate in [
+    ("nested-stop", lambda o: o["gate-sdd"]["Stop"].append(nested)),
+    ("flat-posttooluse", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append(flat)),
+    ("hooks-not-objects", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append({"matcher": "x", "hooks": ["y"]})),
+    ("group-not-object", lambda o: o.__setitem__("my-hooks", "x")),
+    ("event-not-list", lambda o: o["gate-sdd"].__setitem__("Stop", {"type": "command"})),
+]:
+    o = render("v0.38", "true"); mutate(o); d = project(o); rc, out = run(d)
+    if rc != 1 or "Traceback" in out or "Antigravity rejects" not in out: bad.append(f"{name}: {rc} {out[-200:]}")
+check("malformed-shapes", not bad, "; ".join(bad))
 # A symlinked hooks file with copies pending: nothing written, and the reason is the link.
 d = project(render("v0.38", "true")); (d / ".agents/hooks/harness-checks.sh").unlink()
 real = d / "real-hooks.json"; (d / ".agents/hooks.json").rename(real); (d / ".agents/hooks.json").symlink_to(real)

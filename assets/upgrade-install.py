@@ -362,26 +362,40 @@ def check_proposal(obj):
         raise Refusal(f"the proposal for {HOOKS_JSON} still holds a placeholder")
 
 
+TOOL_EVENTS = {"PreToolUse", "PostToolUse"}
+
+
 def malformed(project):
-    """Refuse a hooks file holding an entry that is not an object. Antigravity drops the whole
-    file over one malformed entry, so carrying it into a proposal would switch every gate off,
-    and reading past it is how the reader once crashed."""
+    """Refuse a hooks file in a shape Antigravity rejects. Its schema is mixed: a tool event
+    nests its entries as {matcher, hooks: [...]}, every other event is flat {type, command}
+    (`docs/verified.md`, `scripts/check-manifests.py`), and one entry of the wrong form makes it
+    drop the whole file, so carrying one into a proposal, or calling such a file current, would
+    leave every gate off while this script reported success."""
+
+    def refuse(where, what):
+        raise Refusal(
+            f"{HOOKS_JSON} holds {what} at {where}, and Antigravity rejects the whole file "
+            "for one; fix it by hand first"
+        )
+
     for g, group in project.items():
         if not isinstance(group, dict):
-            continue
+            refuse(g, "a group that is not an object")
         for ev, entries in group.items():
-            if not isinstance(entries, list):
+            if ev == "enabled":
                 continue
+            if not isinstance(entries, list):
+                refuse(f"{g}.{ev}", "an event whose value is not a list")
             for i, e in enumerate(entries):
-                inner = e.get("hooks") if isinstance(e, dict) else None
-                if not isinstance(e, dict) or (
-                    inner is not None
-                    and not (isinstance(inner, list) and all(isinstance(h, dict) for h in inner))
-                ):
-                    raise Refusal(
-                        f"{HOOKS_JSON} holds an entry that is not an object at {g}.{ev}[{i}], "
-                        "and Antigravity rejects the whole file for one; fix it by hand first"
-                    )
+                where = f"{g}.{ev}[{i}]"
+                if not isinstance(e, dict):
+                    refuse(where, "an entry that is not an object")
+                inner = e.get("hooks")
+                if ev in TOOL_EVENTS:
+                    if not (isinstance(inner, list) and all(isinstance(h, dict) for h in inner)):
+                        refuse(where, "a tool-event entry without the nested list of hook objects")
+                elif "hooks" in e:
+                    refuse(where, "a nested entry under an event that takes the flat form")
 
 
 def hooks_plan(root, args, table):
@@ -505,7 +519,9 @@ def plan_project(root, args, table, current):
         for rel, src in sorted(table["copy_set"].items()):
             cls, detail = classify(root, rel, src, table, current)
             plan["copies"].append(
-                (rel, src, "symlink" if dir_link and cls != "symlink" else cls, detail)
+                (rel, src, "symlink", f"{HOOKS_DIR} -> {os.readlink(root / HOOKS_DIR)}")
+                if dir_link and cls != "symlink"
+                else (rel, src, cls, detail)
             )
         plan["hooks"] = hooks_plan(root, args, table)
     for rel in contracts:
@@ -543,8 +559,10 @@ def pending(plan, args):
     changes, questions, kept = [], list(plan["questions"]), []
     # A pre-0.41.0 guard is outstanding work: #340's migration removes it, so an install that
     # holds one is not current, and a batch names it as behind.
-    for rel, _src, cls, _detail in plan["guards"]:
+    for rel, _src, cls, detail in plan["guards"]:
         ask = ", and asks first because it is your edit" if cls == "edited" else ""
+        if cls == "symlink":
+            ask = f", and asks first: it is a symlink to {detail}"
         questions.append(
             f"{rel} is a pre-0.41.0 guard ({cls}): init's guard migration (#340) removes it{ask}"
         )
@@ -558,7 +576,7 @@ def pending(plan, args):
                 kept.append(rel)
                 questions.append(f"{rel} is your edit: it is replaced only with --replace {rel}")
         elif cls == "symlink":
-            questions.append(f"{rel} is a symlink; nothing is written through it")
+            questions.append(f"{rel} is a symlink to {_detail}; nothing is written through it")
     h = plan["hooks"]
     hooks_write = False
     if h and h["state"] == "symlink":
@@ -672,7 +690,7 @@ def report(root, plan, args):
         "current": "",
         "shipped": "an earlier text of this plugin; replaced on --write",
         "missing": "added on --write",
-        "symlink": "a symlink; nothing is written through it",
+        "symlink": "a symlink to {detail}; nothing is written through it",
     }
     for rel, src, cls, detail in plan["copies"] + plan["contracts"]:
         if cls == "edited":
@@ -687,11 +705,13 @@ def report(root, plan, args):
                 difflib.unified_diff(mine, cur, f"{rel} (yours)", f"{rel} (plugin)")
             )
         else:
-            note = notes[cls]
+            note = notes[cls].format(detail=detail) if cls == "symlink" else notes[cls]
             print(f"  {cls:<8} {rel}" + (f"  ({note})" if note else ""))
     for rel, src, cls, detail in plan["guards"]:
         print(
-            f"  guard    {rel}: {cls}; #340's migration removes it, and this script never writes it"
+            f"  guard    {rel}: {cls}"
+            + (f" to {detail}" if cls == "symlink" else "")
+            + "; #340's migration removes it, and this script never writes it"
         )
         if cls == "edited":
             cur = (PLUGIN / src).read_text(encoding="utf-8", errors="replace")
