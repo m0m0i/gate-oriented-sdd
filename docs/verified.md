@@ -656,7 +656,7 @@ Q3's answer to the paragraph is one sample.
     - both contract copies, `.agents/agents/_shared/` and `.agents/_shared/`;
     - `.agents/hooks.json`.
 
-    No copy was `edited`. The project's one chosen value in the hooks file, its fast check `exit 0`, survived as `( exit 0 ) 1>&2; echo '{}'` in the new `gate-sdd-fast-check` group. The three `scripts/` guards stayed where they were, and that second report counted them as nothing to upgrade.
+    No copy was `edited`. The project's one chosen value in the hooks file, its fast check `exit 0`, survived as `( exit 0 ) 1>&2; echo '{}'` in the new `gate-sdd-fast-check` group. The three `scripts/` guards stayed where they were, and that second report counted them as nothing to upgrade. The review after these runs found that verdict wrong: the script now reports each pre-0.41.0 guard as a question until #340's migration removes it, so such an install exits 3 and a batch names it as behind.
   - **The upgraded checks fail this project.** The agent ran the copied `harness-checks.sh`, which failed `check-document-set.py` (`mode is full and 1 required item(s) are not found: docs/ROADMAP.md`) and `check-document-cascade.py` (four documents without a reconciliation stamp, `docs/ROADMAP.md` among them). Those are checks the 2026-09 copies never ran: its old `scripts/` guards still passed. Its final answer reported neither the refused write nor this failure.
   - **In a later turn the gate blocked.** Asked to add a comment to a source file, the agent was blocked by the re-rendered quality gate, whose message ran the runner's output and named those two checks. It removed the comment as asked, and the gate kept blocking each continuation until the print timeout, so `agy` exited 3. The tree was left as it was.
 

@@ -18,7 +18,7 @@ The table's `copy_set` is the copy set's one machine-read statement. `init`, bot
 
 ## Consequences
 - An existing Antigravity install, from v0.2.3 on, can be upgraded without losing an edit to a copy or to its hooks file, and nothing is written that the user did not answer for.
-- The copies and the hooks file are written together or not at all, so a refreshed gate never runs under an older hooks file's `timeout`s.
+- The copies are written only when the hooks file will be current after the run. Every destination is checked before any file is written, and the hooks file is written last. A write that still fails part way, as a sandbox refusing the temporary file can make it, exits 1 and names what was already written. Gates refreshed under an older hooks file then hold themselves to its `timeout`s and block, under #304's deadline, rather than pass.
 - A project installed from a feature branch that never reached the default branch reads that branch's texts as edits. That costs a question, not a loss.
 - CAP-5 stays unmet on Antigravity in ADR-10's sense: a fix still needs a re-run. What changed is that the re-run is defined, and safe to run.
 - On Claude Code, the script handles the reviewer contract copy only. The gates there arrive by plugin update (ADR-8), and the `.claude/settings.json` declaration stays with `init`'s migrations.

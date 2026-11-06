@@ -357,7 +357,8 @@ def check_proposal(obj):
         running |= keys
     if not {"quality", "review"} <= running:
         raise Refusal(f"the proposal for {HOOKS_JSON} would not run both gates")
-    if "{{" in dump(obj):
+    text = dump(obj)
+    if "{{FAST_CHECK}}" in text or "{{HOOKS_DIR}}" in text:
         raise Refusal(f"the proposal for {HOOKS_JSON} still holds a placeholder")
 
 
@@ -488,14 +489,14 @@ def plan_project(root, args, table, current):
         plan["contracts"].append((rel, table["contract"]["source"], cls, detail))
     for rel in guards:
         cls, detail = classify(root, rel, table["legacy_guards"][rel], table, current)
-        plan["guards"].append((rel, cls))
+        plan["guards"].append((rel, table["legacy_guards"][rel], cls, detail))
     # The set is judged whole: a kept quality gate that predates the runner stops the checks.
     for rel, _src, cls, detail in plan["copies"]:
         if (
             rel == QUALITY_GATE
             and cls == "edited"
             and rel not in args.replace
-            and b"harness-checks.sh" not in detail
+            and not runs_the_runner(detail)
         ):
             plan["questions"].append(
                 f"{rel} is your edit and does not run harness-checks.sh: kept, the gate stops "
@@ -505,9 +506,24 @@ def plan_project(root, args, table, current):
     return plan
 
 
+def runs_the_runner(text):
+    """Whether a quality gate's text calls harness-checks.sh on a line that is not a comment."""
+    for line in text.decode("utf-8", errors="replace").splitlines():
+        if "harness-checks.sh" in line and not line.lstrip().startswith("#"):
+            return True
+    return False
+
+
 def pending(plan, args):
     """The changes this plan proposes, and the questions it leaves, after the answers given."""
     changes, questions, kept = [], list(plan["questions"]), []
+    # A pre-0.41.0 guard is outstanding work: #340's migration removes it, so an install that
+    # holds one is not current, and a batch names it as behind.
+    for rel, _src, cls, _detail in plan["guards"]:
+        ask = ", and asks first because it is your edit" if cls == "edited" else ""
+        questions.append(
+            f"{rel} is a pre-0.41.0 guard ({cls}): init's guard migration (#340) removes it{ask}"
+        )
     for rel, src, cls, _detail in plan["copies"] + plan["contracts"]:
         if cls in ("shipped", "missing"):
             changes.append((rel, src))
@@ -558,14 +574,38 @@ def apply(root, plan, args):
     copy_changes = [c for c in changes if c[0].startswith(HOOKS_DIR + "/")]
     hooks_current_after = h is None or h["state"] == "current" or hooks_write
     if copy_changes and not hooks_current_after:
-        print(
-            f"upgrade-install: nothing written: {HOOKS_JSON} would stay older than the gates. "
-            "Accept its proposal with --hooks-json, or answer its question, and run again."
-        )
+        if h["state"] == "symlink":
+            why = (
+                f"{HOOKS_JSON} is a symlink to {h['target']}, and nothing is written through it, "
+                "so the gates are not refreshed without it. "
+                "Replace the link with a file and run again."
+            )
+        else:
+            why = (
+                f"{HOOKS_JSON} would stay older than the gates. "
+                "Accept its proposal with --hooks-json, or answer its question, and run again."
+            )
+        print(f"upgrade-install: nothing written: {why}")
+        for q in questions:
+            print(f"  question {q}")
         return EXIT_PENDING
     writes = [(rel, (PLUGIN / src).read_bytes(), PLUGIN / src) for rel, src in changes]
     if hooks_write:
         writes.append((HOOKS_JSON, dump(h["proposal"]).encode("utf-8"), None))
+    # Every destination is checked before any file is written, so a directory that refuses a
+    # write stops the run with nothing written. A write can still fail later, as a sandbox that
+    # refuses the temporary file does; that exits 1 and names what was already written.
+    for rel, _data, _source in writes:
+        d = (root / rel).parent
+        while not d.exists() and d != root:
+            d = d.parent
+        if not os.access(d, os.W_OK):
+            print(
+                f"upgrade-install: refused: {d.relative_to(root)} cannot be written, "
+                "so nothing was written.",
+                file=sys.stderr,
+            )
+            return EXIT_REFUSED
     done = []
     for rel, data, source in writes:
         dest = root / rel
@@ -625,10 +665,21 @@ def report(root, plan, args):
         else:
             note = notes[cls]
             print(f"  {cls:<8} {rel}" + (f"  ({note})" if note else ""))
-    for rel, cls in plan["guards"]:
+    for rel, src, cls, detail in plan["guards"]:
         print(
             f"  guard    {rel}: {cls}; #340's migration removes it, and this script never writes it"
         )
+        if cls == "edited":
+            cur = (PLUGIN / src).read_text(encoding="utf-8", errors="replace")
+            mine = detail.decode("utf-8", errors="replace")
+            sys.stdout.writelines(
+                difflib.unified_diff(
+                    mine.splitlines(keepends=True),
+                    cur.splitlines(keepends=True),
+                    f"{rel} (yours)",
+                    f"{rel} (plugin)",
+                )
+            )
     h = plan["hooks"]
     if h:
         if h["state"] == "current":

@@ -12318,15 +12318,23 @@ else
   [ "$(up_tree "$p")" = "$before" ] || c1="no(the report wrote a file)"
 
   # --write: shipped replaced, missing added, guards untouched, then a second run changes nothing.
-  out=$(run_up "$p" --project . --write)
+  # Written, it still exits 3: the scripts/ guards are left for #340's migration, and they are
+  # the only questions it leaves.
+  out=$(run_up "$p" --project . --write); o=$(cat "$TMP/upout")
   c2=ok
-  case "$out" in exit=0) ;; *) c2="no(write: $out $(cat "$TMP/upout" "$TMP/uperr"))" ;; esac
+  case "$out" in exit=3) ;; *) c2="no(write: $out $o $(cat "$TMP/uperr"))" ;; esac
+  printf '%s\n' "$o" | grep '^  question' | grep -qv 'pre-0.41.0 guard' && c2="no(a question beyond the guards: $o)"
   cmp -s "$p/.agents/hooks/quality-gate.sh" "$ROOT/hooks/quality-gate.sh" || c2="no(quality gate not replaced)"
   cmp -s "$p/.agents/hooks/harness-checks.sh" "$ROOT/hooks/harness-checks.sh" || c2="no(runner not added)"
   cmp -s "$p/.agents/agents/_shared/reviewer-contract.md" "$ROOT/reviewers/_shared/reviewer-contract.md" || c2="no(contract not replaced)"
   [ "$(git -C "$ROOT" show gate-sdd--v0.36.0:assets/check-locks.py | shasum -a 256)" = "$(shasum -a 256 < "$p/scripts/check-locks.py")" ] || c2="no(a guard in scripts/ was written)"
+  # The guards #340's migration removes still count: an install holding them is not current, so
+  # a batch names it as behind. Once they are gone, a second run changes nothing.
   mid=$(up_tree "$p"); out=$(run_up "$p" --project .)
-  case "$out:$(cat "$TMP/upout")" in exit=0:*"nothing to upgrade"*) c3=ok ;; *) c3="no(second run: $out $(cat "$TMP/upout"))" ;; esac
+  case "$out:$(cat "$TMP/upout")" in exit=3:*"scripts/check-locks.py is a pre-0.41.0 guard"*"#340"*) c3=ok ;; *) c3="no(guards left: $out $(cat "$TMP/upout"))" ;; esac
+  [ "$(up_tree "$p")" = "$mid" ] || c3="no(the guard report wrote)"
+  rm "$p"/scripts/check-*; mid=$(up_tree "$p"); out=$(run_up "$p" --project .)
+  case "$out:$(cat "$TMP/upout")" in exit=0:*"nothing to upgrade"*) ;; *) c3="no(second run: $out $(cat "$TMP/upout"))" ;; esac
   [ "$(up_tree "$p")" = "$mid" ] || c3="no(the second run wrote)"
   # Modes: an existing copy keeps its own, a missing one takes the source's.
   [ -x "$p/.agents/hooks/quality-gate.sh" ] && [ -x "$p/.agents/hooks/check-locks.py" ] && c4=ok || c4="no(modes: $(ls -l "$p/.agents/hooks" | tr '\n' ' '))"
@@ -12339,12 +12347,16 @@ else
   case "$out:$o" in exit=3:*"1 edit(s) kept, set mixed"*) c6=ok ;; *) c6="no($out $o $(cat "$TMP/uperr"))" ;; esac
   cmp -s "$p/.agents/hooks/review-gate.sh" "$TMP/up-mine" || c6="no(the edit was overwritten)"
   out=$(run_up "$p" --project . --write --replace .agents/hooks/review-gate.sh)
-  case "$out" in exit=0) cmp -s "$p/.agents/hooks/review-gate.sh" "$ROOT/hooks/review-gate.sh" && c7=ok || c7="no(not replaced)" ;; *) c7="no($out $(cat "$TMP/upout"))" ;; esac
+  case "$out" in exit=3) cmp -s "$p/.agents/hooks/review-gate.sh" "$ROOT/hooks/review-gate.sh" && c7=ok || c7="no(not replaced)" ;; *) c7="no($out $(cat "$TMP/upout"))" ;; esac
 
   # A kept edited quality gate that predates the runner names the checks it would stop running.
   p="$TMP/up-kept-qg"; up_v036 "$p"; printf '# ours\n' >> "$p/.agents/hooks/quality-gate.sh"
   out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
   case "$o" in *"does not run harness-checks.sh"*"check-steering-anchors.sh, check-locks.py, check-document-set.py, check-document-cascade.py"*"- Validators:"*) c8=ok ;; *) c8="no($o)" ;; esac
+  # A gate that names the runner only in comments does not run it either.
+  sed 's/^\(.*harness-checks\.sh.*\)$/# \1/' "$ROOT/hooks/quality-gate.sh" > "$p/.agents/hooks/quality-gate.sh"
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  case "$o" in *"does not run harness-checks.sh"*) ;; *) c8="no(comment-only runner cleared the question: $o)" ;; esac
 
   # A symlinked copy is a question, and nothing is written through it.
   p="$TMP/up-link"; up_v036 "$p"; cp "$p/.agents/hooks/gate-lib.sh" "$TMP/up-elsewhere.sh"
@@ -12367,8 +12379,9 @@ else
   if : 2>/dev/null > "$p/.agents/agents/_shared/probe"; then
     note_skip "upgrade/partial-write" "permissions not enforced here (running as root?)"; c11=ok; rm -f "$p/.agents/agents/_shared/probe"
   else
-    out=$(run_up "$p" --project . --write); e=$(cat "$TMP/uperr")
-    case "$out:$e" in exit=1:*"write failed at .agents/agents/_shared/reviewer-contract.md"*"Already written: .agents/hooks/"*) c11=ok ;; *) c11="no($out $e)" ;; esac
+    before=$(up_tree "$p"); out=$(run_up "$p" --project . --write); e=$(cat "$TMP/uperr")
+    case "$out:$e" in exit=1:*".agents/agents/_shared"*"cannot be written"*"nothing was written"*) c11=ok ;; *) c11="no($out $e)" ;; esac
+    [ "$(up_tree "$p")" = "$before" ] || c11="no(a file was written before the refusal)"
   fi
   chmod 755 "$p/.agents/agents/_shared"
 
@@ -12417,11 +12430,16 @@ else
   out=$(run_up "$p" --project . --write)
   cmp -s "$p/.agents/_shared/reviewer-contract.md" "$ROOT/reviewers/_shared/reviewer-contract.md" || c17="no(old-path contract not replaced: $out)"
 
-  r="$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17"
-  [ "$r" = "okokokokokokokokokokokokokokokokok" ] \
+  # An edited guard is shown with its diff, so the migration's question shows the edit it asks about.
+  p="$TMP/up-guard-edit"; up_v036 "$p"; printf '# our guard tweak\n' >> "$p/scripts/check-locks.py"
+  out=$(run_up "$p" --project .); o=$(cat "$TMP/upout")
+  case "$o" in *"guard    scripts/check-locks.py: edited"*"-# our guard tweak"*) c18=ok ;; *) c18="no($o)" ;; esac
+
+  r="$c1$c2$c3$c4$c5$c6$c7$c8$c9$c10$c11$c12$c13$c14$c15$c16$c17$c18"
+  [ "$r" = "okokokokokokokokokokokokokokokokokok" ] \
     && report "a re-run classifies each copy, judges the set whole, and writes only what the answers allow" ok \
     || report "a re-run classifies each copy, judges the set whole, and writes only what the answers allow" no \
-       "report=$c1 write=$c2 again=$c3 modes=$c4 edited=$c5 kept=$c6 replace=$c7 kept-qg=$c8 symlink=$c9 unreadable=$c10 partial=$c11 claude-code=$c12 install=$c13 refusals=$c14 stale-table=$c15 batch=$c16 old-contract=$c17"
+       "report=$c1 write=$c2 again=$c3 modes=$c4 edited=$c5 kept=$c6 replace=$c7 kept-qg=$c8 symlink=$c9 unreadable=$c10 partial=$c11 claude-code=$c12 install=$c13 refusals=$c14 stale-table=$c15 batch=$c16 old-contract=$c17 edited-guard=$c18"
 fi
 
 # 419. #343 AC2, AC4, AC6, AC7 — the hooks file is re-rendered from the template that wrote it,
@@ -12467,6 +12485,8 @@ def switches_ok(d):
 res = {}
 def check(name, cond, why=""):
     res[name] = "ok" if cond else f"no({why})"
+# Each template keyed once: two sharing a key would leave "each identifies itself" testing five.
+check("distinct", len(T) == len(table["templates"]) == 6, f"shape() keyed {len(T)} of {len(table['templates'])}")
 FAST_ENV = "cd \"$(git rev-parse --show-toplevel 2>/dev/null || pwd)\" && ( {} ) 1>&2; echo '{{}}'"
 
 # Each of the six templates, rendered, identifies itself.
@@ -12564,6 +12584,14 @@ o = render("v0.38", "true"); o = {k: dict(reversed(list(v.items()))) for k, v in
 d = project(None, text=json.dumps(o, indent=4)); before = (d / ".agents/hooks.json").read_text()
 rc, out = run(d, "--write")
 check("whitespace", rc == 0 and (d / ".agents/hooks.json").read_text() == before, f"{rc} {out[-300:]}")
+# A fast check that holds braces of its own is the project's, not a placeholder left behind.
+d = project(render("v0.33", "jq '{{.a}}' x.json")); rc, out = run(d, "--write", "--hooks-json")
+check("braces", rc == 0 and hooks(d) == render("v0.38", "jq '{{.a}}' x.json"), f"{rc} {out[-300:]}")
+# A symlinked hooks file with copies pending: nothing written, and the reason is the link.
+d = project(render("v0.38", "true")); (d / ".agents/hooks/harness-checks.sh").unlink()
+real = d / "real-hooks.json"; (d / ".agents/hooks.json").rename(real); (d / ".agents/hooks.json").symlink_to(real)
+rc, out = run(d, "--write", "--hooks-json")
+check("symlink-hooks", rc == 3 and "symlink" in out and "accept its proposal" not in out and not (d / ".agents/hooks/harness-checks.sh").exists(), f"{rc} {out[-300:]}")
 print(" ".join(f"{k}={v}" for k, v in res.items()))
 EOF
 )
