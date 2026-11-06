@@ -90,6 +90,15 @@ def load_table():
                 "Reinstall the plugin from a release or a clean clone."
             )
         current[src] = h
+    try:
+        tpl = sha(TEMPLATE.read_bytes())
+    except OSError as e:
+        raise Refusal(f"the plugin's template {TEMPLATE} cannot be read: {e}") from e
+    if tpl not in table["templates"]:
+        raise Refusal(
+            "the plugin's table is stale: hooks/templates/antigravity.hooks.json's text is not in "
+            f"{TABLE.name}. Reinstall the plugin from a release or a clean clone."
+        )
     return table, current
 
 
@@ -394,8 +403,16 @@ def malformed(project):
                 if ev in TOOL_EVENTS:
                     if not (isinstance(inner, list) and all(isinstance(h, dict) for h in inner)):
                         refuse(where, "a tool-event entry without the nested list of hook objects")
+                    hooks = inner
                 elif "hooks" in e:
                     refuse(where, "a nested entry under an event that takes the flat form")
+                else:
+                    hooks = [e]
+                # The rejection docs/verified.md records: a command hook must specify 'command'.
+                for h in hooks:
+                    cmd = h.get("command")
+                    if not (isinstance(cmd, str) and cmd.strip()):
+                        refuse(where, "a hook with no command")
 
 
 def hooks_plan(root, args, table):
@@ -510,21 +527,36 @@ def plan_project(root, args, table, current):
         "questions": [],
     }
     if ag:
-        dir_link = (root / HOOKS_DIR).is_symlink()
-        if dir_link:
+        # A symlinked .agents/ or .agents/hooks/ would take every write somewhere else, so nothing
+        # under the link is written: each file under it is reported as a symlink, naming the link.
+        link = next((d for d in (".agents", HOOKS_DIR) if (root / d).is_symlink()), None)
+        via = f"{link} -> {os.readlink(root / link)}" if link else None
+        if link:
             plan["questions"].append(
-                f"{HOOKS_DIR} is a symlink to {os.readlink(root / HOOKS_DIR)}; "
-                "nothing is written through it"
+                f"{link} is a symlink to {os.readlink(root / link)}; nothing is written through it"
             )
         for rel, src in sorted(table["copy_set"].items()):
             cls, detail = classify(root, rel, src, table, current)
             plan["copies"].append(
-                (rel, src, "symlink", f"{HOOKS_DIR} -> {os.readlink(root / HOOKS_DIR)}")
-                if dir_link and cls != "symlink"
-                else (rel, src, cls, detail)
+                (rel, src, "symlink", via) if link and cls != "symlink" else (rel, src, cls, detail)
             )
-        plan["hooks"] = hooks_plan(root, args, table)
+        plan["hooks"] = (
+            {"state": "symlink", "target": via, "blocking": [], "asks": [], "needs_replace": False}
+            if link == ".agents"
+            else hooks_plan(root, args, table)
+        )
+    agents_link = (root / ".agents").is_symlink()
     for rel in contracts:
+        if agents_link and rel.startswith(".agents/"):
+            plan["contracts"].append(
+                (
+                    rel,
+                    table["contract"]["source"],
+                    "symlink",
+                    f".agents -> {os.readlink(root / '.agents')}",
+                )
+            )
+            continue
         cls, detail = classify(root, rel, table["contract"]["source"], table, current)
         plan["contracts"].append((rel, table["contract"]["source"], cls, detail))
     for rel in guards:

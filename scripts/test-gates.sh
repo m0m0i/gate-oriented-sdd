@@ -12365,6 +12365,13 @@ else
   case "$o" in *"gate-lib.sh is a symlink to $TMP/up-elsewhere.sh"*) c9=ok ;; *) c9="no($out $o)" ;; esac
   [ "$(shasum -a 256 < "$TMP/up-elsewhere.sh")" = "$before" ] && [ -L "$p/.agents/hooks/gate-lib.sh" ] || c9="no(written through the link)"
 
+  # A symlinked .agents/ is a question too: everything under it would be written through the link.
+  p="$TMP/up-agents-link"; up_v036 "$p"; mv "$p/.agents" "$TMP/up-agents-real"; ln -s "$TMP/up-agents-real" "$p/.agents"
+  before=$( cd "$TMP/up-agents-real" && find . -type f | LC_ALL=C sort | xargs shasum -a 256 )
+  out=$(run_up "$p" --project . --write --hooks-json); o=$(cat "$TMP/upout")
+  case "$o" in *".agents is a symlink to $TMP/up-agents-real"*) ;; *) c9="no(.agents link: $out $o)" ;; esac
+  [ "$( cd "$TMP/up-agents-real" && find . -type f | LC_ALL=C sort | xargs shasum -a 256 )" = "$before" ] || c9="no(written through the .agents link)"
+
   # An unreadable copy is a refusal, never a class.
   p="$TMP/up-unread"; up_v036 "$p"; chmod 000 "$p/.agents/hooks/review-gate.sh"
   if [ -r "$p/.agents/hooks/review-gate.sh" ]; then
@@ -12412,6 +12419,10 @@ else
   printf '# drift\n' >> "$sp/hooks/gate-lib.sh"
   out=$( cd "$TMP/up-report" && python3 "$sp/assets/upgrade-install.py" --project . 2>"$TMP/uperr" >/dev/null; echo "exit=$?" )
   case "$out:$(cat "$TMP/uperr")" in exit=1:*"table is stale: hooks/gate-lib.sh"*) c15=ok ;; *) c15="no($out $(cat "$TMP/uperr"))" ;; esac
+  # The template is one of the plugin's own sources too.
+  cp "$ROOT/hooks/gate-lib.sh" "$sp/hooks/gate-lib.sh"; printf ' \n' >> "$sp/hooks/templates/antigravity.hooks.json"
+  out=$( cd "$TMP/up-report" && python3 "$sp/assets/upgrade-install.py" --project . 2>"$TMP/uperr" >/dev/null; echo "exit=$?" )
+  case "$out:$(cat "$TMP/uperr")" in exit=1:*"table is stale: hooks/templates/antigravity.hooks.json"*) ;; *) c15="no(stale template: $out $(cat "$TMP/uperr"))" ;; esac
 
   # A batch: one current, one behind, one refused — named, the worst code, and nothing written.
   pa="$TMP/up-report"; pb="$TMP/up-b"; up_v036 "$pb"; before=$(up_tree "$pb")
@@ -12628,6 +12639,9 @@ for name, mutate in [
     ("hooks-not-objects", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append({"matcher": "x", "hooks": ["y"]})),
     ("group-not-object", lambda o: o.__setitem__("my-hooks", "x")),
     ("event-not-list", lambda o: o["gate-sdd"].__setitem__("Stop", {"type": "command"})),
+    # The rejection docs/verified.md records word for word: a command hook must specify 'command'.
+    ("missing-command-flat", lambda o: o.__setitem__("my-hooks", {"enabled": True, "Stop": [{"type": "command", "timeout": 5}]})),
+    ("missing-command-nested", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append({"matcher": "x", "hooks": [{"type": "command"}]})),
 ]:
     o = render("v0.38", "true"); mutate(o); d = project(o); rc, out = run(d)
     if rc != 1 or "Traceback" in out or "Antigravity rejects" not in out: bad.append(f"{name}: {rc} {out[-200:]}")
