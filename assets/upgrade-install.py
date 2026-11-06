@@ -120,8 +120,9 @@ def project_root(arg):
 def classify(root, rel, src, table, current):
     """One copy's class: (class, detail). Raises Refusal for a state it will not judge."""
     path = root / rel
-    if path.is_symlink():
-        return "symlink", os.readlink(path)
+    link = link_on_path(root, rel)
+    if link:
+        return "symlink", link[1] if link[0] == rel else f"{link[0]} -> {link[1]}"
     if not os.path.lexists(path):
         return "missing", None
     if not path.is_file():
@@ -154,7 +155,47 @@ def render(template_text, fast_check):
 
 
 def dump(obj):
-    return json.dumps(obj, indent=2, ensure_ascii=False) + "\n"
+    return json.dumps(obj, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
+
+
+class NotStrictJSON(ValueError):
+    """Text Python's reader takes and JSON does not: NaN, an infinite number, a repeated key."""
+
+
+def strict_loads(text):
+    """Parse as JSON proper. Python's reader also takes NaN and Infinity, turns 1e400 into an
+    infinity it would write back, and keeps the last of two equal keys where gate_hook_switches
+    reads both; a hooks file holding any of them is not one Antigravity loads."""
+
+    def constant(name):
+        raise NotStrictJSON(f"{name}, which is not JSON")
+
+    def number(literal):
+        v = float(literal)
+        if v != v or v in (float("inf"), float("-inf")):
+            raise NotStrictJSON(f"{literal}, which overflows to infinity and is not JSON")
+        return v
+
+    def pairs(items):
+        out = {}
+        for k, v in items:
+            if k in out:
+                raise NotStrictJSON(f'the key "{k}" twice in one object')
+            out[k] = v
+        return out
+
+    return json.loads(text, parse_constant=constant, parse_float=number, object_pairs_hook=pairs)
+
+
+def link_on_path(root, rel):
+    """The first symlink on the way from the project root to `rel`, the file itself included, as
+    (its path, its target), or None. Anything under a link would be written somewhere else."""
+    p = root
+    for part in pathlib.PurePosixPath(rel).parts:
+        p = p / part
+        if p.is_symlink():
+            return str(p.relative_to(root)), os.readlink(p)
+    return None
 
 
 GATES = {
@@ -282,6 +323,14 @@ def identify(project, templates):
 
 def merge_project_values(cur, project, tpl, f, args, out):
     """Carry what the project chose onto the current template's rendering `cur`."""
+    # A project group bearing a name the current template uses, on a file whose template did not
+    # use it, cannot be told from the plugin's own group: merging would replace it.
+    for g in cur:
+        if g not in tpl and g in project:
+            raise Refusal(
+                f"{HOOKS_JSON} has a group of its own named {g!r}, a name this plugin's current "
+                "template now uses; rename that group, then run again"
+            )
     cslots = slots(cur)
     # The fast check's matcher, where it differs from the identifying template's own.
     tfast = [s for s in f["tslots"] if s[2] == "fast"]
@@ -298,11 +347,18 @@ def merge_project_values(cur, project, tpl, f, args, out):
         cs = [c for c in cslots if c[2] == s[2] and (c[1] == s[1])]
         if not cs:
             continue
-        th, ph, ch = hooks_of(te), hooks_of(f["pslots"][s][1]), hooks_of(cslots[cs[0]][1])
+        pe, ce = f["pslots"][s][1], cslots[cs[0]][1]
+        th, ph, ch = hooks_of(te), hooks_of(pe), hooks_of(ce)
         if th and ph and ch:
             for key, val in ph[0].items():
                 if key not in th[0]:
                     ch[0][key] = val
+        # And keys beside the matcher, and hooks after the first in a nested entry.
+        if "hooks" in te and "hooks" in pe and "hooks" in ce:
+            for key, val in pe.items():
+                if key not in te:
+                    ce[key] = val
+            ce["hooks"].extend(ph[1:])
     # Every entry the template does not own is the project's, kept where it stood.
     owned = {(s[0], s[1], f["pslots"][s][0]) for s in f["tslots"] if s in f["pslots"]}
     for g, group in project.items():
@@ -327,8 +383,8 @@ def merge_project_values(cur, project, tpl, f, args, out):
                     target.append(e)
     # The fast-check group's `enabled`, where the identifying template had that group.
     pfast = project.get(FAST_GROUP)
-    if FAST_GROUP in tpl and isinstance(pfast, dict) and FAST_GROUP in cur:
-        cur[FAST_GROUP]["enabled"] = pfast.get("enabled")
+    if FAST_GROUP in tpl and isinstance(pfast, dict) and FAST_GROUP in cur and "enabled" in pfast:
+        cur[FAST_GROUP]["enabled"] = pfast["enabled"]
     gate_group = "gate-sdd"
     off = gate_group in project and project[gate_group].get("enabled") is not True
     if off and FAST_GROUP not in tpl:
@@ -401,18 +457,28 @@ def malformed(project):
                     refuse(where, "an entry that is not an object")
                 inner = e.get("hooks")
                 if ev in TOOL_EVENTS:
-                    if not (isinstance(inner, list) and all(isinstance(h, dict) for h in inner)):
-                        refuse(where, "a tool-event entry without the nested list of hook objects")
+                    if not (
+                        isinstance(inner, list)
+                        and inner
+                        and all(isinstance(h, dict) for h in inner)
+                    ):
+                        refuse(where, "a tool-event entry without a nested list of hook objects")
+                    if not isinstance(e.get("matcher"), str):
+                        refuse(where, "a tool-event entry without a matcher")
                     hooks = inner
                 elif "hooks" in e:
                     refuse(where, "a nested entry under an event that takes the flat form")
                 else:
                     hooks = [e]
                 # The rejection docs/verified.md records: a command hook must specify 'command'.
+                # Shapes whose handling is not recorded are refused rather than guessed at: a
+                # type other than command, an empty hooks list and a missing matcher (#343).
                 for h in hooks:
                     cmd = h.get("command")
                     if not (isinstance(cmd, str) and cmd.strip()):
                         refuse(where, "a hook with no command")
+                    if h.get("type") != "command":
+                        refuse(where, "a hook whose type is not command")
 
 
 def hooks_plan(root, args, table):
@@ -423,8 +489,10 @@ def hooks_plan(root, args, table):
     template_text = TEMPLATE.read_text(encoding="utf-8")
     path = root / HOOKS_JSON
     out = {"blocking": [], "asks": [], "notes": [], "needs_replace": False, "old": None}
-    if path.is_symlink():
-        out.update(state="symlink", target=os.readlink(path))
+    link = link_on_path(root, HOOKS_JSON)
+    if link:
+        target = link[1] if link[0] == HOOKS_JSON else f"{link[0]} -> {link[1]}"
+        out.update(state="symlink", target=target)
         return out
     if not os.path.lexists(path):
         if args.fast_check is None:
@@ -440,13 +508,25 @@ def hooks_plan(root, args, table):
         raise Refusal(f"{HOOKS_JSON} cannot be read: {e}") from e
     out["old"] = old_text
     try:
-        project = json.loads(old_text)
+        project = strict_loads(old_text)
         if not isinstance(project, dict):
             raise ValueError("not an object")
+    except NotStrictJSON as e:
+        raise Refusal(
+            f"{HOOKS_JSON} holds {e}, and Antigravity rejects the whole file for it; "
+            "fix it by hand first"
+        ) from e
     except ValueError:
         project = None
     if project is not None:
         malformed(project)
+        try:
+            json.dumps(project, ensure_ascii=False).encode("utf-8")
+        except UnicodeEncodeError as e:
+            raise Refusal(
+                f"{HOOKS_JSON} holds a string that cannot be written as UTF-8 (a lone surrogate); "
+                "fix it by hand first"
+            ) from e
     found, why = (
         (None, f"{HOOKS_JSON} is not JSON")
         if project is None
@@ -527,41 +607,27 @@ def plan_project(root, args, table, current):
         "questions": [],
     }
     if ag:
-        # A symlinked .agents/ or .agents/hooks/ would take every write somewhere else, so nothing
-        # under the link is written: each file under it is reported as a symlink, naming the link.
-        link = next((d for d in (".agents", HOOKS_DIR) if (root / d).is_symlink()), None)
-        via = f"{link} -> {os.readlink(root / link)}" if link else None
-        if link:
-            plan["questions"].append(
-                f"{link} is a symlink to {os.readlink(root / link)}; nothing is written through it"
-            )
         for rel, src in sorted(table["copy_set"].items()):
             cls, detail = classify(root, rel, src, table, current)
-            plan["copies"].append(
-                (rel, src, "symlink", via) if link and cls != "symlink" else (rel, src, cls, detail)
-            )
-        plan["hooks"] = (
-            {"state": "symlink", "target": via, "blocking": [], "asks": [], "needs_replace": False}
-            if link == ".agents"
-            else hooks_plan(root, args, table)
-        )
-    agents_link = (root / ".agents").is_symlink()
+            plan["copies"].append((rel, src, cls, detail))
+        plan["hooks"] = hooks_plan(root, args, table)
     for rel in contracts:
-        if agents_link and rel.startswith(".agents/"):
-            plan["contracts"].append(
-                (
-                    rel,
-                    table["contract"]["source"],
-                    "symlink",
-                    f".agents -> {os.readlink(root / '.agents')}",
-                )
-            )
-            continue
         cls, detail = classify(root, rel, table["contract"]["source"], table, current)
         plan["contracts"].append((rel, table["contract"]["source"], cls, detail))
     for rel in guards:
         cls, detail = classify(root, rel, table["legacy_guards"][rel], table, current)
         plan["guards"].append((rel, table["legacy_guards"][rel], cls, detail))
+    # Every write under a symlinked directory would land somewhere else: each such directory is
+    # named once, and nothing under it is written (each file under it is reported as a symlink).
+    seen = set()
+    rels = [c[0] for c in plan["copies"] + plan["contracts"]] + [g[0] for g in plan["guards"]]
+    for rel in [*rels, HOOKS_JSON] if plan["hooks"] else rels:
+        link = link_on_path(root, rel)
+        if link and link[0] != rel and link[0] not in seen:
+            seen.add(link[0])
+            plan["questions"].append(
+                f"{link[0]} is a symlink to {link[1]}; nothing is written through it"
+            )
     # The set is judged whole: a kept quality gate that predates the runner stops the checks.
     for rel, _src, cls, detail in plan["copies"]:
         if (

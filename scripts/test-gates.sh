@@ -12365,6 +12365,13 @@ else
   case "$o" in *"gate-lib.sh is a symlink to $TMP/up-elsewhere.sh"*) c9=ok ;; *) c9="no($out $o)" ;; esac
   [ "$(shasum -a 256 < "$TMP/up-elsewhere.sh")" = "$before" ] && [ -L "$p/.agents/hooks/gate-lib.sh" ] || c9="no(written through the link)"
 
+  # So is a symlink anywhere on a contract copy's path: .agents/agents/_shared here.
+  p="$TMP/up-shared-link"; up_v036 "$p"; mv "$p/.agents/agents/_shared" "$TMP/up-shared-real"; ln -s "$TMP/up-shared-real" "$p/.agents/agents/_shared"
+  before=$(shasum -a 256 < "$TMP/up-shared-real/reviewer-contract.md")
+  out=$(run_up "$p" --project . --write); o=$(cat "$TMP/upout")
+  case "$o" in *".agents/agents/_shared is a symlink to $TMP/up-shared-real"*) ;; *) c9="no(_shared link: $out $o)" ;; esac
+  [ "$(shasum -a 256 < "$TMP/up-shared-real/reviewer-contract.md")" = "$before" ] || c9="no(written through the _shared link)"
+
   # A symlinked .agents/ is a question too: everything under it would be written through the link.
   p="$TMP/up-agents-link"; up_v036 "$p"; mv "$p/.agents" "$TMP/up-agents-real"; ln -s "$TMP/up-agents-real" "$p/.agents"
   before=$( cd "$TMP/up-agents-real" && find . -type f | LC_ALL=C sort | xargs shasum -a 256 )
@@ -12642,10 +12649,42 @@ for name, mutate in [
     # The rejection docs/verified.md records word for word: a command hook must specify 'command'.
     ("missing-command-flat", lambda o: o.__setitem__("my-hooks", {"enabled": True, "Stop": [{"type": "command", "timeout": 5}]})),
     ("missing-command-nested", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append({"matcher": "x", "hooks": [{"type": "command"}]})),
+    # Refused conservatively: shapes whose handling docs/verified.md does not record.
+    ("type-not-command", lambda o: o.__setitem__("my-hooks", {"enabled": True, "Stop": [{"type": "http", "command": "x"}]})),
+    ("empty-hooks", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append({"matcher": "x", "hooks": []})),
+    ("no-matcher", lambda o: o["gate-sdd-fast-check"]["PostToolUse"].append({"hooks": [{"type": "command", "command": "x"}]})),
 ]:
     o = render("v0.38", "true"); mutate(o); d = project(o); rc, out = run(d)
     if rc != 1 or "Traceback" in out or "Antigravity rejects" not in out: bad.append(f"{name}: {rc} {out[-200:]}")
 check("malformed-shapes", not bad, "; ".join(bad))
+# Text that is not JSON though Python's reader takes it: NaN, Infinity, a number that overflows to
+# infinity, and a key given twice (which gate_hook_switches reads differently). Each would be
+# called current or written back as a file Antigravity drops whole. A lone surrogate cannot be
+# written at all. All are refusals that name the file, never a traceback.
+cur_text = json.dumps(render("v0.38", "true"), indent=2)
+bad = []
+for name, text in [
+    ("nan", cur_text.replace('"timeout": 600', '"timeout": NaN', 1)),
+    ("infinity", cur_text.replace('"timeout": 600', '"timeout": Infinity', 1)),
+    ("overflow", cur_text.replace('"timeout": 600', '"timeout": 1e400', 1)),
+    ("duplicate-key", cur_text.replace('"enabled": true', '"enabled": false, "enabled": true', 1)),
+    ("lone-surrogate", cur_text[:-2] + ', "my-hooks": {"enabled": true, "Stop": [{"type": "command", "command": "echo \\ud800"}]}\n}'),
+]:
+    d = project(None, text=text); rc, out = run(d, "--write", "--hooks-json")
+    if rc != 1 or "Traceback" in out or ".agents/hooks.json" not in out: bad.append(f"{name}: {rc} {out[-200:]}")
+check("not-json", not bad, "; ".join(bad))
+# What the project added in or beside a template-owned entry is kept: a second inner hook, a key
+# beside the matcher. A project group bearing the fast-check group's name on a file older than that
+# group cannot be told from the plugin's: refused. A fast-check group with no enabled stays on.
+o = render("v0.37", "true"); fe = o["gate-sdd-fast-check"]["PostToolUse"][0]
+fe["hooks"].append({"type": "command", "command": "echo second", "timeout": 5}); fe["note"] = "ours"
+del o["gate-sdd-fast-check"]["enabled"]
+d = project(o); rc, out = run(d, "--write", "--hooks-json"); h = hooks(d)
+he = h["gate-sdd-fast-check"]["PostToolUse"][0]
+check("kept-inner", rc == 0 and len(he["hooks"]) == 2 and he["hooks"][1]["command"] == "echo second" and he.get("note") == "ours" and h["gate-sdd-fast-check"]["enabled"] is True, f"{rc} {out[-300:]} {json.dumps(he)[:200]}")
+o = render("v0.21", "true"); o["gate-sdd-fast-check"] = {"enabled": True, "PreToolUse": [{"matcher": "x", "hooks": [{"type": "command", "command": "sh mine.sh"}]}]}
+d = project(o); rc, out = run(d, "--write", "--hooks-json")
+check("own-fast-group", rc == 1 and "gate-sdd-fast-check" in out and hooks(d) == o, f"{rc} {out[-300:]}")
 # A symlinked hooks file with copies pending: nothing written, and the reason is the link.
 d = project(render("v0.38", "true")); (d / ".agents/hooks/harness-checks.sh").unlink()
 real = d / "real-hooks.json"; (d / ".agents/hooks.json").rename(real); (d / ".agents/hooks.json").symlink_to(real)
