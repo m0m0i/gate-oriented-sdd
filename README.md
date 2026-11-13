@@ -177,7 +177,7 @@ git clone https://github.com/m0m0i/gate-oriented-sdd
 agy plugin install ./gate-oriented-sdd
 ```
 
-Then run `init` inside a project, as on Claude Code. On either harness it reads the repo before it asks you anything, runs each validator before adopting it, and verifies the gate is silent before declaring success.
+Then run `init` inside a project, as on Claude Code. On either harness it reads the repo before it asks you anything, runs each validator before adopting it, and verifies the gate is silent before declaring success. That check runs in the session's own shell, with the session's `PATH`, which a hook need not have: the gate first runs under the hook's `PATH` at the first turn end after an edit. `init` warns, and blocks nothing, when a validator's command resolves in the session's shell but not under the system directories alone.
 
 ### Keeping the gates current
 

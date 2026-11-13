@@ -14,12 +14,12 @@ Keep the list short. A check that grows to police every sentence becomes an obst
 editing prose, and prose that cannot be edited rots — which is a worse failure than the one
 this prevents.
 
-Forty-two today. A forty-third needs an argument, in the spec that proposes it, for why review cannot
+Forty-three today. A forty-fourth needs an argument, in the spec that proposes it, for why review cannot
 defend that sentence instead — "short" with no number attached is not a limit, and the list
 grows one defensible entry at a time. #146 added the twenty-second and twenty-third entries and moved this number
 with it, #26 the twenty-fourth, #79 the twenty-fifth, #256 the twenty-sixth without moving it, #263 the
 twenty-seventh and twenty-eighth, #262 the twenty-ninth, #166 the thirtieth, #84 the thirty-first to thirty-fourth
-and #239 the thirty-fifth and thirty-sixth, both without moving it, #304 the thirty-seventh, #320 the thirty-eighth and #329 the thirty-ninth to forty-first, #340 retired five and replaced them with five, without moving it, and #343 the forty-second; a cap that is not moved with the entry reads as already exceeded, and the next author
+and #239 the thirty-fifth and thirty-sixth, both without moving it, #304 the thirty-seventh, #320 the thirty-eighth and #329 the thirty-ninth to forty-first, #340 retired five and replaced them with five, without moving it, #343 the forty-second and #355 the forty-third; a cap that is not moved with the entry reads as already exceeded, and the next author
 cannot tell whether the list is at its limit or the sentence is stale — which is how this said twenty-five over twenty-six, and thirty over thirty-six.
 """
 
@@ -160,6 +160,19 @@ CONTRACTS = (
         "against a number nobody took; without the warnings a capped line reads as enough; "
         "and a re-run of init that lowered a value someone chose would reintroduce the "
         "block. #320 AC1–AC4, AC3a.",
+    ),
+    (
+        "skills/init/SKILL.md",
+        "compare `command -v <word>` in the session's shell with `env PATH=/usr/bin:/bin:/usr/sbin:/sbin sh -c 'command -v \"$1\"' sh <word>`, testing each for a non-zero status, and warn about every word that resolves only in the session's shell",
+        "init runs the validators and the gate by hand in the session's shell, and that pass is "
+        "recorded, so a hook's `PATH` is first tried at a turn end after an edit. A tool it "
+        "lacks then blocks every turn end until a person restarts the host (#355). This "
+        "comparison is the one place an install hears of it while that person is still "
+        "there. Review cannot defend it: the sentence reads as an optional caveat about the "
+        "by-hand run, so trimming it reads as concision, and every install still passes "
+        "`init`; the cost shows later, as that block. The needle holds the list of system "
+        "directories because a longer one, with Homebrew's added, would stop catching "
+        "Homebrew's tools. #355 AC7.",
     ),
     (
         "skills/init/SKILL.md",
