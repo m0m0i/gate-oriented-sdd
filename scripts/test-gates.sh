@@ -3282,11 +3282,10 @@ gbs_run() {
   done
 }
 
-# gbs_check <dir>: prints nothing and returns 0 when every block passes, else the first failures.
-gbs_check() {
-  python3 -I - "$1" "${gbs_utf8:-C}" "$ADR_PARA" <<'PY'
-import glob, json, os, sys
-d, utf8, para = sys.argv[1], sys.argv[2], sys.argv[3].encode()
+# gbs_expect is the Python each check of a block execs: expect(), that rule, and block_reason(),
+# the strict parse of one block's stdout.
+gbs_expect='
+import json
 def expect(b):
     out, i = [], 0
     while i < len(b):
@@ -3306,6 +3305,24 @@ def dup(pairs):
     if len(keys) != len(set(keys)):
         raise ValueError("duplicate key")
     return dict(pairs)
+def block_reason(out):
+    if not out.endswith(b"\n") or out.count(b"\n") != 1:
+        raise ValueError("not one line")
+    obj = json.loads(out.decode("utf-8"), object_pairs_hook=dup)
+    if set(obj) != {"decision", "reason"} or obj["decision"] != "continue":
+        raise ValueError("keys or decision")
+    r = obj["reason"]
+    if any(0xD800 <= ord(x) <= 0xDFFF for x in r):
+        raise ValueError("surrogate")
+    return r
+'
+
+# gbs_check <dir>: prints nothing and returns 0 when every block passes, else the first failures.
+gbs_check() {
+  python3 -I - "$1" "${gbs_utf8:-C}" "$ADR_PARA" "$gbs_expect" <<'PY'
+import glob, os, sys
+d, utf8, para = sys.argv[1], sys.argv[2], sys.argv[3].encode()
+exec(sys.argv[4])
 bad = []
 for f in sorted(glob.glob(os.path.join(d, "m*"))):
     if "." in os.path.basename(f):
@@ -3319,14 +3336,7 @@ for f in sorted(glob.glob(os.path.join(d, "m*"))):
             try:
                 if got_rc != rc:
                     raise ValueError(f"exit {got_rc}")
-                if not out.endswith(b"\n") or out.count(b"\n") != 1:
-                    raise ValueError("not one line")
-                obj = json.loads(out.decode("utf-8"), object_pairs_hook=dup)
-                if set(obj) != {"decision", "reason"} or obj["decision"] != "continue":
-                    raise ValueError("keys or decision")
-                r = obj["reason"]
-                if any(0xD800 <= ord(x) <= 0xDFFF for x in r):
-                    raise ValueError("surrogate")
+                r = block_reason(out)
                 if r != expect(msg):
                     raise ValueError(f"reason {r!r} != {expect(msg)!r}")
             except Exception as e:
@@ -12750,6 +12760,10 @@ PN_HEAD_HOST="Quality gate: a gating validator failed. These are the harness che
 PN_BARE="gate-sdd: exit 127: '$pn_miss' is not on the PATH this hook runs with."
 PN_OTHER="gate-sdd: exit 127, the shell's status for a command it could not find: the one this validator names, or one it runs, such as an 'env' shebang's interpreter or a script's tool."
 PN_OPEN='The PATH this hook ran with is: '
+# The timeout block's own header and remedy at a budget of 3 s the line set, and its cut-off line.
+PN_TB_HEAD="Quality gate: the validators did not finish within this gate's budget of 3 s, set by the '- Validator budget:' line in .steering/tech.md, so this turn is blocked rather than passed. A gate the harness kills at its timeout ends the turn as a pass, so this gate keeps a deadline of its own and blocks at it."
+PN_TB_FIX="To give it more time, write '- Validator budget: <seconds>' in .steering/tech.md, a whole number up to 590, or make the suite faster. A validator that alone needs more than 590 s belongs in CI rather than on the '- Validators:' line."
+PN_CUT='--- sleep 20 (cut off at the deadline)'
 pn_para() { # pn_para <bare|other> <harness> [<PATH>] — the paragraph a block with a 127 carries
   case "$1" in
     bare) _pp='That is the environment the host started this hook with, and no agent can change it from inside the session. A person can: ' ;;
@@ -12761,10 +12775,13 @@ pn_para() { # pn_para <bare|other> <harness> [<PATH>] — the paragraph a block 
   esac
   printf '%s%s\n%s' "$PN_OPEN" "${3-$PATH}" "$_pp"
 }
-pn_run() { # pn_run <repo> <harness> [<PATH>] — the gate as <harness> runs it: its status in $pn_rc, stderr in $pn_err, the decoded reason in $pn_rsn
-  pn_rc=$( GATE_SDD_HARNESS=$2; PATH=${3-$PATH}; export GATE_SDD_HARNESS PATH; t3_qg "$1" ); pn_rc=${pn_rc#exit=}
+pn_read() { # the block in $t3d/out and $t3d/err: stderr in $pn_err, the decoded reason in $pn_rsn
   pn_err=$(cat "$t3d/err")
   pn_rsn=$(python3 -I -c 'import json, sys; sys.stdout.buffer.write(json.loads(open(sys.argv[1], "rb").read().decode("utf-8"))["reason"].encode("utf-8"))' "$t3d/out" 2>&1)
+}
+pn_run() { # pn_run <repo> <harness> [<PATH>] — the gate as <harness> runs it: its status in $pn_rc, stderr in $pn_err, the decoded reason in $pn_rsn
+  pn_rc=$( GATE_SDD_HARNESS=$2; PATH=${3-$PATH}; export GATE_SDD_HARNESS PATH; t3_qg "$1" ); pn_rc=${pn_rc#exit=}
+  pn_read
 }
 pn_chan() { # pn_chan <tag> <harness> — prints nothing when the last pn_run blocked on both channels, with one text
   case "$2" in antigravity) _pc=0 ;; *) _pc=2 ;; esac
@@ -12775,6 +12792,7 @@ pn_seen() { # which of this section's texts the last block holds, for a failure'
   _ps=""
   case "$pn_err" in *"$PN_HEAD"*) _ps="$_ps main's-header" ;; esac
   case "$pn_err" in *"$PN_HEAD_HOST"*) _ps="$_ps the-host's-header" ;; esac
+  case "$pn_err" in *"$PN_TB_HEAD"*) _ps="$_ps the-timeout-header" ;; esac
   case "$pn_err" in *"is not on the PATH this hook runs with."*) _ps="$_ps AC1's-line" ;; esac
   case "$pn_err" in *"$PN_OTHER"*) _ps="$_ps AC2's-line" ;; esac
   case "$pn_err" in *"$PN_OPEN"*) _ps="$_ps the-paragraph" ;; esac
@@ -13013,6 +13031,187 @@ case "$agy" in *"'claude'"*|*"desktop app"*) c2="no(names Claude Code's)" ;; esa
 case "$o3:$nm" in exit=0:*"A person can: start 'agy' from a terminal"*) c3=ok ;; *) c3="no($o3)" ;; esac
 [ "$c1$c2$c3" = okokok ] && report "a 127's remedy is worded for the harness the gate runs under" ok \
   || report "a 127's remedy is worded for the harness the gate runs under" no "claude-code=$c1 antigravity=$c2 no-marker=$c3"
+
+# The timeout block, and the PATH's bytes. The parent's timeout block carries the line each 127
+# left in its tail and the same paragraph, and reads each printed failure's class from `progress`
+# alone. Both blocks print a PATH they did not write, which may hold any byte. The timed runs go
+# as cases 294 to 309 do: concurrently through t3_run, at a budget of 3 s with a 20 s validator
+# last, judged once all have finished, each with an elapsed bound beside its outcome.
+pn_tb() { # pn_tb <name> — a timed run's block, read as pn_run leaves one, and its elapsed time in $pn_ms
+  cp "$t3d/$1.run/out" "$t3d/out"; cp "$t3d/$1.run/err" "$t3d/err"
+  pn_rc=$(t3f "$1.run/exit"); pn_ms=$(t3f "$1.run/ms"); pn_read
+}
+pn_jobs=""
+pn_go() { # pn_go <name> <harness> <validators> [<PATH>] — a fixture at a budget of 3 s, holding say.sh, and its gate started in the background
+  _pg=$(t3_repo "$1" "$3" '- Validator budget: 3')
+  printf '#!/bin/sh\necho "%s"\nexit 1\n' "$PN_BARE" > "$_pg/say.sh"; chmod +x "$_pg/say.sh"
+  ( GATE_SDD_HARNESS=$2; PATH=${4-$PATH}; export GATE_SDD_HARNESS PATH; t3_run "$1" "$_pg" hooks/quality-gate.sh ) & pn_jobs="$pn_jobs $!"
+}
+# Two PATH entries of bytes no gate wrote, built by printf and never typed: (a) a tab, both
+# quotes, a backslash, `%s` and a two-byte character; (b) a lone byte that is not UTF-8.
+pn_pa="$t3d/$(printf 'pn\ta\047b"c\\d%%se\303\251f'):$PATH"; printf '%s' "$pn_pa" > "$t3d/pn-path-a"
+pn_pb="$t3d/$(printf 'pn\377ff'):$PATH"; printf '%s' "$pn_pb" > "$t3d/pn-path-b"
+pn_bytes() { # pn_bytes <tag> <stdout> <stderr> <exit> <wanted exit> <PATH file> <a|b> <header> — prints nothing when the block holds that PATH: raw on stderr, and in a strict reason that is stderr's text as gbs_expect decodes it
+  python3 -I - "$@" "$PN_OPEN" "$ADR_PARA" "$gbs_expect" <<'PY'
+import sys
+tag, out, err, rc, want, pathf, kind, head, opening, para, lib = sys.argv[1:12]
+exec(lib)
+try:
+    e, path = open(err, "rb").read(), open(pathf, "rb").read()
+    shown = expect(path)
+    if kind == "a":
+        if shown.encode("utf-8") != path or not all(x in shown for x in (chr(9), chr(39), chr(34), chr(92), "%s", chr(0xE9))):
+            raise ValueError("the fixture's PATH is not (a)'s: " + repr(path[:80]))
+    elif bytes([0xFF]) not in path or "pn" + chr(0xFFFD) + "ff" not in shown or shown.count(chr(0xFFFD)) != 1:
+        raise ValueError("the fixture's PATH is not (b)'s: " + repr(path[:80]))
+    if rc != want:
+        raise ValueError(f"exit {rc}")
+    r = block_reason(open(out, "rb").read())
+    if not e.startswith(head.encode() + b"\n") or not e.endswith(("\n\n" + para + "\n").encode()):
+        raise ValueError("stderr is not this block: " + repr(e[:80]))
+    if e.count(b"\n\n" + opening.encode() + path + b"\n") != 1:
+        raise ValueError("stderr does not hold the PATH's bytes, once")
+    if r != expect(e[:-1]):
+        raise ValueError("the reason is not stderr's text, decoded")
+    if r.count("\n\n" + opening + shown + "\n") != 1:
+        raise ValueError("the reason does not hold the PATH, once")
+except Exception as x:
+    print(f"[{tag}: {str(x)[:200]}] ", end="")
+PY
+}
+
+for h in claude-code antigravity; do
+  pn_go "pn-tb-bare-$h" "$h" "$pn_miss, sleep 20"
+  pn_go "pn-tb-said-$h" "$h" "./say.sh, sleep 20"
+  pn_go "pn-tb-a-$h" "$h" "$pn_miss, sleep 20" "$pn_pa"
+  pn_go "pn-tb-b-$h" "$h" "$pn_miss, sleep 20" "$pn_pb"
+done
+pn_go pn-tb-both claude-code "$pn_miss, sh -c 'exit 127', sleep 20"
+pn_go pn-tb-other antigravity "sh -c 'exit 127', sleep 20"
+
+# 429. #355 AC6 — the child's block is a block whatever bytes the PATH holds. Case 421's fixture
+#      under each PATH, on both harnesses and in both locales: stdout is one strict JSON object,
+#      stderr holds the PATH's raw bytes once, and the reason is stderr's text as gbs_expect
+#      decodes it, so (a)'s PATH is there exactly and (b)'s byte is one U+FFFD. RED on main,
+#      which prints no PATH. RED-CAPABLE under "print the PATH as part of the format", which
+#      loses (a)'s `%s`.
+bad=""
+for k in a b; do
+  case "$k" in a) p=$pn_pa ;; *) p=$pn_pb ;; esac
+  for h in claude-code antigravity; do
+    case "$h" in antigravity) want=0 ;; *) want=2 ;; esac
+    for loc in C "${gbs_utf8:-C}"; do
+      o=$( LC_ALL=$loc; GATE_SDD_HARNESS=$h; PATH=$p; export LC_ALL GATE_SDD_HARNESS PATH; t3_qg "$t3d/pn-bare" )
+      bad="$bad$(pn_bytes "$k/$h/$loc" "$t3d/out" "$t3d/err" "${o#exit=}" "$want" "$t3d/pn-path-$k" "$k" "$PN_HEAD_HOST")"
+    done
+  done
+done
+[ -z "$bad" ] && report "the child's block holds the PATH whatever its bytes: raw on stderr, strict JSON in the reason" ok \
+  || report "the child's block holds the PATH whatever its bytes: raw on stderr, strict JSON in the reason" no "$bad"
+
+for p in $pn_jobs; do while kill -0 "$p" 2>/dev/null; do wait "$p"; done; done
+
+# 430. #355 AC1, AC2 — the timeout block. A 127 before the validator the deadline cut off keeps
+#      its line under its own output, and the block carries the paragraph once, after the
+#      failures and before the timeout block's own remedy, under the timeout block's own header:
+#      AC1's on both harnesses, AC1's when an AC2 127 follows an AC1 one, and AC2's for an AC2
+#      127 alone. RED on main, whose timeout block has neither. RED-CAPABLE under "the paragraph
+#      is the child's alone", "every 127 the timeout block prints is AC1's" and "the last 127's
+#      class is the block's".
+bad=""
+for h in claude-code antigravity; do
+  pn_tb "pn-tb-bare-$h"; bad="$bad$(pn_chan "AC1/$h" "$h")"
+  case "$pn_err" in
+    "$PN_TB_HEAD
+
+--- $pn_miss
+"*"
+$PN_BARE
+$PN_CUT
+
+$(pn_para bare "$h")
+
+$PN_TB_FIX
+
+$ADR_PARA") ;;
+    *) bad="$bad[AC1/$h: $(pn_seen)] " ;;
+  esac
+  rest=${pn_err#*"$PATH"}; case "$rest" in *"$PATH"*) bad="$bad[AC1/$h: the PATH is printed more than once] " ;; esac
+  [ "${pn_ms:-99999}" -le 8000 ] || bad="$bad[AC1/$h: $pn_ms ms] "
+done
+pn_tb pn-tb-both; bad="$bad$(pn_chan AC1+AC2 claude-code)"
+case "$pn_err" in
+  "$PN_TB_HEAD
+
+--- $pn_miss
+"*"
+$PN_BARE
+--- sh -c 'exit 127'
+$PN_OTHER
+$PN_CUT
+
+$(pn_para bare claude-code)
+
+$PN_TB_FIX
+
+$ADR_PARA") ;;
+  *) bad="$bad[AC1+AC2: $(pn_seen)] " ;;
+esac
+rest=${pn_err#*"$PN_OPEN"}; case "$rest" in *"$PN_OPEN"*) bad="$bad[AC1+AC2: more than one paragraph] " ;; esac
+[ "${pn_ms:-99999}" -le 8000 ] || bad="$bad[AC1+AC2: $pn_ms ms] "
+pn_tb pn-tb-other; bad="$bad$(pn_chan AC2 antigravity)"
+[ "$pn_err" = "$PN_TB_HEAD
+
+--- sh -c 'exit 127'
+$PN_OTHER
+$PN_CUT
+
+$(pn_para other antigravity)
+
+$PN_TB_FIX
+
+$ADR_PARA" ] || bad="$bad[AC2: $(pn_seen); stderr: $(printf '%s' "$pn_err" | head -c 500)] "
+[ "${pn_ms:-99999}" -le 8000 ] || bad="$bad[AC2: $pn_ms ms] "
+[ -z "$bad" ] && report "the timeout block carries a 127's line and the paragraph, under its own header and remedy" ok \
+  || report "the timeout block carries a 127's line and the paragraph, under its own header and remedy" no "$bad"
+
+# 431. #355 AC3, Design step 4 — a 127 is known from `progress`, never from a tail's text. A
+#      validator that prints AC1's line itself and exits 1, before the cut-off: the timeout block
+#      is main's, byte for byte, with that line as the output it is and no paragraph. Green on
+#      main, where it is the block being held. RED-CAPABLE under "find a 127 by the line in its
+#      tail".
+want="$PN_TB_HEAD
+
+--- ./say.sh
+$PN_BARE
+$PN_CUT
+
+$PN_TB_FIX
+
+$ADR_PARA"
+bad=""
+for h in claude-code antigravity; do
+  pn_tb "pn-tb-said-$h"; bad="$bad$(pn_chan "$h" "$h")"
+  [ "$pn_err" = "$want" ] || bad="$bad[$h: $(pn_seen); stderr: $(printf '%s' "$pn_err" | head -c 500)] "
+  [ "${pn_ms:-99999}" -le 8000 ] || bad="$bad[$h: $pn_ms ms] "
+done
+[ -z "$bad" ] && report "a validator that prints a 127's line and exits 1 leaves the timeout block main's, byte for byte" ok \
+  || report "a validator that prints a 127's line and exits 1 leaves the timeout block main's, byte for byte" no "$bad"
+
+# 432. #355 AC6 — the timeout block is a block whatever bytes the PATH holds: case 429's check,
+#      on the block the parent builds, on both harnesses. RED on main, which prints no PATH.
+#      RED-CAPABLE under "print the PATH as part of the format".
+bad=""
+for k in a b; do
+  for h in claude-code antigravity; do
+    case "$h" in antigravity) want=0 ;; *) want=2 ;; esac
+    n="pn-tb-$k-$h"; ms=$(t3f "$n.run/ms")
+    bad="$bad$(pn_bytes "$k/$h" "$t3d/$n.run/out" "$t3d/$n.run/err" "$(t3f "$n.run/exit")" "$want" "$t3d/pn-path-$k" "$k" "$PN_TB_HEAD")"
+    [ "${ms:-99999}" -le 8000 ] || bad="$bad[$k/$h: $ms ms] "
+  done
+done
+[ -z "$bad" ] && report "the timeout block holds the PATH whatever its bytes: raw on stderr, strict JSON in the reason" ok \
+  || report "the timeout block holds the PATH whatever its bytes: raw on stderr, strict JSON in the reason" no "$bad"
 
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1

@@ -198,7 +198,7 @@ Decided rather than asked, as design calls:
   - AC5: with the paragraph cut out by its opening words, and the printed `PATH` value removed, the added text holds none of `hooks.json`, `settings.json`, `git config`, `tech.md`, `Validators`, `~/`, `export` or `launchctl`. The paragraph's presence makes this red on `main`.
   - The per-harness remedy wording, one row each.
   Then the fix, Design steps 1–6, the comment at `:466-469`, and the table rebuilt.
-- [ ] **T2:** the timeout block and AC6. The rows:
+- [x] **T2:** the timeout block and AC6. The rows:
   - an AC1 127, followed by a validator cut off at a 3 s budget: the timeout block carries the line and the paragraph, and keeps its own header;
   - a validator that prints the AC1 line itself and exits 1, followed by the cut-off: no paragraph, and the block is `main`'s;
   - AC6, in both blocks: (a) a `PATH` entry holding a tab, `'`, `"`, `\`, `%s` and `é` (C3 A9), where the decoded `reason` holds the `PATH` exactly and stderr the raw bytes; (b) one holding a lone `\377`, built with `printf`, never typed, where the `reason` has U+FFFD at that place and stderr the raw byte. Both are checked as strict UTF-8, against the suite's `gbs_expect` decoder.

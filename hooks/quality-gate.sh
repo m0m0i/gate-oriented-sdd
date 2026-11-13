@@ -348,9 +348,10 @@ The last pass record at $_qb_r could not be removed, so the next turn end may sk
   # The timeout block (AC1, AC2), built once the watchdog has finished its kill, from what the
   # child recorded: the validator it cut off with the tail of its v.<n>, whatever it wrote before
   # it died; each one that failed before that, with its tail as an ordinary failure has it; and
-  # each one after the last start, which never ran. Then, where the watchdog could not walk the
-  # child's tree, that only the child was killed (AC4); and a remedy that follows from what set
-  # the budget.
+  # each one after the last start, which never ran. Then, with a 127 among those failures, the
+  # paragraph the child's block carries, by the class `progress` holds for each and never by a
+  # tail's text (#355); where the watchdog could not walk the child's tree, that only the child
+  # was killed (AC4); and a remedy that follows from what set the budget.
   qg_timeout_block() {
     validators=$(gate_steering_value .steering/tech.md Validators)
     _tb_cut=$(qg_open)
@@ -361,7 +362,7 @@ The last pass record at $_qb_r could not be removed, so the next turn end may sk
     elif [ -z "$_tb_cut" ]; then
       printf ' Every validator it started had finished, and it was cut off before it reached a verdict.'
     fi
-    _tb_n=0; _tb_body=""
+    _tb_n=0; _tb_body=""; _tb_127=""
     while IFS= read -r _tb_c; do
       [ -n "$_tb_c" ] || continue
       _tb_n=$((_tb_n + 1))
@@ -374,6 +375,11 @@ The last pass record at $_qb_r could not be removed, so the next turn end may sk
       elif grep -qx "fail $_tb_n" "$run/progress" 2>/dev/null; then
         _tb_body="$_tb_body
 --- $_tb_c"
+        if grep -qx "127 $_tb_n bare" "$run/progress" 2>/dev/null; then
+          _tb_127=bare
+        elif grep -qx "127 $_tb_n other" "$run/progress" 2>/dev/null; then
+          _tb_127=${_tb_127:-other}
+        fi
       else
         continue
       fi
@@ -384,6 +390,7 @@ $_tb_t"
 $(qg_cmds)
 EOF
     [ -z "$_tb_body" ] || printf '\n%s' "$_tb_body"
+    [ -z "$_tb_127" ] || qg_path_note "$_tb_127"
     printf '%s' "$qg_nw"
     printf '\n\n'
     if [ "$qg_budget" -ge "$_gate_qg_max" ]; then
