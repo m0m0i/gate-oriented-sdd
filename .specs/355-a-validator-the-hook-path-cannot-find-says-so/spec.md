@@ -204,7 +204,7 @@ Decided rather than asked, as design calls:
   - AC6, in both blocks: (a) a `PATH` entry holding a tab, `'`, `"`, `\`, `%s` and `é` (C3 A9), where the decoded `reason` holds the `PATH` exactly and stderr the raw bytes; (b) one holding a lone `\377`, built with `printf`, never typed, where the `reason` has U+FFFD at that place and stderr the raw byte. Both are checked as strict UTF-8, against the suite's `gbs_expect` decoder.
   Red first, then the timeout block's half, and the table rebuilt.
 - [x] **T3:** AC7. `init`'s sentence, item 5's report, the forty-third pin with its docstring, and both READMEs. Red: the pin fails before the sentence exists.
-- [ ] **T4:** AC10, the real run on `agy`, in a fixture under `~/agent-work-dir/`.
+- [x] **T4:** AC10, the real run on `agy`, in a fixture under `~/agent-work-dir/`.
   - **No install:** `agy plugin install` changes the machine-wide plugin set (A10), and the installed v0.41.0 stays as it is. The hooks file and the gates are copied into the fixture's `.agents/` by hand, in `init`'s layout: first `main`'s, then this branch's.
   - **The run:** headless, `--sandbox --mode accept-edits`, a trusted folder.
   - **Recorded from inside the hook:** a validator that writes the hook's `PATH` and `command -v npm` to a file.
