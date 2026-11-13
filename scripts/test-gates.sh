@@ -10684,8 +10684,8 @@ done
 # own files() comment calls the first of those "the worst possible failure mode for a guard"
 # and then does not check for it. #39.
 
-leak_repo() {  # $1 = name. A git repo holding only the guard, which SELF excludes: the
-               # work-set is therefore empty by construction, with no adversarial setup.
+leak_repo() {  # $1 = name. A git repo holding only the guard's own copy, which the guard scans
+               # like any other file: a work-set of one, before a case adds to it (#357).
                #
                # `lkg-`, not `lk-`: $TMP is ONE flat namespace shared by every fixture here, and
                # lock_repo already owns lk-*. The first draft of this case reused lk-empty, got
@@ -10711,9 +10711,12 @@ run_leak() {  # $1 = repo; $2 = the pattern file, `-` to name none; $3 = HOME; $
     sh scripts/check-leakage.sh >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
 }
 
+# An empty work-set takes the guard's copy out of it: untracked, and ignored (#357).
 r=$(leak_repo lkg-empty)
+( cd "$r" && git rm -q --cached scripts/check-leakage.sh && mkdir -p .git/info \
+  && printf 'scripts/\n' >> .git/info/exclude ) >/dev/null 2>&1
 out=$(run_leak "$r")
-[ "$out" = "1" ] && c0=ok || c0=no
+[ "$out" = "1" ] && grep -q 'work-set is empty' "$TMP/lkerr" && c0=ok || c0=no
 case "$(cat "$TMP/lkout")" in *clean*) c1=no ;; *) c1=ok ;; esac
 
 # The control, and the half that stops the fix from being "fail whenever it saw nothing":
@@ -10721,7 +10724,7 @@ case "$(cat "$TMP/lkout")" in *clean*) c1=no ;; *) c1=ok ;; esac
 r=$(leak_repo lkg-clean); printf 'nothing to see\n' > "$r/note.md"
 out=$(run_leak "$r")
 [ "$out" = "0" ] && c2=ok || c2=no
-case "$(cat "$TMP/lkout")" in *"1 file"*) c3=ok ;; *) c3=no ;; esac
+case "$(cat "$TMP/lkout")" in *"2 file(s) scanned"*) c3=ok ;; *) c3=no ;; esac
 
 # A file in the work-set it cannot open: `xargs grep … 2>/dev/null` swallowed the
 # "Permission denied" and the scan went round it in silence.
@@ -10745,7 +10748,7 @@ fi
 r=$(leak_repo lkg-hit); printf 'see ADR-%s for the rationale\n' 0001 > "$r/doc.md"
 out=$(run_leak "$r")
 [ "$out" = "1" ] && c6=ok || c6=no
-case "$(cat "$TMP/lkerr")" in *"cross-reference id"*) c7=ok ;; *) c7=no ;; esac
+grep -Fxq -e 'LEAK [public] doc.md line(s): 1' "$TMP/lkerr" && c7=ok || c7=no
 
 # A path git C-quotes, and a path holding a space. `core.quotePath` defaults to TRUE, so one
 # byte above 0x80 arrives as the literal `"caf\303\251.md"` — a string `[ -r ]` cannot open,
@@ -10761,7 +10764,7 @@ printf 'nothing to see\n' > "$r/$odd.md"
 printf 'nothing to see\n' > "$r/my file.md"
 out=$(run_leak "$r")
 [ "$out" = "0" ] && c8=ok || c8=no
-case "$(cat "$TMP/lkout")" in *"2 file"*) c9=ok ;; *) c9=no ;; esac
+case "$(cat "$TMP/lkout")" in *"3 file(s) scanned"*) c9=ok ;; *) c9=no ;; esac
 
 # Counted is not scanned. Plant a real hit in each odd path: if either is only counted, the
 # guard stays green and the count keeps saying it read them.
@@ -10793,7 +10796,7 @@ rm "$r/note.md"
 out=$(run_leak "$r")
 [ "$out" = "0" ] && c13=ok || c13=no
 case "$(cat "$TMP/lkout")" in *"not in the working tree"*) c14=ok ;; *) c14=no ;; esac
-case "$(cat "$TMP/lkout")" in *"1 file(s) scanned"*) c15=ok ;; *) c15=no ;; esac
+case "$(cat "$TMP/lkout")" in *"2 file(s) scanned"*) c15=ok ;; *) c15=no ;; esac
 
 # A tracked file under a directory the process cannot SEARCH. `[ -e ]` is stat(), which
 # returns EACCES through an unsearchable prefix, and `test` reports that as false — so the
@@ -10932,6 +10935,113 @@ case "$(cat "$TMP/lkerr")" in *"$TMP/lkg-home/.config/gate-sdd/leakage-patterns"
   && report "check-leakage loads its three sections from the named file, else XDG_CONFIG_HOME, else HOME" ok \
   || report "check-leakage loads its three sections from the named file, else XDG_CONFIG_HOME, else HOME" no \
      "exact=$s0 exact-other-case=$s1 fold=$s2 warn=$s3 crlf=$s4 no-eol=$s5 home=$d0 home-other=$d1 xdg=$d2 xdg-first=$d3 named-first=$d4 no-file=$d5"
+
+# 423. #357 AC3, AC4 — a hit in a file's contents is reported as its tier, the file and the line
+#      numbers. The report reaches a public CI log, so neither stream holds the text that matched
+#      or the pattern, and it says the text is withheld. A warning does not change the status.
+LKG_ID=$(printf 'ADR-%s' 0001)   # the public tier's hit, assembled here as in case 155
+lk_report() {  # $1 = the exit status wanted, then each line the report must hold. Reads the last
+               # run_leak, whose status is $out. Prints ok, or what is wrong.
+  [ "$out" = "$1" ] || { printf 'exit=%s' "$out"; return; }
+  shift
+  for want in "$@"; do
+    grep -Fxq -e "$want" "$TMP/lkerr" || { printf 'no line <%s>' "$want"; return; }
+  done
+  [ "$(grep -cE '^(LEAK|WARNING) ' "$TMP/lkerr")" = "$#" ] || { printf 'other report lines'; return; }
+  grep -q 'withheld on purpose' "$TMP/lkerr" || { printf 'not said to be withheld'; return; }
+  cat "$TMP/lkout" "$TMP/lkerr" | grep -qi -e 'zq_' -e "$LKG_ID" && { printf 'the matched text is printed'; return; }
+  printf ok
+}
+
+r=$(leak_repo lkg-r-fail)
+printf '%s\n' 'a clean line' 'a line holding Zq_Exact here' 'clean again' 'Zq_Exact and Zq_Exact' > "$r/note.md"
+out=$(run_leak "$r"); r0=$(lk_report 1 'LEAK [fail] note.md line(s): 2 4')
+
+r=$(leak_repo lkg-r-fold)
+printf '%s\n' 'clean' 'clean' 'a line holding ZQ_Fold here' > "$r/note.md"
+out=$(run_leak "$r"); r1=$(lk_report 1 'LEAK [fail ignore-case] note.md line(s): 3')
+
+r=$(leak_repo lkg-r-public); printf 'see %s for the rationale\n' "$LKG_ID" > "$r/doc.md"
+out=$(run_leak "$r"); r2=$(lk_report 1 'LEAK [public] doc.md line(s): 1')
+
+r=$(leak_repo lkg-r-warn); printf '%s\n' 'a line holding ZQ_Warn here' 'clean' > "$r/note.md"
+out=$(run_leak "$r"); r3=$(lk_report 0 'WARNING [warn ignore-case] note.md line(s): 1')
+case "$(cat "$TMP/lkout")" in *"2 file(s) scanned, private patterns loaded"*) r3="$r3+clean" ;; esac
+
+# Every tier in one run, in a path with a space, a path beginning with `-`, and a file grep
+# calls binary: the second read for the line numbers is handed the same odd paths.
+r=$(leak_repo lkg-r-all)
+printf '%s\n' 'clean' 'Zq_Exact' > "$r/my file.md"
+printf '%s\n' 'zq_FOLD' > "$r/-dash.md"
+printf '%s\n' 'clean' 'clean' 'zq_warn' "$LKG_ID" > "$r/both.md"
+printf 'clean\n\000 Zq_Exact\n' > "$r/blob.bin"
+out=$(run_leak "$r")
+r4=$(lk_report 1 'LEAK [fail] my file.md line(s): 2' 'LEAK [fail ignore-case] -dash.md line(s): 1' \
+  'WARNING [warn ignore-case] both.md line(s): 3' 'LEAK [public] both.md line(s): 4' \
+  'LEAK [fail] blob.bin line(s): 2')
+
+# The control: no hit says nothing on stderr, and the clean line says the private patterns ran.
+r=$(leak_repo lkg-r-clean); printf 'nothing to see\n' > "$r/note.md"
+out=$(run_leak "$r")
+[ "$out" = 0 ] && [ ! -s "$TMP/lkerr" ] \
+  && grep -q '2 file(s) scanned, private patterns loaded' "$TMP/lkout" && r5=ok || r5=no
+
+[ "$r0 $r1 $r2 $r3 $r4 $r5" = "ok ok ok ok+clean ok ok" ] \
+  && report "check-leakage reports a tier, a file and line numbers, and never the text that matched" ok \
+  || report "check-leakage reports a tier, a file and line numbers, and never the text that matched" no \
+     "fail=$r0 fold=$r1 public=$r2 warn=$r3 all=$r4 clean=$r5"
+
+# 424. #357 AC3 — a path that matches is reported by its position in the listing and never by
+#      name, because the name is the text. A hit inside such a file is located by that position
+#      too. Every file is committed, so the listing is the index in its sorted order.
+lk_commit() { ( cd "$1" && git add -A && git commit -qm two ) >/dev/null 2>&1; }
+
+r=$(leak_repo lkg-n-fail); mkdir -p "$r/sub"
+for f in Zq_Exact.txt a.md b.md sub/a-Zq_Exact-b.md; do printf 'nothing to see\n' > "$r/$f"; done
+lk_commit "$r"
+out=$(run_leak "$r"); n0=$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1 5')
+case "$(cat "$TMP/lkout" "$TMP/lkerr")" in *sub/*) n0="$n0+named" ;; esac
+grep -q 'git ls-files --cached --others --exclude-standard' "$TMP/lkerr" || n0="$n0+no-listing-command"
+
+r=$(leak_repo lkg-n-warn); printf 'nothing to see\n' > "$r/ZQ_Warn.md"
+lk_commit "$r"
+out=$(run_leak "$r"); n1=$(lk_report 0 'WARNING [warn ignore-case] path number(s) in the listing: 1')
+
+r=$(leak_repo lkg-n-both); printf '%s\n' 'clean' 'a line holding ZQ_Warn here' > "$r/a-zq_FOLD.md"
+lk_commit "$r"
+out=$(run_leak "$r")
+n2=$(lk_report 1 'LEAK [fail ignore-case] path number(s) in the listing: 1' \
+  'WARNING [warn ignore-case] path number 1 in the listing, line(s): 2')
+
+# An index entry with no working-tree file still has a name, and the name is still in the index.
+r=$(leak_repo lkg-n-absent)
+printf 'nothing to see\n' > "$r/Zq_Exact.md"; printf 'nothing to see\n' > "$r/keep.md"
+lk_commit "$r"; rm "$r/Zq_Exact.md"
+out=$(run_leak "$r"); n3=$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1')
+
+[ "$n0 $n1 $n2 $n3" = "ok ok ok ok" ] \
+  && report "check-leakage reports a matching path by its position in the listing, not by name" ok \
+  || report "check-leakage reports a matching path by its position in the listing, not by name" no \
+     "fail=$n0 warn=$n1 path-and-contents=$n2 absent=$n3"
+
+# 425. #357 — the guard scans its own text like any other file, so a private word written back
+#      into the script is caught, in the private tiers and in the public one.
+lk_lines=$(wc -l < "$ROOT/scripts/check-leakage.sh"); lk_lines=$((lk_lines + 1))
+r=$(leak_repo lkg-self); printf 'nothing to see\n' > "$r/note.md"
+printf '# %s\n' 'Zq_Exact' >> "$r/scripts/check-leakage.sh"
+out=$(run_leak "$r"); g0=$(lk_report 1 "LEAK [fail] scripts/check-leakage.sh line(s): $lk_lines")
+r=$(leak_repo lkg-self-public); printf 'nothing to see\n' > "$r/note.md"
+printf '# see %s\n' "$LKG_ID" >> "$r/scripts/check-leakage.sh"
+out=$(run_leak "$r"); g1=$(lk_report 1 "LEAK [public] scripts/check-leakage.sh line(s): $lk_lines")
+# And the copy as shipped is clean: the public tier's own expression does not match itself.
+r=$(leak_repo lkg-self-clean)
+out=$(run_leak "$r")
+[ "$out" = 0 ] && grep -q '1 file(s) scanned, private patterns loaded' "$TMP/lkout" && g2=ok || g2="exit=$out"
+
+[ "$g0 $g1 $g2" = "ok ok ok" ] \
+  && report "check-leakage scans its own script, and catches a pattern written into it" ok \
+  || report "check-leakage scans its own script, and catches a pattern written into it" no \
+     "private=$g0 public=$g1 as-shipped=$g2"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
