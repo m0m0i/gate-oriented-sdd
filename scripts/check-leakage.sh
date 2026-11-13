@@ -47,8 +47,9 @@ pattern_fault() {  # $1 = the fault
   echo "  That is \$GATE_SDD_LEAKAGE_PATTERNS, else \${XDG_CONFIG_HOME:-\$HOME/.config}/gate-sdd/leakage-patterns." >&2
   echo "  The file holds one extended regular expression per line, each under [fail]," >&2
   echo "  [fail ignore-case] or [warn ignore-case], and at least one of them fails. Blank lines" >&2
-  echo "  and lines starting with # are dropped. CONTRIBUTING.md says what to write in it" >&2
-  echo "  without private context. A run with no list is not a pass." >&2
+  echo "  and lines starting with # are dropped, and a line that ends in a space or a tab is" >&2
+  echo "  refused. CONTRIBUTING.md says what to write in it without private context. A run with" >&2
+  echo "  no list is not a pass." >&2
   exit 1
 }
 
@@ -73,15 +74,20 @@ load_private() {
   tr -d '\r' 2>/dev/null < "$PATTERNS" > "$TIERS/list" || pattern_fault "the file cannot be read"
 
   # A blank line is dropped because an empty expression matches every line.
+  # A space or a tab that ends a line is part of its expression, and after a section header it
+  # makes the header an expression of the section above, so the line is a fault (#357).
+  tab=$(printf '\t')
   section=""
   at=0
   orphans=""
+  trailing=""
   while IFS= read -r line || [ -n "$line" ]; do
     at=$((at + 1))
     case "$line" in
       '#'*) continue ;;
       '[fail]'|'[fail ignore-case]'|'[warn ignore-case]')
         section=${line#?}; section=${section%?}; continue ;;
+      *[![:space:]]*' '|*[![:space:]]*"$tab") trailing="$trailing $at"; continue ;;
       *[![:space:]]*) ;;
       *) continue ;;
     esac
@@ -89,10 +95,12 @@ load_private() {
       orphans="$orphans $at"
       continue
     fi
-    printf '%s\n' "$line" >> "$TIERS/$section"
-    printf '%s\n' "$at" >> "$TIERS/$section.at"
+    # A pattern that is not written is a pattern not run, which must not read as a pass (#357).
+    { printf '%s\n' "$line" >> "$TIERS/$section" && printf '%s\n' "$at" >> "$TIERS/$section.at"; } \
+      || pattern_fault "a pattern could not be written to the temporary directory the tiers are read from"
   done < "$TIERS/list"
 
+  [ -z "$trailing" ] || pattern_fault "line(s)$trailing end in a space or a tab"
   [ -z "$orphans" ] || pattern_fault "line(s)$orphans hold a pattern outside any section"
 
   # An expression grep cannot compile makes every scan exit above 1 into a discarded stderr, which
