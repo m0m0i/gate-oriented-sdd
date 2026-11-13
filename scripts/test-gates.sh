@@ -11296,6 +11296,50 @@ done
   || report "CONTRIBUTING.md says where the patterns live, and its example is a file the guard loads" no \
      "example=$m0 loads=$m1 own-page=$m2 page-control=$m3 named=$m4"
 
+# 430. #357 AC9 — the tiers are files in a directory mktemp makes. With no directory, or with one
+#      the public tier cannot be written into, the guard has nothing to scan with and says so on
+#      exit 1. Under --public-only that tier is the only one, so a run that went on without it
+#      would read nothing and call the tree clean. The mktemp is a stand-in on PATH: a real one
+#      may ignore a TMPDIR that is not there, and a stand-in needs no permission to be enforced.
+lk_shim() {  # $1 = name, then the lines of a mktemp that stands in for the real one. Prints the
+             # directory to put first on PATH.
+  lk_d="$TMP/lkg-shim-$1"; mkdir -p "$lk_d"; shift
+  { printf '%s\n' '#!/bin/sh'; printf '%s\n' "$@"; } > "$lk_d/mktemp"; chmod +x "$lk_d/mktemp"
+  printf '%s' "$lk_d"
+}
+lk_tiers() {  # $1 = the stand-in's directory, $2 = the fault's words, then the guard's arguments.
+              # Runs the guard in $lk_r under that mktemp. Prints ok, or what is wrong.
+  lk_d=$1; lk_w=$2; shift 2
+  out=$(PATH="$lk_d:$PATH"; export PATH; run_leak "$lk_r" "" "" "" "$@"); all=$(cat "$TMP/lkout" "$TMP/lkerr")
+  [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
+  case "$all" in *clean*) printf 'says clean'; return ;; esac
+  case "$all" in *"$lk_w"*) ;; *) printf 'fault not named'; return ;; esac
+  printf ok
+}
+lk_r=$(leak_repo lkg-t-tiers); printf 'nothing to see\n' > "$lk_r/note.md"
+
+# The control: under the real mktemp this tree is clean, with the private patterns and without.
+out=$(run_leak "$lk_r"); [ "$out" = 0 ] && t0=ok || t0="exit=$out"
+out=$(run_leak "$lk_r" "" "" "" --public-only); [ "$out" = 0 ] || t0="$t0+public-only-exit=$out"
+
+# No directory: mktemp fails, or prints a path where there is none.
+lk_s=$(lk_shim fails 'exit 1')
+t1=$(lk_tiers "$lk_s" 'mktemp -d made no directory')
+t2=$(lk_tiers "$lk_s" 'mktemp -d made no directory' --public-only)
+lk_s=$(lk_shim no-dir "printf '%s\\n' '$TMP/lkg-tiers-not-made'")
+t3=$(lk_tiers "$lk_s" 'mktemp -d made no directory')
+t4=$(lk_tiers "$lk_s" 'mktemp -d made no directory' --public-only)
+
+# A directory the public tier cannot be written into: a directory already has its name.
+lk_s=$(lk_shim no-write "mkdir -p '$TMP/lkg-tiers/public' && printf '%s\\n' '$TMP/lkg-tiers'")
+t5=$(lk_tiers "$lk_s" 'the public tier could not be written' --public-only)
+t6=$(lk_tiers "$lk_s" 'the public tier could not be written')
+
+[ "$t0 $t1 $t2 $t3 $t4 $t5 $t6" = "ok ok ok ok ok ok ok" ] \
+  && report "check-leakage fails when it has no directory for its tiers, or cannot write the public one" ok \
+  || report "check-leakage fails when it has no directory for its tiers, or cannot write the public one" no \
+     "control=$t0 mktemp-fails=$t1/$t2 no-directory=$t3/$t4 no-public-tier=$t5/$t6"
+
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
 # #145. check-version-bump.py must include rules/ in SHIPPED so any change
