@@ -12734,6 +12734,286 @@ EOF
 [ "$cs_out" = ok ] && report "the copy set is stated once, in the table, and cited elsewhere" ok \
   || report "the copy set is stated once, in the table, and cited elsewhere" no "$cs_out"
 
+# --- quality gate: a validator the hook's PATH cannot find (#355) -----------------------
+#
+# A hook runs with the PATH its host started it with, which need not be the session's shell's. A
+# validator whose command that PATH does not hold exits 127, and the gate blocked on it with the
+# header it gives a failure of the project's code and a remedy aimed at the agent, which cannot
+# change a host's environment. The block now keeps each status: a 127 gets one line after its
+# output, and the block one paragraph with the PATH and what a person can do. These cases drive
+# the child's block through t3_repo and t3_qg, on both harnesses, and hold the reason and stderr
+# to one text. The texts are stated here, not read from the gate, so a rewording is a decision
+# this file records.
+pn_miss=gate-sdd-absent-355   # a command on no PATH
+PN_HEAD="Quality gate: a gating validator failed. These are the harness checks this gate ships with, then the commands on the '- Validators:' line in .steering/tech.md, and they gate CI too — fix the failure rather than working around the gate."
+PN_HEAD_HOST="Quality gate: a gating validator failed. These are the harness checks this gate ships with, then the commands on the '- Validators:' line in .steering/tech.md, and they gate CI too — none of these could be started on the hook's PATH, which no agent can change; the paragraph below says what a person can."
+PN_BARE="gate-sdd: exit 127: '$pn_miss' is not on the PATH this hook runs with."
+PN_OTHER="gate-sdd: exit 127, the shell's status for a command it could not find: the one this validator names, or one it runs, such as an 'env' shebang's interpreter or a script's tool."
+PN_OPEN='The PATH this hook ran with is: '
+pn_para() { # pn_para <bare|other> <harness> [<PATH>] — the paragraph a block with a 127 carries
+  case "$1" in
+    bare) _pp='That is the environment the host started this hook with, and no agent can change it from inside the session. A person can: ' ;;
+    *) _pp='The command that was not found may be missing from this PATH, or may be one the project or its checkout should provide. If it is missing from this PATH, a person can: ' ;;
+  esac
+  case "$2" in
+    antigravity) _pp="${_pp}start 'agy' from a terminal whose shell has the tool on its PATH." ;;
+    *) _pp="${_pp}start 'claude' from a terminal whose shell has the tool on its PATH, since a hook inherits the session's environment; or, for the desktop app, put the tool's directory on the login shell's PATH, then quit and reopen the app." ;;
+  esac
+  printf '%s%s\n%s' "$PN_OPEN" "${3-$PATH}" "$_pp"
+}
+pn_run() { # pn_run <repo> <harness> [<PATH>] — the gate as <harness> runs it: its status in $pn_rc, stderr in $pn_err, the decoded reason in $pn_rsn
+  pn_rc=$( GATE_SDD_HARNESS=$2; PATH=${3-$PATH}; export GATE_SDD_HARNESS PATH; t3_qg "$1" ); pn_rc=${pn_rc#exit=}
+  pn_err=$(cat "$t3d/err")
+  pn_rsn=$(python3 -I -c 'import json, sys; sys.stdout.buffer.write(json.loads(open(sys.argv[1], "rb").read().decode("utf-8"))["reason"].encode("utf-8"))' "$t3d/out" 2>&1)
+}
+pn_chan() { # pn_chan <tag> <harness> — prints nothing when the last pn_run blocked on both channels, with one text
+  case "$2" in antigravity) _pc=0 ;; *) _pc=2 ;; esac
+  adr_check "$1" "$t3d/out" "$t3d/err" "$pn_rc" "$_pc"
+  [ "$pn_rsn" = "$pn_err" ] || printf '%s: the reason and stderr differ; ' "$1"
+}
+pn_seen() { # which of this section's texts the last block holds, for a failure's detail
+  _ps=""
+  case "$pn_err" in *"$PN_HEAD"*) _ps="$_ps main's-header" ;; esac
+  case "$pn_err" in *"$PN_HEAD_HOST"*) _ps="$_ps the-host's-header" ;; esac
+  case "$pn_err" in *"is not on the PATH this hook runs with."*) _ps="$_ps AC1's-line" ;; esac
+  case "$pn_err" in *"$PN_OTHER"*) _ps="$_ps AC2's-line" ;; esac
+  case "$pn_err" in *"$PN_OPEN"*) _ps="$_ps the-paragraph" ;; esac
+  printf 'the block holds:%s' "${_ps:- none of them}"
+}
+
+# 421. #355 AC1 — a validator whose first word is on no PATH, alone and after an assignment that is
+#      not PATH (Design step 2's skip). The gate blocks as for any failure, and the block names
+#      the word after the shell's own output, prints the PATH once, says no agent can change it,
+#      and gives the harness's remedy. Every failure is AC1's, so the header's last clause is the
+#      host's (step 5). RED on main, whose block is the header aimed at the agent over the
+#      shell's text alone. RED-CAPABLE under "an assignment ends the reading", which makes the
+#      second row AC2's.
+r=$(t3_repo pn-bare "$pn_miss"); r2=$(t3_repo pn-assign "FOO=1 $pn_miss")
+bad=""
+for row in "alone|$r|$pn_miss" "assignment|$r2|FOO=1 $pn_miss"; do
+  tag=${row%%|*}; row=${row#*|}; rr=${row%%|*}; cmd=${row#*|}
+  for h in claude-code antigravity; do
+    pn_run "$rr" "$h"; bad="$bad$(pn_chan "$tag/$h" "$h")"
+    case "$pn_err" in
+      "$PN_HEAD_HOST
+
+--- $cmd
+"*"
+$PN_BARE
+
+$(pn_para bare "$h")
+
+$ADR_PARA") ;;
+      *) bad="$bad[$tag/$h: $(pn_seen)] " ;;
+    esac
+    rest=${pn_err#*"$PATH"}; case "$rest" in *"$PATH"*) bad="$bad[$tag/$h: the PATH is printed more than once] " ;; esac
+    [ "$tag" != alone ] || cp "$t3d/err" "$t3d/pn-bare-$h.err"
+  done
+done
+[ -z "$bad" ] && report "a validator the hook's PATH does not hold blocks, naming the word, the PATH and a person's remedy" ok \
+  || report "a validator the hook's PATH does not hold blocks, naming the word, the PATH and a person's remedy" no "$bad"
+
+# 422. #355 AC2 — a 127 the gate cannot put on the hook's PATH says only what is known. One row per
+#      rule of Design step 2: a first word that resolves (`sh -c`, and a script on the PATH whose
+#      `env` shebang names a missing interpreter), one holding a `/` (a script calling a missing
+#      name, and a script that is not there), one after a PATH assignment, a redirection, and an
+#      `=` word that is no assignment. Each keeps main's header, gets AC2's line and the PATH, and
+#      is not told that no agent can change the cause. RED on main, which has no line and no
+#      paragraph. RED-CAPABLE under "every 127 is AC1's", which swaps the header on all seven.
+pn_bin="$t3d/pn-bin"; mkdir -p "$pn_bin"
+printf '#!/usr/bin/env %s\n' "$pn_miss" > "$pn_bin/pn-envtool"; chmod +x "$pn_bin/pn-envtool"
+r=$(t3_repo pn-other true)
+printf '#!/bin/sh\n%s\n' "$pn_miss" > "$r/lint.sh"; chmod +x "$r/lint.sh"
+bad=""
+set -- "sh -c $pn_miss" pn-envtool ./lint.sh ./missing.sh "PATH=/x $pn_miss" ">o.flag $pn_miss" "a-b=c $pn_miss"
+for cmd; do
+  printf -- '- Validators: %s\n' "$cmd" > "$r/.steering/tech.md"
+  for h in claude-code antigravity; do
+    pn_run "$r" "$h" "$pn_bin:$PATH"; bad="$bad$(pn_chan "$cmd/$h" "$h")"
+    case "$pn_err" in
+      "$PN_HEAD
+
+--- $cmd
+"*"
+$PN_OTHER
+
+$(pn_para other "$h" "$pn_bin:$PATH")
+
+$ADR_PARA") ;;
+      *) bad="$bad[$cmd/$h: $(pn_seen)] " ;;
+    esac
+    case "$pn_err" in *"no agent can change"*|*"is not on the PATH this hook runs with"*) bad="$bad[$cmd/$h: AC1's words on a 127 that is not AC1's] " ;; esac
+    case "$cmd" in "sh -c "*) cp "$t3d/err" "$t3d/pn-other-$h.err" ;; esac
+  done
+done
+[ -z "$bad" ] && report "a 127 the gate cannot put on the hook's PATH says only what is known, under main's header" ok \
+  || report "a 127 the gate cannot put on the hook's PATH says only what is known, under main's header" no "$bad"
+
+# 423. #355 AC1, AC3 — mixed blocks: an exit 1 beside an AC1 127, and an AC1 127 beside an AC2
+#      127. The header is main's, since not every failure is AC1's; each 127 has its own line
+#      after its own output, and the block has one paragraph, AC1's, after the last failure.
+#      RED on main. RED-CAPABLE under "swap the header when any failure is AC1's".
+r=$(t3_repo pn-mixed1 "sh -c 'echo boom >&2; exit 1', $pn_miss")
+r2=$(t3_repo pn-mixed2 "$pn_miss, sh -c 'echo said; exit 127'")
+bad=""
+for h in claude-code antigravity; do
+  pn_run "$r" "$h"; bad="$bad$(pn_chan "exit-1+AC1/$h" "$h")"
+  case "$pn_err" in
+    "$PN_HEAD
+
+--- sh -c 'echo boom >&2; exit 1'
+boom
+--- $pn_miss
+"*"
+$PN_BARE
+
+$(pn_para bare "$h")
+
+$ADR_PARA") ;;
+    *) bad="$bad[exit-1+AC1/$h: $(pn_seen)] " ;;
+  esac
+  rest=${pn_err#*"$PN_OPEN"}; case "$rest" in *"$PN_OPEN"*) bad="$bad[exit-1+AC1/$h: more than one paragraph] " ;; esac
+  pn_run "$r2" "$h"; bad="$bad$(pn_chan "AC1+AC2/$h" "$h")"
+  case "$pn_err" in
+    "$PN_HEAD
+
+--- $pn_miss
+"*"
+$PN_BARE
+--- sh -c 'echo said; exit 127'
+said
+$PN_OTHER
+
+$(pn_para bare "$h")
+
+$ADR_PARA") ;;
+    *) bad="$bad[AC1+AC2/$h: $(pn_seen)] " ;;
+  esac
+  rest=${pn_err#*"$PN_OPEN"}; case "$rest" in *"$PN_OPEN"*) bad="$bad[AC1+AC2/$h: more than one paragraph] " ;; esac
+done
+[ -z "$bad" ] && report "a block that mixes failures keeps main's header, a line per 127 and one paragraph" ok \
+  || report "a block that mixes failures keeps main's header, a line per 127 and one paragraph" no "$bad"
+
+# 424. #355 AC3 — a block with no 127 is main's, byte for byte, on both channels: an exit 1, and
+#      an exit 126, the status for a command that was found and could not be run. Green on main,
+#      where it is the block being held. RED-CAPABLE under "explain every non-zero status", and
+#      under "print the paragraph for every failed block".
+r=$(t3_repo pn-plain "sh -c 'echo boom >&2; exit 1', sh -c 'echo deny; exit 126'")
+want="$PN_HEAD
+
+--- sh -c 'echo boom >&2; exit 1'
+boom
+--- sh -c 'echo deny; exit 126'
+deny
+
+$ADR_PARA"
+bad=""
+for h in claude-code antigravity; do
+  pn_run "$r" "$h"; bad="$bad$(pn_chan "$h" "$h")"
+  [ "$pn_err" = "$want" ] || bad="$bad[$h: $(pn_seen); stderr: $(printf '%s' "$pn_err" | head -c 400)] "
+done
+[ -z "$bad" ] && report "a block with no 127 is main's, byte for byte" ok \
+  || report "a block with no 127 is main's, byte for byte" no "$bad"
+
+# 425. #355 Design step 3 — the line is appended on a line of its own. A validator whose output
+#      does not end in a newline gets one before the line, and one that printed nothing gets
+#      the line straight under its `--- <command>`, with no blank line between. The whole block
+#      is compared, both outputs being the validators' own. RED on main. RED-CAPABLE under
+#      "append the line as it is", which glues it onto `x`, and under "always write the newline".
+r=$(t3_repo pn-glue "sh -c 'printf x; exit 127', sh -c 'exit 127'")
+bad=""
+for h in claude-code antigravity; do
+  pn_run "$r" "$h"; bad="$bad$(pn_chan "$h" "$h")"
+  [ "$pn_err" = "$PN_HEAD
+
+--- sh -c 'printf x; exit 127'
+x
+$PN_OTHER
+--- sh -c 'exit 127'
+$PN_OTHER
+
+$(pn_para other "$h")
+
+$ADR_PARA" ] || bad="$bad[$h: $(pn_seen); stderr: $(printf '%s' "$pn_err" | head -c 500)] "
+done
+[ -z "$bad" ] && report "a 127's line stands on a line of its own, whatever the validator printed" ok \
+  || report "a 127's line stands on a line of its own, whatever the validator printed" no "$bad"
+
+# 426. #355 AC4 — a 127 stays an ordinary failure. A pass is recorded; then the line gains a
+#      validator on no PATH, and one after it that copies `progress` out of the run dir. The run
+#      blocks with AC1's line, leaves no pass record, and names itself failed in the start token;
+#      `progress` holds `127 3 bare` and then `fail 3`, as the timeout block reads them; and the
+#      next turn end runs the validators again and blocks again. RED on main, which has neither
+#      the line nor the `127` record. RED-CAPABLE under "a 127 does not count as a failure".
+r=$(t3_repo pn-ac4 "sh -c 'echo x >> ran.log'" '- Source globs: *.txt'); mkdir -p "$t3d/pn-tmp"
+o1=$(t3_qg "$r"); [ -s "$r/.git/gate-sdd/quality-pass" ] && rec1=yes || rec1=no
+printf -- '- Validators: %s\n- Source globs: *.txt\n' "sh -c 'echo x >> ran.log', $pn_miss, cat \"\$TMPDIR\"/gate-sdd-run.*/progress > progress.flag" > "$r/.steering/tech.md"
+o2=$( TMPDIR="$t3d/pn-tmp"; export TMPDIR; t3_qg "$r" ); err2=$(cat "$t3d/err"); n2=$(qgp_runs "$r")
+[ -e "$r/.git/gate-sdd/quality-pass" ] && rec2=yes || rec2=no
+tok=$(cat "$r/.git/gate-sdd/quality-run" 2>/dev/null)
+prog=$(tr '\n' ' ' < "$r/progress.flag" 2>/dev/null)
+o3=$(t3_qg "$r"); n3=$(qgp_runs "$r"); [ -e "$r/.git/gate-sdd/quality-pass" ] && rec3=yes || rec3=no
+case "$err2" in *"$PN_BARE"*) m=ok ;; *) m=no ;; esac
+case "$tok" in *.failed) t=ok ;; *) t="no($tok)" ;; esac
+case "$prog" in *"start 3 $pn_miss 127 3 bare fail 3 start 4 "*) p=ok ;; *) p="no($prog)" ;; esac
+[ "$o1$o2$o3" = exit=0exit=2exit=2 ] && [ "$rec1$rec2$rec3" = yesnono ] && [ "$m$t$p" = okokok ] && [ "$n2$n3" = 23 ] \
+  && report "a 127 is an ordinary failure: no pass is recorded, and the next turn end runs the validators" ok \
+  || report "a 127 is an ordinary failure: no pass is recorded, and the next turn end runs the validators" no "exits=$o1,$o2,$o3 records=$rec1,$rec2,$rec3 line=$m token=$t progress=$p runs=$n2,$n3"
+
+# 427. #355 AC5 — the text this change adds names nothing an agent could make the gate pass
+#      through. From case 421's and 422's blocks, on each harness: the paragraph, found by its
+#      opening words and with the printed PATH taken out, each 127's line, and the header's
+#      clause where it was replaced. None may hold a hook file's name, a settings file's, a git
+#      setting, the steering file or its line, a home-directory path, or a way to set a
+#      variable. RED on main, where there is no paragraph to find. RED-CAPABLE under a remedy
+#      that names any of them.
+pn_levers() { # pn_levers <stderr file> <PATH> — prints what the added text names that it must not, or why it could not be read
+  python3 -I - "$1" "$2" "$PN_OPEN" <<'PY'
+import sys
+err = open(sys.argv[1], "rb").read().decode("utf-8", "replace")
+path, opening = sys.argv[2], sys.argv[3]
+i = err.find("\n\n" + opening)
+if i < 0:
+    print("no paragraph"); sys.exit()
+rest = err[i + 2 + len(opening):]
+if not rest.startswith(path):
+    print("the paragraph does not print the PATH"); sys.exit()
+added = [opening + rest[len(path):].split("\n\n", 1)[0]]
+added += [l for l in err.splitlines() if l.startswith("gate-sdd: exit 127")]
+head = err.splitlines()[0]
+if "fix the failure rather than working around the gate" not in head:
+    added.append(head.split("they gate CI too", 1)[-1])
+if len(added) < 2:
+    print("no line for a 127"); sys.exit()
+text = "\n".join(added)
+hits = [w for w in ("hooks.json", "settings.json", "git config", "tech.md", "Validators", "~/", "export", "launchctl") if w in text]
+if hits:
+    print("names " + ", ".join(hits))
+PY
+}
+bad=""
+for h in claude-code antigravity; do
+  o=$(pn_levers "$t3d/pn-bare-$h.err" "$PATH" 2>&1); [ -z "$o" ] || bad="$bad[AC1/$h: $o] "
+  o=$(pn_levers "$t3d/pn-other-$h.err" "$pn_bin:$PATH" 2>&1); [ -z "$o" ] || bad="$bad[AC2/$h: $o] "
+done
+[ -z "$bad" ] && report "the text a 127 adds names nothing an agent could make the gate pass through" ok \
+  || report "the text a 127 adds names nothing an agent could make the gate pass through" no "$bad"
+
+# 428. #355 AC1, Design step 4 — the remedy is the harness's own, one row each. Claude Code's
+#      names starting `claude` from a terminal and the desktop app's login shell, and not `agy`;
+#      Antigravity's names starting `agy` and neither of the others. A hook file with no marker,
+#      read as Antigravity by its variables, gets Antigravity's: the wording follows the test the
+#      block's exit status follows. RED on main. RED-CAPABLE under "one remedy for both".
+cc=$(cat "$t3d/pn-bare-claude-code.err" 2>/dev/null); agy=$(cat "$t3d/pn-bare-antigravity.err" 2>/dev/null)
+o3=$( ANTIGRAVITY_AGENT=1; export ANTIGRAVITY_AGENT; t3_qg "$t3d/pn-bare" ); nm=$(cat "$t3d/err")
+case "$cc" in *"A person can: start 'claude' from a terminal whose shell has the tool on its PATH"*"for the desktop app, put the tool's directory on the login shell's PATH, then quit and reopen the app."*) c1=ok ;; *) c1=no ;; esac
+case "$cc" in *"'agy'"*) c1="no(names agy)" ;; esac
+case "$agy" in *"A person can: start 'agy' from a terminal whose shell has the tool on its PATH."*) c2=ok ;; *) c2=no ;; esac
+case "$agy" in *"'claude'"*|*"desktop app"*) c2="no(names Claude Code's)" ;; esac
+case "$o3:$nm" in exit=0:*"A person can: start 'agy' from a terminal"*) c3=ok ;; *) c3="no($o3)" ;; esac
+[ "$c1$c2$c3" = okokok ] && report "a 127's remedy is worded for the harness the gate runs under" ok \
+  || report "a 127's remedy is worded for the harness the gate runs under" no "claude-code=$c1 antigravity=$c2 no-marker=$c3"
+
 printf '\ntest-gates: %d passed, %d failed, %d skipped\n' "$pass" "$fail" "$skipped"
 [ "$fail" -eq 0 ] || exit 1
 

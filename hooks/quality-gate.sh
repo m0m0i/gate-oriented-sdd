@@ -123,6 +123,44 @@ qg_cmds() {
   qg_split
 }
 
+# A validator's first word, read from its text alone and never by `eval`: printed when it is a bare
+# name, and nothing when it cannot be read as one. Run in a `$(...)`, which keeps its settings (#355).
+qg_first_word() {  # <command>
+  LC_ALL=C; unset IFS
+  set -f
+  for _fw in $1; do
+    case "$_fw" in
+      *\"*|*\'*|*\$*|*\`*|*\(*|*\{*|*\\*|*\;*|*\&*|*\|*|*\<*|*\>*|*\**|*\?*|*\[*|\~*) break ;;
+      *=*)
+        # A leading assignment is skipped, PATH's excepted; any other word holding `=` is no name.
+        case "${_fw%%=*}" in
+          PATH|''|[!A-Za-z_]*|*[!A-Za-z0-9_]*) break ;;
+        esac
+        continue ;;
+      */*) break ;;
+    esac
+    printf '%s\n' "$_fw"
+    break
+  done
+  set +f
+}
+
+# The paragraph a block with a 127 carries, once, after its failures: the PATH this hook ran with
+# and what a person can do on this harness's host. It names nothing an agent can change (#355).
+qg_path_note() {  # <bare|other>
+  printf '\n\nThe PATH this hook ran with is: %s\n' "${PATH-}"
+  if [ "$1" = bare ]; then
+    printf 'That is the environment the host started this hook with, and no agent can change it from inside the session. A person can: '
+  else
+    printf 'The command that was not found may be missing from this PATH, or may be one the project or its checkout should provide. If it is missing from this PATH, a person can: '
+  fi
+  if _gate_block_status; then   # 0 on Antigravity
+    printf "start 'agy' from a terminal whose shell has the tool on its PATH."
+  else
+    printf "start 'claude' from a terminal whose shell has the tool on its PATH, since a hook inherits the session's environment; or, for the desktop app, put the tool's directory on the login shell's PATH, then quit and reopen the app."
+  fi
+}
+
 # The order of runs in this worktree (#331). One record per worktree, written by whichever run
 # FINISHED last, let a run that started before a later one failed record its pass after that
 # failure, and the next turn end skipped a red tree: two sessions in one checkout, or Antigravity
@@ -467,6 +505,8 @@ validators=$(gate_steering_read .steering/tech.md Validators); rc=$?
 #     passes, as an agent did to quiet #324's parse error, changes nothing listed here, so a pass
 #     recorded under that shim outlives it until the source changes. The gate trusts the commands
 #     the Validators line names; what they are is the project's.
+#   - Not hashed either: PATH, which is the host's. A pass recorded under one PATH stands under
+#     another until the source changes (#355).
 #   - GIT_INDEX_FILE prefixes git itself only. On a shell function, macOS sh keeps the
 #     assignment and exports it to every validator after it.
 qg_fingerprint() {  # <pathspec>...
@@ -583,7 +623,7 @@ if [ -n "$qg_record" ] && [ -e "$qg_record" ] && ! rm -f "$qg_record"; then
   printf 'Quality gate: could not remove the last pass record at %s; the validators run anyway.\n' "$qg_record" >&2
 fi
 
-failed=""
+failed=""; qg_127=""; qg_allbare=yes
 # Each validator runs in a subshell of its own, so an `exit`, a `cd` or an assignment stays inside
 # it, in the foreground with the hook's stdin and pathname expansion (case 203). Its output goes to
 # v.<n> in the run dir, never to this shell's stdout, which carries the verdict alone and nothing
@@ -601,9 +641,27 @@ for cmd in $cmds; do
   IFS=$old_ifs
   n=$((n + 1))
   printf 'start %s %s\n' "$n" "$cmd" >> "$run/progress"
-  if ( eval "$cmd" ) > "$run/v.$n" 2>&1; then
+  ( eval "$cmd" ) > "$run/v.$n" 2>&1 && qg_rc=0 || qg_rc=$?
+  if [ "$qg_rc" -eq 0 ]; then
     printf 'ok %s\n' "$n" >> "$run/progress"
   else
+    # A 127's line goes after the validator's own output, on a line of its own, and `progress`
+    # records its class before the failure. The probe asks this shell's PATH, outside the eval (#355).
+    if [ "$qg_rc" -eq 127 ]; then
+      qg_w=$(qg_first_word "$cmd")
+      [ ! -s "$run/v.$n" ] || [ "$(tail -c 1 "$run/v.$n" | wc -l | tr -d ' ')" != 0 ] || printf '\n' >> "$run/v.$n"
+      if [ -n "$qg_w" ] && ! command -v -- "$qg_w" >/dev/null 2>&1; then
+        qg_127=bare
+        printf "gate-sdd: exit 127: '%s' is not on the PATH this hook runs with.\n" "$qg_w" >> "$run/v.$n"
+        printf '127 %s bare\n' "$n" >> "$run/progress"
+      else
+        qg_allbare=""; [ -n "$qg_127" ] || qg_127=other
+        printf "gate-sdd: exit 127, the shell's status for a command it could not find: the one this validator names, or one it runs, such as an 'env' shebang's interpreter or a script's tool.\n" >> "$run/v.$n"
+        printf '127 %s other\n' "$n" >> "$run/progress"
+      fi
+    else
+      qg_allbare=""
+    fi
     printf 'fail %s\n' "$n" >> "$run/progress"
     # Every failure is an ordering event, written before the next validator starts (#331): a run
     # that started before this failure, earlier or later than this run, can no longer record a
@@ -651,5 +709,12 @@ fi
 
 [ -z "$failed" ] && gate_pass
 
-gate_block "Quality gate: a gating validator failed. These are the harness checks this gate ships with, then the commands on the '- Validators:' line in .steering/tech.md, and they gate CI too — fix the failure rather than working around the gate.
-$failed$qg_unordered$qg_unrec"
+# A block with a 127 carries the paragraph, and only when every failure is a first word this PATH
+# does not hold does the header stop telling the agent to fix it. Any other block is unchanged (#355).
+qg_fix="fix the failure rather than working around the gate"; qg_note=""
+if [ -n "$qg_127" ]; then
+  [ -z "$qg_allbare" ] || qg_fix="none of these could be started on the hook's PATH, which no agent can change; the paragraph below says what a person can"
+  qg_note=$(qg_path_note "$qg_127")
+fi
+gate_block "Quality gate: a gating validator failed. These are the harness checks this gate ships with, then the commands on the '- Validators:' line in .steering/tech.md, and they gate CI too — $qg_fix.
+$failed$qg_note$qg_unordered$qg_unrec"

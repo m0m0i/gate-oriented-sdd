@@ -182,7 +182,7 @@ Decided rather than asked, as design calls:
 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review. Each case names the Design rule it exercises rather than restating the classification.
-- [ ] **T1:** the child's block (AC1–AC5). Cases from 421, after `t3_repo`, `t3_qg` and `adr_check`, on both harnesses and both channels. The rows:
+- [x] **T1:** the child's block (AC1–AC5). Cases from 421, after `t3_repo`, `t3_qg` and `adr_check`, on both harnesses and both channels. The rows:
   - AC1's case: alone, and after an assignment that is not `PATH` (`FOO=1 <missing>`; the step 2 skip). Every failure is AC1's, so the header is swapped.
   - AC2's case:
     - `sh -c <missing>` (the word resolves);
