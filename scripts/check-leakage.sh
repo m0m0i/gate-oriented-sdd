@@ -124,6 +124,18 @@ else
   load_private
 fi
 
+# Every tier is a file of expressions over the same work-set: the private file's three sections,
+# and the public tier, which fails as [fail] does. A tier with no file is a tier not run, which
+# is every private one under --public-only (#357).
+if ! printf '%s\n' "$IDS" > "$TIERS/public"; then
+  echo "check-leakage FAILED — the public tier could not be written beside the private patterns." >&2
+  exit 1
+fi
+TIER_ORDER='fail
+fail ignore-case
+public
+warn ignore-case'
+
 # Decided once and read twice: which lister runs, and whether a leading `"` can only be git's
 # doing. In a non-git tree nothing quotes, so a file genuinely named `"quoted".md` must not be
 # mistaken for one git could not represent. Review round 2.
@@ -220,62 +232,6 @@ done <<EOF
 $list
 EOF
 
-# A file this guard was handed and could not open is not a file it read and found clean.
-# `xargs grep … 2>/dev/null` discarded "Permission denied" along with the noise it was there
-# for, so the scan went round such a file in silence, on the same exit code and in the same
-# sentence. Checked once here rather than three times below, so the three scans keep their
-# stderr discard: after this, what they could still print is noise.
-if [ -n "$unscannable" ]; then
-  echo "check-leakage FAILED — in the work-set and cannot be handed to grep as a path:$unscannable" >&2
-  echo "" >&2
-  echo "  git C-quoted these because they hold a quote, a backslash or a control character." >&2
-  echo "  Rename them. This guard is the clean-room backstop and must not skip a file quietly." >&2
-  exit 1
-fi
-
-if [ -n "$unreadable" ]; then
-  echo "check-leakage FAILED — in the work-set and could not be read:$unreadable" >&2
-  echo "" >&2
-  echo "  Fix the permissions rather than treating this as a pass. A file that was not read" >&2
-  echo "  is not a file that came back clean, and this guard is the clean-room backstop." >&2
-  exit 1
-fi
-
-# Zero files is not a clean tree. files()'s own comment calls a scan of nothing "the worst
-# possible failure mode for a guard" and then does not check for it: a fresh clone, a broken
-# `git ls-files`, or an exclusion that grew all end here, and until now they all printed
-# `check-leakage: clean` on exit 0. AGENTS.md calls this the guard that matters most. #39.
-if [ "$scanned" -eq 0 ]; then
-  if [ "$absent" -gt 0 ]; then
-    # It was not empty, and saying so would send the reader to `git ls-files`, which is not
-    # the cause. A fully sparse checkout lands here. AC5's second clause.
-    echo "check-leakage FAILED — the work-set held $absent index entr(ies) and no working-tree" >&2
-    echo "  file for any of them, so nothing was scanned. A checkout this partial cannot be" >&2
-    echo "  cleared by this guard; check it out fully rather than treating this as a pass." >&2
-  else
-    echo "check-leakage FAILED — the work-set is empty, so nothing was scanned." >&2
-    echo "  'found nothing' and 'looked at nothing' must not share an exit code. Check that" >&2
-    echo "  git ls-files works here: the listing holds this script at the least." >&2
-  fi
-  exit 1
-fi
-
-# NUL-delimited into xargs, so a path holding a space reaches grep as one argument, and `--`,
-# so a path beginning with `-` is not read as an option. Either one unread is a silent pass (#39).
-scan() { printf '%s' "$scanlist" | tr '\n' '\0' | xargs -0 grep "$@" -- 2>/dev/null; }
-
-# Every tier is a file of expressions over the same work-set: the private file's three sections,
-# and the public tier, which fails as [fail] does. A tier with no file is a tier not run, which
-# is every private one under --public-only (#357).
-if ! printf '%s\n' "$IDS" > "$TIERS/public"; then
-  echo "check-leakage FAILED — the public tier could not be written beside the private patterns." >&2
-  exit 1
-fi
-TIER_ORDER='fail
-fail ignore-case
-public
-warn ignore-case'
-
 if [ "$IN_GIT" -eq 1 ]; then
   LISTING="git ls-files --cached --others --exclude-standard"
 else
@@ -287,7 +243,8 @@ warned=0
 
 # The report reaches a public CI log, so it holds a tier and a location and never the text that
 # matched or the pattern. A path that matches is itself that text: it is named by its position
-# in the listing, here and wherever a hit inside the file is reported (#357).
+# in the listing: here, in the refusals below, and wherever a hit inside the file is reported.
+# So every path is tried before anything is refused (#357).
 #
 # Each tier is tried against the listing as text in this locale, and again as bytes. In a UTF-8
 # locale a name that is not UTF-8 is matched by no expression under BSD grep, and under GNU
@@ -314,14 +271,86 @@ $TIER_ORDER
 EOF
 
 # A name is compared as bytes, so one that is not text in this locale is still found (#357).
-shown() {  # $1 = a file that hit. Prints its name, or its position when the name itself matched.
+shown() {  # $1 = a path, $2 = what follows a position. Prints the path, or its position in the
+           # listing when the path itself matched.
   if printf '%s' "$named" | LC_ALL=C grep -aFxq -e "$1"; then
-    printf 'path number %s in the listing,' \
-      "$(printf '%s\n' "$list" | LC_ALL=C grep -anFx -e "$1" | LC_ALL=C sed -n '1s/:.*//p')"
+    printf 'path number %s in the listing%s' \
+      "$(printf '%s\n' "$list" | LC_ALL=C grep -anFx -e "$1" | LC_ALL=C sed -n '1s/:.*//p')" "${2-}"
   else
     printf '%s' "$1"
   fi
 }
+
+entries() {  # $1 = the entries a refusal names, one to a line. Prints each as `shown` gives it.
+  printf '%s\n' "$1" | while IFS= read -r entry; do
+    entry=${entry#  }
+    [ -n "$entry" ] || continue
+    printf '\n  %s' "$(shown "$entry")"
+  done
+}
+
+# A report that holds a LEAK or a WARNING ends with this, whichever exit it leaves by (#357).
+closing() {
+  [ "$fail" -ne 0 ] || [ "$warned" -ne 0 ] || return 0
+  echo "" >&2
+  if [ "$fail" -ne 0 ]; then
+    echo "Clean-room rule: do not scrub these in place. Scrubbing leaves the shape," >&2
+    echo "and the shape is where the private structure lives. Rewrite the file." >&2
+  else
+    echo "A warning does not fail the guard. Confirm that each one is a generic example." >&2
+  fi
+  echo "The matched text is withheld on purpose, because this report is public wherever CI" >&2
+  echo "prints it. Open the location to see what matched." >&2
+  [ -z "$named" ] \
+    || echo "A path number is the line of this command's output that holds the path: $LISTING" >&2
+}
+
+# A file this guard was handed and could not open is not a file it read and found clean.
+# `xargs grep … 2>/dev/null` discarded "Permission denied" along with the noise it was there
+# for, so the scan went round such a file in silence, on the same exit code and in the same
+# sentence. Checked once here rather than three times below, so the three scans keep their
+# stderr discard: after this, what they could still print is noise.
+if [ -n "$unscannable" ]; then
+  echo "check-leakage FAILED — in the work-set and cannot be handed to grep as a path:$(entries "$unscannable")" >&2
+  echo "" >&2
+  echo "  git C-quoted these because they hold a quote, a backslash or a control character." >&2
+  echo "  Rename them. This guard is the clean-room backstop and must not skip a file quietly." >&2
+  closing
+  exit 1
+fi
+
+if [ -n "$unreadable" ]; then
+  echo "check-leakage FAILED — in the work-set and could not be read:$(entries "$unreadable")" >&2
+  echo "" >&2
+  echo "  Fix the permissions rather than treating this as a pass. A file that was not read" >&2
+  echo "  is not a file that came back clean, and this guard is the clean-room backstop." >&2
+  closing
+  exit 1
+fi
+
+# Zero files is not a clean tree. files()'s own comment calls a scan of nothing "the worst
+# possible failure mode for a guard" and then does not check for it: a fresh clone, a broken
+# `git ls-files`, or an exclusion that grew all end here, and until now they all printed
+# `check-leakage: clean` on exit 0. AGENTS.md calls this the guard that matters most. #39.
+if [ "$scanned" -eq 0 ]; then
+  if [ "$absent" -gt 0 ]; then
+    # It was not empty, and saying so would send the reader to `git ls-files`, which is not
+    # the cause. A fully sparse checkout lands here. AC5's second clause.
+    echo "check-leakage FAILED — the work-set held $absent index entr(ies) and no working-tree" >&2
+    echo "  file for any of them, so nothing was scanned. A checkout this partial cannot be" >&2
+    echo "  cleared by this guard; check it out fully rather than treating this as a pass." >&2
+  else
+    echo "check-leakage FAILED — the work-set is empty, so nothing was scanned." >&2
+    echo "  'found nothing' and 'looked at nothing' must not share an exit code. Check that" >&2
+    echo "  git ls-files works here: the listing holds this script at the least." >&2
+  fi
+  closing
+  exit 1
+fi
+
+# NUL-delimited into xargs, so a path holding a space reaches grep as one argument, and `--`,
+# so a path beginning with `-` is not read as an option. Either one unread is a silent pass (#39).
+scan() { printf '%s' "$scanlist" | tr '\n' '\0' | xargs -0 grep "$@" -- 2>/dev/null; }
 
 # One batched pass per tier finds the files that hit, which keeps the run time, and only those
 # are read a second time for their line numbers. The inner loop ends a pipeline, so its lines
@@ -338,7 +367,7 @@ while IFS= read -r tier; do
       lines=$(grep -anE $fold -f "$TIERS/$tier" -- "$f" 2>/dev/null \
         | LC_ALL=C sed -n 's/^\([0-9][0-9]*\):.*/\1/p' | tr '\n' ' ')
       lines=${lines% }
-      printf '%s\n' "$kind [$tier] $(shown "$f") line(s): ${lines:-not found on the second read}"
+      printf '%s\n' "$kind [$tier] $(shown "$f" ,) line(s): ${lines:-not found on the second read}"
     done
   )
   [ -n "$hits" ] || continue
@@ -348,19 +377,7 @@ done <<EOF
 $TIER_ORDER
 EOF
 
-if [ "$fail" -ne 0 ] || [ "$warned" -ne 0 ]; then
-  echo "" >&2
-  if [ "$fail" -ne 0 ]; then
-    echo "Clean-room rule: do not scrub these in place. Scrubbing leaves the shape," >&2
-    echo "and the shape is where the private structure lives. Rewrite the file." >&2
-  else
-    echo "A warning does not fail the guard. Confirm that each one is a generic example." >&2
-  fi
-  echo "The matched text is withheld on purpose, because this report is public wherever CI" >&2
-  echo "prints it. Open the location to see what matched." >&2
-  [ -z "$named" ] \
-    || echo "A path number is the line of this command's output that holds the path: $LISTING" >&2
-fi
+closing
 [ "$fail" -eq 0 ] || exit 1
 
 note=""

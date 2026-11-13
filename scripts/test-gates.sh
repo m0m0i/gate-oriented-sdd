@@ -11053,10 +11053,39 @@ else
   note_skip "leakage/non-utf8-name-on-disk" "this filesystem refuses a file name that is not UTF-8"
 fi
 
-[ "$n0 $n1 $n2 $n3 $n4 $n5" = "ok ok ok ok okok okok" ] \
+# A refusal names its entries and comes before any file is read, so an entry whose path matches
+# is named by its position there too, and one that does not match keeps its name. A path git
+# quotes keeps the rest of its name in the listing, which is the text an expression finds.
+lk_refusal() {  # $1 = the refusal's words, $2 = the entry it still names. Reads the last run_leak.
+                # Prints nothing, or what is wrong.
+  grep -Fq -e "$1" "$TMP/lkerr" || printf '+not-refused'
+  grep -Fxq -e '  path number 1 in the listing' "$TMP/lkerr" || printf '+no-position'
+  grep -Fxq -e "  $2" "$TMP/lkerr" || printf '+other-not-named'
+  grep -q 'git ls-files --cached --others --exclude-standard' "$TMP/lkerr" || printf '+no-listing-command'
+}
+
+r=$(leak_repo lkg-n-quoted)
+printf 'nothing to see\n' > "$r/a\"Zq_Exact.md"; printf 'nothing to see\n' > "$r/b\"plain.md"
+lk_commit "$r"
+out=$(run_leak "$r")
+n6="$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1')$(lk_refusal 'cannot be handed to grep' '"b\"plain.md"')"
+
+r=$(leak_repo lkg-n-unread)
+printf 'nothing to see\n' > "$r/a-Zq_Exact.md"; printf 'nothing to see\n' > "$r/b-plain.md"
+lk_commit "$r"; chmod 000 "$r/a-Zq_Exact.md" "$r/b-plain.md" 2>/dev/null
+if cat "$r/b-plain.md" >/dev/null 2>&1; then
+  n7=ok
+  note_skip "leakage/unreadable-matching-path" "permissions not enforced here (running as root?)"
+else
+  out=$(run_leak "$r")
+  n7="$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1')$(lk_refusal 'could not be read' 'b-plain.md')"
+fi
+chmod 644 "$r/a-Zq_Exact.md" "$r/b-plain.md" 2>/dev/null
+
+[ "$n0 $n1 $n2 $n3 $n4 $n5 $n6 $n7" = "ok ok ok ok okok okok ok ok" ] \
   && report "check-leakage reports a matching path by its position in the listing, not by name" ok \
   || report "check-leakage reports a matching path by its position in the listing, not by name" no \
-     "fail=$n0 warn=$n1 path-and-contents=$n2 absent=$n3 not-utf8=$n4 not-utf8-contents=$n5"
+     "fail=$n0 warn=$n1 path-and-contents=$n2 absent=$n3 not-utf8=$n4 not-utf8-contents=$n5 quoted=$n6 unreadable=$n7"
 
 # 425. #357 — the guard scans its own text like any other file, so a private word written back
 #      into the script is caught, in the private tiers and in the public one.
