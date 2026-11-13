@@ -288,13 +288,21 @@ warned=0
 # The report reaches a public CI log, so it holds a tier and a location and never the text that
 # matched or the pattern. A path that matches is itself that text: it is named by its position
 # in the listing, here and wherever a hit inside the file is reported (#357).
+#
+# Each tier is tried against the listing as text in this locale, and again as bytes. In a UTF-8
+# locale a name that is not UTF-8 is matched by no expression under BSD grep, and under GNU
+# grep without -a it is matched and a sentence on stderr stands in for it. Both read as no hit (#357).
 named=""
 while IFS= read -r tier; do
   [ -s "$TIERS/$tier" ] || continue
   case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
   case "$tier" in warn*) kind=WARNING ;; *) kind=LEAK ;; esac
   # shellcheck disable=SC2086  # $fold is one option or nothing
-  hits=$(printf '%s\n' "$list" | grep -nE $fold -f "$TIERS/$tier" 2>/dev/null)
+  hits=$(
+    { printf '%s\n' "$list" | grep -anE $fold -f "$TIERS/$tier" 2>/dev/null
+      printf '%s\n' "$list" | LC_ALL=C grep -anE $fold -f "$TIERS/$tier" 2>/dev/null
+    } | LC_ALL=C sort -t: -k1,1n -u
+  )
   [ -n "$hits" ] || continue
   named="$named$(printf '%s\n' "$hits" | LC_ALL=C sed 's/^[0-9]*://')
 "
@@ -305,10 +313,11 @@ done <<EOF
 $TIER_ORDER
 EOF
 
+# A name is compared as bytes, so one that is not text in this locale is still found (#357).
 shown() {  # $1 = a file that hit. Prints its name, or its position when the name itself matched.
-  if printf '%s' "$named" | grep -Fxq -e "$1"; then
+  if printf '%s' "$named" | LC_ALL=C grep -aFxq -e "$1"; then
     printf 'path number %s in the listing,' \
-      "$(printf '%s\n' "$list" | grep -nFx -e "$1" | LC_ALL=C sed -n '1s/:.*//p')"
+      "$(printf '%s\n' "$list" | LC_ALL=C grep -anFx -e "$1" | LC_ALL=C sed -n '1s/:.*//p')"
   else
     printf '%s' "$1"
   fi

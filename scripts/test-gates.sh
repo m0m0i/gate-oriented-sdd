@@ -10951,7 +10951,8 @@ lk_report() {  # $1 = the exit status wanted, then each line the report must hol
   done
   [ "$(grep -cE '^(LEAK|WARNING) ' "$TMP/lkerr")" = "$#" ] || { printf 'other report lines'; return; }
   grep -q 'withheld on purpose' "$TMP/lkerr" || { printf 'not said to be withheld'; return; }
-  cat "$TMP/lkout" "$TMP/lkerr" | grep -qi -e 'zq_' -e "$LKG_ID" && { printf 'the matched text is printed'; return; }
+  # Read as bytes: in a UTF-8 locale BSD grep matches nothing on a line that is not UTF-8.
+  cat "$TMP/lkout" "$TMP/lkerr" | LC_ALL=C grep -qai -e 'zq_' -e "$LKG_ID" && { printf 'the matched text is printed'; return; }
   printf ok
 }
 
@@ -11021,10 +11022,41 @@ printf 'nothing to see\n' > "$r/Zq_Exact.md"; printf 'nothing to see\n' > "$r/ke
 lk_commit "$r"; rm "$r/Zq_Exact.md"
 out=$(run_leak "$r"); n3=$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1')
 
-[ "$n0 $n1 $n2 $n3" = "ok ok ok ok" ] \
+# A name that is not UTF-8 is matched as bytes whatever the locale. In a UTF-8 locale BSD grep
+# matches no expression against such a line, and GNU grep matches it and prints a sentence on
+# stderr in its place: either way the path read as no hit. Both locale names are run, since a
+# machine has one or the other, and a name it does not have is the C locale. The entry is made
+# in the index, because a filesystem may refuse the name, and the byte is built here so this
+# file stays ASCII.
+lk_bytes=$(printf 'a-\351-Zq_Exact.md')
+r=$(leak_repo lkg-n-bytes)
+( cd "$r" && git update-index --add --cacheinfo "100644,$(git hash-object -w scripts/check-leakage.sh),$lk_bytes" \
+  && git commit -qm two ) >/dev/null 2>&1
+n4=""
+for lk_locale in C.UTF-8 en_US.UTF-8; do
+  out=$(LC_ALL=$lk_locale; export LC_ALL; run_leak "$r")
+  n4="$n4$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1')"
+done
+
+# And where the filesystem takes the name, a hit inside that file is located by the position too.
+r=$(leak_repo lkg-n-bytes-file)
+if ( printf 'a line holding ZQ_Warn here\n' > "$r/$lk_bytes" ) 2>/dev/null && [ -e "$r/$lk_bytes" ]; then
+  lk_commit "$r"
+  n5=""
+  for lk_locale in C.UTF-8 en_US.UTF-8; do
+    out=$(LC_ALL=$lk_locale; export LC_ALL; run_leak "$r")
+    n5="$n5$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1' \
+      'WARNING [warn ignore-case] path number 1 in the listing, line(s): 1')"
+  done
+else
+  n5=okok
+  note_skip "leakage/non-utf8-name-on-disk" "this filesystem refuses a file name that is not UTF-8"
+fi
+
+[ "$n0 $n1 $n2 $n3 $n4 $n5" = "ok ok ok ok okok okok" ] \
   && report "check-leakage reports a matching path by its position in the listing, not by name" ok \
   || report "check-leakage reports a matching path by its position in the listing, not by name" no \
-     "fail=$n0 warn=$n1 path-and-contents=$n2 absent=$n3"
+     "fail=$n0 warn=$n1 path-and-contents=$n2 absent=$n3 not-utf8=$n4 not-utf8-contents=$n5"
 
 # 425. #357 — the guard scans its own text like any other file, so a private word written back
 #      into the script is caught, in the private tiers and in the public one.
