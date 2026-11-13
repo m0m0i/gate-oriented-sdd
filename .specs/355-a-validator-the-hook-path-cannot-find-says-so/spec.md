@@ -114,6 +114,7 @@ Decided rather than asked, as design calls:
   2. **Classify a 127, by text alone (`qg_first_word`).**
      - Under `set -f` with the default `IFS`, split the command into words.
      - Skip leading assignments. A word is one only when it matches `[A-Za-z_][A-Za-z0-9_]*=*`. An assignment whose name is exactly `PATH` makes the first word unknown.
+     - A first word that holds an `=` and is no assignment is unknown. It reads as a mistyped assignment, which no host's `PATH` supplies. Amended 2026-11-13, in T1: without this rule `a-b=c <missing>` was a bare word, so AC1's case, where T1's row holds it to AC2.
      - A word holding a quote, `$`, a backtick, `(`, `{`, `\`, `;`, `&`, `|`, `<`, `>`, `*`, `?` or `[`, or starting with `~`, is unknown. The gate evals under `set +f` (`:598`), so a glob or a tilde can expand to a name the probe never checked, and a redirection is not a command.
      - A word holding a `/` is never called "not on the `PATH`".
      - Otherwise the word is bare, and `command -v "$w" >/dev/null 2>&1` is asked under the gate's own `PATH`. dash returns 127 for a missing name and bash 1, so the test is for non-zero, never for `= 1`.
