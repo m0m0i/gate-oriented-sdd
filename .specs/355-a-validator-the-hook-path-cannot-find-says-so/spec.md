@@ -1,5 +1,5 @@
 # Spec: a validator the hook's PATH cannot find blocks with a message that says so
-- Slug: 355-a-validator-the-hook-path-cannot-find-says-so   Issue: 355   Type: bug   Status: draft
+- Slug: 355-a-validator-the-hook-path-cannot-find-says-so   Issue: 355   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-11-08
 
 ## 1. Requirements (WHAT / WHY)
