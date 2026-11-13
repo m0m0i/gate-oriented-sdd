@@ -1,5 +1,5 @@
 # Spec: the leakage guard holds no private literal, fails closed without its list, and never prints what it matched
-- Slug: 357-the-leakage-guard-holds-no-private-literal   Issue: 357   Type: bug   Status: draft
+- Slug: 357-the-leakage-guard-holds-no-private-literal   Issue: 357   Type: bug   Status: approved
 - Author: m0m0i   Date: 2026-11-13
 
 ## 1. Requirements (WHAT / WHY)
