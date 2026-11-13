@@ -209,4 +209,4 @@ Decided rather than asked, as design calls:
   - **The run:** headless, `--sandbox --mode accept-edits`, a trusted folder.
   - **Recorded from inside the hook:** a validator that writes the hook's `PATH` and `command -v npm` to a file.
   - **Nothing is pushed.**
-- [ ] **T5:** the records for AC8 and AC10: `docs/fidelity.md`'s row, and `docs/verified.md`'s section from T4.
+- [x] **T5:** the records for AC8 and AC10: `docs/fidelity.md`'s row, and `docs/verified.md`'s section from T4.
