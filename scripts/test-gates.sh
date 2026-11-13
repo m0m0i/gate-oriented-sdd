@@ -10702,13 +10702,15 @@ leak_repo() {  # $1 = name. A git repo holding only the guard's own copy, which 
 LKG_PAT="$TMP/lkg-patterns"; mkdir -p "$TMP/lkg-home"
 printf '%s\n' '# a synthetic list' '' '[fail]' 'Zq_Exact' '[fail ignore-case]' 'zq_fold' \
   '[warn ignore-case]' 'zq_warn' > "$LKG_PAT"
-run_leak() {  # $1 = repo; $2 = the pattern file, `-` to name none; $3 = HOME; $4 = XDG_CONFIG_HOME
+run_leak() {  # $1 = repo; $2 = the pattern file, `-` to name none; $3 = HOME; $4 = XDG_CONFIG_HOME;
+              # then the guard's own arguments, before which $2 to $4 may be given empty
   ( cd "$1" || exit
     unset GATE_SDD_LEAKAGE_PATTERNS XDG_CONFIG_HOME
     HOME=${3:-$TMP/lkg-home}; export HOME
     [ "${2:-$LKG_PAT}" = - ] || { GATE_SDD_LEAKAGE_PATTERNS=${2:-$LKG_PAT}; export GATE_SDD_LEAKAGE_PATTERNS; }
     [ -z "${4:-}" ] || { XDG_CONFIG_HOME=$4; export XDG_CONFIG_HOME; }
-    sh scripts/check-leakage.sh >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
+    if [ "$#" -gt 4 ]; then shift 4; else set --; fi
+    sh scripts/check-leakage.sh "$@" >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
 }
 
 # An empty work-set takes the guard's copy out of it: untracked, and ignored (#357).
@@ -11042,6 +11044,152 @@ out=$(run_leak "$r")
   && report "check-leakage scans its own script, and catches a pattern written into it" ok \
   || report "check-leakage scans its own script, and catches a pattern written into it" no \
      "private=$g0 public=$g1 as-shipped=$g2"
+
+# 426. #357 AC6 — `--public-only` runs the public tier alone, for a pull request from a fork, which
+#      gets no secret. It needs no pattern file, says on every run that the private patterns were
+#      not run and that this is not a pass, and exits by the public tier's result.
+LKG_NOTICE='check-leakage: PRIVATE PATTERNS NOT RUN (--public-only): not a pass for private context'
+lk_noticed() {  # Reads the last run_leak. Prints nothing when the notice is there and no line says
+                # the private patterns were loaded, or what is wrong.
+  grep -Fxq -e "$LKG_NOTICE" "$TMP/lkerr" || printf '+no-notice'
+  cat "$TMP/lkout" "$TMP/lkerr" | grep -q 'loaded' && printf '+says-loaded'
+}
+
+r=$(leak_repo lkg-o-clean); printf 'nothing to see\n' > "$r/note.md"
+out=$(run_leak "$r" - "" "" --public-only)
+[ "$out" = 0 ] && grep -q '2 file(s) scanned, private patterns not run' "$TMP/lkout" && o0=ok || o0="exit=$out"
+o0="$o0$(lk_noticed)"
+
+r=$(leak_repo lkg-o-hit); printf 'see %s for the rationale\n' "$LKG_ID" > "$r/doc.md"
+out=$(run_leak "$r" - "" "" --public-only)
+o1="$(lk_report 1 'LEAK [public] doc.md line(s): 1')$(lk_noticed)"
+
+# With a usable list named and a hit in each of its sections and in a path, the flag still runs
+# the public tier alone. The control is the same tree without the flag.
+r=$(leak_repo lkg-o-private)
+printf '%s\n' 'Zq_Exact' 'zq_FOLD' 'zq_warn' > "$r/note.md"; printf 'nothing to see\n' > "$r/Zq_Exact.md"
+out=$(run_leak "$r"); [ "$out" = 1 ] && o2=ok || o2="control-exit=$out"
+out=$(run_leak "$r" "" "" "" --public-only)
+[ "$out" = 0 ] && ! grep -qE '^(LEAK|WARNING) ' "$TMP/lkerr" && o3=ok || o3="exit=$out"
+o3="$o3$(lk_noticed)"
+
+# The flag skips the private patterns and nothing else: an empty work-set is still not a pass.
+r=$(leak_repo lkg-o-empty)
+( cd "$r" && git rm -q --cached scripts/check-leakage.sh && mkdir -p .git/info \
+  && printf 'scripts/\n' >> .git/info/exclude ) >/dev/null 2>&1
+out=$(run_leak "$r" - "" "" --public-only)
+[ "$out" = 1 ] && grep -q 'work-set is empty' "$TMP/lkerr" && o4=ok || o4="exit=$out"
+case "$(cat "$TMP/lkout")" in *clean*) o4="$o4+says-clean" ;; esac
+
+[ "$o0 $o1 $o2 $o3 $o4" = "ok ok ok ok ok" ] \
+  && report "check-leakage --public-only runs the public tier alone, and says it is not a pass" ok \
+  || report "check-leakage --public-only runs the public tier alone, and says it is not a pass" no \
+     "clean=$o0 public-hit=$o1 private-control=$o2 private-not-run=$o3 empty-work-set=$o4"
+
+# 427. #357 — `--public-only` is the guard's one argument. Anything else is refused over a clean
+#      tree and a usable pattern file, with nothing scanned, and the argument is not printed.
+lk_refused() {  # The guard's arguments, run in $lk_r. Prints ok, or what is wrong.
+  out=$(run_leak "$lk_r" "" "" "" "$@"); all=$(cat "$TMP/lkout" "$TMP/lkerr")
+  [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
+  case "$all" in *clean*) printf 'says clean'; return ;; esac
+  case "$all" in *'The only argument is --public-only'*) ;; *) printf 'not refused as an argument'; return ;; esac
+  case "$all" in *zq_*) printf 'the argument is printed'; return ;; esac
+  printf ok
+}
+lk_r=$(leak_repo lkg-a-args); printf 'nothing to see\n' > "$lk_r/note.md"
+a0=$(lk_refused --zq_other)
+a1=$(lk_refused --public-only zq_more)
+a2=$(lk_refused zq_first --public-only)
+a3=$(lk_refused --public-only --public-only)
+a4=$(lk_refused '')
+a5=$(lk_refused --public)
+
+[ "$a0 $a1 $a2 $a3 $a4 $a5" = "ok ok ok ok ok ok" ] \
+  && report "check-leakage refuses any argument but --public-only, and does not print it" ok \
+  || report "check-leakage refuses any argument but --public-only, and does not print it" no \
+     "unknown=$a0 flag-then-more=$a1 more-then-flag=$a2 flag-twice=$a3 empty=$a4 prefix=$a5"
+
+# 428. #357 AC6 — CI's `Leakage guard` step, run here as .github/workflows/ci.yml holds it. The
+#      secret reaches the guard as its pattern file, a secret that is unset or empty fails the
+#      step, and only a pull request from a fork runs the public tier alone. The two values the
+#      step reads arrive through `env:`, so nothing is interpolated into the script it runs.
+
+# The guard's half of it: an unset secret is a file with nothing in it, or with one empty line.
+p="$TMP/lkg-p-empty"; printf '' > "$p"
+e0=$(lk_fault lkg-f-empty "$p" 'no fail pattern')
+p="$TMP/lkg-p-newline"; printf '\n' > "$p"
+e1=$(lk_fault lkg-f-newline "$p" 'no fail pattern')
+
+lk_step() {  # $1 = `env` or `run`. Prints that block of the step, without its indentation.
+  awk -v want="$1" '
+    /^      - name: Leakage guard$/ { step = 1; next }
+    step && /^      - / { exit }
+    step && /^        env:$/ { block = "env"; next }
+    step && /^        run: \|$/ { block = "run"; next }
+    step && block != "" && /^          / { if (block == want) print substr($0, 11); next }
+    step && block != "" && /^$/ { if (block == want) print ""; next }
+    step { block = "" }
+  ' "$ROOT/.github/workflows/ci.yml"
+}
+lk_step run > "$TMP/lkg-step.sh"
+k0=ok
+[ -s "$TMP/lkg-step.sh" ] || k0="no run block"
+grep -Fq -e '${{' "$TMP/lkg-step.sh" && k0="$k0+interpolated"
+lk_step env > "$TMP/lkg-step.env"
+grep -Fxq -e 'LEAKAGE_PATTERNS: ${{ secrets.LEAKAGE_PATTERNS }}' "$TMP/lkg-step.env" || k0="$k0+no-secret"
+grep -Fxq -e "FROM_FORK: \${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}" \
+  "$TMP/lkg-step.env" || k0="$k0+no-fork-test"
+
+mkdir -p "$TMP/lkg-runner"
+run_step() {  # $1 = repo; $2 = FROM_FORK; $3 = LEAKAGE_PATTERNS. `-` leaves either one unset.
+              # Prints the step's exit status, with `+left` when the file it wrote is still there.
+  ( cd "$1" || exit
+    unset GATE_SDD_LEAKAGE_PATTERNS XDG_CONFIG_HOME FROM_FORK LEAKAGE_PATTERNS
+    HOME=$TMP/lkg-home; RUNNER_TEMP=$TMP/lkg-runner; export HOME RUNNER_TEMP
+    [ "$2" = - ] || { FROM_FORK=$2; export FROM_FORK; }
+    [ "$3" = - ] || { LEAKAGE_PATTERNS=$3; export LEAKAGE_PATTERNS; }
+    sh -e "$TMP/lkg-step.sh" >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
+  [ -z "$(find "$TMP/lkg-runner" -type f)" ] || printf '+left'
+}
+lk_unset() {  # Reads the last run_step, whose status is $out: the step failed for want of the
+              # secret, on a file it wrote under RUNNER_TEMP. Prints ok, or what is wrong.
+  [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
+  all=$(cat "$TMP/lkout" "$TMP/lkerr")
+  case "$all" in *clean*) printf 'says clean'; return ;; esac
+  case "$all" in *'no fail pattern'*) ;; *) printf 'fault not named'; return ;; esac
+  case "$all" in *"Looked in: $TMP/lkg-runner/"*) ;; *) printf 'not a file under RUNNER_TEMP'; return ;; esac
+  case "$all" in *'LEAKAGE_PATTERNS is unset or empty'*) ;; *) printf 'secret not named'; return ;; esac
+  printf ok
+}
+LKG_SECRET=$(cat "$LKG_PAT")
+
+# This repository's own run: a push to main, or a pull request from one of its branches.
+r=$(leak_repo lkg-k-own); printf 'nothing to see\n' > "$r/note.md"
+out=$(run_step "$r" false "$LKG_SECRET")
+[ "$out" = 0 ] && grep -q '2 file(s) scanned, private patterns loaded' "$TMP/lkout" && k1=ok || k1="exit=$out"
+cat "$TMP/lkout" "$TMP/lkerr" | grep -qi 'zq_' && k1="$k1+the secret is printed"
+out=$(run_step "$r" false ""); k2=$(lk_unset)
+out=$(run_step "$r" false -); k3=$(lk_unset)
+# A fork test that did not evaluate is not a fork.
+out=$(run_step "$r" - -); k4=$(lk_unset)
+out=$(run_step "$r" "" ""); k5=$(lk_unset)
+
+r=$(leak_repo lkg-k-own-hit); printf 'a line holding Zq_Exact here\n' > "$r/note.md"
+out=$(run_step "$r" false "$LKG_SECRET"); k6=$(lk_report 1 'LEAK [fail] note.md line(s): 1')
+
+# A pull request from a fork: no secret, the public tier alone, and the notice.
+r=$(leak_repo lkg-k-fork); printf 'a line holding Zq_Exact here\n' > "$r/note.md"
+out=$(run_step "$r" true "")
+[ "$out" = 0 ] && grep -q '2 file(s) scanned, private patterns not run' "$TMP/lkout" && k7=ok || k7="exit=$out"
+k7="$k7$(lk_noticed)"
+r=$(leak_repo lkg-k-fork-hit); printf 'see %s for the rationale\n' "$LKG_ID" > "$r/doc.md"
+out=$(run_step "$r" true "")
+k8="$(lk_report 1 'LEAK [public] doc.md line(s): 1')$(lk_noticed)"
+
+[ "$e0 $e1 $k0 $k1 $k2 $k3 $k4 $k5 $k6 $k7 $k8" = "ok ok ok ok ok ok ok ok ok ok ok" ] \
+  && report "CI's leakage step fails without its secret, and runs the public tier alone only for a fork" ok \
+  || report "CI's leakage step fails without its secret, and runs the public tier alone only for a fork" no \
+     "empty-file=$e0 newline-file=$e1 step=$k0 own=$k1 empty-secret=$k2 unset-secret=$k3 fork-unset=$k4 fork-empty=$k5 own-hit=$k6 fork=$k7 fork-hit=$k8"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #

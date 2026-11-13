@@ -8,8 +8,21 @@
 # path in a doc comment.
 #
 # It runs in CI and is safe to run locally: ./scripts/check-leakage.sh
-# Exit 0 = clean. Exit 1 = something private is in the tree.
+# Exit 0 = clean. Exit 1 = something private is in the tree, or the guard could not look.
 set -u
+
+# --public-only is the one argument: the public tier alone, for a pull request from a fork, which
+# has no private patterns to be given. Any other argument is refused, and is not printed (#357).
+PUBLIC_ONLY=0
+case "$#:${1-}" in
+  0:) ;;
+  1:--public-only) PUBLIC_ONLY=1 ;;
+  *)
+    echo "check-leakage FAILED — it was given an argument it does not take, so it looked at nothing." >&2
+    echo "  The only argument is --public-only, which runs the public tier alone and is not a" >&2
+    echo "  pass for private context. The argument is withheld: this report can reach a public log." >&2
+    exit 1 ;;
+esac
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT" || exit 1
@@ -39,14 +52,11 @@ pattern_fault() {  # $1 = the fault
   exit 1
 }
 
-[ -e "$PATTERNS" ] || pattern_fault "no such file"
-{ [ -f "$PATTERNS" ] && [ -r "$PATTERNS" ]; } || pattern_fault "the file cannot be read"
-
-# One file per section, named for it, with each pattern's line number beside it in `<section>.at`.
-# The directory holds private text, so it goes on every exit (#357).
+# Every tier is a file of expressions in this directory. It holds private text, so it goes on
+# every exit (#357).
 TIERS=$(mktemp -d 2>/dev/null) || TIERS=""
 if [ -z "$TIERS" ] || [ ! -d "$TIERS" ]; then
-  echo "check-leakage FAILED — mktemp -d made no directory to split the private patterns into." >&2
+  echo "check-leakage FAILED — mktemp -d made no directory to write the tiers into." >&2
   exit 1
 fi
 trap 'rm -rf "$TIERS"' EXIT
@@ -54,50 +64,65 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# A CR before the newline is part of no pattern: left in, the pattern matches nothing.
-tr -d '\r' 2>/dev/null < "$PATTERNS" > "$TIERS/list" || pattern_fault "the file cannot be read"
+# One file per section, named for it, with each pattern's line number beside it in `<section>.at`.
+load_private() {
+  [ -e "$PATTERNS" ] || pattern_fault "no such file"
+  { [ -f "$PATTERNS" ] && [ -r "$PATTERNS" ]; } || pattern_fault "the file cannot be read"
 
-# A blank line is dropped because an empty expression matches every line.
-section=""
-at=0
-orphans=""
-while IFS= read -r line || [ -n "$line" ]; do
-  at=$((at + 1))
-  case "$line" in
-    '#'*) continue ;;
-    '[fail]'|'[fail ignore-case]'|'[warn ignore-case]')
-      section=${line#?}; section=${section%?}; continue ;;
-    *[![:space:]]*) ;;
-    *) continue ;;
-  esac
-  if [ -z "$section" ]; then
-    orphans="$orphans $at"
-    continue
-  fi
-  printf '%s\n' "$line" >> "$TIERS/$section"
-  printf '%s\n' "$at" >> "$TIERS/$section.at"
-done < "$TIERS/list"
+  # A CR before the newline is part of no pattern: left in, the pattern matches nothing.
+  tr -d '\r' 2>/dev/null < "$PATTERNS" > "$TIERS/list" || pattern_fault "the file cannot be read"
 
-[ -z "$orphans" ] || pattern_fault "line(s)$orphans hold a pattern outside any section"
+  # A blank line is dropped because an empty expression matches every line.
+  section=""
+  at=0
+  orphans=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    at=$((at + 1))
+    case "$line" in
+      '#'*) continue ;;
+      '[fail]'|'[fail ignore-case]'|'[warn ignore-case]')
+        section=${line#?}; section=${section%?}; continue ;;
+      *[![:space:]]*) ;;
+      *) continue ;;
+    esac
+    if [ -z "$section" ]; then
+      orphans="$orphans $at"
+      continue
+    fi
+    printf '%s\n' "$line" >> "$TIERS/$section"
+    printf '%s\n' "$at" >> "$TIERS/$section.at"
+  done < "$TIERS/list"
 
-# An expression grep cannot compile makes every scan exit above 1 into a discarded stderr, which
-# reads as no hit. Each section is compiled against empty input before any file is scanned.
-for section in 'fail' 'fail ignore-case' 'warn ignore-case'; do
-  [ -s "$TIERS/$section" ] || continue
-  case "$section" in *ignore-case) fold=-i ;; *) fold="" ;; esac
-  # shellcheck disable=SC2086  # $fold is one option or nothing
-  grep -E $fold -f "$TIERS/$section" </dev/null >/dev/null 2>&1
-  [ "$?" -gt 1 ] || continue
-  invalid=""
-  while IFS= read -r line <&3 && IFS= read -r at <&4; do
-    # shellcheck disable=SC2086
-    grep -E $fold -e "$line" </dev/null >/dev/null 2>&1
-    [ "$?" -le 1 ] || invalid="$invalid $at"
-  done 3< "$TIERS/$section" 4< "$TIERS/$section.at"
-  pattern_fault "invalid expression in [$section], line(s)$invalid"
-done
+  [ -z "$orphans" ] || pattern_fault "line(s)$orphans hold a pattern outside any section"
 
-{ [ -s "$TIERS/fail" ] || [ -s "$TIERS/fail ignore-case" ]; } || pattern_fault "it holds no fail pattern"
+  # An expression grep cannot compile makes every scan exit above 1 into a discarded stderr, which
+  # reads as no hit. Each section is compiled against empty input before any file is scanned.
+  for section in 'fail' 'fail ignore-case' 'warn ignore-case'; do
+    [ -s "$TIERS/$section" ] || continue
+    case "$section" in *ignore-case) fold=-i ;; *) fold="" ;; esac
+    # shellcheck disable=SC2086  # $fold is one option or nothing
+    grep -E $fold -f "$TIERS/$section" </dev/null >/dev/null 2>&1
+    [ "$?" -gt 1 ] || continue
+    invalid=""
+    while IFS= read -r line <&3 && IFS= read -r at <&4; do
+      # shellcheck disable=SC2086
+      grep -E $fold -e "$line" </dev/null >/dev/null 2>&1
+      [ "$?" -le 1 ] || invalid="$invalid $at"
+    done 3< "$TIERS/$section" 4< "$TIERS/$section.at"
+    pattern_fault "invalid expression in [$section], line(s)$invalid"
+  done
+
+  { [ -s "$TIERS/fail" ] || [ -s "$TIERS/fail ignore-case" ]; } || pattern_fault "it holds no fail pattern"
+}
+
+# A run that leaves the private patterns out says so before it scans, whatever it then finds,
+# and never says they were loaded: read as a pass, it clears a tree nothing private was looked
+# for in (#357).
+if [ "$PUBLIC_ONLY" -eq 1 ]; then
+  echo "check-leakage: PRIVATE PATTERNS NOT RUN (--public-only): not a pass for private context" >&2
+else
+  load_private
+fi
 
 # Decided once and read twice: which lister runs, and whether a leading `"` can only be git's
 # doing. In a non-git tree nothing quotes, so a file genuinely named `"quoted".md` must not be
@@ -240,7 +265,8 @@ fi
 scan() { printf '%s' "$scanlist" | tr '\n' '\0' | xargs -0 grep "$@" -- 2>/dev/null; }
 
 # Every tier is a file of expressions over the same work-set: the private file's three sections,
-# and the public tier, which fails as [fail] does. A tier with no file is a tier not run (#357).
+# and the public tier, which fails as [fail] does. A tier with no file is a tier not run, which
+# is every private one under --public-only (#357).
 if ! printf '%s\n' "$IDS" > "$TIERS/public"; then
   echo "check-leakage FAILED — the public tier could not be written beside the private patterns." >&2
   exit 1
@@ -330,5 +356,9 @@ fi
 
 note=""
 [ "$absent" -gt 0 ] && note=", $absent index entr(ies) not in the working tree"
-echo "check-leakage: clean — $scanned file(s) scanned$note, private patterns loaded"
+if [ "$PUBLIC_ONLY" -eq 1 ]; then
+  echo "check-leakage: public tier clean — $scanned file(s) scanned$note, private patterns not run"
+else
+  echo "check-leakage: clean — $scanned file(s) scanned$note, private patterns loaded"
+fi
 exit 0

@@ -24,8 +24,27 @@ jobs:
       # First, and on every PR. This harness was extracted from a private
       # polyrepo, and the cheapest moment to catch private context is before it
       # is merged — not after it is public and in the history.
+      #
+      # The private patterns are the repository secret LEAKAGE_PATTERNS, written to a file the
+      # guard is pointed at, and a secret that is unset or empty fails the step. A pull request
+      # from a fork is given no secrets, so it runs the public tier alone, which the guard says
+      # is not a pass. Both values reach the script through `env:`, never by interpolation into
+      # `run:`, and only the exact word `true` is a fork (#357).
       - name: Leakage guard
-        run: ./scripts/check-leakage.sh
+        env:
+          LEAKAGE_PATTERNS: ${{ secrets.LEAKAGE_PATTERNS }}
+          FROM_FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          if [ "${FROM_FORK-}" = true ]; then
+            exec ./scripts/check-leakage.sh --public-only
+          fi
+          if [ -z "${LEAKAGE_PATTERNS-}" ]; then
+            echo "::error title=Leakage guard::The repository secret LEAKAGE_PATTERNS is unset or empty, so the private patterns cannot run."
+          fi
+          patterns=$(mktemp "${RUNNER_TEMP:-/tmp}/leakage-patterns.XXXXXX")
+          trap 'rm -f "$patterns"' EXIT
+          printf '%s\n' "${LEAKAGE_PATTERNS-}" > "$patterns"
+          GATE_SDD_LEAKAGE_PATTERNS=$patterns ./scripts/check-leakage.sh
 
       - name: Both plugin manifests agree
         run: ./scripts/check-manifests.py
