@@ -10697,7 +10697,19 @@ leak_repo() {  # $1 = name. A git repo holding only the guard, which SELF exclud
     && git add -A && git commit -qm init ) >/dev/null 2>&1
   echo "$r"
 }
-run_leak() { ( cd "$1" && sh scripts/check-leakage.sh >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" ) }
+# Every run gets a synthetic pattern file and a HOME under $TMP, so no case reads the list of
+# the machine it runs on. `zq_` marks every synthetic pattern: no path mktemp makes holds it (#357).
+LKG_PAT="$TMP/lkg-patterns"; mkdir -p "$TMP/lkg-home"
+printf '%s\n' '# a synthetic list' '' '[fail]' 'Zq_Exact' '[fail ignore-case]' 'zq_fold' \
+  '[warn ignore-case]' 'zq_warn' > "$LKG_PAT"
+run_leak() {  # $1 = repo; $2 = the pattern file, `-` to name none; $3 = HOME; $4 = XDG_CONFIG_HOME
+  ( cd "$1" || exit
+    unset GATE_SDD_LEAKAGE_PATTERNS XDG_CONFIG_HOME
+    HOME=${3:-$TMP/lkg-home}; export HOME
+    [ "${2:-$LKG_PAT}" = - ] || { GATE_SDD_LEAKAGE_PATTERNS=${2:-$LKG_PAT}; export GATE_SDD_LEAKAGE_PATTERNS; }
+    [ -z "${4:-}" ] || { XDG_CONFIG_HOME=$4; export XDG_CONFIG_HOME; }
+    sh scripts/check-leakage.sh >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
+}
 
 r=$(leak_repo lkg-empty)
 out=$(run_leak "$r")
@@ -10829,6 +10841,97 @@ case "$(cat "$TMP/lkerr")" in *"cannot be handed to grep"*) c20=ok ;; *) c20=no 
   && report "check-leakage counts what it scanned, and fails on nothing or unreadable" ok \
   || report "check-leakage counts what it scanned, and fails on nothing or unreadable" no \
      "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7 odd-exit=$c8 odd-count=$c9 space-hit=$c10 utf8-hit=$c11 dash-hit=$c12 del-exit=$c13 del-noted=$c14 del-count=$c15 unsearch=$c16/$c17/$c18 quoted=$c19/$c20"
+
+# 421. #357 AC2 — a pattern file that is missing or cannot be used is not a pass. Each fault exits
+#      1 over a tree with nothing in it to find, names itself and the file the guard looked in,
+#      and prints no pattern: the report reaches a public CI log.
+lk_fault() {  # $1 = fixture, $2 = pattern file, $3 = the fault's words, $4 = where in the file, if
+              # the fault has a place. Prints ok, or what is wrong.
+  r=$(leak_repo "$1"); printf 'nothing to see\n' > "$r/note.md"
+  out=$(run_leak "$r" "$2"); all=$(cat "$TMP/lkout" "$TMP/lkerr")
+  [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
+  case "$all" in *clean*) printf 'says clean'; return ;; esac
+  case "$all" in *"$3"*) ;; *) printf 'fault not named'; return ;; esac
+  case "$all" in *"${4:-}"*) ;; *) printf 'place not named'; return ;; esac
+  case "$all" in *"$2"*) ;; *) printf 'file not named'; return ;; esac
+  case "$all" in *zq_*) printf 'a pattern is printed'; return ;; esac
+  printf ok
+}
+
+f0=$(lk_fault lkg-f-absent "$TMP/lkg-p-absent" 'no such file')
+
+p="$TMP/lkg-p-unreadable"; cp "$LKG_PAT" "$p"; chmod 000 "$p" 2>/dev/null
+if cat "$p" >/dev/null 2>&1; then
+  f1=ok
+  note_skip "leakage/unreadable-patterns" "permissions not enforced here (running as root?)"
+else
+  f1=$(lk_fault lkg-f-unreadable "$p" 'cannot be read')
+fi
+chmod 644 "$p" 2>/dev/null
+
+# No fail pattern: a section with nothing under it, and a list that only warns.
+p="$TMP/lkg-p-nofail"; printf '%s\n' '[fail]' '# nothing under it' '' '[warn ignore-case]' 'zq_warn' > "$p"
+f2=$(lk_fault lkg-f-nofail "$p" 'no fail pattern')
+
+p="$TMP/lkg-p-orphan"; printf '%s\n' '# a comment' 'zq_orphan' '[fail]' 'zq_kept' > "$p"
+f3=$(lk_fault lkg-f-orphan "$p" 'outside any section' 'line(s) 2')
+
+# An invalid expression is a fault in whichever section holds it, the warning one included.
+f4=""; lk_n=0
+for s in 'fail' 'fail ignore-case' 'warn ignore-case'; do
+  lk_n=$((lk_n + 1)); p="$TMP/lkg-p-invalid-$lk_n"
+  printf '%s\n' '[fail]' 'zq_kept' "[$s]" 'zq_fine' 'zq_(open' > "$p"
+  f4="$f4$(lk_fault "lkg-f-invalid-$lk_n" "$p" 'invalid expression' "[$s], line(s) 5")"
+done
+
+[ "$f0$f1$f2$f3$f4" = "okokokokokokok" ] \
+  && report "check-leakage fails without a usable pattern file, and prints no pattern" ok \
+  || report "check-leakage fails without a usable pattern file, and prints no pattern" no \
+     "absent=$f0 unreadable=$f1 no-fail=$f2 orphan=$f3 invalid=$f4"
+
+# 422. #357 AC1 — the file's three sections are a fail, a fail ignoring case and a warning ignoring
+#      case. The file is the one GATE_SDD_LEAKAGE_PATTERNS names, else the one under
+#      XDG_CONFIG_HOME, else the one under HOME's .config.
+lk_plant() {  # $1 = fixture, $2 = the text planted, then run_leak's $2, $3 and $4. Prints the exit
+              # status, with `+leak` after it when a line of the report starts with LEAK.
+  r=$(leak_repo "$1"); printf 'a line holding %s here\n' "$2" > "$r/note.md"
+  shift 2; out=$(run_leak "$r" "$@")
+  grep -q '^LEAK' "$TMP/lkerr" && out="$out+leak"
+  printf '%s' "$out"
+}
+
+s0=$(lk_plant lkg-s-exact Zq_Exact)
+s1=$(lk_plant lkg-s-exact-case zq_exact)
+s2=$(lk_plant lkg-s-fold ZQ_Fold)
+s3=$(lk_plant lkg-s-warn ZQ_Warn)
+case "$(cat "$TMP/lkerr")" in *WARNING*) s3="$s3+warning" ;; esac
+case "$(cat "$TMP/lkout")" in *clean*) s3="$s3+clean" ;; esac
+
+# A list written by another tool still loads: CRLF line ends, and a last line with no newline.
+p="$TMP/lkg-p-crlf"; printf '[fail]\r\nzq_crlf\r\n' > "$p"
+s4=$(lk_plant lkg-s-crlf zq_crlf "$p")
+p="$TMP/lkg-p-noeol"; printf '[fail]\nzq_noeol' > "$p"
+s5=$(lk_plant lkg-s-noeol zq_noeol "$p")
+
+h="$TMP/lkg-home-own"; mkdir -p "$h/.config/gate-sdd"
+printf '%s\n' '[fail]' 'zq_home' > "$h/.config/gate-sdd/leakage-patterns"
+x="$TMP/lkg-xdg"; mkdir -p "$x/gate-sdd"
+printf '%s\n' '[fail]' 'zq_xdg' > "$x/gate-sdd/leakage-patterns"
+d0=$(lk_plant lkg-d-home zq_home - "$h")
+d1=$(lk_plant lkg-d-home-other zq_xdg - "$h")
+case "$(cat "$TMP/lkout")" in *clean*) d1="$d1+clean" ;; esac
+d2=$(lk_plant lkg-d-xdg zq_xdg - "$h" "$x")
+d3=$(lk_plant lkg-d-xdg-first zq_home - "$h" "$x")
+d4=$(lk_plant lkg-d-named-first zq_xdg "$LKG_PAT" "$h" "$x")
+# And a HOME with no file under it is the absent fault, at the default path.
+d5=$(lk_plant lkg-d-none zq_home - "$TMP/lkg-home")
+case "$(cat "$TMP/lkerr")" in *"$TMP/lkg-home/.config/gate-sdd/leakage-patterns"*) d5="$d5+named" ;; esac
+
+[ "$s0 $s1 $s2 $s3 $s4 $s5" = "1+leak 0 1+leak 0+warning+clean 1+leak 1+leak" ] \
+  && [ "$d0 $d1 $d2 $d3 $d4 $d5" = "1+leak 0+clean 1+leak 0 0 1+named" ] \
+  && report "check-leakage loads its three sections from the named file, else XDG_CONFIG_HOME, else HOME" ok \
+  || report "check-leakage loads its three sections from the named file, else XDG_CONFIG_HOME, else HOME" no \
+     "exact=$s0 exact-other-case=$s1 fold=$s2 warn=$s3 crlf=$s4 no-eol=$s5 home=$d0 home-other=$d1 xdg=$d2 xdg-first=$d3 named-first=$d4 no-file=$d5"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #

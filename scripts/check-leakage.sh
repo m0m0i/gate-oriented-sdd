@@ -18,17 +18,87 @@ cd "$ROOT" || exit 1
 # itself. Nothing else may be excluded — an allowlist here is how a guard rots.
 SELF="scripts/check-leakage.sh"
 
-# Tier 1 — identifiers that are unambiguously private. Any hit is a failure.
-PRIVATE='perk[-_ ]?patrol|4thFebs|perkpatrol'
-
-# Tier 2 — the private cross-reference id scheme. Bare words like "ADR" are fine
-# and appear legitimately in this repo's own prose; it is the *numbered* forms
-# that carry meaning from the private docs hub.
+# The public tier — the numbered forms of the private cross-reference id scheme. It names
+# nothing, so it stays here and fails on every run; a bare word like "ADR" is this repo's own.
 IDS='\bNS-[0-9]|\bCAP-[a-z]|\bCON-[a-z]|\bADR-[0-9]{4}'
 
-# Tier 3 — domain nouns from the private product. These can appear innocently in
-# a generic example, so they are reported as warnings for a human to judge.
-DOMAIN='card_rules|cardType|benefits[-_]digger|amex|chase_sapphire|venture_x'
+# The private patterns live in a file outside the repository, because every word written here
+# is published. $GATE_SDD_LEAKAGE_PATTERNS names the file, else it is the default path (#357).
+PATTERNS=${GATE_SDD_LEAKAGE_PATTERNS:-${XDG_CONFIG_HOME:-${HOME-}/.config}/gate-sdd/leakage-patterns}
+
+# A list that is missing or unusable is not a pass. The report names the fault and the file,
+# never a pattern: it reaches a public CI log (#357).
+pattern_fault() {  # $1 = the fault
+  echo "check-leakage FAILED — the private patterns were not loaded: $1" >&2
+  echo "  Looked in: $PATTERNS" >&2
+  echo "" >&2
+  echo "  That is \$GATE_SDD_LEAKAGE_PATTERNS, else \${XDG_CONFIG_HOME:-\$HOME/.config}/gate-sdd/leakage-patterns." >&2
+  echo "  The file holds one extended regular expression per line, each under [fail]," >&2
+  echo "  [fail ignore-case] or [warn ignore-case], and at least one of them fails. Blank lines" >&2
+  echo "  and lines starting with # are dropped. CONTRIBUTING.md says what to write in it" >&2
+  echo "  without private context. A run with no list is not a pass." >&2
+  exit 1
+}
+
+[ -e "$PATTERNS" ] || pattern_fault "no such file"
+{ [ -f "$PATTERNS" ] && [ -r "$PATTERNS" ]; } || pattern_fault "the file cannot be read"
+
+# One file per section, named for it, with each pattern's line number beside it in `<section>.at`.
+# The directory holds private text, so it goes on every exit (#357).
+TIERS=$(mktemp -d 2>/dev/null) || TIERS=""
+if [ -z "$TIERS" ] || [ ! -d "$TIERS" ]; then
+  echo "check-leakage FAILED — mktemp -d made no directory to split the private patterns into." >&2
+  exit 1
+fi
+trap 'rm -rf "$TIERS"' EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# A CR before the newline is part of no pattern: left in, the pattern matches nothing.
+tr -d '\r' 2>/dev/null < "$PATTERNS" > "$TIERS/list" || pattern_fault "the file cannot be read"
+
+# A blank line is dropped because an empty expression matches every line.
+section=""
+at=0
+orphans=""
+while IFS= read -r line || [ -n "$line" ]; do
+  at=$((at + 1))
+  case "$line" in
+    '#'*) continue ;;
+    '[fail]'|'[fail ignore-case]'|'[warn ignore-case]')
+      section=${line#?}; section=${section%?}; continue ;;
+    *[![:space:]]*) ;;
+    *) continue ;;
+  esac
+  if [ -z "$section" ]; then
+    orphans="$orphans $at"
+    continue
+  fi
+  printf '%s\n' "$line" >> "$TIERS/$section"
+  printf '%s\n' "$at" >> "$TIERS/$section.at"
+done < "$TIERS/list"
+
+[ -z "$orphans" ] || pattern_fault "line(s)$orphans hold a pattern outside any section"
+
+# An expression grep cannot compile makes every scan exit above 1 into a discarded stderr, which
+# reads as no hit. Each section is compiled against empty input before any file is scanned.
+for section in 'fail' 'fail ignore-case' 'warn ignore-case'; do
+  [ -s "$TIERS/$section" ] || continue
+  case "$section" in *ignore-case) fold=-i ;; *) fold="" ;; esac
+  # shellcheck disable=SC2086  # $fold is one option or nothing
+  grep -E $fold -f "$TIERS/$section" </dev/null >/dev/null 2>&1
+  [ "$?" -gt 1 ] || continue
+  invalid=""
+  while IFS= read -r line <&3 && IFS= read -r at <&4; do
+    # shellcheck disable=SC2086
+    grep -E $fold -e "$line" </dev/null >/dev/null 2>&1
+    [ "$?" -le 1 ] || invalid="$invalid $at"
+  done 3< "$TIERS/$section" 4< "$TIERS/$section.at"
+  pattern_fault "invalid expression in [$section], line(s)$invalid"
+done
+
+{ [ -s "$TIERS/fail" ] || [ -s "$TIERS/fail ignore-case" ]; } || pattern_fault "it holds no fail pattern"
 
 # Decided once and read twice: which lister runs, and whether a leading `"` can only be git's
 # doing. In a non-git tree nothing quotes, so a file genuinely named `"quoted".md` must not be
@@ -179,7 +249,10 @@ scan() { printf '%s\n' "$scanlist" | tr '\n' '\0' | xargs -0 grep "$@" -- 2>/dev
 
 fail=0
 
-hits=$(scan -HniE "$PRIVATE")
+hits=$(
+  [ -s "$TIERS/fail" ] && scan -HnE -f "$TIERS/fail"
+  [ -s "$TIERS/fail ignore-case" ] && scan -HniE -f "$TIERS/fail ignore-case"
+)
 if [ -n "$hits" ]; then
   echo "LEAK (private identifier):" >&2
   echo "$hits" | sed 's/^/  /' >&2
@@ -193,7 +266,8 @@ if [ -n "$hits" ]; then
   fail=1
 fi
 
-hits=$(scan -HniE "$DOMAIN")
+hits=""
+[ -s "$TIERS/warn ignore-case" ] && hits=$(scan -HniE -f "$TIERS/warn ignore-case")
 if [ -n "$hits" ]; then
   echo "WARNING (private domain noun — confirm this is a generic example):" >&2
   echo "$hits" | sed 's/^/  /' >&2
