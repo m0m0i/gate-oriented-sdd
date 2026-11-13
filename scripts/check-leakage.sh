@@ -348,24 +348,35 @@ if [ "$scanned" -eq 0 ]; then
   exit 1
 fi
 
-# NUL-delimited into xargs, so a path holding a space reaches grep as one argument, and `--`,
-# so a path beginning with `-` is not read as an option. Either one unread is a silent pass (#39).
-scan() { printf '%s' "$scanlist" | tr '\n' '\0' | xargs -0 grep "$@" -- 2>/dev/null; }
+# Reads paths one to a line. NUL-delimited into xargs, so a path holding a space reaches grep as
+# one argument, and `--`, so a path beginning with `-` is not read as an option. Either one
+# unread is a silent pass (#39).
+scan() { tr '\n' '\0' | xargs -0 grep "$@" -- 2>/dev/null; }
 
-# One batched pass per tier finds the files that hit, which keeps the run time, and only those
-# are read a second time for their line numbers. The inner loop ends a pipeline, so its lines
-# come back through a command substitution and the verdict is set from them (#357).
+# A file holding a line this locale cannot read whole is scanned again as bytes: BSD grep in a
+# UTF-8 locale matches nothing after a byte that is not UTF-8, which reads as no hit. Only those
+# files get the second pass, which keeps the run time (#357).
+undecoded=$(printf '%s' "$scanlist" | scan -lvxE --null -e '.*' | tr '\0' '\n')
+
+# One batched pass per tier finds the files that hit, and only those are read again for their
+# line numbers, as text and as bytes. The inner loop ends a pipeline, so its lines come back
+# through a command substitution and the verdict is set from them (#357).
 while IFS= read -r tier; do
   [ -s "$TIERS/$tier" ] || continue
   case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
   case "$tier" in warn*) kind=WARNING ;; *) kind=LEAK ;; esac
   # shellcheck disable=SC2086
   hits=$(
-    scan -lE $fold --null -f "$TIERS/$tier" | tr '\0' '\n' | while IFS= read -r f; do
+    { printf '%s' "$scanlist" | scan -lE $fold --null -f "$TIERS/$tier"
+      [ -z "$undecoded" ] \
+        || printf '%s\n' "$undecoded" | ( LC_ALL=C; export LC_ALL; scan -lE $fold --null -f "$TIERS/$tier" )
+    } | tr '\0' '\n' | LC_ALL=C sort -u | while IFS= read -r f; do
       [ -n "$f" ] || continue
       # -a, so a file grep calls binary still gives its line numbers and not a sentence.
-      lines=$(grep -anE $fold -f "$TIERS/$tier" -- "$f" 2>/dev/null \
-        | LC_ALL=C sed -n 's/^\([0-9][0-9]*\):.*/\1/p' | tr '\n' ' ')
+      lines=$(
+        { grep -anE $fold -f "$TIERS/$tier" -- "$f" 2>/dev/null
+          LC_ALL=C grep -anE $fold -f "$TIERS/$tier" -- "$f" 2>/dev/null
+        } | LC_ALL=C sed -n 's/^\([0-9][0-9]*\):.*/\1/p' | LC_ALL=C sort -n -u | tr '\n' ' ')
       lines=${lines% }
       printf '%s\n' "$kind [$tier] $(shown "$f" ,) line(s): ${lines:-not found on the second read}"
     done

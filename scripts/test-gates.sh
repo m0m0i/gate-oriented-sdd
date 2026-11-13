@@ -10989,10 +10989,36 @@ out=$(run_leak "$r")
 [ "$out" = 0 ] && [ ! -s "$TMP/lkerr" ] \
   && grep -q '2 file(s) scanned, private patterns loaded' "$TMP/lkout" && r5=ok || r5=no
 
-[ "$r0 $r1 $r2 $r3 $r4 $r5" = "ok ok ok ok+clean ok ok" ] \
+# A line that is not UTF-8 is matched as bytes whatever the locale: in a UTF-8 locale BSD grep
+# matches nothing after such a byte, which reads as no hit. Both locale names are run, since a
+# machine has one or the other, and a name it does not have is the C locale. The byte is built
+# here so this file stays ASCII (#357).
+r=$(leak_repo lkg-r-bytes); printf 'clean\na \351 Zq_Exact here\n' > "$r/latin.md"
+r6=""
+for lk_locale in C.UTF-8 en_US.UTF-8; do
+  out=$(LC_ALL=$lk_locale; export LC_ALL; run_leak "$r")
+  r6="$r6$(lk_report 1 'LEAK [fail] latin.md line(s): 2')"
+done
+
+# Every tier after such a byte, in one run. A file's lines found as text and as bytes are one
+# list in number order: lines 1, 10 and 11 are found both ways and named once, line 3 as bytes.
+r=$(leak_repo lkg-r-bytes-all)
+{ printf 'Zq_Exact\nclean\n\351 Zq_Exact\n'; printf '%s\n' clean clean clean clean clean clean
+  printf 'Zq_Exact \351\nZq_Exact\n'; } > "$r/mixed.md"
+printf '\351 ZQ_Fold\n' > "$r/fold.md"
+printf 'clean\n\351 zq_WARN\n' > "$r/warn.md"
+printf '\351 see %s\n' "$LKG_ID" > "$r/doc.md"
+r7=""
+for lk_locale in C.UTF-8 en_US.UTF-8; do
+  out=$(LC_ALL=$lk_locale; export LC_ALL; run_leak "$r")
+  r7="$r7$(lk_report 1 'LEAK [fail] mixed.md line(s): 1 3 10 11' 'LEAK [fail ignore-case] fold.md line(s): 1' \
+    'WARNING [warn ignore-case] warn.md line(s): 2' 'LEAK [public] doc.md line(s): 1')"
+done
+
+[ "$r0 $r1 $r2 $r3 $r4 $r5 $r6 $r7" = "ok ok ok ok+clean ok ok okok okok" ] \
   && report "check-leakage reports a tier, a file and line numbers, and never the text that matched" ok \
   || report "check-leakage reports a tier, a file and line numbers, and never the text that matched" no \
-     "fail=$r0 fold=$r1 public=$r2 warn=$r3 all=$r4 clean=$r5"
+     "fail=$r0 fold=$r1 public=$r2 warn=$r3 all=$r4 clean=$r5 not-utf8=$r6 not-utf8-all=$r7"
 
 # 424. #357 AC3 — a path that matches is reported by its position in the listing and never by
 #      name, because the name is the text. A hit inside such a file is located by that position
