@@ -11191,6 +11191,50 @@ k8="$(lk_report 1 'LEAK [public] doc.md line(s): 1')$(lk_noticed)"
   || report "CI's leakage step fails without its secret, and runs the public tier alone only for a fork" no \
      "empty-file=$e0 newline-file=$e1 step=$k0 own=$k1 empty-secret=$k2 unset-secret=$k3 fork-unset=$k4 fork-empty=$k5 own-hit=$k6 fork=$k7 fork-hit=$k8"
 
+# 429. #357 AC8 — the guard's fault report sends its reader to CONTRIBUTING.md, so what that page
+#      says is held to the guard: the two places the file is looked for, the flag and its notice,
+#      CI's secret, and an example the loader takes. The page says not to copy the example,
+#      because each of its expressions matches its own line there: run over the page, the example
+#      reports all three of its sections.
+LKG_DOC="$ROOT/CONTRIBUTING.md"
+awk '
+  /^```/ { if (!inside) { inside = 1; held = ""; hit = 0; next }
+           if (hit) { printf "%s", held; exit }
+           inside = 0; next }
+  inside { held = held $0 "\n"; if ($0 == "[fail]") hit = 1 }
+' "$LKG_DOC" > "$TMP/lkg-p-doc"
+
+m0=ok
+[ -s "$TMP/lkg-p-doc" ] || m0="no fence holding [fail]"
+for want in '[fail]' '[fail ignore-case]' '[warn ignore-case]'; do
+  grep -Fxq -e "$want" "$TMP/lkg-p-doc" || m0="$m0+no $want"
+done
+
+r=$(leak_repo lkg-m-loads); printf 'nothing to see\n' > "$r/note.md"
+out=$(run_leak "$r" "$TMP/lkg-p-doc")
+[ "$out" = 0 ] && grep -q '2 file(s) scanned, private patterns loaded' "$TMP/lkout" && m1=ok || m1="exit=$out"
+
+r=$(leak_repo lkg-m-page); cp "$LKG_DOC" "$r/CONTRIBUTING.md"
+out=$(run_leak "$r" "$TMP/lkg-p-doc")
+[ "$out" = 1 ] && m2=ok || m2="exit=$out"
+for want in 'LEAK [fail]' 'LEAK [fail ignore-case]' 'WARNING [warn ignore-case]'; do
+  grep -Fq -e "$want CONTRIBUTING.md line(s): " "$TMP/lkerr" || m2="$m2+no $want"
+done
+# The control: under the suite's own list the page is clean, so those hits are the example's.
+out=$(run_leak "$r")
+[ "$out" = 0 ] && [ ! -s "$TMP/lkerr" ] && m3=ok || m3="exit=$out"
+
+m4=ok
+for want in 'GATE_SDD_LEAKAGE_PATTERNS' '${XDG_CONFIG_HOME:-$HOME/.config}/gate-sdd/leakage-patterns' \
+  './scripts/check-leakage.sh --public-only' "$LKG_NOTICE" '`LEAKAGE_PATTERNS`'; do
+  grep -Fq -e "$want" "$LKG_DOC" || m4="$m4+no <$want>"
+done
+
+[ "$m0 $m1 $m2 $m3 $m4" = "ok ok ok ok ok" ] \
+  && report "CONTRIBUTING.md says where the patterns live, and its example is a file the guard loads" ok \
+  || report "CONTRIBUTING.md says where the patterns live, and its example is a file the guard loads" no \
+     "example=$m0 loads=$m1 own-page=$m2 page-control=$m3 named=$m4"
+
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
 # #145. check-version-bump.py must include rules/ in SHIPPED so any change
