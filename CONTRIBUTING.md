@@ -48,10 +48,52 @@ A fence keeps its line breaks when it holds literal code, output, or a line-sens
 
 Stating the carve-out by delimiter instead is what #64 cost: the skills that generate this repository's own documents went on emitting the wrapping the convention had just removed, and the next reader, applying the rule correctly, would have put it back.
 
+## The leakage guard's patterns
+
+**`scripts/check-leakage.sh` holds no private word. It reads its list from a file outside the repository,** because every word written in this repository is published, the guard's own source included, so a list kept in the script publishes what it exists to protect (#357). The file is the one `GATE_SDD_LEAKAGE_PATTERNS` names, and otherwise `${XDG_CONFIG_HOME:-$HOME/.config}/gate-sdd/leakage-patterns`.
+
+It holds one extended regular expression per line, each under one of three section headers. Blank lines and lines that start with `#` are dropped, so an expression that begins with `#` is written `[#]…`. A line that ends in a space or a tab is refused, an expression and a section header alike: the blank would be part of the expression, and a header that ends in one is not read as a header.
+
+- **`[fail]`** — a match fails the guard.
+- **`[fail ignore-case]`** — a match in any letter case fails the guard.
+- **`[warn ignore-case]`** — a match in any letter case prints a warning and does not change the exit status. It is for a word that can also be a generic example, and each warning is yours to confirm as one.
+
+```
+# The shape of the file. Every word in it is made up.
+
+[fail]
+/home/your-login/
+Codename-Example
+
+[fail ignore-case]
+example-client-name
+
+[warn ignore-case]
+example-internal-tool
+```
+
+Each expression is tried against every line of every tracked file and of every untracked file git does not ignore, and against each of their paths. A fourth tier, the public one, is in the script because it names nothing: it is the id shapes of the private cross-reference scheme, and it fails as `[fail]` does on every run. The report gives a tier, a file and its line numbers, or a matching path's position in the listing. It withholds the text that matched and the expression, because CI's log is public: open the location to see what matched.
+
+**A run without a usable list fails.** A file that is absent or cannot be read, that holds no fail pattern, that holds a pattern before its first section header, that holds a line ending in a space or a tab, or that holds an expression `grep -E` cannot compile exits 1 with the fault and the path it looked in. So does a run that could not write a pattern into its temporary directory. A list that is missing must not read as a pass.
+
+**Without private context, write a file with one expression of your own.** You cannot know the maintainer's words, and nothing in the environment lets the guard pass without a list: any session could set it, and a missing list would then read as a pass. `[fail]` with one expression under it is a whole file. Make the expression something of yours that should not be published — your home directory's path is one, which pasted command output carries into a file. Do not copy the example above: this page is scanned too, and each of its expressions matches its own line here.
+
+**A pull request from a fork runs the public tier alone, which is not a pass for private context.** GitHub gives a fork's run no repository secret, so for one CI runs `./scripts/check-leakage.sh --public-only`. That reads no pattern file and prints `check-leakage: PRIVATE PATTERNS NOT RUN (--public-only): not a pass for private context` before it scans, so a green check there clears the public tier and nothing else: in CI the private patterns first run over such a change on the push to `main` that merges it. Every other run — a push to `main`, a pull request from a branch of this repository — is given the whole file as the repository secret `LEAKAGE_PATTERNS`, and fails when that secret is unset, empty or does not decode. Only CI's step passes the flag: on the `- Validators:` line or in a hook it would be the setting the paragraph above refuses.
+
+**The secret is the file base64-encoded on one line.** A one-line secret is masked whole in the step's echoed `env:` block, and CI's step decodes it into a temporary file that it removes when it ends. A maintainer sets it with two commands, after every edit to the file:
+
+```bash
+encoded=$(base64 < "${XDG_CONFIG_HOME:-$HOME/.config}/gate-sdd/leakage-patterns" | tr -d '\n')
+printf '%s' "$encoded" | gh secret set LEAKAGE_PATTERNS
+```
+
+The first encodes the file and joins the lines GNU `base64` wraps its output into. The second gives the value to `gh` on standard input, so it is in no command's arguments. A secret that holds the file as it is written, or its encoding on more than one line, fails the step.
+
 ## Before you open a PR
 
 ```bash
-./scripts/check-leakage.sh          # no private context
+./scripts/check-leakage.sh          # no private context; it fails until this machine has a
+                                    # pattern file, which the section above describes
 ./scripts/check-manifests.py        # both manifests agree; hook shapes correct; each gate's
                                     # Stop timeout is its ceiling in hooks/gate-lib.sh
 ./scripts/check-markdown-fences.py  # no ```markdown fence hand-wraps the Markdown it quotes
