@@ -10684,8 +10684,8 @@ done
 # own files() comment calls the first of those "the worst possible failure mode for a guard"
 # and then does not check for it. #39.
 
-leak_repo() {  # $1 = name. A git repo holding only the guard, which SELF excludes: the
-               # work-set is therefore empty by construction, with no adversarial setup.
+leak_repo() {  # $1 = name. A git repo holding only the guard's own copy, which the guard scans
+               # like any other file: a work-set of one, before a case adds to it (#357).
                #
                # `lkg-`, not `lk-`: $TMP is ONE flat namespace shared by every fixture here, and
                # lock_repo already owns lk-*. The first draft of this case reused lk-empty, got
@@ -10697,11 +10697,28 @@ leak_repo() {  # $1 = name. A git repo holding only the guard, which SELF exclud
     && git add -A && git commit -qm init ) >/dev/null 2>&1
   echo "$r"
 }
-run_leak() { ( cd "$1" && sh scripts/check-leakage.sh >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" ) }
+# Every run gets a synthetic pattern file and a HOME under $TMP, so no case reads the list of
+# the machine it runs on. `zq_` marks every synthetic pattern: no path mktemp makes holds it (#357).
+LKG_PAT="$TMP/lkg-patterns"; mkdir -p "$TMP/lkg-home"
+printf '%s\n' '# a synthetic list' '' '[fail]' 'Zq_Exact' '[fail ignore-case]' 'zq_fold' \
+  '[warn ignore-case]' 'zq_warn' > "$LKG_PAT"
+run_leak() {  # $1 = repo; $2 = the pattern file, `-` to name none; $3 = HOME; $4 = XDG_CONFIG_HOME;
+              # then the guard's own arguments, before which $2 to $4 may be given empty
+  ( cd "$1" || exit
+    unset GATE_SDD_LEAKAGE_PATTERNS XDG_CONFIG_HOME
+    HOME=${3:-$TMP/lkg-home}; export HOME
+    [ "${2:-$LKG_PAT}" = - ] || { GATE_SDD_LEAKAGE_PATTERNS=${2:-$LKG_PAT}; export GATE_SDD_LEAKAGE_PATTERNS; }
+    [ -z "${4:-}" ] || { XDG_CONFIG_HOME=$4; export XDG_CONFIG_HOME; }
+    if [ "$#" -gt 4 ]; then shift 4; else set --; fi
+    sh scripts/check-leakage.sh "$@" >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
+}
 
+# An empty work-set takes the guard's copy out of it: untracked, and ignored (#357).
 r=$(leak_repo lkg-empty)
+( cd "$r" && git rm -q --cached scripts/check-leakage.sh && mkdir -p .git/info \
+  && printf 'scripts/\n' >> .git/info/exclude ) >/dev/null 2>&1
 out=$(run_leak "$r")
-[ "$out" = "1" ] && c0=ok || c0=no
+[ "$out" = "1" ] && grep -q 'work-set is empty' "$TMP/lkerr" && c0=ok || c0=no
 case "$(cat "$TMP/lkout")" in *clean*) c1=no ;; *) c1=ok ;; esac
 
 # The control, and the half that stops the fix from being "fail whenever it saw nothing":
@@ -10709,7 +10726,7 @@ case "$(cat "$TMP/lkout")" in *clean*) c1=no ;; *) c1=ok ;; esac
 r=$(leak_repo lkg-clean); printf 'nothing to see\n' > "$r/note.md"
 out=$(run_leak "$r")
 [ "$out" = "0" ] && c2=ok || c2=no
-case "$(cat "$TMP/lkout")" in *"1 file"*) c3=ok ;; *) c3=no ;; esac
+case "$(cat "$TMP/lkout")" in *"2 file(s) scanned"*) c3=ok ;; *) c3=no ;; esac
 
 # A file in the work-set it cannot open: `xargs grep … 2>/dev/null` swallowed the
 # "Permission denied" and the scan went round it in silence.
@@ -10733,7 +10750,7 @@ fi
 r=$(leak_repo lkg-hit); printf 'see ADR-%s for the rationale\n' 0001 > "$r/doc.md"
 out=$(run_leak "$r")
 [ "$out" = "1" ] && c6=ok || c6=no
-case "$(cat "$TMP/lkerr")" in *"cross-reference id"*) c7=ok ;; *) c7=no ;; esac
+grep -Fxq -e 'LEAK [public] doc.md line(s): 1' "$TMP/lkerr" && c7=ok || c7=no
 
 # A path git C-quotes, and a path holding a space. `core.quotePath` defaults to TRUE, so one
 # byte above 0x80 arrives as the literal `"caf\303\251.md"` — a string `[ -r ]` cannot open,
@@ -10749,7 +10766,7 @@ printf 'nothing to see\n' > "$r/$odd.md"
 printf 'nothing to see\n' > "$r/my file.md"
 out=$(run_leak "$r")
 [ "$out" = "0" ] && c8=ok || c8=no
-case "$(cat "$TMP/lkout")" in *"2 file"*) c9=ok ;; *) c9=no ;; esac
+case "$(cat "$TMP/lkout")" in *"3 file(s) scanned"*) c9=ok ;; *) c9=no ;; esac
 
 # Counted is not scanned. Plant a real hit in each odd path: if either is only counted, the
 # guard stays green and the count keeps saying it read them.
@@ -10781,7 +10798,7 @@ rm "$r/note.md"
 out=$(run_leak "$r")
 [ "$out" = "0" ] && c13=ok || c13=no
 case "$(cat "$TMP/lkout")" in *"not in the working tree"*) c14=ok ;; *) c14=no ;; esac
-case "$(cat "$TMP/lkout")" in *"1 file(s) scanned"*) c15=ok ;; *) c15=no ;; esac
+case "$(cat "$TMP/lkout")" in *"2 file(s) scanned"*) c15=ok ;; *) c15=no ;; esac
 
 # A tracked file under a directory the process cannot SEARCH. `[ -e ]` is stat(), which
 # returns EACCES through an unsearchable prefix, and `test` reports that as false — so the
@@ -10829,6 +10846,604 @@ case "$(cat "$TMP/lkerr")" in *"cannot be handed to grep"*) c20=ok ;; *) c20=no 
   && report "check-leakage counts what it scanned, and fails on nothing or unreadable" ok \
   || report "check-leakage counts what it scanned, and fails on nothing or unreadable" no \
      "empty-exit=$c0 empty-not-clean=$c1 ctl-exit=$c2 ctl-count=$c3 unread-exit=$c4 unread-named=$c5 hit-exit=$c6 hit-msg=$c7 odd-exit=$c8 odd-count=$c9 space-hit=$c10 utf8-hit=$c11 dash-hit=$c12 del-exit=$c13 del-noted=$c14 del-count=$c15 unsearch=$c16/$c17/$c18 quoted=$c19/$c20"
+
+# 421. #357 AC2 — a pattern file that is missing or cannot be used is not a pass. Each fault exits
+#      1 over a tree with nothing in it to find, names itself and the file the guard looked in,
+#      and prints no pattern: the report reaches a public CI log.
+lk_fault() {  # $1 = fixture, $2 = pattern file, $3 = the fault's words, $4 = where in the file, if
+              # the fault has a place. Prints ok, or what is wrong.
+  r=$(leak_repo "$1"); printf 'nothing to see\n' > "$r/note.md"
+  out=$(run_leak "$r" "$2"); all=$(cat "$TMP/lkout" "$TMP/lkerr")
+  [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
+  case "$all" in *clean*) printf 'says clean'; return ;; esac
+  case "$all" in *"$3"*) ;; *) printf 'fault not named'; return ;; esac
+  case "$all" in *"${4:-}"*) ;; *) printf 'place not named'; return ;; esac
+  case "$all" in *"$2"*) ;; *) printf 'file not named'; return ;; esac
+  case "$all" in *zq_*) printf 'a pattern is printed'; return ;; esac
+  printf ok
+}
+
+f0=$(lk_fault lkg-f-absent "$TMP/lkg-p-absent" 'no such file')
+
+p="$TMP/lkg-p-unreadable"; cp "$LKG_PAT" "$p"; chmod 000 "$p" 2>/dev/null
+if cat "$p" >/dev/null 2>&1; then
+  f1=ok
+  note_skip "leakage/unreadable-patterns" "permissions not enforced here (running as root?)"
+else
+  f1=$(lk_fault lkg-f-unreadable "$p" 'cannot be read')
+fi
+chmod 644 "$p" 2>/dev/null
+
+# No fail pattern: a section with nothing under it, and a list that only warns.
+p="$TMP/lkg-p-nofail"; printf '%s\n' '[fail]' '# nothing under it' '' '[warn ignore-case]' 'zq_warn' > "$p"
+f2=$(lk_fault lkg-f-nofail "$p" 'no fail pattern')
+
+p="$TMP/lkg-p-orphan"; printf '%s\n' '# a comment' 'zq_orphan' '[fail]' 'zq_kept' > "$p"
+f3=$(lk_fault lkg-f-orphan "$p" 'outside any section' 'line(s) 2')
+
+# An invalid expression is a fault in whichever section holds it, the warning one included.
+f4=""; lk_n=0
+for s in 'fail' 'fail ignore-case' 'warn ignore-case'; do
+  lk_n=$((lk_n + 1)); p="$TMP/lkg-p-invalid-$lk_n"
+  printf '%s\n' '[fail]' 'zq_kept' "[$s]" 'zq_fine' 'zq_(open' > "$p"
+  f4="$f4$(lk_fault "lkg-f-invalid-$lk_n" "$p" 'invalid expression' "[$s], line(s) 5")"
+done
+
+[ "$f0$f1$f2$f3$f4" = "okokokokokokok" ] \
+  && report "check-leakage fails without a usable pattern file, and prints no pattern" ok \
+  || report "check-leakage fails without a usable pattern file, and prints no pattern" no \
+     "absent=$f0 unreadable=$f1 no-fail=$f2 orphan=$f3 invalid=$f4"
+
+# 422. #357 AC1 — the file's three sections are a fail, a fail ignoring case and a warning ignoring
+#      case. The file is the one GATE_SDD_LEAKAGE_PATTERNS names, else the one under
+#      XDG_CONFIG_HOME, else the one under HOME's .config.
+lk_plant() {  # $1 = fixture, $2 = the text planted, then run_leak's $2, $3 and $4. Prints the exit
+              # status, with `+leak` after it when a line of the report starts with LEAK.
+  r=$(leak_repo "$1"); printf 'a line holding %s here\n' "$2" > "$r/note.md"
+  shift 2; out=$(run_leak "$r" "$@")
+  grep -q '^LEAK' "$TMP/lkerr" && out="$out+leak"
+  printf '%s' "$out"
+}
+
+s0=$(lk_plant lkg-s-exact Zq_Exact)
+s1=$(lk_plant lkg-s-exact-case zq_exact)
+s2=$(lk_plant lkg-s-fold ZQ_Fold)
+s3=$(lk_plant lkg-s-warn ZQ_Warn)
+case "$(cat "$TMP/lkerr")" in *WARNING*) s3="$s3+warning" ;; esac
+case "$(cat "$TMP/lkout")" in *clean*) s3="$s3+clean" ;; esac
+
+# A list written by another tool still loads: CRLF line ends, and a last line with no newline.
+p="$TMP/lkg-p-crlf"; printf '[fail]\r\nzq_crlf\r\n' > "$p"
+s4=$(lk_plant lkg-s-crlf zq_crlf "$p")
+p="$TMP/lkg-p-noeol"; printf '[fail]\nzq_noeol' > "$p"
+s5=$(lk_plant lkg-s-noeol zq_noeol "$p")
+
+h="$TMP/lkg-home-own"; mkdir -p "$h/.config/gate-sdd"
+printf '%s\n' '[fail]' 'zq_home' > "$h/.config/gate-sdd/leakage-patterns"
+x="$TMP/lkg-xdg"; mkdir -p "$x/gate-sdd"
+printf '%s\n' '[fail]' 'zq_xdg' > "$x/gate-sdd/leakage-patterns"
+d0=$(lk_plant lkg-d-home zq_home - "$h")
+d1=$(lk_plant lkg-d-home-other zq_xdg - "$h")
+case "$(cat "$TMP/lkout")" in *clean*) d1="$d1+clean" ;; esac
+d2=$(lk_plant lkg-d-xdg zq_xdg - "$h" "$x")
+d3=$(lk_plant lkg-d-xdg-first zq_home - "$h" "$x")
+d4=$(lk_plant lkg-d-named-first zq_xdg "$LKG_PAT" "$h" "$x")
+# And a HOME with no file under it is the absent fault, at the default path.
+d5=$(lk_plant lkg-d-none zq_home - "$TMP/lkg-home")
+case "$(cat "$TMP/lkerr")" in *"$TMP/lkg-home/.config/gate-sdd/leakage-patterns"*) d5="$d5+named" ;; esac
+
+[ "$s0 $s1 $s2 $s3 $s4 $s5" = "1+leak 0 1+leak 0+warning+clean 1+leak 1+leak" ] \
+  && [ "$d0 $d1 $d2 $d3 $d4 $d5" = "1+leak 0+clean 1+leak 0 0 1+named" ] \
+  && report "check-leakage loads its three sections from the named file, else XDG_CONFIG_HOME, else HOME" ok \
+  || report "check-leakage loads its three sections from the named file, else XDG_CONFIG_HOME, else HOME" no \
+     "exact=$s0 exact-other-case=$s1 fold=$s2 warn=$s3 crlf=$s4 no-eol=$s5 home=$d0 home-other=$d1 xdg=$d2 xdg-first=$d3 named-first=$d4 no-file=$d5"
+
+# 423. #357 AC3, AC4 — a hit in a file's contents is reported as its tier, the file and the line
+#      numbers. The report reaches a public CI log, so neither stream holds the text that matched
+#      or the pattern, and it says the text is withheld. A warning does not change the status.
+LKG_ID=$(printf 'ADR-%s' 0001)   # the public tier's hit, assembled here as in case 155
+lk_report() {  # $1 = the exit status wanted, then each line the report must hold. Reads the last
+               # run_leak, whose status is $out. Prints ok, or what is wrong.
+  [ "$out" = "$1" ] || { printf 'exit=%s' "$out"; return; }
+  shift
+  for want in "$@"; do
+    grep -Fxq -e "$want" "$TMP/lkerr" || { printf 'no line <%s>' "$want"; return; }
+  done
+  [ "$(grep -cE '^(LEAK|WARNING) ' "$TMP/lkerr")" = "$#" ] || { printf 'other report lines'; return; }
+  grep -q 'withheld on purpose' "$TMP/lkerr" || { printf 'not said to be withheld'; return; }
+  # Read as bytes: in a UTF-8 locale BSD grep matches nothing on a line that is not UTF-8.
+  cat "$TMP/lkout" "$TMP/lkerr" | LC_ALL=C grep -qai -e 'zq_' -e "$LKG_ID" && { printf 'the matched text is printed'; return; }
+  printf ok
+}
+
+r=$(leak_repo lkg-r-fail)
+printf '%s\n' 'a clean line' 'a line holding Zq_Exact here' 'clean again' 'Zq_Exact and Zq_Exact' > "$r/note.md"
+out=$(run_leak "$r"); r0=$(lk_report 1 'LEAK [fail] note.md line(s): 2 4')
+
+r=$(leak_repo lkg-r-fold)
+printf '%s\n' 'clean' 'clean' 'a line holding ZQ_Fold here' > "$r/note.md"
+out=$(run_leak "$r"); r1=$(lk_report 1 'LEAK [fail ignore-case] note.md line(s): 3')
+
+r=$(leak_repo lkg-r-public); printf 'see %s for the rationale\n' "$LKG_ID" > "$r/doc.md"
+out=$(run_leak "$r"); r2=$(lk_report 1 'LEAK [public] doc.md line(s): 1')
+
+r=$(leak_repo lkg-r-warn); printf '%s\n' 'a line holding ZQ_Warn here' 'clean' > "$r/note.md"
+out=$(run_leak "$r"); r3=$(lk_report 0 'WARNING [warn ignore-case] note.md line(s): 1')
+case "$(cat "$TMP/lkout")" in *"2 file(s) scanned, private patterns loaded"*) r3="$r3+clean" ;; esac
+
+# Every tier in one run, in a path with a space, a path beginning with `-`, and a file grep
+# calls binary: the second read for the line numbers is handed the same odd paths.
+r=$(leak_repo lkg-r-all)
+printf '%s\n' 'clean' 'Zq_Exact' > "$r/my file.md"
+printf '%s\n' 'zq_FOLD' > "$r/-dash.md"
+printf '%s\n' 'clean' 'clean' 'zq_warn' "$LKG_ID" > "$r/both.md"
+printf 'clean\n\000 Zq_Exact\n' > "$r/blob.bin"
+out=$(run_leak "$r")
+r4=$(lk_report 1 'LEAK [fail] my file.md line(s): 2' 'LEAK [fail ignore-case] -dash.md line(s): 1' \
+  'WARNING [warn ignore-case] both.md line(s): 3' 'LEAK [public] both.md line(s): 4' \
+  'LEAK [fail] blob.bin line(s): 2')
+
+# The control: no hit says nothing on stderr, and the clean line says the private patterns ran.
+r=$(leak_repo lkg-r-clean); printf 'nothing to see\n' > "$r/note.md"
+out=$(run_leak "$r")
+[ "$out" = 0 ] && [ ! -s "$TMP/lkerr" ] \
+  && grep -q '2 file(s) scanned, private patterns loaded' "$TMP/lkout" && r5=ok || r5=no
+
+# A line that is not UTF-8 is matched as bytes whatever the locale: in a UTF-8 locale BSD grep
+# matches nothing after such a byte, which reads as no hit. Both locale names are run, since a
+# machine has one or the other, and a name it does not have is the C locale. The byte is built
+# here so this file stays ASCII (#357).
+r=$(leak_repo lkg-r-bytes); printf 'clean\na \351 Zq_Exact here\n' > "$r/latin.md"
+r6=""
+for lk_locale in C.UTF-8 en_US.UTF-8; do
+  out=$(LC_ALL=$lk_locale; export LC_ALL; run_leak "$r")
+  r6="$r6$(lk_report 1 'LEAK [fail] latin.md line(s): 2')"
+done
+
+# Every tier after such a byte, in one run. A file's lines found as text and as bytes are one
+# list in number order: lines 1, 10 and 11 are found both ways and named once, line 3 as bytes.
+r=$(leak_repo lkg-r-bytes-all)
+{ printf 'Zq_Exact\nclean\n\351 Zq_Exact\n'; printf '%s\n' clean clean clean clean clean clean
+  printf 'Zq_Exact \351\nZq_Exact\n'; } > "$r/mixed.md"
+printf '\351 ZQ_Fold\n' > "$r/fold.md"
+printf 'clean\n\351 zq_WARN\n' > "$r/warn.md"
+printf '\351 see %s\n' "$LKG_ID" > "$r/doc.md"
+r7=""
+for lk_locale in C.UTF-8 en_US.UTF-8; do
+  out=$(LC_ALL=$lk_locale; export LC_ALL; run_leak "$r")
+  r7="$r7$(lk_report 1 'LEAK [fail] mixed.md line(s): 1 3 10 11' 'LEAK [fail ignore-case] fold.md line(s): 1' \
+    'WARNING [warn ignore-case] warn.md line(s): 2' 'LEAK [public] doc.md line(s): 1')"
+done
+
+[ "$r0 $r1 $r2 $r3 $r4 $r5 $r6 $r7" = "ok ok ok ok+clean ok ok okok okok" ] \
+  && report "check-leakage reports a tier, a file and line numbers, and never the text that matched" ok \
+  || report "check-leakage reports a tier, a file and line numbers, and never the text that matched" no \
+     "fail=$r0 fold=$r1 public=$r2 warn=$r3 all=$r4 clean=$r5 not-utf8=$r6 not-utf8-all=$r7"
+
+# 424. #357 AC3 — a path that matches is reported by its position in the listing and never by
+#      name, because the name is the text. A hit inside such a file is located by that position
+#      too. Every file is committed, so the listing is the index in its sorted order.
+lk_commit() { ( cd "$1" && git add -A && git commit -qm two ) >/dev/null 2>&1; }
+
+r=$(leak_repo lkg-n-fail); mkdir -p "$r/sub"
+for f in Zq_Exact.txt a.md b.md sub/a-Zq_Exact-b.md; do printf 'nothing to see\n' > "$r/$f"; done
+lk_commit "$r"
+out=$(run_leak "$r"); n0=$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1 5')
+case "$(cat "$TMP/lkout" "$TMP/lkerr")" in *sub/*) n0="$n0+named" ;; esac
+grep -q 'git ls-files --cached --others --exclude-standard' "$TMP/lkerr" || n0="$n0+no-listing-command"
+
+r=$(leak_repo lkg-n-warn); printf 'nothing to see\n' > "$r/ZQ_Warn.md"
+lk_commit "$r"
+out=$(run_leak "$r"); n1=$(lk_report 0 'WARNING [warn ignore-case] path number(s) in the listing: 1')
+
+r=$(leak_repo lkg-n-both); printf '%s\n' 'clean' 'a line holding ZQ_Warn here' > "$r/a-zq_FOLD.md"
+lk_commit "$r"
+out=$(run_leak "$r")
+n2=$(lk_report 1 'LEAK [fail ignore-case] path number(s) in the listing: 1' \
+  'WARNING [warn ignore-case] path number 1 in the listing, line(s): 2')
+
+# An index entry with no working-tree file still has a name, and the name is still in the index.
+r=$(leak_repo lkg-n-absent)
+printf 'nothing to see\n' > "$r/Zq_Exact.md"; printf 'nothing to see\n' > "$r/keep.md"
+lk_commit "$r"; rm "$r/Zq_Exact.md"
+out=$(run_leak "$r"); n3=$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1')
+
+# A name that is not UTF-8 is matched as bytes whatever the locale. In a UTF-8 locale BSD grep
+# matches no expression against such a line, and GNU grep matches it and prints a sentence on
+# stderr in its place: either way the path read as no hit. Both locale names are run, since a
+# machine has one or the other, and a name it does not have is the C locale. The entry is made
+# in the index, because a filesystem may refuse the name, and the byte is built here so this
+# file stays ASCII.
+lk_bytes=$(printf 'a-\351-Zq_Exact.md')
+r=$(leak_repo lkg-n-bytes)
+( cd "$r" && git update-index --add --cacheinfo "100644,$(git hash-object -w scripts/check-leakage.sh),$lk_bytes" \
+  && git commit -qm two ) >/dev/null 2>&1
+n4=""
+for lk_locale in C.UTF-8 en_US.UTF-8; do
+  out=$(LC_ALL=$lk_locale; export LC_ALL; run_leak "$r")
+  n4="$n4$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1')"
+done
+
+# And where the filesystem takes the name, a hit inside that file is located by the position too.
+r=$(leak_repo lkg-n-bytes-file)
+if ( printf 'a line holding ZQ_Warn here\n' > "$r/$lk_bytes" ) 2>/dev/null && [ -e "$r/$lk_bytes" ]; then
+  lk_commit "$r"
+  n5=""
+  for lk_locale in C.UTF-8 en_US.UTF-8; do
+    out=$(LC_ALL=$lk_locale; export LC_ALL; run_leak "$r")
+    n5="$n5$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1' \
+      'WARNING [warn ignore-case] path number 1 in the listing, line(s): 1')"
+  done
+else
+  n5=okok
+  note_skip "leakage/non-utf8-name-on-disk" "this filesystem refuses a file name that is not UTF-8"
+fi
+
+# A refusal names its entries and comes before any file is read, so an entry whose path matches
+# is named by its position there too, and one that does not match keeps its name. A path git
+# quotes keeps the rest of its name in the listing, which is the text an expression finds.
+lk_refusal() {  # $1 = the refusal's words, $2 = the entry it still names. Reads the last run_leak.
+                # Prints nothing, or what is wrong.
+  grep -Fq -e "$1" "$TMP/lkerr" || printf '+not-refused'
+  grep -Fxq -e '  path number 1 in the listing' "$TMP/lkerr" || printf '+no-position'
+  grep -Fxq -e "  $2" "$TMP/lkerr" || printf '+other-not-named'
+  grep -q 'git ls-files --cached --others --exclude-standard' "$TMP/lkerr" || printf '+no-listing-command'
+}
+
+r=$(leak_repo lkg-n-quoted)
+printf 'nothing to see\n' > "$r/a\"Zq_Exact.md"; printf 'nothing to see\n' > "$r/b\"plain.md"
+lk_commit "$r"
+out=$(run_leak "$r")
+n6="$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1')$(lk_refusal 'cannot be handed to grep' '"b\"plain.md"')"
+
+r=$(leak_repo lkg-n-unread)
+printf 'nothing to see\n' > "$r/a-Zq_Exact.md"; printf 'nothing to see\n' > "$r/b-plain.md"
+lk_commit "$r"; chmod 000 "$r/a-Zq_Exact.md" "$r/b-plain.md" 2>/dev/null
+if cat "$r/b-plain.md" >/dev/null 2>&1; then
+  n7=ok
+  note_skip "leakage/unreadable-matching-path" "permissions not enforced here (running as root?)"
+else
+  out=$(run_leak "$r")
+  n7="$(lk_report 1 'LEAK [fail] path number(s) in the listing: 1')$(lk_refusal 'could not be read' 'b-plain.md')"
+fi
+chmod 644 "$r/a-Zq_Exact.md" "$r/b-plain.md" 2>/dev/null
+
+[ "$n0 $n1 $n2 $n3 $n4 $n5 $n6 $n7" = "ok ok ok ok okok okok ok ok" ] \
+  && report "check-leakage reports a matching path by its position in the listing, not by name" ok \
+  || report "check-leakage reports a matching path by its position in the listing, not by name" no \
+     "fail=$n0 warn=$n1 path-and-contents=$n2 absent=$n3 not-utf8=$n4 not-utf8-contents=$n5 quoted=$n6 unreadable=$n7"
+
+# 425. #357 — the guard scans its own text like any other file, so a private word written back
+#      into the script is caught, in the private tiers and in the public one.
+lk_lines=$(wc -l < "$ROOT/scripts/check-leakage.sh"); lk_lines=$((lk_lines + 1))
+r=$(leak_repo lkg-self); printf 'nothing to see\n' > "$r/note.md"
+printf '# %s\n' 'Zq_Exact' >> "$r/scripts/check-leakage.sh"
+out=$(run_leak "$r"); g0=$(lk_report 1 "LEAK [fail] scripts/check-leakage.sh line(s): $lk_lines")
+r=$(leak_repo lkg-self-public); printf 'nothing to see\n' > "$r/note.md"
+printf '# see %s\n' "$LKG_ID" >> "$r/scripts/check-leakage.sh"
+out=$(run_leak "$r"); g1=$(lk_report 1 "LEAK [public] scripts/check-leakage.sh line(s): $lk_lines")
+# And the copy as shipped is clean: the public tier's own expression does not match itself.
+r=$(leak_repo lkg-self-clean)
+out=$(run_leak "$r")
+[ "$out" = 0 ] && grep -q '1 file(s) scanned, private patterns loaded' "$TMP/lkout" && g2=ok || g2="exit=$out"
+
+[ "$g0 $g1 $g2" = "ok ok ok" ] \
+  && report "check-leakage scans its own script, and catches a pattern written into it" ok \
+  || report "check-leakage scans its own script, and catches a pattern written into it" no \
+     "private=$g0 public=$g1 as-shipped=$g2"
+
+# 426. #357 AC6 — `--public-only` runs the public tier alone, for a pull request from a fork, which
+#      gets no secret. It needs no pattern file, says on every run that the private patterns were
+#      not run and that this is not a pass, and exits by the public tier's result.
+LKG_NOTICE='check-leakage: PRIVATE PATTERNS NOT RUN (--public-only): not a pass for private context'
+lk_noticed() {  # Reads the last run_leak. Prints nothing when the notice is there and no line says
+                # the private patterns were loaded, or what is wrong.
+  grep -Fxq -e "$LKG_NOTICE" "$TMP/lkerr" || printf '+no-notice'
+  cat "$TMP/lkout" "$TMP/lkerr" | grep -q 'loaded' && printf '+says-loaded'
+}
+
+r=$(leak_repo lkg-o-clean); printf 'nothing to see\n' > "$r/note.md"
+out=$(run_leak "$r" - "" "" --public-only)
+[ "$out" = 0 ] && grep -q '2 file(s) scanned, private patterns not run' "$TMP/lkout" && o0=ok || o0="exit=$out"
+o0="$o0$(lk_noticed)"
+
+r=$(leak_repo lkg-o-hit); printf 'see %s for the rationale\n' "$LKG_ID" > "$r/doc.md"
+out=$(run_leak "$r" - "" "" --public-only)
+o1="$(lk_report 1 'LEAK [public] doc.md line(s): 1')$(lk_noticed)"
+
+# With a usable list named and a hit in each of its sections and in a path, the flag still runs
+# the public tier alone. The control is the same tree without the flag.
+r=$(leak_repo lkg-o-private)
+printf '%s\n' 'Zq_Exact' 'zq_FOLD' 'zq_warn' > "$r/note.md"; printf 'nothing to see\n' > "$r/Zq_Exact.md"
+out=$(run_leak "$r"); [ "$out" = 1 ] && o2=ok || o2="control-exit=$out"
+out=$(run_leak "$r" "" "" "" --public-only)
+[ "$out" = 0 ] && ! grep -qE '^(LEAK|WARNING) ' "$TMP/lkerr" && o3=ok || o3="exit=$out"
+o3="$o3$(lk_noticed)"
+
+# The flag skips the private patterns and nothing else: an empty work-set is still not a pass.
+r=$(leak_repo lkg-o-empty)
+( cd "$r" && git rm -q --cached scripts/check-leakage.sh && mkdir -p .git/info \
+  && printf 'scripts/\n' >> .git/info/exclude ) >/dev/null 2>&1
+out=$(run_leak "$r" - "" "" --public-only)
+[ "$out" = 1 ] && grep -q 'work-set is empty' "$TMP/lkerr" && o4=ok || o4="exit=$out"
+case "$(cat "$TMP/lkout")" in *clean*) o4="$o4+says-clean" ;; esac
+
+[ "$o0 $o1 $o2 $o3 $o4" = "ok ok ok ok ok" ] \
+  && report "check-leakage --public-only runs the public tier alone, and says it is not a pass" ok \
+  || report "check-leakage --public-only runs the public tier alone, and says it is not a pass" no \
+     "clean=$o0 public-hit=$o1 private-control=$o2 private-not-run=$o3 empty-work-set=$o4"
+
+# 427. #357 — `--public-only` is the guard's one argument. Anything else is refused over a clean
+#      tree and a usable pattern file, with nothing scanned, and the argument is not printed.
+lk_refused() {  # The guard's arguments, run in $lk_r. Prints ok, or what is wrong.
+  out=$(run_leak "$lk_r" "" "" "" "$@"); all=$(cat "$TMP/lkout" "$TMP/lkerr")
+  [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
+  case "$all" in *clean*) printf 'says clean'; return ;; esac
+  case "$all" in *'The only argument is --public-only'*) ;; *) printf 'not refused as an argument'; return ;; esac
+  case "$all" in *zq_*) printf 'the argument is printed'; return ;; esac
+  printf ok
+}
+lk_r=$(leak_repo lkg-a-args); printf 'nothing to see\n' > "$lk_r/note.md"
+a0=$(lk_refused --zq_other)
+a1=$(lk_refused --public-only zq_more)
+a2=$(lk_refused zq_first --public-only)
+a3=$(lk_refused --public-only --public-only)
+a4=$(lk_refused '')
+a5=$(lk_refused --public)
+
+[ "$a0 $a1 $a2 $a3 $a4 $a5" = "ok ok ok ok ok ok" ] \
+  && report "check-leakage refuses any argument but --public-only, and does not print it" ok \
+  || report "check-leakage refuses any argument but --public-only, and does not print it" no \
+     "unknown=$a0 flag-then-more=$a1 more-then-flag=$a2 flag-twice=$a3 empty=$a4 prefix=$a5"
+
+# 428. #357 AC6 — CI's `Leakage guard` step, run here as .github/workflows/ci.yml holds it. The
+#      secret holds the pattern file base64-encoded on one line, and the step decodes it into the
+#      file the guard reads. A secret that is unset, empty or does not decode fails the step, and
+#      only a pull request from a fork runs the public tier alone. The two values the step reads
+#      arrive through `env:`, so nothing is interpolated into the script it runs.
+
+# The guard's half of it: a secret that decodes to nothing, or to one empty line, is no list.
+p="$TMP/lkg-p-empty"; printf '' > "$p"
+e0=$(lk_fault lkg-f-empty "$p" 'no fail pattern')
+p="$TMP/lkg-p-newline"; printf '\n' > "$p"
+e1=$(lk_fault lkg-f-newline "$p" 'no fail pattern')
+
+lk_step() {  # $1 = `env` or `run`. Prints that block of the step, without its indentation.
+  awk -v want="$1" '
+    /^      - name: Leakage guard$/ { step = 1; next }
+    step && /^      - / { exit }
+    step && /^        env:$/ { block = "env"; next }
+    step && /^        run: \|$/ { block = "run"; next }
+    step && block != "" && /^          / { if (block == want) print substr($0, 11); next }
+    step && block != "" && /^$/ { if (block == want) print ""; next }
+    step { block = "" }
+  ' "$ROOT/.github/workflows/ci.yml"
+}
+lk_step run > "$TMP/lkg-step.sh"
+k0=ok
+[ -s "$TMP/lkg-step.sh" ] || k0="no run block"
+grep -Fq -e '${{' "$TMP/lkg-step.sh" && k0="$k0+interpolated"
+lk_step env > "$TMP/lkg-step.env"
+grep -Fxq -e 'LEAKAGE_PATTERNS: ${{ secrets.LEAKAGE_PATTERNS }}' "$TMP/lkg-step.env" || k0="$k0+no-secret"
+grep -Fxq -e "FROM_FORK: \${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}" \
+  "$TMP/lkg-step.env" || k0="$k0+no-fork-test"
+
+mkdir -p "$TMP/lkg-runner"
+run_step() {  # $1 = repo; $2 = FROM_FORK; $3 = LEAKAGE_PATTERNS. `-` leaves either one unset.
+              # Prints the step's exit status, with `+left` when the file it wrote is still there.
+  ( cd "$1" || exit
+    unset GATE_SDD_LEAKAGE_PATTERNS XDG_CONFIG_HOME FROM_FORK LEAKAGE_PATTERNS
+    HOME=$TMP/lkg-home; RUNNER_TEMP=$TMP/lkg-runner; export HOME RUNNER_TEMP
+    [ "$2" = - ] || { FROM_FORK=$2; export FROM_FORK; }
+    [ "$3" = - ] || { LEAKAGE_PATTERNS=$3; export LEAKAGE_PATTERNS; }
+    sh -e "$TMP/lkg-step.sh" >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
+  [ -z "$(find "$TMP/lkg-runner" -type f)" ] || printf '+left'
+}
+lk_no_secret() {  # $1 = the fault's words. Reads the last run_step, whose status is $out: the step
+                  # failed on its secret, the guard did not run, and neither stream holds a
+                  # pattern or the value. Prints ok, or what is wrong.
+  [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
+  all=$(cat "$TMP/lkout" "$TMP/lkerr")
+  case "$all" in *clean*) printf 'says clean'; return ;; esac
+  case "$all" in *"::error title=Leakage guard::The repository secret LEAKAGE_PATTERNS $1"*) ;; *) printf 'fault not named'; return ;; esac
+  case "$all" in *check-leakage*|*'LEAK ['*|*'WARNING ['*) printf 'the guard ran'; return ;; esac
+  case "$all" in *[Zz][Qq]_*|*"$LKG_SECRET"*) printf 'the secret is printed'; return ;; esac
+  printf ok
+}
+lk_unset() { lk_no_secret 'is unset or empty'; }
+lk_undecoded() { lk_no_secret 'does not decode'; }
+# Encoded as CONTRIBUTING.md has a maintainer encode it: GNU base64 wraps its output, BSD does not.
+LKG_SECRET=$(base64 < "$LKG_PAT" | tr -d '\n')
+
+# This repository's own run: a push to main, or a pull request from one of its branches.
+r=$(leak_repo lkg-k-own); printf 'nothing to see\n' > "$r/note.md"
+out=$(run_step "$r" false "$LKG_SECRET")
+[ "$out" = 0 ] && grep -q '2 file(s) scanned, private patterns loaded' "$TMP/lkout" && k1=ok || k1="exit=$out"
+cat "$TMP/lkout" "$TMP/lkerr" | grep -qiF -e 'zq_' -e "$LKG_SECRET" && k1="$k1+the secret is printed"
+out=$(run_step "$r" false ""); k2=$(lk_unset)
+out=$(run_step "$r" false -); k3=$(lk_unset)
+# A fork test that did not evaluate is not a fork.
+out=$(run_step "$r" - -); k4=$(lk_unset)
+out=$(run_step "$r" "" ""); k5=$(lk_unset)
+
+# A value that does not decode fails the step, where base64 refuses it and where base64 decodes
+# what it can of it and exits 0, as BSD's does: a value that is not base64, the list as it is
+# written, the encoded list short of its last character, and the encoded list on two lines.
+out=$(run_step "$r" false 'zq_not base64 !'); k9=$(lk_undecoded)
+out=$(run_step "$r" false "$(cat "$LKG_PAT")"); k10=$(lk_undecoded)
+out=$(run_step "$r" false "${LKG_SECRET%?}"); k11=$(lk_undecoded)
+out=$(run_step "$r" false "$(printf '%s\n' "$LKG_SECRET" | fold -w 40)"); k12=$(lk_undecoded)
+
+r=$(leak_repo lkg-k-own-hit); printf 'a line holding Zq_Exact here\n' > "$r/note.md"
+out=$(run_step "$r" false "$LKG_SECRET"); k6=$(lk_report 1 'LEAK [fail] note.md line(s): 1')
+
+# A pull request from a fork: no secret, the public tier alone, and the notice.
+r=$(leak_repo lkg-k-fork); printf 'a line holding Zq_Exact here\n' > "$r/note.md"
+out=$(run_step "$r" true "")
+[ "$out" = 0 ] && grep -q '2 file(s) scanned, private patterns not run' "$TMP/lkout" && k7=ok || k7="exit=$out"
+k7="$k7$(lk_noticed)"
+r=$(leak_repo lkg-k-fork-hit); printf 'see %s for the rationale\n' "$LKG_ID" > "$r/doc.md"
+out=$(run_step "$r" true "")
+k8="$(lk_report 1 'LEAK [public] doc.md line(s): 1')$(lk_noticed)"
+
+[ "$e0 $e1 $k0 $k1 $k2 $k3 $k4 $k5 $k6 $k7 $k8" = "ok ok ok ok ok ok ok ok ok ok ok" ] \
+  && [ "$k9 $k10 $k11 $k12" = "ok ok ok ok" ] \
+  && report "CI's leakage step decodes its secret, fails without one, and runs the public tier alone only for a fork" ok \
+  || report "CI's leakage step decodes its secret, fails without one, and runs the public tier alone only for a fork" no \
+     "empty-file=$e0 newline-file=$e1 step=$k0 own=$k1 empty-secret=$k2 unset-secret=$k3 fork-unset=$k4 fork-empty=$k5 own-hit=$k6 fork=$k7 fork-hit=$k8 not-base64=$k9 as-written=$k10 cut-short=$k11 two-lines=$k12"
+
+# 429. #357 AC8 — the guard's fault report sends its reader to CONTRIBUTING.md, so what that page
+#      says is held to the guard: the two places the file is looked for, the flag and its notice,
+#      CI's secret and the two commands that set it, the two forms of line the loader refuses or
+#      drops, and an example the loader takes. The page says not to copy the example, because
+#      each of its expressions matches its own line there: run over the page, the example reports
+#      all three of its sections.
+LKG_DOC="$ROOT/CONTRIBUTING.md"
+awk '
+  /^```/ { if (!inside) { inside = 1; held = ""; hit = 0; next }
+           if (hit) { printf "%s", held; exit }
+           inside = 0; next }
+  inside { held = held $0 "\n"; if ($0 == "[fail]") hit = 1 }
+' "$LKG_DOC" > "$TMP/lkg-p-doc"
+
+m0=ok
+[ -s "$TMP/lkg-p-doc" ] || m0="no fence holding [fail]"
+for want in '[fail]' '[fail ignore-case]' '[warn ignore-case]'; do
+  grep -Fxq -e "$want" "$TMP/lkg-p-doc" || m0="$m0+no $want"
+done
+
+r=$(leak_repo lkg-m-loads); printf 'nothing to see\n' > "$r/note.md"
+out=$(run_leak "$r" "$TMP/lkg-p-doc")
+[ "$out" = 0 ] && grep -q '2 file(s) scanned, private patterns loaded' "$TMP/lkout" && m1=ok || m1="exit=$out"
+
+r=$(leak_repo lkg-m-page); cp "$LKG_DOC" "$r/CONTRIBUTING.md"
+out=$(run_leak "$r" "$TMP/lkg-p-doc")
+[ "$out" = 1 ] && m2=ok || m2="exit=$out"
+for want in 'LEAK [fail]' 'LEAK [fail ignore-case]' 'WARNING [warn ignore-case]'; do
+  grep -Fq -e "$want CONTRIBUTING.md line(s): " "$TMP/lkerr" || m2="$m2+no $want"
+done
+# The control: under the suite's own list the page is clean, so those hits are the example's.
+out=$(run_leak "$r")
+[ "$out" = 0 ] && [ ! -s "$TMP/lkerr" ] && m3=ok || m3="exit=$out"
+
+m4=ok
+for want in 'GATE_SDD_LEAKAGE_PATTERNS' '${XDG_CONFIG_HOME:-$HOME/.config}/gate-sdd/leakage-patterns' \
+  './scripts/check-leakage.sh --public-only' "$LKG_NOTICE" '`LEAKAGE_PATTERNS`' \
+  "| tr -d '\\n')" '| gh secret set LEAKAGE_PATTERNS' 'ends in a space or a tab' '`[#]'; do
+  grep -Fq -e "$want" "$LKG_DOC" || m4="$m4+no <$want>"
+done
+
+[ "$m0 $m1 $m2 $m3 $m4" = "ok ok ok ok ok" ] \
+  && report "CONTRIBUTING.md says where the patterns live, and its example is a file the guard loads" ok \
+  || report "CONTRIBUTING.md says where the patterns live, and its example is a file the guard loads" no \
+     "example=$m0 loads=$m1 own-page=$m2 page-control=$m3 named=$m4"
+
+# 430. #357 AC9 — the tiers are files in a directory mktemp makes. With no directory, or with one
+#      the public tier cannot be written into, the guard has nothing to scan with and says so on
+#      exit 1. Under --public-only that tier is the only one, so a run that went on without it
+#      would read nothing and call the tree clean. The mktemp is a stand-in on PATH: a real one
+#      may ignore a TMPDIR that is not there, and a stand-in needs no permission to be enforced.
+lk_shim() {  # $1 = name, then the lines of a mktemp that stands in for the real one. Prints the
+             # directory to put first on PATH.
+  lk_d="$TMP/lkg-shim-$1"; mkdir -p "$lk_d"; shift
+  { printf '%s\n' '#!/bin/sh'; printf '%s\n' "$@"; } > "$lk_d/mktemp"; chmod +x "$lk_d/mktemp"
+  printf '%s' "$lk_d"
+}
+lk_tiers() {  # $1 = the stand-in's directory, $2 = the fault's words, then the guard's arguments.
+              # Runs the guard in $lk_r under that mktemp. Prints ok, or what is wrong.
+  lk_d=$1; lk_w=$2; shift 2
+  out=$(PATH="$lk_d:$PATH"; export PATH; run_leak "$lk_r" "" "" "" "$@"); all=$(cat "$TMP/lkout" "$TMP/lkerr")
+  [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
+  case "$all" in *clean*) printf 'says clean'; return ;; esac
+  case "$all" in *"$lk_w"*) ;; *) printf 'fault not named'; return ;; esac
+  printf ok
+}
+lk_r=$(leak_repo lkg-t-tiers); printf 'nothing to see\n' > "$lk_r/note.md"
+
+# The control: under the real mktemp this tree is clean, with the private patterns and without.
+out=$(run_leak "$lk_r"); [ "$out" = 0 ] && t0=ok || t0="exit=$out"
+out=$(run_leak "$lk_r" "" "" "" --public-only); [ "$out" = 0 ] || t0="$t0+public-only-exit=$out"
+
+# No directory: mktemp fails, or prints a path where there is none.
+lk_s=$(lk_shim fails 'exit 1')
+t1=$(lk_tiers "$lk_s" 'mktemp -d made no directory')
+t2=$(lk_tiers "$lk_s" 'mktemp -d made no directory' --public-only)
+lk_s=$(lk_shim no-dir "printf '%s\\n' '$TMP/lkg-tiers-not-made'")
+t3=$(lk_tiers "$lk_s" 'mktemp -d made no directory')
+t4=$(lk_tiers "$lk_s" 'mktemp -d made no directory' --public-only)
+
+# A directory the public tier cannot be written into: a directory already has its name.
+lk_s=$(lk_shim no-write "mkdir -p '$TMP/lkg-tiers/public' && printf '%s\\n' '$TMP/lkg-tiers'")
+t5=$(lk_tiers "$lk_s" 'the public tier could not be written' --public-only)
+t6=$(lk_tiers "$lk_s" 'the public tier could not be written')
+
+[ "$t0 $t1 $t2 $t3 $t4 $t5 $t6" = "ok ok ok ok ok ok ok" ] \
+  && report "check-leakage fails when it has no directory for its tiers, or cannot write the public one" ok \
+  || report "check-leakage fails when it has no directory for its tiers, or cannot write the public one" no \
+     "control=$t0 mktemp-fails=$t1/$t2 no-directory=$t3/$t4 no-public-tier=$t5/$t6"
+
+# 431. #357 AC2 — a line of the pattern file that ends in a space or a tab is a fault, an expression
+#      and a section header alike. The blank is part of the expression, and after a header it
+#      makes the header an expression of the section above. The fault names each such line and
+#      the file, and prints no pattern.
+p="$TMP/lkg-p-trail-space"; printf '%s\n' '[fail]' 'zq_kept' 'zq_spaced ' > "$p"
+b0=$(lk_fault lkg-b-space "$p" 'end in a space or a tab' 'line(s) 3')
+p="$TMP/lkg-p-trail-tab"; printf '[fail]\nzq_kept\n[fail ignore-case]\nzq_tabbed\t\n' > "$p"
+b1=$(lk_fault lkg-b-tab "$p" 'end in a space or a tab' 'line(s) 4')
+# Every such line is named, and a CR before the newline does not hide the blank before it.
+p="$TMP/lkg-p-trail-many"; printf '[fail]\r\nzq_one \r\nzq_kept\r\nzq_two\t \r\n' > "$p"
+b2=$(lk_fault lkg-b-many "$p" 'end in a space or a tab' 'line(s) 2 4')
+
+# A header that ends in a blank is not a header. Read as an expression under [warn ignore-case],
+# it leaves the fail patterns below it as warnings on exit 0.
+p="$TMP/lkg-p-trail-header"
+printf '%s\n' '[fail]' 'zq_kept' '[warn ignore-case]' 'zq_warn' '[fail] ' 'zq_demoted' > "$p"
+b3=$(lk_fault lkg-b-header "$p" 'end in a space or a tab' 'line(s) 5')
+b4=$(lk_plant lkg-b-header-hit zq_demoted "$p")
+case "$(cat "$TMP/lkout" "$TMP/lkerr")" in *WARNING*|*clean*) b4="$b4+read-as-a-warning" ;; esac
+
+# The control: a comment and a line of blanks are dropped as before, whatever they end in, and an
+# expression that begins with `#` is written `[#]`, which is what CONTRIBUTING.md tells its reader.
+p="$TMP/lkg-p-trail-control"; printf '# a comment \n[fail]\n \t\nzq_kept\n[#]zq_hash\n' > "$p"
+b5=$(lk_plant lkg-b-control '#zq_hash' "$p")
+b6=$(lk_plant lkg-b-control-other 'zq_hash' "$p")
+
+[ "$b0 $b1 $b2 $b3 $b4" = "ok ok ok ok 1" ] && [ "$b5 $b6" = "1+leak 0" ] \
+  && report "check-leakage refuses a pattern or a section header that ends in a space or a tab" ok \
+  || report "check-leakage refuses a pattern or a section header that ends in a space or a tab" no \
+     "space=$b0 tab=$b1 each-line-after-a-cr=$b2 header=$b3 header-demotes=$b4 control=$b5/$b6"
+
+# 432. #357 AC2 — the loader's writes into its temporary directory are checked. A section that
+#      is not written is a tier not run: a guard that goes on with the rest of its list calls a
+#      tree holding that section's hit clean. The stand-in leaves a link to nowhere under the
+#      file's name, which no write goes through, whoever runs the suite.
+lk_unwritable() {  # $1 = name, $2 = the file in the tiers' directory that cannot be written. Prints
+                   # the directory of a mktemp that makes such a directory.
+  lk_shim "$1" "mkdir -p '$TMP/lkg-tiers-$1' && ln -s '$TMP/lkg-not-made/file' '$TMP/lkg-tiers-$1/$2' || exit 1" \
+    "printf '%s\\n' '$TMP/lkg-tiers-$1'"
+}
+lk_r=$(leak_repo lkg-t-writes); printf 'a line holding ZQ_Fold here\n' > "$lk_r/note.md"
+
+# The control: under the real mktemp the hit is found.
+out=$(run_leak "$lk_r"); w0=$(lk_report 1 'LEAK [fail ignore-case] note.md line(s): 1')
+
+lk_s=$(lk_unwritable w-section 'fail ignore-case')
+w1=$(lk_tiers "$lk_s" 'could not be written to the temporary directory')
+case "$(cat "$TMP/lkout" "$TMP/lkerr")" in *[Zz][Qq]_*) w1="$w1+a pattern is printed" ;; esac
+# The line numbers beside a section are what an invalid expression is reported by.
+lk_s=$(lk_unwritable w-at 'fail ignore-case.at')
+w2=$(lk_tiers "$lk_s" 'could not be written to the temporary directory')
+case "$(cat "$TMP/lkout" "$TMP/lkerr")" in *[Zz][Qq]_*) w2="$w2+a pattern is printed" ;; esac
+
+# --public-only writes no section, so the same directory serves it: the public tier still runs.
+out=$(PATH="$lk_s:$PATH"; export PATH; run_leak "$lk_r" "" "" "" --public-only)
+[ "$out" = 0 ] && grep -q '2 file(s) scanned, private patterns not run' "$TMP/lkout" && w3=ok || w3="exit=$out"
+w3="$w3$(lk_noticed)"
+
+[ "$w0 $w1 $w2 $w3" = "ok ok ok ok" ] \
+  && report "check-leakage fails when it cannot write a pattern into its temporary directory" ok \
+  || report "check-leakage fails when it cannot write a pattern into its temporary directory" no \
+     "control=$w0 section=$w1 line-numbers=$w2 public-only=$w3"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
