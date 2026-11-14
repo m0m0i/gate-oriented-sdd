@@ -2,7 +2,7 @@
 
 Both target harnesses move fast, so nothing in this repo is designed against documentation alone. Every row below was produced by running the thing on a real install. Re-verify when the version column moves.
 
-Last **updated**: 2026-11-04 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity CLI rows below reflect the 2026-10-11 verification run (A1–A14), and the #324 section re-ran `PostToolUse` and named groups on CLI 1.4.7. Antigravity IDE has been discontinued and is removed from the active target matrix.
+Last **updated**: 2026-11-13 — this field records the most recent addition, not a re-run of every row. Each section carries its own provenance; the Antigravity CLI rows below reflect the 2026-10-11 verification run (A1–A14), and the #324 section re-ran `PostToolUse` and named groups on CLI 1.4.7. Antigravity IDE has been discontinued and is removed from the active target matrix.
 
 The version table below carries a date beside each row. Claude Code's row was re-dated to 2.1.252 on 2026-09-05 on the strength of the runs recorded in the dated sections below — subagent reviews, the gates on every turn, and `init` in a scratch clone all ran under it — which is what #48 asked for and got: a run, not a re-typed number. The Antigravity CLI row carries the date it was verified. Re-dating a row on the strength of nothing is still the failure this file exists to prevent.
 
@@ -11,7 +11,7 @@ The version table below carries a date beside each row. Claude Code's row was re
 | Component | Version |
 | :-- | :-- |
 | Claude Code | 2.1.300 — the #304 section of 2026-10-16. 2.1.296 — the #239 section of 2026-10-12. 2.1.294 — the #274 section of 2026-10-10: the terminal CLI, started from a desktop-app session whose own copy was 2.1.295; its F3 ran on the maintainer's second machine, the app's copy 2.1.295 and its terminal CLI 2.1.296. 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
-| Antigravity CLI (`agy`) | 1.4.7 — the #324 section of 2026-10-26, whose R0 ran on 1.4.0. 1.3.3 — the #239 section of 2026-10-12, and verified 2026-10-11 (A1–A14 run sheet from 2026-10-11 deep review, headless `agy -p` in trusted scratch fixture). 1.2.16 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
+| Antigravity CLI (`agy`) | 1.5.6 and 1.5.7 — the #355 section of 2026-11-13, whose E1 ran on 1.5.6 and whose E2 and E3 ran on 1.5.7. 1.4.7 — the #324 section of 2026-10-26, whose R0 ran on 1.4.0. 1.3.3 — the #239 section of 2026-10-12, and verified 2026-10-11 (A1–A14 run sheet from 2026-10-11 deep review, headless `agy -p` in trusted scratch fixture). 1.2.16 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
 | Antigravity IDE | Discontinued; removed from active target matrix. (Historical: 2.3.1 verified 2026-08-21) |
 | Platform | macOS (darwin, arm64) |
 
@@ -672,6 +672,57 @@ Q3's answer to the paragraph is one sample.
 - **A consumer's re-run that is pushed and passes its CI.**
 - **What to do about a vendored plugin copy.** Nothing `init` ships reaches the copy under `.agents/plugins/`, so a session can read its older skills. R4 shows it, and nothing here changes it.
 
+## The `PATH` a `Stop` hook gets, on Antigravity CLI 1.5.6 and 1.5.7 (#355)
+
+**Run on 2026-11-13, Antigravity CLI 1.5.6 and 1.5.7**, for #355's AC10. E1 ran on 1.5.6. The CLI's background updater ran after it, as the #324 section records for its R0, and E2 and E3 ran on 1.5.7 (`agy.log`: `Language server version: 1.5.7`). Every run was one headless turn, with the launch `PATH` set by `env`: `env PATH=<the run's PATH> <agy> --sandbox --mode accept-edits --effort low --output-format stream-json --print-timeout 150s -p`. `agy` was named by its absolute path, because the reduced `PATH` does not hold it. `CLAUDECODE`, eight named `CLAUDE_CODE_*` variables, `GATE_SDD_PLUGIN_ROOT`, `ANTIGRAVITY_CONVERSATION_ID` and `ANTIGRAVITY_AGENT` were unset. It was not `env -i`, which drops `HOME` and the login. The prompt was: "Reply with the one word: ok. If a hook then blocks the end of your turn, edit no file and run no command: reply with the one word blocked."
+
+- **The fixture:** a git repository under `~/agent-work-dir`, which `trustedWorkspaces` lists, with no remote. Nothing was pushed, and no `agy plugin install` was run.
+- **The install, by hand, in `init`'s layout:** the copy set in `.agents/hooks/`, and `.agents/hooks.json` rendered from the template with `{{HOOKS_DIR}}` as `.agents/hooks` and `{{FAST_CHECK}}` as `true`. First `main`'s at `80ebb03`, then this branch's at `c6ba34c`. Of the copied files only `quality-gate.sh` differs between the two. `python-reviewer` and its contract came from `reviewers/`, the directory contracts and issue templates from `assets/`.
+- **The steering file:** `- Validators: sh rec.sh, npm --version, gate-sdd-355-absent --version`, `- Source globs: :(glob)src/**` and `- Mode: bootstrap`. `gate-sdd-355-absent` is on no `PATH` at all. `rec.sh` appends the time, its `PATH` and the result of `command -v npm` to a file, and exits 0, so each record is written from inside the gate's own validator run.
+- **`npm` on this machine:** a real binary in a version manager's install directory under the home directory, on the session shell's `PATH`. Under `PATH=/usr/bin:/bin:/usr/sbin:/sbin`, `command -v npm` exits 1.
+- **The harness checks:** the four real ones pass in the fixture under that reduced `PATH`, with `/usr/bin/python3`.
+
+| Run | The gate, and the `PATH` `agy` was launched with | Observed |
+| :-- | :-- | :-- |
+| E1 | `main`'s (`80ebb03`), on CLI 1.5.6; `/usr/bin:/bin:/usr/sbin:/sbin` | **The hook's `PATH` was the launch `PATH`, and the block is today's.** All eleven records read `PATH=/usr/bin:/bin:/usr/sbin:/sbin` and `command -v npm: not found (status 1)`. The block's header ends "fix the failure rather than working around the gate." Under `--- npm --version` it has only bash's `<fixture>/.agents/hooks/quality-gate.sh: line 604: npm: command not found`, and the same line for `gate-sdd-355-absent` under `--- gate-sdd-355-absent --version`. Nothing in it names a `PATH`, or a remedy other than fixing the failure. |
+| E2 | This branch's (`c6ba34c`), on CLI 1.5.7; the same `PATH` | **The same `PATH`, and the block is AC1's.** The eleven records are E1's. The header's clause is now "none of these could be started on the hook's PATH, which no agent can change; the paragraph below says what a person can." After bash's line, each validator's tail ends `gate-sdd: exit 127: 'npm' is not on the PATH this hook runs with.`, or the same line naming `'gate-sdd-355-absent'`. One paragraph follows the failures: `The PATH this hook ran with is: /usr/bin:/bin:/usr/sbin:/sbin`, then "That is the environment the host started this hook with, and no agent can change it from inside the session. A person can: start 'agy' from a terminal whose shell has the tool on its PATH." |
+| E3 | This branch's, on CLI 1.5.7; `<the directory holding npm>:/usr/bin:/bin:/usr/sbin:/sbin`. This run is outside AC10's two. | **The hook's `PATH` followed the launch `PATH`.** All eleven records hold exactly the launch value, and `command -v npm` resolved in that directory with status 0. `npm --version` passed, so the block names `gate-sdd-355-absent` alone. It carries E2's header, since the one failed validator is AC1's case, and its paragraph prints the launch value. |
+
+In every run the gate ran eleven times and the turn was re-entered ten times, which is A4's cap, still 10 on 1.5.6 and 1.5.7. The model answered `ok`, then `blocked` ten times, and the stream shows no tool call. The result was `status: SUCCESS` and `agy` exited 0. The fixture's tree was unchanged after each run.
+
+Each block quoted above is the first of its run's eleven, taken from the hook's stderr as `agy.log` records it (`JSON hook command stderr:`). The stream-json output shows a block only as a `system_message` step with no content.
+
+**What this settles for #355's spec.** On CLI 1.5.6 and 1.5.7, headless:
+- A `Stop` hook runs with the `PATH` `agy` was launched with. It is not rebuilt from the user's shell: the session's own zsh, started from the user's profile, resolves `npm`, and the hooks of E1 and E2 did not. It is not a fixed one: E3's hook held the directory its launch added. E1 and E2 alone could not tell an inherited `PATH` from a fixed one, because the reduced `PATH` is also the system default.
+- The remedy the Antigravity block names, starting `agy` from a terminal whose shell has the tool on its `PATH`, is E3's mechanism, with the `PATH` set by `env` rather than by a terminal's shell.
+- `main`'s block for a command the hook cannot find says only what the shell says. This branch's names the command, the `PATH` and the remedy.
+- Seen in passing: under the reduced `PATH`, another installed plugin's hook failed in E1 and E2 with `sh: node: command not found` and `exit status 127` in `agy.log`. It did not fail in E3.
+
+**The 2026-11-08 process inspection is not a hook run.** At #355's spec, on this Mac, the environments of running processes were read, and no hook ran:
+- the launchd-started Antigravity App (2.29.0) and the `remote-control` CLI daemon held `PATH=/usr/bin:/bin:/usr/sbin:/sbin`;
+- the App's language server held the login shell's environment, taken through a `$SHELL -ilc env` that falls back silently to the minimal one.
+
+Which of the two a hook under the App inherits is not measured, and neither is the environment #355's reported session ran under. The same day, the four harness checks passed under `PATH=/usr/bin:/bin` with macOS's `/usr/bin/python3` 3.9.6.
+
+**Claude Code, for the same question.** No Claude Code session was run for #355.
+- **Documented, not measured:** "A hook process inherits the parent environment" (the hooks page, read again on 2026-11-13). The desktop page's `PATH` row points to its entry "Session not finding installed tools", whose text was not read again.
+- **Measured:** an entry only the Bash tool's shell receives, a plugin's `bin/`, does not reach a `Stop` hook. That is P4 of the #263 and #264 section above, on 2.1.293.
+- **Not exercised:** a hook's `PATH` beside the `PATH` of the shell that started `claude`, and a hook in a session the desktop app starts.
+
+Both remedies the Claude Code block names therefore rest on the documentation. Their wording, per harness, is held by `scripts/test-gates.sh`.
+
+### What these runs do not support
+
+- **The Antigravity App, the `remote-control` daemon, and an interactive session.** Every run was the CLI, headless. The block offers the App no remedy for that reason.
+- **The `reason` as the model received it.** The quoted text is the hook's stderr. That the JSON on stdout was honoured is shown only by the ten re-entries.
+- **How an agent reacts to either block.** The prompt told the model to answer one word and edit nothing, so nothing here shows whether the new block keeps an agent away from the toolchain.
+- **A version manager's shim.** The `npm` here is a real binary in an install directory.
+- **Any shell but macOS's `/bin/sh`, which is bash, running the hook.** The shell's own "not found" line differs under dash, CI's `sh`, where only `scripts/test-gates.sh` ran.
+- **`main`'s and the branch's blocks on one CLI version.** E1 ran on 1.5.6, and E2 and E3 on 1.5.7.
+- **A `PATH` set by a terminal's shell.** Each launch `PATH` was set with `env`.
+- **AC2's wording, the timeout block, and a `PATH` holding unusual bytes,** on a real `agy`. Those are `scripts/test-gates.sh` cases only.
+- **An install made by the `init` skill, and `init`'s `PATH` warning.** The fixture was copied by hand, and no session ran `init`.
+
 ## Still to verify
 
 - [x] The Antigravity run sheet from the 2026-10-11 deep review, A1–A14 in [`reviews/2026-10-11-antigravity-checklist.md`](./reviews/2026-10-11-antigravity-checklist.md): whether a gate blocks at all, the continuation cap, timeouts, digest timing, reviewer registration and `rules/AGENTS.md` — run on 2026-10-11 on CLI 1.3.3, section above.
@@ -699,5 +750,6 @@ Q3's answer to the paragraph is one sample.
 - [ ] `sprint` on a backlog item that decomposes into a feature and a chore, and on an iteration with unplanned work to label.
 - [x] `init` on an Antigravity project that already has a harness install — the re-run through `assets/upgrade-install.py` — run on 2026-11-04 on CLI 1.4.12 for #343, on a v0.36.0 fixture and a real 2026-09 install, section above.
 - [ ] `init` on a project that already has a harness install, beyond the hooks install and the contract copy: an existing `CONTRACT.md` whose compiled rules the installed rulebook must keep, and the guard migration run by the skill (#343's runs left both out).
+- [ ] A hook's `PATH` where #355's runs did not reach: under the Antigravity App and the `remote-control` daemon; on Claude Code, beside the `PATH` of the shell that started `claude`, and in a session the desktop app starts. On Antigravity, an agent's reaction to #355's block with no instruction to leave the tree alone.
 - [ ] The known-failing validator path at `init` step 1, and the omit and record-as-known-failing answers at step 4.
 - [ ] `init` step 3's merge paths with something to merge: issue templates that differ from the plugin's, and an `AGENTS.md` that needs a diff shown before it is touched. On #76 both were byte-identical or already canonical, so neither path ran.
