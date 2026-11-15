@@ -42,8 +42,10 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 
-# Only the working-tree scan reads the checkout this script sits in (#360).
+# Only the working-tree scan reads the checkout this script sits in, so it drops what git sets
+# for a hook, which names the repository the hook ran in (#360).
 if [ "$MODE" = tree ]; then
+  unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
   ROOT=$(cd "$(dirname "$0")/.." && pwd)
   cd "$ROOT" || exit 1
 fi

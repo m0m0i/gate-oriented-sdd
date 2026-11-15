@@ -11858,6 +11858,194 @@ h17="$(lk_refused --commits) $(lk_refused --commits --zq_option) $(lk_refused --
   || report "check-leakage --commits scans each commit's message, added paths and added lines" no \
      "clean=$h0 empty-set=$h1 message=$h2 path=$h3 not-ascii-path=$h4 removed-line=$h5 merge-only=$h6 config=$h7 identity=$h8 unresolvable=$h9 shallow=$h10 no-repository=$h11 partial-git=$h12 unplaced-hit=$h13 unreadable-object=$h14 bare=$h15 public-only=$h16 grammar=$h17"
 
+# 439. #360 AC6 — one command installs the hooks for a clone and every worktree of it: a shim
+#      under each hook's name in the common hooks directory, and a snapshot of the guard and the
+#      hook scripts beside them. Run again it brings both up to date. It refuses to replace a
+#      hook it did not write, to install over a newer shim, and to install under core.hooksPath.
+hook_repo() {  # $1 = name. A repo holding the guard, the hook scripts and the installer,
+               # committed, with nothing installed.
+  r="$TMP/$1"; mkdir -p "$r/scripts/git-hooks"
+  cp "$ROOT/scripts/check-leakage.sh" "$ROOT/scripts/install-git-hooks.sh" "$r/scripts/"
+  cp "$ROOT"/scripts/git-hooks/*.sh "$r/scripts/git-hooks/"
+  ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
+    && git add -A && git commit -qm init ) >/dev/null 2>&1
+  echo "$r"
+}
+# Every git a hook case runs is given nothing of the machine or of the hook this suite may
+# itself be running under: no global or system configuration, none of the variables git sets
+# for a hook, an identity, the synthetic pattern file unless $LK_PAT names another, and no
+# editor to wait on (#360).
+lk_git_in() {  # $1 = directory, then git's arguments. Prints git's exit status.
+  ( cd "$1" || exit; shift
+    unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX XDG_CONFIG_HOME
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_EDITOR=true \
+    GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t \
+    HOME="$TMP/lkg-home" GATE_SDD_LEAKAGE_PATTERNS="${LK_PAT-$LKG_PAT}" \
+    git "$@" >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
+}
+lk_install() {  # $1 = repo. Prints the installer's exit status.
+  ( cd "$1" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX \
+    && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 sh scripts/install-git-hooks.sh >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
+}
+LKG_HOOKS='commit-msg pre-commit'
+
+r=$(hook_repo lkg-i-install)
+out=$(lk_install "$r"); i0=ok
+[ "$out" = 0 ] || i0="exit=$out"
+grep -q '^install-git-hooks: .* installed in .*hooks (shim version [0-9]*), with a snapshot in ' "$TMP/lkout" || i0="$i0+not-said"
+for lk_n in $LKG_HOOKS; do
+  [ -x "$r/.git/hooks/$lk_n" ] && cmp -s "$r/.git/hooks/$lk_n" "$ROOT/scripts/git-hooks/shim.sh" || i0="$i0+no-$lk_n"
+  cmp -s "$r/.git/hooks/gate-sdd/scripts/git-hooks/$lk_n.sh" "$ROOT/scripts/git-hooks/$lk_n.sh" || i0="$i0+no-snapshot-$lk_n"
+done
+cmp -s "$r/.git/hooks/gate-sdd/scripts/check-leakage.sh" "$ROOT/scripts/check-leakage.sh" || i0="$i0+no-snapshot-guard"
+
+# Run again with a hook script changed: the snapshot follows, and nothing else differs.
+printf '# a later line\n' >> "$r/scripts/git-hooks/commit-msg.sh"
+out=$(lk_install "$r"); [ "$out" = 0 ] && i1=ok || i1="exit=$out"
+cmp -s "$r/.git/hooks/gate-sdd/scripts/git-hooks/commit-msg.sh" "$r/scripts/git-hooks/commit-msg.sh" || i1="$i1+snapshot-not-updated"
+[ ! -e "$r/.git/hooks/gate-sdd.new" ] || i1="$i1+left-a-working-copy"
+
+# A hook file it did not write is left as it is, and nothing is installed beside it.
+r=$(hook_repo lkg-i-foreign); mkdir -p "$r/.git/hooks"
+printf '#!/bin/sh\necho mine\n' > "$r/.git/hooks/pre-commit"
+out=$(lk_install "$r")
+[ "$out" = 1 ] && grep -q 'is a hook this installer did not write' "$TMP/lkerr" && i2=ok || i2="exit=$out"
+grep -q 'echo mine' "$r/.git/hooks/pre-commit" || i2="$i2+replaced"
+[ ! -e "$r/.git/hooks/commit-msg" ] && [ ! -e "$r/.git/hooks/gate-sdd" ] || i2="$i2+partly-installed"
+
+# A newer shim than this checkout's is not put back.
+r=$(hook_repo lkg-i-newer); out=$(lk_install "$r")
+sed 's/^# gate-sdd-shim [0-9]*$/# gate-sdd-shim 999/' "$ROOT/scripts/git-hooks/shim.sh" > "$r/.git/hooks/pre-commit"
+out=$(lk_install "$r")
+[ "$out" = 1 ] && grep -q 'is shim version 999' "$TMP/lkerr" && i3=ok || i3="exit=$out"
+grep -q '^# gate-sdd-shim 999$' "$r/.git/hooks/pre-commit" || i3="$i3+replaced"
+
+r=$(hook_repo lkg-i-hookspath); ( cd "$r" && git config core.hooksPath elsewhere ) >/dev/null 2>&1
+out=$(lk_install "$r")
+[ "$out" = 1 ] && grep -q 'core.hooksPath is set' "$TMP/lkerr" && [ ! -e "$r/.git/hooks/commit-msg" ] && i4=ok || i4="exit=$out"
+
+[ "$i0 $i1 $i2 $i3 $i4" = "ok ok ok ok ok" ] \
+  && report "install-git-hooks installs the shims and a snapshot, and refuses what it must not replace" ok \
+  || report "install-git-hooks installs the shims and a snapshot, and refuses what it must not replace" no \
+     "install=$i0 again=$i1 foreign-hook=$i2 newer-shim=$i3 hooks-path=$i4"
+
+# 440. #360 AC4 — with the hooks installed, `git commit` is refused when its message, a staged
+#      path or staged content matches a failing pattern, and the refusal names a place and
+#      never the text. One repository serves every half; a refused commit leaves HEAD where it was.
+lk_head() { ( cd "$1" && git rev-parse HEAD ) 2>/dev/null; }
+lk_refusal_is() {  # $1 = the line the guard's report must hold. Reads the last lk_git_in, whose
+                   # status is $out, and $lk_before, HEAD before it. Prints ok, or what is wrong.
+  [ "$out" != 0 ] || { printf 'committed'; return; }
+  grep -Fxq -e "$1" "$TMP/lkerr" || { printf 'no line <%s>' "$1"; return; }
+  grep -q 'The commit is refused' "$TMP/lkerr" || { printf 'not said to be refused'; return; }
+  cat "$TMP/lkout" "$TMP/lkerr" | LC_ALL=C grep -qai -e 'zq_' && { printf 'the matched text is printed'; return; }
+  [ "$(lk_head "$lk_c")" = "$lk_before" ] || { printf 'HEAD moved'; return; }
+  printf ok
+}
+lk_c=$(hook_repo lkg-c-commit); out=$(lk_install "$lk_c")
+
+# The control: a clean commit goes through, and says nothing of the guard.
+printf 'one\n' > "$lk_c/a.md"; out=$(lk_git_in "$lk_c" add a.md)
+lk_before=$(lk_head "$lk_c"); out=$(lk_git_in "$lk_c" commit -qm 'a clean message')
+[ "$out" = 0 ] && [ "$(lk_head "$lk_c")" != "$lk_before" ] && [ ! -s "$TMP/lkerr" ] && c0=ok || c0="exit=$out"
+
+printf 'two\n' > "$lk_c/b.md"; out=$(lk_git_in "$lk_c" add b.md)
+lk_before=$(lk_head "$lk_c"); out=$(lk_git_in "$lk_c" commit -qm 'a message holding Zq_Exact')
+c1=$(lk_refusal_is 'LEAK [fail] input line(s): 1')
+
+# A warning does not refuse the commit.
+lk_before=$(lk_head "$lk_c"); out=$(lk_git_in "$lk_c" commit -qm 'a message holding zq_warn')
+[ "$out" = 0 ] && grep -q '^WARNING \[warn ignore-case\] input line(s): 1$' "$TMP/lkerr" && c2=ok || c2="exit=$out"
+
+printf 'clean\nZq_Exact\n' > "$lk_c/c.md"; out=$(lk_git_in "$lk_c" add c.md)
+lk_before=$(lk_head "$lk_c"); out=$(lk_git_in "$lk_c" commit -qm 'staged content')
+c3=$(lk_refusal_is 'LEAK [fail] c.md line(s): 2')
+out=$(lk_git_in "$lk_c" rm -q --cached c.md); rm -f "$lk_c/c.md"
+
+printf 'nothing to see\n' > "$lk_c/d-Zq_Exact.md"; out=$(lk_git_in "$lk_c" add d-Zq_Exact.md)
+lk_before=$(lk_head "$lk_c"); out=$(lk_git_in "$lk_c" commit -qm 'a staged path')
+c4=$(lk_refusal_is 'LEAK [fail] staged path number(s) in the listing: 1')
+out=$(lk_git_in "$lk_c" rm -q --cached d-Zq_Exact.md); rm -f "$lk_c/d-Zq_Exact.md"
+
+# --amend: the new message, and what is newly staged.
+lk_before=$(lk_head "$lk_c"); out=$(lk_git_in "$lk_c" commit -q --amend -m 'amended to hold Zq_Exact')
+c5=$(lk_refusal_is 'LEAK [fail] input line(s): 1')
+printf 'Zq_Exact\n' > "$lk_c/e.md"; out=$(lk_git_in "$lk_c" add e.md)
+lk_before=$(lk_head "$lk_c"); out=$(lk_git_in "$lk_c" commit -q --amend --no-edit)
+c5="$c5 $(lk_refusal_is 'LEAK [fail] e.md line(s): 1')"
+out=$(lk_git_in "$lk_c" rm -q --cached e.md); rm -f "$lk_c/e.md"
+
+# A commit of named paths takes the file from the working tree, past what is staged.
+printf 'clean\n' > "$lk_c/f.md"; out=$(lk_git_in "$lk_c" add f.md); out=$(lk_git_in "$lk_c" commit -qm 'f, clean')
+printf 'clean\nZq_Exact\n' > "$lk_c/f.md"
+lk_before=$(lk_head "$lk_c"); out=$(lk_git_in "$lk_c" commit -qm 'f, by name' f.md)
+c6=$(lk_refusal_is 'LEAK [fail] f.md line(s): 2')
+printf 'clean\n' > "$lk_c/f.md"
+
+# The message of a merge commit.
+out=$(lk_git_in "$lk_c" checkout -qb side); printf 'side\n' > "$lk_c/s.md"
+out=$(lk_git_in "$lk_c" add s.md); out=$(lk_git_in "$lk_c" commit -qm side); out=$(lk_git_in "$lk_c" checkout -q main)
+printf 'main\n' > "$lk_c/m.md"; out=$(lk_git_in "$lk_c" add m.md); out=$(lk_git_in "$lk_c" commit -qm main)
+lk_before=$(lk_head "$lk_c"); out=$(lk_git_in "$lk_c" merge -q --no-ff -m 'a merge holding Zq_Exact' side)
+c7=$(lk_refusal_is 'LEAK [fail] input line(s): 1')
+out=$(lk_git_in "$lk_c" merge --abort)
+
+# A pattern file that cannot be loaded refuses the commit: the hook did not look.
+printf 'three\n' > "$lk_c/g.md"; out=$(lk_git_in "$lk_c" add g.md)
+lk_before=$(lk_head "$lk_c"); out=$(LK_PAT="$TMP/lkg-p-absent" lk_git_in "$lk_c" commit -qm 'a clean message')
+[ "$out" != 0 ] && grep -q 'the private patterns were not loaded' "$TMP/lkerr" \
+  && [ "$(lk_head "$lk_c")" = "$lk_before" ] && c8=ok || c8="exit=$out"
+
+[ "$c0 $c1 $c2 $c3 $c4 $c6 $c7 $c8" = "ok ok ok ok ok ok ok ok" ] && [ "$c5" = "ok ok" ] \
+  && report "the commit hooks refuse a message, a staged path and staged content that match" ok \
+  || report "the commit hooks refuse a message, a staged path and staged content that match" no \
+     "clean=$c0 message=$c1 warning=$c2 content=$c3 path=$c4 amend=$c5 named-paths=$c6 merge-message=$c7 no-patterns=$c8"
+
+# 441. #360 AC6 — the installed hooks run in every worktree of the clone: from a subdirectory
+#      of a linked worktree, and in a worktree whose branch holds no hook script while the main
+#      checkout holds none either, where the snapshot serves. With neither a script nor a
+#      snapshot the shim refuses, and names the installer.
+lk_c=$(hook_repo lkg-w-main); out=$(lk_install "$lk_c")
+out=$(lk_git_in "$lk_c" worktree add -q "$TMP/lkg-w-linked" -b linked); mkdir -p "$TMP/lkg-w-linked/sub"
+printf 'Zq_Exact\n' > "$TMP/lkg-w-linked/sub/a.md"; out=$(lk_git_in "$TMP/lkg-w-linked/sub" add a.md)
+out=$(lk_git_in "$TMP/lkg-w-linked/sub" commit -qm 'from a subdirectory')
+[ "$out" != 0 ] && grep -Fxq -e 'LEAK [fail] sub/a.md line(s): 1' "$TMP/lkerr" && w0=ok || w0="exit=$out"
+printf 'clean\n' > "$TMP/lkg-w-linked/sub/a.md"; out=$(lk_git_in "$TMP/lkg-w-linked/sub" add a.md)
+out=$(lk_git_in "$TMP/lkg-w-linked/sub" commit -qm 'a message holding Zq_Exact')
+[ "$out" != 0 ] && grep -Fxq -e 'LEAK [fail] input line(s): 1' "$TMP/lkerr" || w0="$w0+message-exit=$out"
+out=$(lk_git_in "$TMP/lkg-w-linked/sub" commit -qm 'a clean message'); [ "$out" = 0 ] || w0="$w0+clean-exit=$out"
+
+# Two branches with no scripts at all: the main checkout on one, a linked worktree on the other.
+out=$(lk_git_in "$lk_c" rm -rq scripts); out=$(lk_git_in "$lk_c" commit -q --no-verify -m 'before the hooks')
+out=$(lk_git_in "$lk_c" worktree add -q "$TMP/lkg-w-old" -b old)
+printf 'Zq_Exact\n' > "$TMP/lkg-w-old/a.md"; out=$(lk_git_in "$TMP/lkg-w-old" add a.md)
+out=$(lk_git_in "$TMP/lkg-w-old" commit -qm 'on an older branch')
+[ "$out" != 0 ] && grep -Fxq -e 'LEAK [fail] a.md line(s): 1' "$TMP/lkerr" && w1=ok || w1="exit=$out"
+printf 'clean\n' > "$TMP/lkg-w-old/a.md"; out=$(lk_git_in "$TMP/lkg-w-old" add a.md)
+out=$(lk_git_in "$TMP/lkg-w-old" commit -qm 'a clean message'); [ "$out" = 0 ] || w1="$w1+clean-exit=$out"
+
+# And with the snapshot gone, the shim has nothing to run and says so.
+mv "$lk_c/.git/hooks/gate-sdd" "$TMP/lkg-w-snapshot-away"
+printf 'clean again\n' > "$TMP/lkg-w-old/a.md"; out=$(lk_git_in "$TMP/lkg-w-old" add a.md)
+lk_before=$(lk_head "$TMP/lkg-w-old"); out=$(lk_git_in "$TMP/lkg-w-old" commit -qm 'a clean message')
+[ "$out" != 0 ] && grep -q 'found no hook script to run' "$TMP/lkerr" && grep -q 'scripts/install-git-hooks.sh' "$TMP/lkerr" \
+  && [ "$(lk_head "$TMP/lkg-w-old")" = "$lk_before" ] && w2=ok || w2="exit=$out"
+
+[ "$w0 $w1 $w2" = "ok ok ok" ] \
+  && report "the installed hooks run in a linked worktree, and from the snapshot where a branch has none" ok \
+  || report "the installed hooks run in a linked worktree, and from the snapshot where a branch has none" no \
+     "linked-subdirectory=$w0 no-hooks-on-either-branch=$w1 no-snapshot=$w2"
+
+# 442. #360 — the working-tree scan reads the checkout the guard sits in, whatever repository
+#      the variables git sets for a hook name.
+r=$(leak_repo lkg-e-own); printf 'a line holding Zq_Exact here\n' > "$r/own-only.md"
+lk_o=$(leak_repo lkg-e-other); printf 'nothing to see\n' > "$lk_o/note.md"; ( cd "$lk_o" && git add -A ) >/dev/null 2>&1
+out=$(GIT_DIR="$lk_o/.git"; GIT_INDEX_FILE="$lk_o/.git/index"; GIT_WORK_TREE="$lk_o"; export GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE; run_leak "$r")
+e0=$(lk_report 1 'LEAK [fail] own-only.md line(s): 1')
+[ "$e0" = ok ] \
+  && report "check-leakage scans its own checkout when git's hook variables name another" ok \
+  || report "check-leakage scans its own checkout when git's hook variables name another" no "own-tree=$e0"
+
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
 # #145. check-version-bump.py must include rules/ in SHIPPED so any change
