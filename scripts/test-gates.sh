@@ -10713,14 +10713,15 @@ LKG_PAT="$TMP/lkg-patterns"; mkdir -p "$TMP/lkg-home"
 printf '%s\n' '# a synthetic list' '' '[fail]' 'Zq_Exact' '[fail ignore-case]' 'zq_fold' \
   '[warn ignore-case]' 'zq_warn' > "$LKG_PAT"
 run_leak() {  # $1 = repo; $2 = the pattern file, `-` to name none; $3 = HOME; $4 = XDG_CONFIG_HOME;
-              # then the guard's own arguments, before which $2 to $4 may be given empty
+              # then the guard's own arguments, before which $2 to $4 may be given empty.
+              # Standard input is the file $LK_IN names, else empty: never the suite's own (#360).
   ( cd "$1" || exit
     unset GATE_SDD_LEAKAGE_PATTERNS XDG_CONFIG_HOME
     HOME=${3:-$TMP/lkg-home}; export HOME
     [ "${2:-$LKG_PAT}" = - ] || { GATE_SDD_LEAKAGE_PATTERNS=${2:-$LKG_PAT}; export GATE_SDD_LEAKAGE_PATTERNS; }
     [ -z "${4:-}" ] || { XDG_CONFIG_HOME=$4; export XDG_CONFIG_HOME; }
     if [ "$#" -gt 4 ]; then shift 4; else set --; fi
-    sh scripts/check-leakage.sh "$@" >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
+    sh scripts/check-leakage.sh "$@" <"${LK_IN:-/dev/null}" >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
 }
 
 # An empty work-set takes the guard's copy out of it: untracked, and ignored (#357).
@@ -11183,13 +11184,13 @@ case "$(cat "$TMP/lkout")" in *clean*) o4="$o4+says-clean" ;; esac
   || report "check-leakage --public-only runs the public tier alone, and says it is not a pass" no \
      "clean=$o0 public-hit=$o1 private-control=$o2 private-not-run=$o3 empty-work-set=$o4"
 
-# 427. #357 — `--public-only` is the guard's one argument. Anything else is refused over a clean
-#      tree and a usable pattern file, with nothing scanned, and the argument is not printed.
+# 427. #357, #360 — an argument the guard does not take is refused over a clean tree and a usable
+#      pattern file, with nothing scanned, and the argument is not printed.
 lk_refused() {  # The guard's arguments, run in $lk_r. Prints ok, or what is wrong.
   out=$(run_leak "$lk_r" "" "" "" "$@"); all=$(cat "$TMP/lkout" "$TMP/lkerr")
   [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
   case "$all" in *clean*) printf 'says clean'; return ;; esac
-  case "$all" in *'The only argument is --public-only'*) ;; *) printf 'not refused as an argument'; return ;; esac
+  case "$all" in *'it was given an argument it does not take'*) ;; *) printf 'not refused as an argument'; return ;; esac
   case "$all" in *zq_*) printf 'the argument is printed'; return ;; esac
   printf ok
 }
@@ -11202,8 +11203,8 @@ a4=$(lk_refused '')
 a5=$(lk_refused --public)
 
 [ "$a0 $a1 $a2 $a3 $a4 $a5" = "ok ok ok ok ok ok" ] \
-  && report "check-leakage refuses any argument but --public-only, and does not print it" ok \
-  || report "check-leakage refuses any argument but --public-only, and does not print it" no \
+  && report "check-leakage refuses an argument it does not take, and does not print it" ok \
+  || report "check-leakage refuses an argument it does not take, and does not print it" no \
      "unknown=$a0 flag-then-more=$a1 more-then-flag=$a2 flag-twice=$a3 empty=$a4 prefix=$a5"
 
 # 428. #357 AC6 — CI's `Leakage guard` step, run here as .github/workflows/ci.yml holds it. The
@@ -11454,6 +11455,128 @@ w3="$w3$(lk_noticed)"
   && report "check-leakage fails when it cannot write a pattern into its temporary directory" ok \
   || report "check-leakage fails when it cannot write a pattern into its temporary directory" no \
      "control=$w0 section=$w1 line-numbers=$w2 public-only=$w3"
+
+# 433. #360 AC1 to AC3 — `--text` scans standard input with the working-tree scan's tiers and
+#      exit status, and reports a hit by the input's line numbers and nothing else. It reads no
+#      file of the tree, needs no repository, passes an input that is empty and says so, and
+#      refuses a terminal: a run that waits on a keyboard has scanned nothing.
+lk_text() {  # $1 = repo, $2 = the input as printf takes it, then run_leak's $2 on. Prints the status.
+  lk_r=$1; printf "$2" > "$TMP/lkg-in"; shift 2
+  LK_IN="$TMP/lkg-in" run_leak "$lk_r" "$@"
+}
+lk_r=$(leak_repo lkg-x-text)
+
+out=$(lk_text "$lk_r" 'a clean line\nanother\nand a third\n' "" "" "" --text)
+[ "$out" = 0 ] && [ ! -s "$TMP/lkerr" ] \
+  && grep -Fxq -e 'check-leakage: clean — 3 line(s) of text scanned, private patterns loaded' "$TMP/lkout" \
+  && x0=ok || x0="exit=$out"
+
+# Every tier in one input, and a last line with no newline is still a line.
+printf 'clean\nZq_Exact\nzq_FOLD\nZq_Exact twice Zq_Exact\nzq_WARN\nsee %s' "$LKG_ID" > "$TMP/lkg-in"
+out=$(LK_IN="$TMP/lkg-in" run_leak "$lk_r" "" "" "" --text)
+x1=$(lk_report 1 'LEAK [fail] input line(s): 2 4' 'LEAK [fail ignore-case] input line(s): 3' \
+  'LEAK [public] input line(s): 6' 'WARNING [warn ignore-case] input line(s): 5')
+
+out=$(lk_text "$lk_r" 'zq_warn\nclean\n' "" "" "" --text)
+x2=$(lk_report 0 'WARNING [warn ignore-case] input line(s): 1')
+grep -q '2 line(s) of text scanned, private patterns loaded' "$TMP/lkout" || x2="$x2+not-clean"
+
+# A line that is not UTF-8 is matched as bytes whatever the locale, as a file's is.
+x3=""
+for lk_locale in C.UTF-8 en_US.UTF-8; do
+  out=$(LC_ALL=$lk_locale; export LC_ALL; lk_text "$lk_r" 'clean\na \351 Zq_Exact here\n' "" "" "" --text)
+  x3="$x3$(lk_report 1 'LEAK [fail] input line(s): 2')"
+done
+
+# An input that was read and is empty passes, and the clean line says it held nothing.
+out=$(lk_text "$lk_r" '' "" "" "" --text)
+[ "$out" = 0 ] && [ ! -s "$TMP/lkerr" ] \
+  && grep -Fxq -e 'check-leakage: clean — the text held nothing, private patterns loaded' "$TMP/lkout" \
+  && x4=ok || x4="exit=$out"
+
+# The tree is not read: a hit in a file beside the guard is not this mode's, and the control
+# without the flag finds it.
+r=$(leak_repo lkg-x-tree); printf 'a line holding Zq_Exact here\n' > "$r/note.md"
+out=$(lk_text "$r" 'a clean line\n' "" "" "" --text); [ "$out" = 0 ] && x5=ok || x5="exit=$out"
+out=$(run_leak "$r"); [ "$out" = 1 ] || x5="$x5+control-exit=$out"
+
+# No repository is needed: the guard's copy alone, in a directory git knows nothing of.
+mkdir -p "$TMP/lkg-x-nogit/scripts"; cp "$ROOT/scripts/check-leakage.sh" "$TMP/lkg-x-nogit/scripts/"
+out=$(lk_text "$TMP/lkg-x-nogit" 'clean\nZq_Exact\n' "" "" "" --text)
+x6=$(lk_report 1 'LEAK [fail] input line(s): 2')
+
+# --public-only runs the public tier alone over the input, with its notice.
+out=$(lk_text "$lk_r" 'Zq_Exact\n' - "" "" --public-only --text)
+[ "$out" = 0 ] && grep -q '1 line(s) of text scanned, private patterns not run' "$TMP/lkout" && x7=ok || x7="exit=$out"
+x7="$x7$(lk_noticed)"
+printf 'see %s\n' "$LKG_ID" > "$TMP/lkg-in"
+out=$(LK_IN="$TMP/lkg-in" run_leak "$lk_r" - "" "" --text --public-only)
+x8="$(lk_report 1 'LEAK [public] input line(s): 1')$(lk_noticed)"
+
+# The pattern file's faults are this mode's too.
+out=$(lk_text "$lk_r" 'clean\n' "$TMP/lkg-p-absent" "" "" --text)
+[ "$out" = 1 ] && grep -q 'the private patterns were not loaded: no such file' "$TMP/lkerr" && x9=ok || x9="exit=$out"
+
+# Standard input that is a terminal is a fault. The guard runs on a pseudo-terminal python3 makes.
+if lk_tty=$(cd "$lk_r" && GATE_SDD_LEAKAGE_PATTERNS=$LKG_PAT HOME=$TMP/lkg-home python3 -c '
+import os, pty, sys
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("sh", ["sh", "scripts/check-leakage.sh", "--text"])
+data = b""
+while True:
+    try:
+        chunk = os.read(fd, 4096)
+    except OSError:
+        break
+    if not chunk:
+        break
+    data += chunk
+status = os.waitpid(pid, 0)[1]
+sys.stdout.write("%d %s" % (os.WEXITSTATUS(status), data.decode("utf-8", "replace")))
+' 2>/dev/null); then
+  case "$lk_tty" in '1 '*'standard input is a terminal'*) x10=ok ;; *) x10="not refused" ;; esac
+  case "$lk_tty" in *clean*) x10="$x10+says-clean" ;; esac
+else
+  x10=ok
+  note_skip "leakage/terminal-stdin" "python3 could not make a pseudo-terminal here"
+fi
+
+[ "$x0 $x1 $x2 $x3 $x4 $x5 $x6 $x7 $x8 $x9 $x10" = "ok ok ok okok ok ok ok ok ok ok ok" ] \
+  && report "check-leakage --text scans standard input, and reports a hit by the input's line numbers" ok \
+  || report "check-leakage --text scans standard input, and reports a hit by the input's line numbers" no \
+     "clean=$x0 every-tier=$x1 warn=$x2 not-utf8=$x3 empty=$x4 tree-not-read=$x5 no-repository=$x6 public-only=$x7 public-hit=$x8 pattern-fault=$x9 terminal=$x10"
+
+# 434. #360 AC1 — one mode at most, and nothing after it. A refusal scans nothing and prints no
+#      argument, as case 427's do.
+a0=$(lk_refused --text --text)
+a1=$(lk_refused --text zq_more)
+a2=$(lk_refused --public-only --text --public-only)
+[ "$a0 $a1 $a2" = "ok ok ok" ] \
+  && report "check-leakage takes one mode at most, and refuses what follows it" ok \
+  || report "check-leakage takes one mode at most, and refuses what follows it" no \
+     "text-twice=$a0 text-then-more=$a1 flag-twice-around-a-mode=$a2"
+
+# 435. #360 AC12 — the guard's temporary directory holds the patterns and whatever it was given
+#      to scan, so it is gone on every exit: a clean run, a hit, and a fault after it was made.
+#      The mktemp is a stand-in that makes a directory this case can look for.
+lk_s=$(lk_shim tmp-kept "mkdir -p '$TMP/lkg-tmp-kept' && printf '%s\\n' '$TMP/lkg-tmp-kept'")
+lk_gone() {  # the input as printf takes it, then run_leak's $2 on. Prints the status, and
+             # `+kept` when the directory outlived the run.
+  printf "$1" > "$TMP/lkg-in"; shift
+  out=$(PATH="$lk_s:$PATH"; export PATH; LK_IN="$TMP/lkg-in" run_leak "$lk_r" "$@")
+  printf '%s' "$out"
+  [ ! -e "$TMP/lkg-tmp-kept" ] || printf '+kept'
+}
+lk_r=$(leak_repo lkg-x-tmp); printf 'nothing to see\n' > "$lk_r/note.md"
+z0=$(lk_gone 'clean\n' "" "" "" --text)
+z1=$(lk_gone 'Zq_Exact\n' "" "" "" --text)
+z2=$(lk_gone 'clean\n' "$TMP/lkg-p-absent" "" "" --text)
+z3=$(lk_gone '' "" "" "")
+[ "$z0 $z1 $z2 $z3" = "0 1 1 0" ] \
+  && report "check-leakage removes its temporary directory on a clean run, a hit and a fault" ok \
+  || report "check-leakage removes its temporary directory on a clean run, a hit and a fault" no \
+     "clean=$z0 hit=$z1 fault=$z2 working-tree=$z3"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #

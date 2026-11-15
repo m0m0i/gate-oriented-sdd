@@ -8,24 +8,35 @@
 # path in a doc comment.
 #
 # It runs in CI and is safe to run locally: ./scripts/check-leakage.sh
-# Exit 0 = clean. Exit 1 = something private is in the tree, or the guard could not look.
+# Exit 0 = clean. Exit 1 = something private is in what it was given, or the guard could not look.
 set -u
 
-# --public-only is the one argument: the public tier alone, for a pull request from a fork, which
-# has no private patterns to be given. Any other argument is refused, and is not printed (#357).
+# With no mode it scans the working tree. --text scans standard input instead (#360).
+# --public-only runs the public tier alone, for a pull request from a fork, which has no private
+# patterns to be given. Any other argument is refused, and is not printed (#357).
 PUBLIC_ONLY=0
-case "$#:${1-}" in
-  0:) ;;
-  1:--public-only) PUBLIC_ONLY=1 ;;
-  *)
-    echo "check-leakage FAILED — it was given an argument it does not take, so it looked at nothing." >&2
-    echo "  The only argument is --public-only, which runs the public tier alone and is not a" >&2
-    echo "  pass for private context. The argument is withheld: this report can reach a public log." >&2
-    exit 1 ;;
-esac
+MODE=tree
+refuse_arguments() {
+  echo "check-leakage FAILED — it was given an argument it does not take, so it looked at nothing." >&2
+  echo "  It takes --public-only, which runs the public tier alone and is not a pass for private" >&2
+  echo "  context, and one mode at most: --text. The argument is withheld: this report can" >&2
+  echo "  reach a public log." >&2
+  exit 1
+}
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --public-only) [ "$PUBLIC_ONLY" -eq 0 ] || refuse_arguments; PUBLIC_ONLY=1 ;;
+    --text) [ "$MODE" = tree ] || refuse_arguments; MODE=${1#--} ;;
+    *) refuse_arguments ;;
+  esac
+  shift
+done
 
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
-cd "$ROOT" || exit 1
+# Only the working-tree scan reads the checkout this script sits in (#360).
+if [ "$MODE" = tree ]; then
+  ROOT=$(cd "$(dirname "$0")/.." && pwd)
+  cd "$ROOT" || exit 1
+fi
 
 # Nothing is excluded, this script included: an allowlist here is how a guard rots, and its own
 # text is scanned so that a private word written back into it is caught (#357).
@@ -144,6 +155,75 @@ fail ignore-case
 public
 warn ignore-case'
 
+fail=0
+warned=0
+
+# What a clean run says of the private patterns, after what it scanned (#357).
+loaded() {
+  if [ "$PUBLIC_ONLY" -eq 1 ]; then printf 'private patterns not run'; else printf 'private patterns loaded'; fi
+}
+
+# A report that holds a LEAK or a WARNING ends with this, whichever exit it leaves by (#357).
+closing() {
+  [ "$fail" -ne 0 ] || [ "$warned" -ne 0 ] || return 0
+  echo "" >&2
+  if [ "$fail" -ne 0 ]; then
+    echo "Clean-room rule: do not scrub these in place. Scrubbing leaves the shape," >&2
+    echo "and the shape is where the private structure lives. Rewrite the file." >&2
+  else
+    echo "A warning does not fail the guard. Confirm that each one is a generic example." >&2
+  fi
+  echo "The matched text is withheld on purpose, because this report is public wherever CI" >&2
+  echo "prints it. Open the location to see what matched." >&2
+  [ -z "${named-}" ] \
+    || echo "A path number is the line of this command's output that holds the path: $LISTING" >&2
+}
+
+# An input the guard could not read is not an input it read and found clean (#360).
+input_fault() {  # $1 = the fault
+  echo "check-leakage FAILED — $1, so nothing was scanned." >&2
+  exit 1
+}
+
+# Tries every tier against a file of lines, as text in this locale and again as bytes, and
+# reports each tier that hits by the numbers of its lines. $1 = the file, $2 = what the numbers
+# count. Sets fail and warned (#360).
+scan_lines() {
+  while IFS= read -r tier; do
+    [ -s "$TIERS/$tier" ] || continue
+    case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
+    case "$tier" in warn*) kind=WARNING ;; *) kind=LEAK ;; esac
+    # shellcheck disable=SC2086  # $fold is one option or nothing
+    at=$(
+      { grep -anE $fold -f "$TIERS/$tier" -- "$1" 2>/dev/null
+        LC_ALL=C grep -anE $fold -f "$TIERS/$tier" -- "$1" 2>/dev/null
+      } | LC_ALL=C sed -n 's/^\([0-9][0-9]*\):.*/\1/p' | LC_ALL=C sort -n -u | tr '\n' ' ')
+    at=${at% }
+    [ -n "$at" ] || continue
+    echo "$kind [$tier] $2: $at" >&2
+    case "$kind" in LEAK) fail=1 ;; *) warned=1 ;; esac
+  done <<EOF
+$TIER_ORDER
+EOF
+}
+
+# --text: standard input, whole. A terminal is refused: a run that waits on a keyboard has
+# scanned nothing (#360).
+if [ "$MODE" = text ]; then
+  [ ! -t 0 ] || input_fault "standard input is a terminal and --text reads the text to scan from it"
+  cat > "$TIERS/in.text" 2>/dev/null || input_fault "standard input could not be read"
+  scan_lines "$TIERS/in.text" "input line(s)"
+  closing
+  [ "$fail" -eq 0 ] || exit 1
+  count=$(grep -c '' "$TIERS/in.text")
+  if [ "$count" -eq 0 ]; then
+    echo "check-leakage: clean — the text held nothing, $(loaded)"
+  else
+    echo "check-leakage: clean — $count line(s) of text scanned, $(loaded)"
+  fi
+  exit 0
+fi
+
 # Decided once and read twice: which lister runs, and whether a leading `"` can only be git's
 # doing. In a non-git tree nothing quotes, so a file genuinely named `"quoted".md` must not be
 # mistaken for one git could not represent. Review round 2.
@@ -246,9 +326,6 @@ else
   LISTING="find . -type f -not -path './.git/*'"
 fi
 
-fail=0
-warned=0
-
 # The report reaches a public CI log, so it holds a tier and a location and never the text that
 # matched or the pattern. A path that matches is itself that text: it is named by its position
 # in the listing: here, in the refusals below, and wherever a hit inside the file is reported.
@@ -295,22 +372,6 @@ entries() {  # $1 = the entries a refusal names, one to a line. Prints each as `
     [ -n "$entry" ] || continue
     printf '\n  %s' "$(shown "$entry")"
   done
-}
-
-# A report that holds a LEAK or a WARNING ends with this, whichever exit it leaves by (#357).
-closing() {
-  [ "$fail" -ne 0 ] || [ "$warned" -ne 0 ] || return 0
-  echo "" >&2
-  if [ "$fail" -ne 0 ]; then
-    echo "Clean-room rule: do not scrub these in place. Scrubbing leaves the shape," >&2
-    echo "and the shape is where the private structure lives. Rewrite the file." >&2
-  else
-    echo "A warning does not fail the guard. Confirm that each one is a generic example." >&2
-  fi
-  echo "The matched text is withheld on purpose, because this report is public wherever CI" >&2
-  echo "prints it. Open the location to see what matched." >&2
-  [ -z "$named" ] \
-    || echo "A path number is the line of this command's output that holds the path: $LISTING" >&2
 }
 
 # A file this guard was handed and could not open is not a file it read and found clean.
