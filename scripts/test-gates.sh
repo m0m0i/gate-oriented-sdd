@@ -11249,13 +11249,30 @@ lk_step env > "$TMP/lkg-step.env"
 grep -Fxq -e 'LEAKAGE_PATTERNS: ${{ secrets.LEAKAGE_PATTERNS }}' "$TMP/lkg-step.env" || k0="$k0+no-secret"
 grep -Fxq -e "FROM_FORK: \${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}" \
   "$TMP/lkg-step.env" || k0="$k0+no-fork-test"
+# The rest of the block is the event's name, four commit ids and a flag: what a commit set is
+# named by. No text of the event is there, because the log prints the block (#360).
+for want in 'EVENT_NAME: ${{ github.event_name }}' 'HEAD_SHA: ${{ github.event.pull_request.head.sha }}' \
+  'BASE_SHA: ${{ github.event.pull_request.base.sha }}' 'BEFORE: ${{ github.event.before }}' \
+  'AFTER: ${{ github.event.after }}' 'FORCED: ${{ github.event.forced }}'; do
+  grep -Fxq -e "$want" "$TMP/lkg-step.env" || k0="$k0+no <$want>"
+done
+[ "$(grep -c . "$TMP/lkg-step.env")" = 8 ] || k0="$k0+other-env-lines"
 
 mkdir -p "$TMP/lkg-runner"
 run_step() {  # $1 = repo; $2 = FROM_FORK; $3 = LEAKAGE_PATTERNS. `-` leaves either one unset.
-              # Prints the step's exit status, with `+left` when the file it wrote is still there.
+              # Prints the step's exit status, with `+left` when a file it wrote is still there.
+              # The event is a push of nothing, HEAD onto HEAD, unless $LK_EVENT names another
+              # and $LK_HEAD, $LK_BASE, $LK_BEFORE, $LK_AFTER, $LK_FORCED and $LK_PAYLOAD give
+              # what the step's `env:` and the runner would (#360).
   ( cd "$1" || exit
     unset GATE_SDD_LEAKAGE_PATTERNS XDG_CONFIG_HOME FROM_FORK LEAKAGE_PATTERNS
+    unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
     HOME=$TMP/lkg-home; RUNNER_TEMP=$TMP/lkg-runner; export HOME RUNNER_TEMP
+    lk_at=$(git rev-parse HEAD 2>/dev/null)
+    EVENT_NAME=${LK_EVENT-push}; HEAD_SHA=${LK_HEAD-}; BASE_SHA=${LK_BASE-}
+    BEFORE=${LK_BEFORE-$lk_at}; AFTER=${LK_AFTER-$lk_at}; FORCED=${LK_FORCED-false}
+    GITHUB_EVENT_PATH=${LK_PAYLOAD-$TMP/lkg-no-payload}
+    export EVENT_NAME HEAD_SHA BASE_SHA BEFORE AFTER FORCED GITHUB_EVENT_PATH
     [ "$2" = - ] || { FROM_FORK=$2; export FROM_FORK; }
     [ "$3" = - ] || { LEAKAGE_PATTERNS=$3; export LEAKAGE_PATTERNS; }
     sh -e "$TMP/lkg-step.sh" >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
@@ -12221,8 +12238,8 @@ y11=$(lk_hooks "$r" 'this checkout holds no scripts/git-hooks/shim.sh')
      "none=$y0 installed=$y1 one-missing=$y2 not-executable=$y3 edited=$y4 older=$y5 not-a-shim=$y6 restored=$y7 hooks-path=$y8 newer=$y9 two-worktrees=$y10 no-scripts=$y11"
 
 # 445. #360 AC8 — `--no-hook-check` exempts a run from that refusal, for CI, which has no clone to
-#      commit from. Both of the CI step's runs carry it. The `- Validators:` line and the hook
-#      scripts do not: a turn end or a hook that took the exemption would hide an absent hook.
+#      commit from. The CI step's one working-tree run carries it. The `- Validators:` line and
+#      the hook scripts do not: a turn end or a hook that took the exemption would hide an absent hook.
 lk_c=$(hook_repo lkg-y-exempt)
 out=$(run_leak "$lk_c" "" "" "" --no-hook-check)
 [ "$out" = 0 ] && grep -q 'file(s) scanned, private patterns loaded' "$TMP/lkout" && v0=ok || v0="exit=$out"
@@ -12230,16 +12247,92 @@ out=$(run_leak "$lk_c" - "" "" --public-only --no-hook-check); [ "$out" = 0 ] ||
 lk_r=$lk_c
 v1="$(lk_refused --no-hook-check --no-hook-check) $(lk_refused --no-hook-check zq_more)"
 v2=ok
-[ "$(grep -c 'check-leakage\.sh' "$TMP/lkg-step.sh")" = 2 ] || v2="the step does not run the guard twice"
-[ "$(grep -c 'check-leakage\.sh.* --no-hook-check' "$TMP/lkg-step.sh")" = 2 ] || v2="$v2+a run without the exemption"
+[ "$(grep -c 'check-leakage\.sh \$tier --no-hook-check ' "$TMP/lkg-step.sh")" = 1 ] || v2="not one exempted working-tree run"
+grep 'check-leakage\.sh' "$TMP/lkg-step.sh" | grep -v -e '--no-hook-check' | grep -qv -e ' --commits ' -e ' --refs ' -e ' --text ' \
+  && v2="$v2+a working-tree run without the exemption"
 v3=ok
 grep -q -e '--no-hook-check' "$ROOT/.steering/tech.md" && v3="in .steering/tech.md"
 cat "$ROOT"/scripts/git-hooks/*.sh "$ROOT/scripts/install-git-hooks.sh" "$ROOT"/hooks/*.sh | grep -q -e '--no-hook-check' && v3="$v3+in a hook script"
 
 [ "$v0 $v1 $v2 $v3" = "ok ok ok ok ok" ] \
-  && report "--no-hook-check exempts a run, is on both of CI's, and is on no validator line or hook" ok \
-  || report "--no-hook-check exempts a run, is on both of CI's, and is on no validator line or hook" no \
+  && report "--no-hook-check exempts a run, is on CI's working-tree run, and is on no validator line or hook" ok \
+  || report "--no-hook-check exempts a run, is on CI's working-tree run, and is on no validator line or hook" no \
      "exempt=$v0 grammar=$v1 ci-step=$v2 pinned-out=$v3"
+
+# 446. #360 AC9 — CI's `Leakage guard` step also scans what the event publishes. For a pull
+#      request: the commits it adds, its branch name, and its title and body, which the step
+#      reads from the runner's event file and never prints. For a push: the commits pushed,
+#      and the whole history when the push was forced or its old tip is not in the checkout.
+#      A fork's pull request gets the public tier over the same inputs.
+lk_payload() {  # $1 = branch, $2 = title, $3 = body as JSON holds it. Prints the event file's path.
+  printf '{"pull_request": {"head": {"ref": "%s"}, "title": "%s", "body": %s}}\n' "$1" "$2" "$3" > "$TMP/lkg-payload.json"
+  printf '%s' "$TMP/lkg-payload.json"
+}
+lk_pr() {  # $1 = repo, $2 = FROM_FORK, $3 = the secret, $4 = base, then lk_payload's three. Prints
+           # run_step's status for a pull request of HEAD onto $4.
+  lk_r=$1; lk_ff=$2; lk_sec=$3; lk_b=$4; shift 4
+  LK_EVENT=pull_request LK_HEAD=$(lk_head "$lk_r") LK_BASE=$(cd "$lk_r" && git rev-parse "$lk_b") \
+    LK_PAYLOAD=$(lk_payload "$@") run_step "$lk_r" "$lk_ff" "$lk_sec"
+}
+r=$(leak_repo lkg-v-pr); lk_base=$(lk_head "$r")
+printf 'clean\nZq_Exact\n' > "$r/a.md"; lk_ci "$r" 'adds a line'; lk_s=$(lk_id "$r")
+printf 'clean\n' > "$r/a.md"; lk_ci "$r" 'removes it'
+printf 'two\n' > "$r/b.md"; lk_ci "$r" 'a clean commit'
+
+# The control: one clean commit, a clean name, a clean title and no body at all.
+out=$(lk_pr "$r" false "$LKG_SECRET" HEAD~1 a-branch 'a title' null); u0=ok
+[ "$out" = 0 ] || u0="exit=$out"
+for want in 'file(s) scanned, private patterns loaded' '1 commit(s) scanned' '1 ref name(s) scanned' '1 line(s) of text scanned'; do
+  grep -q -e "$want" "$TMP/lkout" || u0="$u0+no <$want>"
+done
+
+# The pull request's commits, where a later one removed the line.
+out=$(lk_pr "$r" false "$LKG_SECRET" "$lk_base" a-branch 'a title' '"a body"')
+u1=$(lk_report 1 "LEAK [fail] commit $lk_s, a.md line(s): 2")
+out=$(lk_pr "$r" false "$LKG_SECRET" HEAD~1 a-Zq_Exact-branch 'a title' '"a body"')
+u2=$(lk_report 1 'LEAK [fail] ref number(s) in the list: 1')
+out=$(lk_pr "$r" false "$LKG_SECRET" HEAD~1 a-branch 'a title holding zq_FOLD' '"a body\nholding Zq_Exact"')
+u3=$(lk_report 1 'LEAK [fail] input line(s): 3' 'LEAK [fail ignore-case] input line(s): 1')
+
+# An event file that cannot be read fails the step: the text was not scanned.
+out=$(LK_EVENT=pull_request LK_HEAD=$(lk_head "$r") LK_BASE=$(lk_head "$r") LK_PAYLOAD="$TMP/lkg-no-such-payload" run_step "$r" false "$LKG_SECRET")
+[ "$out" = 1 ] && grep -q "::error title=Leakage guard::The event's branch name, title and body could not be read" "$TMP/lkout" \
+  && u4=ok || u4="exit=$out"
+printf '{"pull_request": {"title": "no head"}}\n' > "$TMP/lkg-payload.json"
+out=$(LK_EVENT=pull_request LK_HEAD=$(lk_head "$r") LK_BASE=$(lk_head "$r") LK_PAYLOAD="$TMP/lkg-payload.json" run_step "$r" false "$LKG_SECRET")
+[ "$out" = 1 ] || u4="$u4+no-head-exit=$out"
+
+# A fork: the public tier over the commits, the name and the text, with its notice.
+out=$(lk_pr "$r" true "" "$lk_base" a-Zq_Exact-branch 'a title holding Zq_Exact' null)
+[ "$out" = 0 ] && grep -q '3 commit(s) scanned, private patterns not run' "$TMP/lkout" && u5=ok || u5="exit=$out"
+u5="$u5$(lk_noticed)"
+out=$(lk_pr "$r" true "" HEAD~1 "a-$LKG_ID-branch" 'a title' null)
+u6="$(lk_report 1 'LEAK [public] ref number(s) in the list: 1')$(lk_noticed)"
+
+# A push: the commits between the old tip and the new one, and no event file is read.
+out=$(LK_BEFORE=$(cd "$r" && git rev-parse HEAD~1) run_step "$r" false "$LKG_SECRET"); [ "$out" = 0 ] && u7=ok || u7="exit=$out"
+out=$(LK_BEFORE=$lk_base run_step "$r" false "$LKG_SECRET")
+u7="$u7 $(lk_report 1 "LEAK [fail] commit $lk_s, a.md line(s): 2")"
+# Forced, or from a tip the checkout does not hold: the whole history, which holds the line.
+out=$(LK_BEFORE=$(cd "$r" && git rev-parse HEAD~1) LK_FORCED=true run_step "$r" false "$LKG_SECRET")
+u8=$(lk_report 1 "LEAK [fail] commit $lk_s, a.md line(s): 2")
+out=$(LK_BEFORE=0000000000000000000000000000000000000000 run_step "$r" false "$LKG_SECRET")
+u8="$u8 $(lk_report 1 "LEAK [fail] commit $lk_s, a.md line(s): 2")"
+
+# An event the step has no commit set for fails it.
+out=$(LK_EVENT=workflow_dispatch run_step "$r" false "$LKG_SECRET")
+[ "$out" = 1 ] && grep -q '::error title=Leakage guard::This step has no commit set for the event' "$TMP/lkout" && u9=ok || u9="exit=$out"
+
+# The workflow runs again when a pull request's title or body changes, and a newer run of the
+# same pull request replaces an older one.
+u10=ok
+grep -Fxq -e '    types: [opened, synchronize, reopened, edited]' "$ROOT/.github/workflows/ci.yml" || u10="no edited trigger"
+grep -Fxq -e '  cancel-in-progress: true' "$ROOT/.github/workflows/ci.yml" || u10="$u10+no-concurrency"
+
+[ "$u0 $u1 $u2 $u3 $u4 $u5 $u6 $u9 $u10" = "ok ok ok ok ok ok ok ok ok" ] && [ "$u7" = "ok ok" ] && [ "$u8" = "ok ok" ] \
+  && report "CI's leakage step scans a pull request's commits, branch name, title and body, and a push's commits" ok \
+  || report "CI's leakage step scans a pull request's commits, branch name, title and body, and a push's commits" no \
+     "clean=$u0 commits=$u1 branch=$u2 title-and-body=$u3 no-event-file=$u4 fork=$u5 fork-public-hit=$u6 push=$u7 forced-or-unknown-tip=$u8 other-event=$u9 trigger=$u10"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
