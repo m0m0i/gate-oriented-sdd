@@ -11,8 +11,8 @@
 # Exit 0 = clean. Exit 1 = something private is in what it was given, or the guard could not look.
 set -u
 
-# With no mode it scans the working tree. --text scans standard input instead, and --refs a list
-# of ref names on it (#360).
+# With no mode it scans the working tree. --text scans standard input instead, --refs a list of
+# ref names on it, and --staged what the next commit changes (#360).
 # --public-only runs the public tier alone, for a pull request from a fork, which has no private
 # patterns to be given. Any other argument is refused, and is not printed (#357).
 PUBLIC_ONLY=0
@@ -20,14 +20,14 @@ MODE=tree
 refuse_arguments() {
   echo "check-leakage FAILED — it was given an argument it does not take, so it looked at nothing." >&2
   echo "  It takes --public-only, which runs the public tier alone and is not a pass for private" >&2
-  echo "  context, and one mode at most: --text or --refs. The argument is withheld: this report" >&2
-  echo "  can reach a public log." >&2
+  echo "  context, and one mode at most: --text, --refs or --staged. The argument is withheld: this" >&2
+  echo "  report can reach a public log." >&2
   exit 1
 }
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --public-only) [ "$PUBLIC_ONLY" -eq 0 ] || refuse_arguments; PUBLIC_ONLY=1 ;;
-    --text|--refs) [ "$MODE" = tree ] || refuse_arguments; MODE=${1#--} ;;
+    --text|--refs|--staged) [ "$MODE" = tree ] || refuse_arguments; MODE=${1#--} ;;
     *) refuse_arguments ;;
   esac
   shift
@@ -188,8 +188,9 @@ input_fault() {  # $1 = the fault
 
 # Tries every tier against a file of lines, as text in this locale and again as bytes, and
 # reports each tier that hits by the numbers of its lines. $1 = the file, $2 = what the numbers
-# count. Sets fail and warned (#360).
+# count. Sets fail and warned, and leaves every number that hit in $hit_at (#360).
 scan_lines() {
+  hit_at=""
   while IFS= read -r tier; do
     [ -s "$TIERS/$tier" ] || continue
     case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
@@ -202,6 +203,7 @@ scan_lines() {
     at=${at% }
     [ -n "$at" ] || continue
     echo "$kind [$tier] $2: $at" >&2
+    hit_at="$hit_at $at"
     case "$kind" in LEAK) fail=1 ;; *) warned=1 ;; esac
   done <<EOF
 $TIER_ORDER
@@ -225,6 +227,92 @@ if [ "$MODE" = text ] || [ "$MODE" = refs ]; then
     echo "check-leakage: clean — $none, $(loaded)"
   else
     echo "check-leakage: clean — $count $unit scanned, $(loaded)"
+  fi
+  exit 0
+fi
+
+# Every git call of a mode goes through here, so nothing the caller's configuration holds
+# changes what is read: a replace ref shows another object, and a quoted path is not a path (#360).
+g() { git --no-replace-objects -c core.quotePath=false "$@"; }
+# What every diff of a mode is given: a colour, an external diff, a textconv filter and
+# diff.relative each change or drop the lines a scan reads. A deletion publishes nothing (#360).
+DIFF="--no-color --no-ext-diff --no-textconv --no-relative --no-renames --diff-filter=d"
+
+# Tries every tier against the files of a directory, which are named by number, and reports
+# each file that hits by its label and the numbers of its lines. $1 = the directory, $2 = a file
+# whose line N is the label of file N. Sets fail and warned (#360).
+scan_blobs() {
+  while IFS= read -r tier; do
+    [ -s "$TIERS/$tier" ] || continue
+    case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
+    case "$tier" in warn*) kind=WARNING ;; *) kind=LEAK ;; esac
+    # shellcheck disable=SC2086  # $fold is one option or nothing
+    hits=$(
+      cd "$1" || exit
+      { ls | xargs grep -lE $fold -f "$TIERS/$tier" -- 2>/dev/null
+        ls | LC_ALL=C xargs grep -lE $fold -f "$TIERS/$tier" -- 2>/dev/null
+      } | LC_ALL=C sort -n -u | while IFS= read -r n; do
+        [ -n "$n" ] || continue
+        lines=$(
+          { grep -anE $fold -f "$TIERS/$tier" -- "$n" 2>/dev/null
+            LC_ALL=C grep -anE $fold -f "$TIERS/$tier" -- "$n" 2>/dev/null
+          } | LC_ALL=C sed -n 's/^\([0-9][0-9]*\):.*/\1/p' | LC_ALL=C sort -n -u | tr '\n' ' ')
+        printf '%s\n' "$kind [$tier] $(sed -n "${n}p" "$2") line(s): ${lines% }"
+      done
+    )
+    [ -n "$hits" ] || continue
+    printf '%s\n' "$hits" >&2
+    case "$kind" in LEAK) fail=1 ;; *) warned=1 ;; esac
+  done <<EOF
+$TIER_ORDER
+EOF
+}
+
+# --staged: each path the next commit adds or changes, and its content as the index holds it.
+# No git command feeds a pipe: each writes a file, and its status is read first (#360).
+if [ "$MODE" = staged ]; then
+  g rev-parse --git-dir >/dev/null 2>&1 \
+    || input_fault "this is not a git repository and --staged reads its index"
+  # shellcheck disable=SC2086  # $DIFF is a list of options
+  g diff --cached --raw --no-abbrev $DIFF > "$TIERS/in.raw" 2>/dev/null \
+    || input_fault "git could not list what is staged"
+  tab=$(printf '\t')
+  sed "s/^[^$tab]*$tab//" "$TIERS/in.raw" > "$TIERS/in.paths"
+  LISTING="git diff --cached --name-only --no-renames --diff-filter=d"
+
+  quoted=$(grep -n '^"' "$TIERS/in.paths" | sed 's/:.*//' | tr '\n' ' ')
+  [ -z "$quoted" ] || input_fault "git quotes staged path number(s) ${quoted% }, which hold a quote, a backslash or a control character and cannot be read by name. Rename them"
+
+  # A path that matches is the text, so a hit inside it is reported against its number.
+  scan_lines "$TIERS/in.paths" "staged path number(s) in the listing"
+  named=$hit_at
+
+  mkdir "$TIERS/in.blobs" || input_fault "the temporary directory could not hold the staged content"
+  empty=""
+  n=0
+  while IFS= read -r meta <&3 && IFS= read -r path <&4; do
+    n=$((n + 1))
+    case " $named " in
+      *" $n "*) printf 'staged path number %s in the listing,\n' "$n" ;;
+      *) printf '%s\n' "$path" ;;
+    esac >> "$TIERS/in.labels"
+    # $meta is `:<old mode> <new mode> <old id> <new id> <status>`.
+    set -f; set -- $meta; set +f
+    [ "$2" != 160000 ] || continue
+    g cat-file blob "$4" > "$TIERS/in.blobs/$n" 2>/dev/null && continue
+    # A path added with intent to add is listed with the empty blob, which no object holds.
+    [ -n "$empty" ] || empty=$(g hash-object -t blob /dev/null 2>/dev/null)
+    [ "$4" = "$empty" ] && { : > "$TIERS/in.blobs/$n"; continue; }
+    input_fault "the staged content of $(sed -n "${n}p" "$TIERS/in.labels" | sed 's/,$//') could not be read"
+  done 3< "$TIERS/in.raw" 4< "$TIERS/in.paths"
+
+  [ "$n" -eq 0 ] || scan_blobs "$TIERS/in.blobs" "$TIERS/in.labels"
+  closing
+  [ "$fail" -eq 0 ] || exit 1
+  if [ "$n" -eq 0 ]; then
+    echo "check-leakage: clean — nothing is staged, $(loaded)"
+  else
+    echo "check-leakage: clean — $n staged path(s) scanned, $(loaded)"
   fi
   exit 0
 fi

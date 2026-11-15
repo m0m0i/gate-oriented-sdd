@@ -10714,14 +10714,15 @@ printf '%s\n' '# a synthetic list' '' '[fail]' 'Zq_Exact' '[fail ignore-case]' '
   '[warn ignore-case]' 'zq_warn' > "$LKG_PAT"
 run_leak() {  # $1 = repo; $2 = the pattern file, `-` to name none; $3 = HOME; $4 = XDG_CONFIG_HOME;
               # then the guard's own arguments, before which $2 to $4 may be given empty.
-              # Standard input is the file $LK_IN names, else empty: never the suite's own (#360).
+              # Standard input is the file $LK_IN names, else empty: never the suite's own. The
+              # guard is the repo's copy, or the one $LK_GUARD names (#360).
   ( cd "$1" || exit
     unset GATE_SDD_LEAKAGE_PATTERNS XDG_CONFIG_HOME
     HOME=${3:-$TMP/lkg-home}; export HOME
     [ "${2:-$LKG_PAT}" = - ] || { GATE_SDD_LEAKAGE_PATTERNS=${2:-$LKG_PAT}; export GATE_SDD_LEAKAGE_PATTERNS; }
     [ -z "${4:-}" ] || { XDG_CONFIG_HOME=$4; export XDG_CONFIG_HOME; }
     if [ "$#" -gt 4 ]; then shift 4; else set --; fi
-    sh scripts/check-leakage.sh "$@" <"${LK_IN:-/dev/null}" >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
+    sh "${LK_GUARD:-scripts/check-leakage.sh}" "$@" <"${LK_IN:-/dev/null}" >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
 }
 
 # An empty work-set takes the guard's copy out of it: untracked, and ignored (#357).
@@ -11608,6 +11609,109 @@ q4="$(lk_refused --refs --text) $(lk_refused --text --refs) $(lk_refused --refs 
   && report "check-leakage --refs scans ref names, and reports one that matches by its position" ok \
   || report "check-leakage --refs scans ref names, and reports one that matches by its position" no \
      "clean=$q0 every-tier=$q1 empty=$q2 public-only=$q3 grammar=$q4"
+
+# 437. #360 AC1 to AC3 — `--staged` scans what the next commit changes: each staged path, and
+#      its content as the index holds it. The working tree is not read, a deletion is not
+#      scanned, and a staged file that cannot be read is a fault.
+lk_stage() { ( cd "$1" && shift && git add -- "$@" ) >/dev/null 2>&1; }
+
+r=$(leak_repo lkg-g-clean); printf 'nothing to see\n' > "$r/note.md"; lk_stage "$r" note.md
+out=$(run_leak "$r" "" "" "" --staged)
+[ "$out" = 0 ] && [ ! -s "$TMP/lkerr" ] \
+  && grep -Fxq -e 'check-leakage: clean — 1 staged path(s) scanned, private patterns loaded' "$TMP/lkout" \
+  && g0=ok || g0="exit=$out"
+
+# Staged with a hit, then cleaned in the working tree only: the index is what is committed. The
+# control is the working-tree scan, which reads the cleaned file and passes.
+r=$(leak_repo lkg-g-index); printf 'clean\nZq_Exact\nclean\na \351 Zq_Exact\n' > "$r/note.md"; lk_stage "$r" note.md
+printf 'nothing to see\n' > "$r/note.md"
+out=$(run_leak "$r" "" "" "" --staged); g1=$(lk_report 1 'LEAK [fail] note.md line(s): 2 4')
+out=$(run_leak "$r"); [ "$out" = 0 ] || g1="$g1+control-exit=$out"
+
+# The mirror: a hit in the working tree that is not staged is not this commit's.
+r=$(leak_repo lkg-g-unstaged); printf 'nothing to see\n' > "$r/note.md"; lk_stage "$r" note.md
+printf 'Zq_Exact\n' > "$r/note.md"
+out=$(run_leak "$r" "" "" "" --staged); [ "$out" = 0 ] && g2=ok || g2="exit=$out"
+
+# A staged path that matches is named by its position, and a hit inside it is located by that.
+r=$(leak_repo lkg-g-name); printf 'clean\nzq_warn\n' > "$r/a-Zq_Exact.md"; printf 'nothing to see\n' > "$r/b.md"
+lk_stage "$r" a-Zq_Exact.md b.md
+out=$(run_leak "$r" "" "" "" --staged)
+g3=$(lk_report 1 'LEAK [fail] staged path number(s) in the listing: 1' \
+  'WARNING [warn ignore-case] staged path number 1 in the listing, line(s): 2')
+grep -q 'git diff --cached --name-only --no-renames --diff-filter=d' "$TMP/lkerr" || g3="$g3+no-listing-command"
+
+# A path that begins `0:` is read as itself, and not as stage 0 of the path after the colon.
+r=$(leak_repo lkg-g-colon); printf 'nothing to see\n' > "$r/note.md"; printf 'Zq_Exact\n' > "$r/0:note.md"
+lk_stage "$r" note.md 0:note.md
+out=$(run_leak "$r" "" "" "" --staged); g4=$(lk_report 1 'LEAK [fail] 0:note.md line(s): 1')
+
+# A symlink's staged content is its target, which is text a commit publishes.
+r=$(leak_repo lkg-g-link)
+if ln -s 'a/Zq_Exact/target' "$r/link" 2>/dev/null; then
+  lk_stage "$r" link
+  out=$(run_leak "$r" "" "" "" --staged); g5=$(lk_report 1 'LEAK [fail] link line(s): 1')
+else
+  g5=ok; note_skip "leakage/staged-symlink" "this filesystem makes no symbolic link"
+fi
+
+# A staged deletion publishes nothing, so a file whose name or content matches can be removed.
+r=$(leak_repo lkg-g-delete); printf 'Zq_Exact\n' > "$r/a-Zq_Exact.md"
+( cd "$r" && git add -A && git commit -qm two && git rm -q a-Zq_Exact.md ) >/dev/null 2>&1
+out=$(run_leak "$r" "" "" "" --staged)
+[ "$out" = 0 ] && grep -q 'clean — nothing is staged' "$TMP/lkout" && g6=ok || g6="exit=$out"
+
+# A staged file whose object cannot be read is a fault, named by its path.
+r=$(leak_repo lkg-g-object); printf 'a staged line\n' > "$r/note.md"; lk_stage "$r" note.md
+lk_o=$(cd "$r" && git rev-parse :0:note.md)
+rm -f "$r/.git/objects/$(printf '%s' "$lk_o" | cut -c1-2)/$(printf '%s' "$lk_o" | cut -c3-)"
+out=$(run_leak "$r" "" "" "" --staged)
+[ "$out" = 1 ] && grep -q 'the staged content of note.md could not be read' "$TMP/lkerr" && g7=ok || g7="exit=$out"
+case "$(cat "$TMP/lkout")" in *clean*) g7="$g7+says-clean" ;; esac
+
+# The guard reads the repository it is run in, not the one it sits in: another checkout's copy,
+# run here, finds this index's hit.
+r=$(leak_repo lkg-g-caller); printf 'Zq_Exact\n' > "$r/note.md"; lk_stage "$r" note.md
+lk_o=$(leak_repo lkg-g-elsewhere)
+out=$(LK_GUARD="$lk_o/scripts/check-leakage.sh" run_leak "$r" "" "" "" --staged)
+g8=$(lk_report 1 'LEAK [fail] note.md line(s): 1')
+
+# The index is the one git names, as a hook is given it: a hit staged only in another index
+# file is found when GIT_INDEX_FILE and GIT_DIR name it, and not without them.
+r=$(leak_repo lkg-g-env); printf 'Zq_Exact\n' > "$r/note.md"
+( cd "$r" && GIT_INDEX_FILE="$r/.git/other-index" git add note.md ) >/dev/null 2>&1
+out=$(GIT_INDEX_FILE="$r/.git/other-index"; GIT_DIR="$r/.git"; export GIT_INDEX_FILE GIT_DIR; run_leak "$r" "" "" "" --staged)
+g9=$(lk_report 1 'LEAK [fail] note.md line(s): 1')
+out=$(run_leak "$r" "" "" "" --staged); [ "$out" = 0 ] || g9="$g9+default-index-exit=$out"
+
+# Outside a repository there is no index to read.
+out=$(run_leak "$TMP/lkg-x-nogit" "" "" "" --staged)
+[ "$out" = 1 ] && grep -q 'this is not a git repository' "$TMP/lkerr" && g10=ok || g10="exit=$out"
+
+# A path git quotes cannot be read by name, so it is a fault, as the working tree's is.
+r=$(leak_repo lkg-g-quoted); printf 'nothing to see\n' > "$r/a\"q.md"; lk_stage "$r" 'a"q.md'
+out=$(run_leak "$r" "" "" "" --staged)
+[ "$out" = 1 ] && grep -q 'git quotes staged path number(s) 1' "$TMP/lkerr" && g11=ok || g11="exit=$out"
+
+# What holds no content of its own is not a fault: a submodule's entry, and a path added with
+# intent to add, which the commit leaves out.
+r=$(leak_repo lkg-g-nocontent); printf 'later\n' > "$r/later.md"
+( cd "$r" && git update-index --add --cacheinfo "160000,$(git rev-parse HEAD),sub" && git add -N later.md ) >/dev/null 2>&1
+out=$(run_leak "$r" "" "" "" --staged); [ "$out" = 0 ] && g12=ok || g12="exit=$out"
+
+r=$(leak_repo lkg-g-public); printf 'Zq_Exact\n' > "$r/note.md"; lk_stage "$r" note.md
+out=$(run_leak "$r" - "" "" --public-only --staged)
+[ "$out" = 0 ] && grep -q '1 staged path(s) scanned, private patterns not run' "$TMP/lkout" && g13=ok || g13="exit=$out"
+g13="$g13$(lk_noticed)"
+
+lk_r=$r
+g14="$(lk_refused --staged --text) $(lk_refused --staged zq_more)"
+
+[ "$g0 $g1 $g2 $g3 $g4 $g5 $g6 $g7" = "ok ok ok ok ok ok ok ok" ] \
+  && [ "$g8 $g9 $g10 $g11 $g12 $g13 $g14" = "ok ok ok ok ok ok ok ok" ] \
+  && report "check-leakage --staged scans what the next commit changes, from the index git names" ok \
+  || report "check-leakage --staged scans what the next commit changes, from the index git names" no \
+     "clean=$g0 index-not-tree=$g1 unstaged=$g2 path=$g3 colon-path=$g4 symlink=$g5 deletion=$g6 unreadable-object=$g7 callers-repo=$g8 hook-env=$g9 no-repository=$g10 quoted=$g11 no-content=$g12 public-only=$g13 grammar=$g14"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
