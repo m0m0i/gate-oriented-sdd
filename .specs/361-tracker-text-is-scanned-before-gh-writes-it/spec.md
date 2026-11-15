@@ -1,5 +1,5 @@
 # Spec: tracker text an agent session writes with gh is scanned before the command runs
-- Slug: 361-tracker-text-is-scanned-before-gh-writes-it   Issue: 361   Type: feature   Status: draft
+- Slug: 361-tracker-text-is-scanned-before-gh-writes-it   Issue: 361   Type: feature   Status: approved
 - Author: m0m0i   Date: 2026-11-15
 
 ## 1. Requirements (WHAT / WHY)
