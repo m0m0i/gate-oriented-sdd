@@ -11887,7 +11887,7 @@ lk_install() {  # $1 = repo. Prints the installer's exit status.
   ( cd "$1" && unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX \
     && GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 sh scripts/install-git-hooks.sh >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
 }
-LKG_HOOKS='commit-msg pre-commit'
+LKG_HOOKS='commit-msg pre-commit pre-push'
 
 r=$(hook_repo lkg-i-install)
 out=$(lk_install "$r"); i0=ok
@@ -12045,6 +12045,115 @@ e0=$(lk_report 1 'LEAK [fail] own-only.md line(s): 1')
 [ "$e0" = ok ] \
   && report "check-leakage scans its own checkout when git's hook variables name another" ok \
   || report "check-leakage scans its own checkout when git's hook variables name another" no "own-tree=$e0"
+
+# 443. #360 AC5 — with the hooks installed, `git push` is refused before anything is sent when
+#      a commit the destination does not hold, a name being published, an annotated tag's
+#      message or a blob a tag points at matches. What the destination holds is asked of it,
+#      not read from the remote-tracking refs. A refused push leaves the destination as it was.
+lk_remote_main() { ( cd "$1" && git rev-parse -q --verify "${2:-refs/heads/main}" ) 2>/dev/null; }
+lk_pushed() {  # $1 = the line the report must hold, $2 = the destination, $3 = a ref there that
+               # must not exist or move, $4 = its id before. Reads the last lk_git_in.
+  [ "$out" != 0 ] || { printf 'pushed'; return; }
+  grep -Fxq -e "$1" "$TMP/lkerr" || { printf 'no line <%s>' "$1"; return; }
+  grep -q 'The push is refused' "$TMP/lkerr" || { printf 'not said to be refused'; return; }
+  cat "$TMP/lkout" "$TMP/lkerr" | LC_ALL=C grep -qai -e 'zq_' && { printf 'the matched text is printed'; return; }
+  [ "$(lk_remote_main "$2" "$3")" = "${4-}" ] || { printf 'the destination changed'; return; }
+  printf ok
+}
+lk_p=$(hook_repo lkg-p-push); out=$(lk_install "$lk_p")
+lk_d="$TMP/lkg-p-remote.git"; git init -q --bare -b main "$lk_d" >/dev/null 2>&1
+out=$(lk_git_in "$lk_p" remote add origin "$lk_d")
+
+# The control: clean commits, a clean branch name and a clean annotated tag are pushed.
+printf 'one\n' > "$lk_p/a.md"; out=$(lk_git_in "$lk_p" add a.md); out=$(lk_git_in "$lk_p" commit -qm one)
+out=$(lk_git_in "$lk_p" push -q origin main); p0=ok
+[ "$out" = 0 ] && [ "$(lk_remote_main "$lk_d")" = "$(lk_head "$lk_p")" ] || p0="exit=$out"
+out=$(lk_git_in "$lk_p" tag -a v1 -m 'a clean tag'); out=$(lk_git_in "$lk_p" push -q origin v1); [ "$out" = 0 ] || p0="$p0+tag-exit=$out"
+out=$(lk_git_in "$lk_p" push -q origin HEAD:refs/heads/another); [ "$out" = 0 ] || p0="$p0+branch-exit=$out"
+lk_tip=$(lk_remote_main "$lk_d")
+
+# A line one commit adds and the next removes, both made past the commit hooks.
+printf 'clean\nZq_Exact\n' > "$lk_p/b.md"; out=$(lk_git_in "$lk_p" add b.md); out=$(lk_git_in "$lk_p" commit -q --no-verify -m adds)
+lk_s=$(lk_id "$lk_p")
+printf 'clean\n' > "$lk_p/b.md"; out=$(lk_git_in "$lk_p" add b.md); out=$(lk_git_in "$lk_p" commit -q --no-verify -m removes)
+out=$(lk_git_in "$lk_p" push -q origin main)
+p1=$(lk_pushed "LEAK [fail] commit $lk_s, b.md line(s): 2" "$lk_d" refs/heads/main "$lk_tip")
+# The same commits under a new name are as unpublished as under the old one.
+out=$(lk_git_in "$lk_p" push -q origin HEAD:refs/heads/elsewhere)
+p1="$p1 $(lk_pushed "LEAK [fail] commit $lk_s, b.md line(s): 2" "$lk_d" refs/heads/elsewhere)"
+out=$(lk_git_in "$lk_p" reset -q --hard "$lk_tip")
+
+# The name being published, which is the destination's name and not the local one.
+out=$(lk_git_in "$lk_p" push -q origin main:refs/heads/a-Zq_Exact-branch)
+p2=$(lk_pushed 'LEAK [fail] ref number(s) in the list: 1' "$lk_d" refs/heads/a-Zq_Exact-branch)
+out=$(lk_git_in "$lk_p" tag zq_fold-tag); out=$(lk_git_in "$lk_p" push -q origin zq_fold-tag)
+p2="$p2 $(lk_pushed 'LEAK [fail ignore-case] ref number(s) in the list: 1' "$lk_d" refs/tags/zq_fold-tag)"
+
+# The message of every tag in a chain, when only the outermost is pushed.
+out=$(lk_git_in "$lk_p" tag -a inner -m 'an inner tag holding Zq_Exact'); out=$(lk_git_in "$lk_p" tag -a outer -m 'outer' inner)
+out=$(lk_git_in "$lk_p" push -q origin outer)
+p3=$(lk_pushed 'LEAK [fail] input line(s): 2' "$lk_d" refs/tags/outer)
+
+# A tag that points at a blob publishes the blob, and one that points at a tree is refused.
+lk_o=$(cd "$lk_p" && printf 'clean\nZq_Exact\n' | git hash-object -w --stdin)
+out=$(lk_git_in "$lk_p" tag a-blob "$lk_o"); out=$(lk_git_in "$lk_p" push -q origin a-blob)
+p4=$(lk_pushed 'LEAK [fail] input line(s): 2' "$lk_d" refs/tags/a-blob)
+out=$(lk_git_in "$lk_p" tag a-tree 'HEAD^{tree}'); out=$(lk_git_in "$lk_p" push -q origin a-tree)
+[ "$out" != 0 ] && grep -q 'a tag being pushed points at a tree' "$TMP/lkerr" \
+  && [ -z "$(lk_remote_main "$lk_d" refs/tags/a-tree)" ] && p5=ok || p5="exit=$out"
+
+# A remote that fetches from one place and pushes to another: the commit is in the place it
+# fetches from, so the remote-tracking refs hold it, and the place it pushes to does not.
+lk_f="$TMP/lkg-p-fetched.git"; git init -q --bare -b main "$lk_f" >/dev/null 2>&1
+lk_e="$TMP/lkg-p-empty.git"; git init -q --bare -b main "$lk_e" >/dev/null 2>&1
+printf 'Zq_Exact\n' > "$lk_p/c.md"; out=$(lk_git_in "$lk_p" add c.md); out=$(lk_git_in "$lk_p" commit -q --no-verify -m 'held elsewhere')
+lk_s=$(lk_id "$lk_p")
+out=$(lk_git_in "$lk_p" push -q --no-verify "$lk_f" main)
+out=$(lk_git_in "$lk_p" remote add two "$lk_f"); out=$(lk_git_in "$lk_p" config remote.two.pushurl "$lk_e")
+out=$(lk_git_in "$lk_p" fetch -q two)
+out=$(lk_git_in "$lk_p" push -q two main)
+p6=$(lk_pushed "LEAK [fail] commit $lk_s, c.md line(s): 1" "$lk_e" refs/heads/main)
+
+# A destination whose history was rewritten since the last fetch: the remote-tracking ref still
+# lists the old commits, and a branch built on them would put them back.
+out=$(lk_git_in "$lk_p" push -q --no-verify origin main); out=$(lk_git_in "$lk_p" fetch -q origin)
+# What the destination already holds is not this push's: a clean commit on top of it goes through.
+printf 'on top\n' > "$lk_p/top.md"; out=$(lk_git_in "$lk_p" add top.md); out=$(lk_git_in "$lk_p" commit -qm 'on top')
+out=$(lk_git_in "$lk_p" push -q origin main); [ "$out" = 0 ] && p12=ok || p12="exit=$out"
+out=$(lk_git_in "$lk_d" update-ref refs/heads/main "$lk_tip")
+out=$(lk_git_in "$lk_p" checkout -qb built-on-old); printf 'later\n' > "$lk_p/d.md"
+out=$(lk_git_in "$lk_p" add d.md); out=$(lk_git_in "$lk_p" commit -qm later)
+out=$(lk_git_in "$lk_p" push -q origin built-on-old)
+p7=$(lk_pushed "LEAK [fail] commit $lk_s, c.md line(s): 1" "$lk_d" refs/heads/built-on-old)
+
+# Deleting a ref publishes nothing, whatever its name.
+out=$(lk_git_in "$lk_p" push -q --no-verify origin "$lk_tip:refs/heads/zq_fold-old-name")
+out=$(lk_git_in "$lk_p" push -q origin :refs/heads/zq_fold-old-name)
+[ "$out" = 0 ] && [ -z "$(lk_remote_main "$lk_d" refs/heads/zq_fold-old-name)" ] && p8=ok || p8="exit=$out"
+
+# The hook run as git runs it, with a destination that cannot be asked, and with nothing to push.
+lk_pre_push() {  # $1 = the url, then nothing; standard input is git's lines. Prints the status.
+  ( cd "$lk_p" || exit
+    unset GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX XDG_CONFIG_HOME
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 HOME="$TMP/lkg-home" GATE_SDD_LEAKAGE_PATTERNS="$LKG_PAT" \
+    sh scripts/git-hooks/pre-push.sh origin "$1" >"$TMP/lkout" 2>"$TMP/lkerr"; printf '%s' "$?" )
+}
+out=$(printf 'refs/heads/main %s refs/heads/main %s\n' "$lk_tip" "$lk_tip" | lk_pre_push "$TMP/lkg-p-no-such-remote.git")
+[ "$out" = 1 ] && grep -q 'the destination could not be asked what it holds' "$TMP/lkerr" && p9=ok || p9="exit=$out"
+out=$(lk_pre_push "$lk_d" </dev/null); [ "$out" = 0 ] && p10=ok || p10="exit=$out"
+
+# A pattern file that cannot be loaded refuses the push.
+out=$(lk_git_in "$lk_p" checkout -q main); out=$(lk_git_in "$lk_p" reset -q --hard "$lk_tip")
+printf 'two\n' > "$lk_p/e.md"; out=$(lk_git_in "$lk_p" add e.md); out=$(lk_git_in "$lk_p" commit -qm two)
+out=$(LK_PAT="$TMP/lkg-p-absent" lk_git_in "$lk_p" push -q origin main)
+[ "$out" != 0 ] && grep -q 'the private patterns were not loaded' "$TMP/lkerr" \
+  && [ "$(lk_remote_main "$lk_d")" = "$lk_tip" ] && p11=ok || p11="exit=$out"
+out=$(lk_git_in "$lk_p" push -q origin main); [ "$out" = 0 ] || p11="$p11+then-clean-exit=$out"
+
+[ "$p0 $p3 $p4 $p5 $p6 $p7 $p8 $p9 $p10 $p11 $p12" = "ok ok ok ok ok ok ok ok ok ok ok" ] && [ "$p1" = "ok ok" ] && [ "$p2" = "ok ok" ] \
+  && report "the pre-push hook refuses commits, names, tag messages and tagged blobs the destination does not hold" ok \
+  || report "the pre-push hook refuses commits, names, tag messages and tagged blobs the destination does not hold" no \
+     "clean=$p0 removed-line=$p1 names=$p2 nested-tags=$p3 tagged-blob=$p4 tagged-tree=$p5 push-url=$p6 rewritten-destination=$p7 already-held=$p12 deletion=$p8 unreachable-destination=$p9 nothing-to-push=$p10 no-patterns=$p11"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #

@@ -12,7 +12,7 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT" || exit 1
 
 # The hooks installed. Each is scripts/git-hooks/<name>.sh.
-NAMES="commit-msg pre-commit"
+NAMES="commit-msg pre-commit pre-push"
 
 refuse() {
   echo "install-git-hooks FAILED — $1" >&2
