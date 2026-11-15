@@ -11578,6 +11578,37 @@ z3=$(lk_gone '' "" "" "")
   || report "check-leakage removes its temporary directory on a clean run, a hit and a fault" no \
      "clean=$z0 hit=$z1 fault=$z2 working-tree=$z3"
 
+# 436. #360 AC1 to AC3 — `--refs` scans a list of ref names on standard input, one to a line, and
+#      reports a name that matches by its position in the list. The name is the text, so it is
+#      never printed.
+lk_r=$(leak_repo lkg-x-refs)
+out=$(lk_text "$lk_r" 'refs/heads/main\nrefs/heads/a-branch\nrefs/tags/v1\n' "" "" "" --refs)
+[ "$out" = 0 ] && [ ! -s "$TMP/lkerr" ] \
+  && grep -Fxq -e 'check-leakage: clean — 3 ref name(s) scanned, private patterns loaded' "$TMP/lkout" \
+  && q0=ok || q0="exit=$out"
+
+printf 'refs/heads/main\nrefs/heads/Zq_Exact-branch\nrefs/tags/zq_FOLD\nrefs/heads/x-zq_warn\nrefs/tags/%s\n' "$LKG_ID" > "$TMP/lkg-in"
+out=$(LK_IN="$TMP/lkg-in" run_leak "$lk_r" "" "" "" --refs)
+q1=$(lk_report 1 'LEAK [fail] ref number(s) in the list: 2' 'LEAK [fail ignore-case] ref number(s) in the list: 3' \
+  'LEAK [public] ref number(s) in the list: 5' 'WARNING [warn ignore-case] ref number(s) in the list: 4')
+case "$(cat "$TMP/lkout" "$TMP/lkerr")" in *refs/heads/*|*refs/tags/*) q1="$q1+a name is printed" ;; esac
+
+out=$(lk_text "$lk_r" '' "" "" "" --refs)
+[ "$out" = 0 ] && [ ! -s "$TMP/lkerr" ] \
+  && grep -Fxq -e 'check-leakage: clean — the list held no ref name, private patterns loaded' "$TMP/lkout" \
+  && q2=ok || q2="exit=$out"
+
+out=$(lk_text "$lk_r" 'refs/heads/Zq_Exact\n' - "" "" --public-only --refs)
+[ "$out" = 0 ] && grep -q '1 ref name(s) scanned, private patterns not run' "$TMP/lkout" && q3=ok || q3="exit=$out"
+q3="$q3$(lk_noticed)"
+
+q4="$(lk_refused --refs --text) $(lk_refused --text --refs) $(lk_refused --refs zq_more)"
+
+[ "$q0 $q1 $q2 $q3 $q4" = "ok ok ok ok ok ok ok" ] \
+  && report "check-leakage --refs scans ref names, and reports one that matches by its position" ok \
+  || report "check-leakage --refs scans ref names, and reports one that matches by its position" no \
+     "clean=$q0 every-tier=$q1 empty=$q2 public-only=$q3 grammar=$q4"
+
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
 # #145. check-version-bump.py must include rules/ in SHIPPED so any change

@@ -81,7 +81,7 @@ Every claim below marked measured was run in a scratch repository on git 2.54.0 
 ## 3. Tasks (TDD-ordered)
 > One task is one complete Red-Green-Refactor cycle, so one green commit. No task is sequenced after the review.
 - [x] T1: failing cases for `--text` and the argument grammar, with `run_leak`'s standard input closed and case 427 keeping only refusals — then the mode (AC1 to AC3)
-- [ ] T2: failing cases for `--refs` — then the mode (AC1 to AC3)
+- [x] T2: failing cases for `--refs` — then the mode (AC1 to AC3)
 - [ ] T3: failing cases for `--staged`: a path named `0:<another staged path>`, a symlink, an unreadable object, a run from the main checkout and one with `GIT_DIR` and `GIT_INDEX_FILE` set as a hook has them — then the mode (AC1 to AC3)
 - [ ] T4: failing cases for `--commits`: a message, an added path, an empty file's path, a non-ASCII path, a line a later commit removes, a merge-only line, one case per configuration setting the Design names, an unresolvable revision, a refused option, a shallow repository, a bare repository, a git that exits non-zero after partial output, an empty set — then the mode (AC1 to AC3)
 - [ ] T5: failing cases for the shims, the snapshot, the installer, `commit-msg.sh` and `pre-commit.sh` through real `git commit` runs, from a linked worktree's subdirectory and from a worktree whose branch has no hooks while the main checkout has none either — then the five files (AC4, AC6)

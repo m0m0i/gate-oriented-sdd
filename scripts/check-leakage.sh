@@ -11,7 +11,8 @@
 # Exit 0 = clean. Exit 1 = something private is in what it was given, or the guard could not look.
 set -u
 
-# With no mode it scans the working tree. --text scans standard input instead (#360).
+# With no mode it scans the working tree. --text scans standard input instead, and --refs a list
+# of ref names on it (#360).
 # --public-only runs the public tier alone, for a pull request from a fork, which has no private
 # patterns to be given. Any other argument is refused, and is not printed (#357).
 PUBLIC_ONLY=0
@@ -19,14 +20,14 @@ MODE=tree
 refuse_arguments() {
   echo "check-leakage FAILED — it was given an argument it does not take, so it looked at nothing." >&2
   echo "  It takes --public-only, which runs the public tier alone and is not a pass for private" >&2
-  echo "  context, and one mode at most: --text. The argument is withheld: this report can" >&2
-  echo "  reach a public log." >&2
+  echo "  context, and one mode at most: --text or --refs. The argument is withheld: this report" >&2
+  echo "  can reach a public log." >&2
   exit 1
 }
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --public-only) [ "$PUBLIC_ONLY" -eq 0 ] || refuse_arguments; PUBLIC_ONLY=1 ;;
-    --text) [ "$MODE" = tree ] || refuse_arguments; MODE=${1#--} ;;
+    --text|--refs) [ "$MODE" = tree ] || refuse_arguments; MODE=${1#--} ;;
     *) refuse_arguments ;;
   esac
   shift
@@ -207,19 +208,23 @@ $TIER_ORDER
 EOF
 }
 
-# --text: standard input, whole. A terminal is refused: a run that waits on a keyboard has
-# scanned nothing (#360).
-if [ "$MODE" = text ]; then
-  [ ! -t 0 ] || input_fault "standard input is a terminal and --text reads the text to scan from it"
-  cat > "$TIERS/in.text" 2>/dev/null || input_fault "standard input could not be read"
-  scan_lines "$TIERS/in.text" "input line(s)"
+# --text and --refs: standard input, whole. A terminal is refused: a run that waits on a
+# keyboard has scanned nothing. A ref name is the text, so --refs reports a position (#360).
+if [ "$MODE" = text ] || [ "$MODE" = refs ]; then
+  case "$MODE" in
+    text) what="input line(s)"; unit="line(s) of text"; none="the text held nothing" ;;
+    *) what="ref number(s) in the list"; unit="ref name(s)"; none="the list held no ref name" ;;
+  esac
+  [ ! -t 0 ] || input_fault "standard input is a terminal and --$MODE reads what to scan from it"
+  cat > "$TIERS/in.lines" 2>/dev/null || input_fault "standard input could not be read"
+  scan_lines "$TIERS/in.lines" "$what"
   closing
   [ "$fail" -eq 0 ] || exit 1
-  count=$(grep -c '' "$TIERS/in.text")
+  count=$(grep -c '' "$TIERS/in.lines")
   if [ "$count" -eq 0 ]; then
-    echo "check-leakage: clean — the text held nothing, $(loaded)"
+    echo "check-leakage: clean — $none, $(loaded)"
   else
-    echo "check-leakage: clean — $count line(s) of text scanned, $(loaded)"
+    echo "check-leakage: clean — $count $unit scanned, $(loaded)"
   fi
   exit 0
 fi
