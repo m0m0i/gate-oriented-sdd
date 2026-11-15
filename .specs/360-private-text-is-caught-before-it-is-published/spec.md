@@ -1,5 +1,5 @@
 # Spec: private text is caught before a commit or a push publishes it
-- Slug: 360-private-text-is-caught-before-it-is-published   Issue: 360   Type: feature   Status: approved
+- Slug: 360-private-text-is-caught-before-it-is-published   Issue: 360   Type: feature   Status: done
 - Author: m0m0i   Date: 2026-11-15
 
 ## 1. Requirements (WHAT / WHY)
