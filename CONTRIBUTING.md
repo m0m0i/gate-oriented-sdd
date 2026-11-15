@@ -89,11 +89,43 @@ printf '%s' "$encoded" | gh secret set LEAKAGE_PATTERNS
 
 The first encodes the file and joins the lines GNU `base64` wraps its output into. The second gives the value to `gh` on standard input, so it is in no command's arguments. A secret that holds the file as it is written, or its encoding on more than one line, fails the step.
 
+## What the leakage guard scans, and when
+
+**The working tree is one of five things the guard scans.** A commit message, a file one commit adds and the next removes, and a branch or tag name are all published without ever being in the tree at the tip, so the same script, with the same list and the same report, also runs from three git hooks and from CI (#360).
+
+| When | What is scanned | How |
+| :-- | :-- | :-- |
+| Turn end, and by hand | every file of the working tree, and each path | `./scripts/check-leakage.sh` |
+| `git commit` | the message | the `commit-msg` hook, `--text` |
+| `git commit` | each staged path and its staged content | the `pre-commit` hook, `--staged` |
+| `git push` | the names being published; the message of every annotated tag pushed; every commit the destination does not hold: its message, the paths it adds and the lines it adds | the `pre-push` hook, `--refs`, `--text` and `--commits` |
+| CI | the working tree; a pull request's commits, branch name, title and body; the commits of a push to `main` | the `Leakage guard` step |
+
+**Install the hooks once in each clone:**
+
+```bash
+sh scripts/install-git-hooks.sh
+```
+
+It writes a shim under each hook's name into the clone's common hooks directory, which every worktree shares, and a snapshot of the guard and the hook scripts beside them. A worktree runs the hook scripts of its own branch, and the snapshot when its branch has none. Run it again after `scripts/git-hooks/shim.sh` changes. It refuses to replace a hook it did not write, so move your own hook away first, and it refuses while `core.hooksPath` is set, because git would then run none of them.
+
+**The working-tree scan fails until they are installed.** A hook that is absent says nothing, so `./scripts/check-leakage.sh` checks that every hook script under `scripts/git-hooks/` has its shim in place, and exits 1 with the command above when one is missing, cannot run, was edited or is older than this checkout's. CI has no clone to commit from and passes `--no-hook-check`. Only CI's step passes it: on the `- Validators:` line or in a hook it would hide the absence it exists to report.
+
+**The push asks the destination what it holds.** The `pre-push` hook runs `git ls-remote` on the URL git is pushing to and scans every commit that is not reachable from what comes back. It does not trust the remote-tracking refs, which are what this clone remembers: after the destination's history is rewritten they still list the old commits, and a branch built on those would put them back. A push from such a branch is refused whole; rebuild the branch on the new history first.
+
+**What the hooks do not see, and what does.**
+
+- `git commit --no-verify`, `git push --no-verify`, `git -c core.hooksPath=…` and a clone without the hooks skip them in silence. CI scans the commits and the pull request's text, after they are public. Nothing catches a branch or tag name pushed that way.
+- `cherry-pick`, `revert`, `rebase` and `commit-tree` run no commit hook, and a merge runs none over its content. The `pre-push` hook scans those commits.
+- Author, committer and tagger names and addresses are not scanned.
+- An issue's or a pull request's text written with `gh` is not scanned on this machine (#361).
+
 ## Before you open a PR
 
 ```bash
 ./scripts/check-leakage.sh          # no private context; it fails until this machine has a
-                                    # pattern file, which the section above describes
+                                    # pattern file and this clone has the hooks, which the
+                                    # two sections above describe
 ./scripts/check-manifests.py        # both manifests agree; hook shapes correct; each gate's
                                     # Stop timeout is its ceiling in hooks/gate-lib.sh
 ./scripts/check-markdown-fences.py  # no ```markdown fence hand-wraps the Markdown it quotes

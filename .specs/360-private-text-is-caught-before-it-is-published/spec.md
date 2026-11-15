@@ -88,7 +88,7 @@ Every claim below marked measured was run in a scratch repository on git 2.54.0 
 - [x] T6: failing cases for `pre-push.sh` against a local bare remote: a removed line, a branch name, nested annotated tags, a tag of a blob, a tag of a tree, a push URL that differs from the fetch URL, a rewritten remote with no fetch, a deletion, a failed `ls-remote` — then the hook (AC5)
 - [x] T7: failing cases for the absent-hooks refusal, two worktrees on different shim versions, and the exemption's pin; `leak_repo` installs the shims — then the check and `--no-hook-check` on CI's working-tree runs, in one commit, with the install in the maintainer's clone on their go before the turn ends (AC7, AC8)
 - [x] T8: failing cases for the CI step's commit set, forced push, branch-name and title-and-body scans, and the fork's public tier — then the step and the trigger (AC9)
-- [ ] T9: measure AC10 and the suite before and after, raising `- Validator budget:` in the same commit if the suite passes 300 s; `CONTRIBUTING.md` with its pinned strings in case 429, ADR-12, M-1's row and the `scripts/` row (AC10, AC11)
+- [x] T9: measure AC10 and the suite before and after, raising `- Validator budget:` in the same commit if the suite passes 300 s; `CONTRIBUTING.md` with its pinned strings in case 429, ADR-12, M-1's row and the `scripts/` row (AC10, AC11)
 - [ ] T10: `docs/BACKLOG.md` discharges #355 from row 1, shipped as #358, and places #360 and #361 as the open question below is answered
 
 ### Open questions

@@ -11331,8 +11331,9 @@ k8="$(lk_report 1 'LEAK [public] doc.md line(s): 1')$(lk_noticed)"
   || report "CI's leakage step decodes its secret, fails without one, and runs the public tier alone only for a fork" no \
      "empty-file=$e0 newline-file=$e1 step=$k0 own=$k1 empty-secret=$k2 unset-secret=$k3 fork-unset=$k4 fork-empty=$k5 own-hit=$k6 fork=$k7 fork-hit=$k8 not-base64=$k9 as-written=$k10 cut-short=$k11 two-lines=$k12"
 
-# 429. #357 AC8 — the guard's fault report sends its reader to CONTRIBUTING.md, so what that page
-#      says is held to the guard: the two places the file is looked for, the flag and its notice,
+# 429. #357 AC8, #360 AC11 — the guard's fault report sends its reader to CONTRIBUTING.md, so what
+#      that page says is held to the guard: the hooks' installer, the modes they run, the
+#      exemption and what skips a hook; the two places the file is looked for, the flag and its notice,
 #      CI's secret and the two commands that set it, the two forms of line the loader refuses or
 #      drops, and an example the loader takes. The page says not to copy the example, because
 #      each of its expressions matches its own line there: run over the page, the example reports
@@ -11368,7 +11369,9 @@ out=$(run_leak "$r")
 m4=ok
 for want in 'GATE_SDD_LEAKAGE_PATTERNS' '${XDG_CONFIG_HOME:-$HOME/.config}/gate-sdd/leakage-patterns' \
   './scripts/check-leakage.sh --public-only' "$LKG_NOTICE" '`LEAKAGE_PATTERNS`' \
-  "| tr -d '\\n')" '| gh secret set LEAKAGE_PATTERNS' 'ends in a space or a tab' '`[#]'; do
+  "| tr -d '\\n')" '| gh secret set LEAKAGE_PATTERNS' 'ends in a space or a tab' '`[#]' \
+  'sh scripts/install-git-hooks.sh' '`--no-hook-check`' '`--staged`' '`--refs`, `--text` and `--commits`' \
+  '`git ls-remote`' '`git commit --no-verify`' '`git -c core.hooksPath=…`' 'the `Leakage guard` step'; do
   grep -Fq -e "$want" "$LKG_DOC" || m4="$m4+no <$want>"
 done
 

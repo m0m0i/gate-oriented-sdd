@@ -334,8 +334,8 @@ if [ "$MODE" = staged ]; then
 fi
 
 # --commits: the verdict comes from three files over every commit at once: the messages, the
-# paths, and the added lines of the patches. Only when a tier hits is each commit read again
-# for a location, and a hit that read cannot place still fails (#360).
+# paths, and the added lines of the patches. Only when a tier hits are the commits that hold a
+# hit read again, one by one, for a location, and a hit that read cannot place still fails (#360).
 if [ "$MODE" = commits ]; then
   g rev-parse --git-dir >/dev/null 2>&1 \
     || input_fault "this is not a git repository and --commits reads its history"
@@ -381,6 +381,31 @@ EOF
     LISTING="git log --no-walk --format= --name-only --diff-merges=separate --root --no-renames --diff-filter=d <commit>"
     tab=$(printf '\t')
     any_named=""
+
+    # Which commits to read again: one more pass with each commit's id on a line of its own
+    # before its message and patch, and the commits whose lines a tier that hit matches. A
+    # line that only looks like an id line can misplace a hit, never clear one: the verdict
+    # is already made, and a tier this read places nowhere is reported against the set.
+    # shellcheck disable=SC2086
+    g log --stdin $LOG --format='@@@ %H%n%B' -p -U0 --text $DIFF < "$TIERS/in.ids" > "$TIERS/in.marked" 2>/dev/null \
+      || : > "$TIERS/in.marked"
+    : > "$TIERS/in.hitlines"
+    while IFS= read -r tier; do
+      [ -n "$tier" ] || continue
+      case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
+      # shellcheck disable=SC2086
+      { grep -anE $fold -f "$TIERS/$tier" -- "$TIERS/in.marked" 2>/dev/null
+        LC_ALL=C grep -anE $fold -f "$TIERS/$tier" -- "$TIERS/in.marked" 2>/dev/null
+      } | LC_ALL=C sed -n 's/^\([0-9][0-9]*\):.*/\1/p' >> "$TIERS/in.hitlines"
+    done <<EOF
+$hit_tiers
+EOF
+    LC_ALL=C awk '
+      NR == FNR { hit[$1] = 1; next }
+      /^@@@ [0-9a-f]+$/ { id = $2 }
+      (FNR in hit) && id != "" && !seen[id]++ { print id }
+    ' "$TIERS/in.hitlines" "$TIERS/in.marked" > "$TIERS/in.suspects"
+
     {
       while IFS= read -r id; do
         short=$(printf '%s' "$id" | cut -c1-7)
@@ -407,7 +432,7 @@ EOF
           g cat-file blob "$4" > "$TIERS/in.blobs/$n" 2>/dev/null || rm -f "$TIERS/in.blobs/$n"
         done 3< "$TIERS/in.raw" 4< "$TIERS/in.listing"
         [ "$n" -eq 0 ] || scan_blobs "$TIERS/in.blobs" "$TIERS/in.labels"
-      done < "$TIERS/in.ids"
+      done < "$TIERS/in.suspects"
     } 2> "$TIERS/in.report"
     named=$any_named
 
