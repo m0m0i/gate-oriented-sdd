@@ -48,7 +48,9 @@ jobs:
       # hooks: a pull request's commits, branch name, title and body, and a push's commits. The
       # commit ids reach it through `env:`. The branch name, title and body do not, because the
       # log prints a step's `env:` block: they are read from the runner's event file. A fork
-      # gets the public tier over the same inputs (#360).
+      # gets the public tier over the same inputs. The title and body are written with a CR,
+      # alone or before a newline, as a line end: the guard reads lines, and no expression
+      # matches across one (#360).
       - name: Leakage guard
         env:
           LEAKAGE_PATTERNS: ${{ secrets.LEAKAGE_PATTERNS }}

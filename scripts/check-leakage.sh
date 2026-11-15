@@ -262,8 +262,8 @@ scan_blobs() {
     [ -s "$TIERS/$tier" ] || continue
     case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
     case "$tier" in warn*) kind=WARNING ;; *) kind=LEAK ;; esac
-    # shellcheck disable=SC2086  # $fold is one option or nothing
     [ -d "$1" ] || input_fault "the temporary directory lost the content it was to scan"
+    # shellcheck disable=SC2086  # $fold is one option or nothing
     hits=$(
       cd "$1" || exit
       { ls | xargs grep -lE $fold -f "$TIERS/$tier" -- 2>/dev/null

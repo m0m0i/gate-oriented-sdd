@@ -3,8 +3,8 @@
 #
 # $2 is the URL git is pushing to, and standard input holds one line for each ref:
 # `<local ref> <local id> <remote ref> <remote id>`. Three things are scanned: the names being
-# published; the message of every annotated tag pushed, and a blob a tag points at; and every
-# commit the destination does not hold. What it holds is what `git ls-remote` on that URL lists,
+# published; the name and the message of every annotated tag pushed, and a blob a tag points
+# at; and every commit the destination does not hold. What it holds is what `git ls-remote` on that URL lists,
 # never the remote-tracking refs: those are what this clone remembers, and they hide commits
 # when a remote's push URL differs from its fetch URL or its history was rewritten since the
 # last fetch. A deletion publishes nothing. The guard is the one beside this script.
@@ -24,36 +24,46 @@ trap 'rm -rf "$work"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
-: > "$work/names"; : > "$work/text"; : > "$work/commits"
+# What was read and could not be written down was not scanned, so every write is checked, and
+# "nothing to push" is decided by the lines read, not by what reached a file.
+unwritten() { refuse "the hook's temporary directory could not be written"; }
+for part in names text commits; do
+  printf '' > "$work/$part" || unwritten
+done
 
+published=0
 while read -r local_ref local_id remote_ref remote_id; do
   [ -n "$local_id" ] || continue
   case "$local_id" in *[!0]*) ;; *) continue ;; esac
-  printf '%s\n' "$remote_ref" >> "$work/names"
+  published=$((published + 1))
+  printf '%s\n' "$remote_ref" >> "$work/names" || unwritten
   id=$local_id
   while :; do
     kind=$(g cat-file -t "$id" 2>/dev/null) || refuse "an object being pushed could not be read"
     case "$kind" in
-      commit) printf '%s\n' "$id" >> "$work/commits"; break ;;
+      commit) printf '%s\n' "$id" >> "$work/commits" || unwritten; break ;;
       tag)
         g cat-file tag "$id" > "$work/tag" 2>/dev/null || refuse "a tag being pushed could not be read"
         # The header ends at the first empty line. Its `tag` line is the name the object
         # carries, whatever ref it is pushed under; its tagger is not scanned.
-        sed -n '1,/^$/s/^tag //p' "$work/tag" >> "$work/text"
-        sed '1,/^$/d' "$work/tag" >> "$work/text"
+        sed -n '1,/^$/s/^tag //p' "$work/tag" >> "$work/text" || unwritten
+        sed '1,/^$/d' "$work/tag" >> "$work/text" || unwritten
+        # A message need not end in a newline, and the next text must start a line of its own.
+        echo >> "$work/text" || unwritten
         id=$(sed -n 's/^object //p' "$work/tag" | sed -n 1p)
         [ -n "$id" ] || refuse "a tag being pushed names no object" ;;
       blob)
         g cat-file blob "$id" >> "$work/text" 2>/dev/null || refuse "a blob a tag points at could not be read"
         # A blob need not end in a newline, and the next text must start a line of its own.
-        echo >> "$work/text"
+        echo >> "$work/text" || unwritten
         break ;;
       *) refuse "a tag being pushed points at a tree, which the guard has no way to scan" ;;
     esac
   done
 done
 
-[ -s "$work/names" ] || exit 0
+[ "$published" -gt 0 ] || exit 0
+[ -s "$work/names" ] || unwritten
 
 refused=0
 sh "$guard" --refs < "$work/names" > /dev/null || refused=1

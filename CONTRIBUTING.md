@@ -98,7 +98,7 @@ The first encodes the file and joins the lines GNU `base64` wraps its output int
 | Turn end, and by hand | every file of the working tree, and each path | `./scripts/check-leakage.sh` |
 | `git commit` | the message | the `commit-msg` hook, `--text` |
 | `git commit` | each staged path and its staged content | the `pre-commit` hook, `--staged` |
-| `git push` | the names being published; the message of every annotated tag pushed; every commit the destination does not hold: its message, the paths it adds and the lines it adds | the `pre-push` hook, `--refs`, `--text` and `--commits` |
+| `git push` | the names being published, and the name an annotated tag carries; the message of every annotated tag pushed, and a blob a tag points at; every commit the destination does not hold: its message, the paths it adds and the lines it adds | the `pre-push` hook, `--refs`, `--text` and `--commits` |
 | CI | the working tree; a pull request's commits, branch name, title and body; the commits of a push to `main` | the `Leakage guard` step |
 
 **Install the hooks once in each clone:**

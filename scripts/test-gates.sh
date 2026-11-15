@@ -12119,11 +12119,11 @@ p2=$(lk_pushed 'LEAK [fail] ref number(s) in the list: 1' "$lk_d" refs/heads/a-Z
 out=$(lk_git_in "$lk_p" tag zq_fold-tag); out=$(lk_git_in "$lk_p" push -q origin zq_fold-tag)
 p2="$p2 $(lk_pushed 'LEAK [fail ignore-case] ref number(s) in the list: 1' "$lk_d" refs/tags/zq_fold-tag)"
 
-# The message of every tag in a chain, when only the outermost is pushed. Each tag gives two
-# lines before the next: the name it carries, and its message.
+# The message of every tag in a chain, when only the outermost is pushed. Each tag gives the
+# name it carries, its message, and an empty line before the next.
 out=$(lk_git_in "$lk_p" tag -a inner -m 'an inner tag holding Zq_Exact'); out=$(lk_git_in "$lk_p" tag -a outer -m 'outer' inner)
 out=$(lk_git_in "$lk_p" push -q origin outer)
-p3=$(lk_pushed 'LEAK [fail] input line(s): 4' "$lk_d" refs/tags/outer)
+p3=$(lk_pushed 'LEAK [fail] input line(s): 5' "$lk_d" refs/tags/outer)
 
 # A tag that points at a blob publishes the blob, and one that points at a tree is refused.
 lk_o=$(cd "$lk_p" && printf 'clean\nZq_Exact\n' | git hash-object -w --stdin)
@@ -12392,13 +12392,27 @@ out=$(GIT_COMMON_DIR="$lk_o/.git"; export GIT_COMMON_DIR; run_leak "$lk_c")
 lk_p=$(hook_repo lkg-z-push); out=$(lk_install "$lk_p")
 lk_d="$TMP/lkg-z-remote.git"; git init -q --bare -b main "$lk_d" >/dev/null 2>&1
 out=$(lk_git_in "$lk_p" remote add origin "$lk_d")
+# Two tagged blobs, so that the second one's first line is what follows the first one's last.
 lk_o=$(cd "$lk_p" && printf 'no final newline' | git hash-object -w --stdin)
-out=$(lk_git_in "$lk_p" tag a1 "$lk_o"); out=$(lk_git_in "$lk_p" tag -a z1 -m 'Zq_Start of a message')
-out=$(LK_PAT="$LKG_PAT2" lk_git_in "$lk_p" push -q origin a1 z1)
-[ "$out" != 0 ] && grep -q '^LEAK \[fail\] input line(s): ' "$TMP/lkerr" && [ -z "$(lk_remote_main "$lk_d" refs/tags/z1)" ] && z7=ok || z7="exit=$out"
+out=$(lk_git_in "$lk_p" tag a1 "$lk_o")
+lk_o=$(cd "$lk_p" && printf 'Zq_Start of a blob\n' | git hash-object -w --stdin)
+out=$(lk_git_in "$lk_p" tag a2 "$lk_o")
+out=$(LK_PAT="$LKG_PAT2" lk_git_in "$lk_p" push -q origin a1 a2)
+[ "$out" != 0 ] && grep -Fxq -e 'LEAK [fail] input line(s): 2' "$TMP/lkerr" && [ -z "$(lk_remote_main "$lk_d" refs/tags/a2)" ] && z7=ok || z7="exit=$out"
 out=$(lk_git_in "$lk_p" tag -a a-Zq_Exact-name -m 'a clean message')
 out=$(lk_git_in "$lk_p" push -q origin refs/tags/a-Zq_Exact-name:refs/tags/other)
 [ "$out" != 0 ] && grep -q '^LEAK \[fail\] input line(s): ' "$TMP/lkerr" && [ -z "$(lk_remote_main "$lk_d" refs/tags/other)" ] && z8=ok || z8="exit=$out"
+
+# pre-push, when it has nowhere to write what it read: no directory, and a directory whose
+# files cannot be written. Neither is a push with nothing in it.
+lk_line="refs/heads/main $(lk_head "$lk_p") refs/heads/main 0000000000000000000000000000000000000000"
+lk_s=$(lk_shim push-no-tmp 'exit 1')
+out=$(printf '%s\n' "$lk_line" | ( PATH="$lk_s:$PATH"; export PATH; lk_pre_push "$lk_d" ))
+[ "$out" = 1 ] && grep -q 'mktemp -d made no directory to work in' "$TMP/lkerr" && z10=ok || z10="exit=$out"
+lk_s=$(lk_shim push-no-write "mkdir -p '$TMP/lkg-z-work' && ln -s '$TMP/lkg-not-made/file' '$TMP/lkg-z-work/names' || exit 1" \
+  "printf '%s\\n' '$TMP/lkg-z-work'")
+out=$(printf '%s\n' "$lk_line" | ( PATH="$lk_s:$PATH"; export PATH; lk_pre_push "$lk_d" ))
+[ "$out" != 0 ] && z11=ok || z11="exit=$out"
 
 # CI: a title or body with CRLF line ends is scanned as its lines, so an expression that ends
 # in `$` still finds the end of one.
@@ -12406,10 +12420,10 @@ r=$(leak_repo lkg-z-crlf); printf 'one\n' > "$r/a.md"; lk_ci "$r" 'a clean commi
 out=$(lk_pr "$r" false "$(base64 < "$LKG_PAT2" | tr -d '\n')" HEAD~1 a-branch 'a title' '"a body\r\nthat ends in Zq_End\r\nand goes on"')
 z9=$(lk_report 1 'LEAK [fail] input line(s): 3')
 
-[ "$z0 $z1 $z2 $z3 $z4 $z5 $z6 $z7 $z8 $z9" = "ok ok ok ok ok ok ok ok ok ok" ] \
+[ "$z0 $z1 $z2 $z3 $z4 $z5 $z6 $z7 $z8 $z9 $z10 $z11" = "ok ok ok ok ok ok ok ok ok ok ok ok" ] \
   && report "the leak checks refuse what the first review found uncased, and say when the hooks were not checked" ok \
   || report "the leak checks refuse what the first review found uncased, and say when the hooks were not checked" no \
-     "staged-git-fails=$z0 quoted-path-in-commits=$z1 path-after-revisions=$z2 empty-hooks-path=$z3 shim-only=$z4 not-checked-said=$z5 common-dir=$z6 blob-seam=$z7 tag-name=$z8 crlf=$z9"
+     "staged-git-fails=$z0 quoted-path-in-commits=$z1 path-after-revisions=$z2 empty-hooks-path=$z3 shim-only=$z4 not-checked-said=$z5 common-dir=$z6 blob-seam=$z7 tag-name=$z8 crlf=$z9 push-no-directory=$z10 push-unwritable=$z11"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
