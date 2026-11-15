@@ -10696,15 +10696,25 @@ done
 
 leak_repo() {  # $1 = name. A git repo holding only the guard's own copy, which the guard scans
                # like any other file: a work-set of one, before a case adds to it (#357).
+               # The hook scripts sit beside it under an exclude entry and their shims are in
+               # place, so the working-tree scan finds this clone's hooks installed and the
+               # work-set is still one file. A fixture's later commits take --no-verify: they
+               # build a state, and the hooks' own cases are the ones under hook_repo (#360).
                #
                # `lkg-`, not `lk-`: $TMP is ONE flat namespace shared by every fixture here, and
                # lock_repo already owns lk-*. The first draft of this case reused lk-empty, got
                # that fixture's three files, and reported clean — a case failing for a reason
                # that has nothing to do with its subject, which is #124's whole class.
-  r="$TMP/$1"; mkdir -p "$r/scripts"
+  r="$TMP/$1"; mkdir -p "$r/scripts/git-hooks"
   cp "$ROOT/scripts/check-leakage.sh" "$r/scripts/"
+  cp "$ROOT"/scripts/git-hooks/*.sh "$r/scripts/git-hooks/"
   ( cd "$r" && git init -q -b main && git config user.email t@t && git config user.name t \
-    && git add -A && git commit -qm init ) >/dev/null 2>&1
+    && mkdir -p .git/info .git/hooks && printf 'scripts/git-hooks/\n' >> .git/info/exclude \
+    && git add -A && git commit -qm init \
+    && for lk_h in scripts/git-hooks/*.sh; do
+         lk_h=${lk_h##*/}; lk_h=${lk_h%.sh}
+         [ "$lk_h" = shim ] || { cp scripts/git-hooks/shim.sh ".git/hooks/$lk_h" && chmod +x ".git/hooks/$lk_h"; }
+       done ) >/dev/null 2>&1
   echo "$r"
 }
 # Every run gets a synthetic pattern file and a HOME under $TMP, so no case reads the list of
@@ -10805,7 +10815,7 @@ out=$(run_leak "$r"); [ "$out" = "1" ] && c12=ok || c12=no
 # RED-CAPABLE at the same commit: all three halves go red there, the rest stays green.
 r=$(leak_repo lkg-deleted)
 printf 'nothing to see\n' > "$r/note.md"; printf 'nothing to see\n' > "$r/keep.md"
-( cd "$r" && git add -A && git commit -qm two ) >/dev/null 2>&1
+( cd "$r" && git add -A && git commit -q --no-verify -m two ) >/dev/null 2>&1
 rm "$r/note.md"
 out=$(run_leak "$r")
 [ "$out" = "0" ] && c13=ok || c13=no
@@ -10825,7 +10835,7 @@ r=$(leak_repo lkg-unsearchable); mkdir -p "$r/sub/deep"
 printf 'see ADR-%s\n' 0001 > "$r/sub/secret.md"
 printf 'see ADR-%s\n' 0001 > "$r/sub/deep/deeper.md"
 printf 'nothing to see\n' > "$r/keep.md"
-( cd "$r" && git add -A && git commit -qm two ) >/dev/null 2>&1
+( cd "$r" && git add -A && git commit -q --no-verify -m two ) >/dev/null 2>&1
 chmod 000 "$r/sub" 2>/dev/null
 if cat "$r/sub/secret.md" >/dev/null 2>&1; then
   chmod 755 "$r/sub" 2>/dev/null
@@ -10849,7 +10859,7 @@ fi
 # RED-CAPABLE at 7d56992: both halves go red there, the rest of the suite stays green.
 r=$(leak_repo lkg-quoted); printf 'see ADR-%s\n' 0001 > "$r/\"q\".md"
 printf 'nothing to see\n' > "$r/keep.md"
-( cd "$r" && git add -A && git commit -qm two ) >/dev/null 2>&1
+( cd "$r" && git add -A && git commit -q --no-verify -m two ) >/dev/null 2>&1
 out=$(run_leak "$r")
 [ "$out" = "1" ] && c19=ok || c19=no
 case "$(cat "$TMP/lkerr")" in *"cannot be handed to grep"*) c20=ok ;; *) c20=no ;; esac
@@ -11035,7 +11045,7 @@ done
 # 424. #357 AC3 — a path that matches is reported by its position in the listing and never by
 #      name, because the name is the text. A hit inside such a file is located by that position
 #      too. Every file is committed, so the listing is the index in its sorted order.
-lk_commit() { ( cd "$1" && git add -A && git commit -qm two ) >/dev/null 2>&1; }
+lk_commit() { ( cd "$1" && git add -A && git commit -q --no-verify -m two ) >/dev/null 2>&1; }
 
 r=$(leak_repo lkg-n-fail); mkdir -p "$r/sub"
 for f in Zq_Exact.txt a.md b.md sub/a-Zq_Exact-b.md; do printf 'nothing to see\n' > "$r/$f"; done
@@ -11069,7 +11079,7 @@ out=$(run_leak "$r"); n3=$(lk_report 1 'LEAK [fail] path number(s) in the listin
 lk_bytes=$(printf 'a-\351-Zq_Exact.md')
 r=$(leak_repo lkg-n-bytes)
 ( cd "$r" && git update-index --add --cacheinfo "100644,$(git hash-object -w scripts/check-leakage.sh),$lk_bytes" \
-  && git commit -qm two ) >/dev/null 2>&1
+  && git commit -q --no-verify -m two ) >/dev/null 2>&1
 n4=""
 for lk_locale in C.UTF-8 en_US.UTF-8; do
   out=$(LC_ALL=$lk_locale; export LC_ALL; run_leak "$r")
@@ -11657,7 +11667,7 @@ fi
 
 # A staged deletion publishes nothing, so a file whose name or content matches can be removed.
 r=$(leak_repo lkg-g-delete); printf 'Zq_Exact\n' > "$r/a-Zq_Exact.md"
-( cd "$r" && git add -A && git commit -qm two && git rm -q a-Zq_Exact.md ) >/dev/null 2>&1
+( cd "$r" && git add -A && git commit -q --no-verify -m two && git rm -q a-Zq_Exact.md ) >/dev/null 2>&1
 out=$(run_leak "$r" "" "" "" --staged)
 [ "$out" = 0 ] && grep -q 'clean — nothing is staged' "$TMP/lkout" && g6=ok || g6="exit=$out"
 
@@ -11716,7 +11726,7 @@ g14="$(lk_refused --staged --text) $(lk_refused --staged zq_more)"
 # 438. #360 AC1 to AC3 — `--commits` scans a set of commits: each one's message, each path it
 #      adds and each line it adds, so a line a later commit removes is still found. A hit is
 #      reported by the commit's short id and a place in it. Author and committer are not read.
-lk_ci() { ( cd "$1" && git add -A && git commit -qm "$2" ) >/dev/null 2>&1; }
+lk_ci() { ( cd "$1" && git add -A && git commit -q --no-verify -m "$2" ) >/dev/null 2>&1; }
 lk_id() { ( cd "$1" && git rev-parse "${2:-HEAD}" ) | cut -c1-7; }
 
 r=$(leak_repo lkg-h-clean)
@@ -11769,9 +11779,9 @@ out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1); [ "$out" = 0 ] || h5=
 
 # A line only a merge adds, in a file both sides left clean.
 r=$(leak_repo lkg-h-merge); printf 'base\n' > "$r/f.md"; lk_ci "$r" base
-( cd "$r" && git checkout -qb side && printf 'side\n' > s.md && git add -A && git commit -qm side \
-  && git checkout -q main && printf 'main\n' > m.md && git add -A && git commit -qm main \
-  && git merge -q --no-commit side && printf 'base\nZq_Exact\n' > f.md && git add -A && git commit -qm merged ) >/dev/null 2>&1
+( cd "$r" && git checkout -qb side && printf 'side\n' > s.md && git add -A && git commit -q --no-verify -m side \
+  && git checkout -q main && printf 'main\n' > m.md && git add -A && git commit -q --no-verify -m main \
+  && git merge -q --no-commit side && printf 'base\nZq_Exact\n' > f.md && git add -A && git commit -q --no-verify -m merged ) >/dev/null 2>&1
 lk_m=$(lk_id "$r")
 out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD^1 HEAD^2)
 h6=$(lk_report 1 "LEAK [fail] commit $lk_m, f.md line(s): 2")
@@ -11793,13 +11803,13 @@ h7="$h7 $(lk_report 1 "LEAK [fail] commit $lk_s, note.md line(s): 2")"
 out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1); h7="$h7 $(lk_report 1 "LEAK [fail] commit $lk_s, note.md line(s): 2")"
 # A replace ref shows another object in place of the one a push sends.
 ( cd "$r" && rm .git/info/attributes && lk_real=$(git rev-parse HEAD) \
-  && git checkout -q --detach HEAD~1 && printf 'clean\n' > note.md && git add -A && git commit -qm 'a clean stand-in' \
+  && git checkout -q --detach HEAD~1 && printf 'clean\n' > note.md && git add -A && git commit -q --no-verify -m 'a clean stand-in' \
   && git replace "$lk_real" HEAD && git checkout -q main ) >/dev/null 2>&1
 out=$(run_leak "$r" "" "" "" --commits main --not main~1); h7="$h7 $(lk_report 1 "LEAK [fail] commit $lk_s, note.md line(s): 2")"
 
 # Author and committer are not scanned.
 r=$(leak_repo lkg-h-identity); printf 'one\n' > "$r/a.md"
-( cd "$r" && git add -A && GIT_AUTHOR_NAME='Zq_Exact Author' GIT_COMMITTER_EMAIL='zq_fold@example.invalid' git commit -qm 'a clean message' ) >/dev/null 2>&1
+( cd "$r" && git add -A && GIT_AUTHOR_NAME='Zq_Exact Author' GIT_COMMITTER_EMAIL='zq_fold@example.invalid' git commit -q --no-verify -m 'a clean message' ) >/dev/null 2>&1
 out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1); [ "$out" = 0 ] && h8=ok || h8="exit=$out"
 
 # The faults. A revision git cannot resolve, and a repository with no commits beyond its depth.
@@ -12154,6 +12164,82 @@ out=$(lk_git_in "$lk_p" push -q origin main); [ "$out" = 0 ] || p11="$p11+then-c
   && report "the pre-push hook refuses commits, names, tag messages and tagged blobs the destination does not hold" ok \
   || report "the pre-push hook refuses commits, names, tag messages and tagged blobs the destination does not hold" no \
      "clean=$p0 removed-line=$p1 names=$p2 nested-tags=$p3 tagged-blob=$p4 tagged-tree=$p5 push-url=$p6 rewritten-destination=$p7 already-held=$p12 deletion=$p8 unreachable-destination=$p9 nothing-to-push=$p10 no-patterns=$p11"
+
+# 444. #360 AC7 — the working-tree scan fails in a clone whose hooks are not the installed ones,
+#      because a hook that is absent is silent: none installed, one missing, one that cannot
+#      run, one that was edited, an older shim than this checkout's, a file that is no shim,
+#      core.hooksPath set, and a checkout with no hook scripts to compare with. A newer shim
+#      than this checkout's passes, so worktrees on different versions do not block each other.
+lk_hooks() {  # $1 = repo, $2 = the fault's words; `-` when the run must pass. Prints ok, or what is wrong.
+  out=$(run_leak "$1"); all=$(cat "$TMP/lkout" "$TMP/lkerr")
+  if [ "$2" = - ]; then
+    [ "$out" = 0 ] && grep -q 'file(s) scanned, private patterns loaded' "$TMP/lkout" && printf ok || printf 'exit=%s' "$out"
+    return
+  fi
+  [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
+  case "$all" in *clean*) printf 'says clean'; return ;; esac
+  case "$all" in *'the leak hooks of this clone are not installed as this checkout has them'*) ;; *) printf 'not refused for its hooks'; return ;; esac
+  case "$all" in *"$2"*) ;; *) printf 'fault not named'; return ;; esac
+  case "$all" in *'sh scripts/install-git-hooks.sh'*) ;; *) printf 'installer not named'; return ;; esac
+  printf ok
+}
+lk_c=$(hook_repo lkg-y-hooks)
+y0=$(lk_hooks "$lk_c" 'commit-msg is not installed')
+out=$(lk_install "$lk_c"); y1=$(lk_hooks "$lk_c" -)
+
+rm "$lk_c/.git/hooks/pre-push"; y2=$(lk_hooks "$lk_c" 'pre-push is not installed')
+out=$(lk_install "$lk_c"); chmod -x "$lk_c/.git/hooks/pre-commit"; y3=$(lk_hooks "$lk_c" 'pre-commit is not executable')
+out=$(lk_install "$lk_c"); printf '# a line of its own\n' >> "$lk_c/.git/hooks/commit-msg"
+y4=$(lk_hooks "$lk_c" 'commit-msg differs from scripts/git-hooks/shim.sh')
+sed 's/^# gate-sdd-shim [0-9]*$/# gate-sdd-shim 0/' "$ROOT/scripts/git-hooks/shim.sh" > "$lk_c/.git/hooks/commit-msg"
+y5=$(lk_hooks "$lk_c" 'commit-msg is shim version 0, older than this checkout')
+printf '#!/bin/sh\nexit 0\n' > "$lk_c/.git/hooks/commit-msg"; y6=$(lk_hooks "$lk_c" 'commit-msg is not the shim')
+out=$(lk_install "$lk_c" 2>/dev/null); cp "$ROOT/scripts/git-hooks/shim.sh" "$lk_c/.git/hooks/commit-msg"; y7=$(lk_hooks "$lk_c" -)
+( cd "$lk_c" && git config core.hooksPath elsewhere ) >/dev/null 2>&1
+y8=$(lk_hooks "$lk_c" 'core.hooksPath is set'); ( cd "$lk_c" && git config --unset core.hooksPath ) >/dev/null 2>&1
+
+# A newer shim is installed than this checkout holds: it passes. The mirror is the older one above.
+for lk_n in $LKG_HOOKS; do
+  sed 's/^# gate-sdd-shim [0-9]*$/# gate-sdd-shim 999/' "$ROOT/scripts/git-hooks/shim.sh" > "$lk_c/.git/hooks/$lk_n"
+done
+y9=$(lk_hooks "$lk_c" -)
+
+# Two worktrees of one clone on different versions: the one behind passes, and the one ahead
+# is told to install.
+out=$(lk_install "$(hook_repo lkg-y-two)"); lk_c="$TMP/lkg-y-two"
+out=$(lk_git_in "$lk_c" worktree add -q "$TMP/lkg-y-ahead" -b ahead)
+sed 's/^# gate-sdd-shim [0-9]*$/# gate-sdd-shim 999/' "$ROOT/scripts/git-hooks/shim.sh" > "$TMP/lkg-y-ahead/scripts/git-hooks/shim.sh"
+y10="$(lk_hooks "$lk_c" -) $(lk_hooks "$TMP/lkg-y-ahead" 'older than this checkout')"
+
+# A checkout with no hook scripts has nothing to compare the installed ones with.
+r=$(leak_repo lkg-y-none); rm -rf "$r/scripts/git-hooks"
+y11=$(lk_hooks "$r" 'this checkout holds no scripts/git-hooks/shim.sh')
+
+[ "$y0 $y1 $y2 $y3 $y4 $y5 $y6 $y7 $y8 $y9 $y11" = "ok ok ok ok ok ok ok ok ok ok ok" ] && [ "$y10" = "ok ok" ] \
+  && report "check-leakage fails in a clone whose leak hooks are not installed as its checkout has them" ok \
+  || report "check-leakage fails in a clone whose leak hooks are not installed as its checkout has them" no \
+     "none=$y0 installed=$y1 one-missing=$y2 not-executable=$y3 edited=$y4 older=$y5 not-a-shim=$y6 restored=$y7 hooks-path=$y8 newer=$y9 two-worktrees=$y10 no-scripts=$y11"
+
+# 445. #360 AC8 — `--no-hook-check` exempts a run from that refusal, for CI, which has no clone to
+#      commit from. Both of the CI step's runs carry it. The `- Validators:` line and the hook
+#      scripts do not: a turn end or a hook that took the exemption would hide an absent hook.
+lk_c=$(hook_repo lkg-y-exempt)
+out=$(run_leak "$lk_c" "" "" "" --no-hook-check)
+[ "$out" = 0 ] && grep -q 'file(s) scanned, private patterns loaded' "$TMP/lkout" && v0=ok || v0="exit=$out"
+out=$(run_leak "$lk_c" - "" "" --public-only --no-hook-check); [ "$out" = 0 ] || v0="$v0+public-only-exit=$out"
+lk_r=$lk_c
+v1="$(lk_refused --no-hook-check --no-hook-check) $(lk_refused --no-hook-check zq_more)"
+v2=ok
+[ "$(grep -c 'check-leakage\.sh' "$TMP/lkg-step.sh")" = 2 ] || v2="the step does not run the guard twice"
+[ "$(grep -c 'check-leakage\.sh.* --no-hook-check' "$TMP/lkg-step.sh")" = 2 ] || v2="$v2+a run without the exemption"
+v3=ok
+grep -q -e '--no-hook-check' "$ROOT/.steering/tech.md" && v3="in .steering/tech.md"
+cat "$ROOT"/scripts/git-hooks/*.sh "$ROOT/scripts/install-git-hooks.sh" "$ROOT"/hooks/*.sh | grep -q -e '--no-hook-check' && v3="$v3+in a hook script"
+
+[ "$v0 $v1 $v2 $v3" = "ok ok ok ok ok" ] \
+  && report "--no-hook-check exempts a run, is on both of CI's, and is on no validator line or hook" ok \
+  || report "--no-hook-check exempts a run, is on both of CI's, and is on no validator line or hook" no \
+     "exempt=$v0 grammar=$v1 ci-step=$v2 pinned-out=$v3"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #

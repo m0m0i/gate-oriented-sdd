@@ -16,18 +16,23 @@ set -u
 # revisions after it name: revisions, --not and --all, as git rev-list takes them (#360).
 # --public-only runs the public tier alone, for a pull request from a fork, which has no private
 # patterns to be given. Any other argument is refused, and is not printed (#357).
+# --no-hook-check skips the working-tree scan's check that this clone's hooks are installed,
+# for CI, which has no clone to commit from (#360).
 PUBLIC_ONLY=0
+HOOK_CHECK=1
 MODE=tree
 refuse_arguments() {
   echo "check-leakage FAILED — it was given an argument it does not take, so it looked at nothing." >&2
   echo "  It takes --public-only, which runs the public tier alone and is not a pass for private" >&2
-  echo "  context, and one mode at most: --text, --refs, --staged, or --commits and the revisions" >&2
+  echo "  context, --no-hook-check, which CI gives it because it has no clone to commit from, and" >&2
+  echo "  one mode at most: --text, --refs, --staged, or --commits and the revisions" >&2
   echo "  to scan. The argument is withheld: this report can reach a public log." >&2
   exit 1
 }
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --public-only) [ "$PUBLIC_ONLY" -eq 0 ] || refuse_arguments; PUBLIC_ONLY=1 ;;
+    --no-hook-check) [ "$HOOK_CHECK" -eq 1 ] || refuse_arguments; HOOK_CHECK=0 ;;
     --text|--refs|--staged) [ "$MODE" = tree ] || refuse_arguments; MODE=${1#--} ;;
     --commits)
       [ "$MODE" = tree ] || refuse_arguments
@@ -429,6 +434,44 @@ fi
 # doing. In a non-git tree nothing quotes, so a file genuinely named `"quoted".md` must not be
 # mistaken for one git could not represent. Review round 2.
 if git rev-parse --git-dir >/dev/null 2>&1; then IN_GIT=1; else IN_GIT=0; fi
+
+# A hook that is absent is silent, so a clone whose hooks are not the ones this checkout would
+# install fails here, where every turn end and every contributor's run passes. A shim newer
+# than this checkout's passes: worktrees of one clone share the hooks and not the branch (#360).
+hooks_fault() {  # $1 = what is wrong
+  echo "check-leakage FAILED — the leak hooks of this clone are not installed as this checkout has them: $1." >&2
+  echo "  Run: sh scripts/install-git-hooks.sh" >&2
+  echo "" >&2
+  echo "  They scan a commit's message and staged content, and what a push would publish, before" >&2
+  echo "  git publishes it. Without them this scan of the working tree is the only one that runs." >&2
+  exit 1
+}
+shim_version() {  # $1 = a file. Prints its shim number, or nothing when it is not a shim.
+  sed -n 's/^# gate-sdd-shim \([0-9][0-9]*\)$/\1/p' "$1" 2>/dev/null | sed -n 1p
+}
+if [ "$IN_GIT" -eq 1 ] && [ "$HOOK_CHECK" -eq 1 ]; then
+  [ -f scripts/git-hooks/shim.sh ] || hooks_fault "this checkout holds no scripts/git-hooks/shim.sh to compare them with"
+  want=$(shim_version scripts/git-hooks/shim.sh)
+  [ -n "$want" ] || hooks_fault "scripts/git-hooks/shim.sh holds no version line"
+  [ -z "$(git config --get core.hooksPath 2>/dev/null)" ] \
+    || hooks_fault "core.hooksPath is set, so git runs none of them"
+  common=$(git rev-parse --git-common-dir 2>/dev/null) || hooks_fault "git could not name the clone's common directory"
+  checked=0
+  for script in scripts/git-hooks/*.sh; do
+    name=${script##*/}; name=${name%.sh}
+    [ "$name" != shim ] || continue
+    [ -f "$script" ] || continue
+    checked=$((checked + 1))
+    [ -f "$common/hooks/$name" ] || hooks_fault "$name is not installed"
+    [ -x "$common/hooks/$name" ] || hooks_fault "$name is not executable"
+    have=$(shim_version "$common/hooks/$name")
+    [ -n "$have" ] || hooks_fault "$name is not the shim"
+    [ "$have" -ge "$want" ] || hooks_fault "$name is shim version $have, older than this checkout's $want"
+    [ "$have" -gt "$want" ] || cmp -s "$common/hooks/$name" scripts/git-hooks/shim.sh \
+      || hooks_fault "$name differs from scripts/git-hooks/shim.sh at the same version"
+  done
+  [ "$checked" -gt 0 ] || hooks_fault "this checkout holds no hook script under scripts/git-hooks"
+fi
 
 files() {
   if [ "$IN_GIT" -eq 1 ]; then
