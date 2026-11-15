@@ -12444,6 +12444,115 @@ z13=$(lk_report 1 'LEAK [fail] ref number(s) in the list: 2 3')
   || report "the leak checks refuse what the first review found uncased, and say when the hooks were not checked" no \
      "staged-git-fails=$z0 quoted-path-in-commits=$z1 path-after-revisions=$z2 empty-hooks-path=$z3 shim-only=$z4 not-checked-said=$z5 common-dir=$z6 blob-seam=$z7 tag-name=$z8 crlf=$z9 push-no-directory=$z10 push-unwritable=$z11 anchored-added-line=$z12 anchored-ref-name=$z13"
 
+# --- guards: scripts/claude-hooks/gh_guard.py ---------------------------------------
+#
+# The hook that scans what a gh write would publish, from any project's Claude Code session
+# (#361). It is registered in the maintainer's user-level settings, so these cases run it as
+# that entry does: `<python> -I gh_guard.py`, a hook input on standard input, an environment
+# that holds only what a case puts in it, and a HOME under $TMP with synthetic patterns.
+
+# The interpreter. The installer registers a 3.9 on macOS, and the hook keeps to 3.9.
+GHG_PY=$(command -v python3 2>/dev/null)
+GHG_HOOK="$ROOT/scripts/claude-hooks"
+mkdir -p "$TMP/ghg-home/.config/gate-sdd" "$TMP/ghg-bare-home" "$TMP/ghg-cwd"
+cp "$LKG_PAT" "$TMP/ghg-home/.config/gate-sdd/leakage-patterns"
+ghg_input() {  # $1 = the command, which holds no `"` and no backslash; $2 = the tool, Bash by default
+  printf '{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"%s","tool_input":{"command":"%s"},"cwd":"%s"}' \
+    "${2:-Bash}" "$1" "$TMP/ghg-cwd" > "$TMP/ghg-in"
+}
+ghg_run() {  # $1 = the hook's directory, else the repository's; GHG_HOME, GHG_ENV as a case sets
+             # them. Reads $TMP/ghg-in; prints the exit status; leaves ghgout and ghgerr.
+  ( cd "$TMP/ghg-cwd" && env -i PATH=/usr/bin:/bin HOME="${GHG_HOME:-$TMP/ghg-home}" ${GHG_ENV:-} \
+      "$GHG_PY" -I "${1:-$GHG_HOOK}/gh_guard.py" <"$TMP/ghg-in" >"$TMP/ghgout" 2>"$TMP/ghgerr"
+    printf '%s' "$?" )
+}
+ghg_fake() {  # $1 = name, then the lines of a gh_guard_lib.py beside a copy of the entry script
+  ghg_f="$TMP/ghg-fake-$1"; mkdir -p "$ghg_f"; cp "$GHG_HOOK/gh_guard.py" "$ghg_f/"; shift
+  printf '%s\n' "$@" > "$ghg_f/gh_guard_lib.py"; echo "$ghg_f"
+}
+ghg_blocked() {  # $1 = the exit status; then the words stderr must hold. Prints ok or what is wrong.
+  ghg_w=ok
+  [ "$1" = 2 ] || ghg_w="exit=$1"; shift
+  [ -s "$TMP/ghgout" ] && ghg_w="$ghg_w+stdout"
+  grep -q '^gate-sdd gh guard: blocked\. ' "$TMP/ghgerr" || ghg_w="$ghg_w+no-head"
+  for ghg_s in "$@"; do grep -Fq -e "$ghg_s" "$TMP/ghgerr" || ghg_w="$ghg_w+missing:$ghg_s"; done
+  grep -q 'Zq_Exact' "$TMP/ghgout" "$TMP/ghgerr" && ghg_w="$ghg_w+holds-the-text"
+  echo "$ghg_w"
+}
+
+# 448. #361 AC1, AC3, AC4 — the protocol. A command without a gh word passes, with nothing on
+#      stdout or stderr, and with no pattern file to load; every other way out of the hook that
+#      is not the module's own pass is a block, and the block never holds the module's message.
+if [ -z "$GHG_PY" ]; then
+  note_skip "gh-guard/protocol" "no python3 on PATH"
+else
+  ghg_input 'ls -la && git status'
+  out=$(GHG_HOME="$TMP/ghg-bare-home" ghg_run)
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && [ ! -s "$TMP/ghgerr" ] && p0=ok || p0="exit=$out"
+  ghg_input 'ls' mcp__terminal__run_in_terminal
+  out=$(GHG_HOME="$TMP/ghg-bare-home" ghg_run)
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && p0="$p0 ok" || p0="$p0 terminal-exit=$out"
+
+  # Input that is not a PreToolUse event with a command in it.
+  p1=""
+  for ghg_x in 'not json' '[]' '{"tool_input":{}}' '{"tool_input":{"command":7}}' '{"tool_input":"ls"}'; do
+    printf '%s' "$ghg_x" > "$TMP/ghg-in"; out=$(ghg_run)
+    p1="$p1 $(ghg_blocked "$out" 'could not read its input')"
+  done
+  printf '\377\376' > "$TMP/ghg-in"; out=$(ghg_run); p1="$p1 $(ghg_blocked "$out" 'could not read its input')"
+
+  # An argument the hook does not take.
+  ghg_input 'ls'; out=$( ( cd "$TMP/ghg-cwd" && env -i PATH=/usr/bin:/bin HOME="$TMP/ghg-home" \
+    "$GHG_PY" -I "$GHG_HOOK/gh_guard.py" --surprise <"$TMP/ghg-in" >"$TMP/ghgout" 2>"$TMP/ghgerr"; printf '%s' "$?" ) )
+  p2=$(ghg_blocked "$out" 'an argument it does not take')
+
+  # The module's own failures, by a module that stands in for it.
+  ghg_input 'ls'
+  p3=""
+  for ghg_x in "raise RuntimeError('Zq_Exact')|RuntimeError" "raise SystemExit(1)|SystemExit" \
+               "raise SystemExit(0)|SystemExit" "raise SystemExit('Zq_Exact')|SystemExit" \
+               "raise KeyboardInterrupt|KeyboardInterrupt"; do
+    ghg_f=$(ghg_fake crash 'def run(argv, data):' "    ${ghg_x%|*}")
+    out=$(ghg_run "$ghg_f"); p3="$p3 $(ghg_blocked "$out" "failed with ${ghg_x#*|} before it could decide")"
+  done
+  ghg_f=$(ghg_fake import-crash "raise ValueError('Zq_Exact')")
+  out=$(ghg_run "$ghg_f"); p3="$p3 $(ghg_blocked "$out" 'could not start (ValueError)')"
+
+  # What the module returns, when it is not a decision.
+  p4=""
+  for ghg_x in '(1, "", "")' '(0, "Zq_Exact", "")' '(0, "{\"decision\": \"approve\"}", "")' \
+               '(True, "", "")' '(0, "", None)' 'None' '(2, "", "")'; do
+    ghg_f=$(ghg_fake returns 'def run(argv, data):' "    return $ghg_x")
+    out=$(ghg_run "$ghg_f"); p4="$p4 $(ghg_blocked "$out")"
+  done
+  # A stray print is discarded, and a well-formed warning passes as the one thing on stdout.
+  ghg_f=$(ghg_fake prints 'def run(argv, data):' "    print('Zq_Exact')" '    return (0, "", "")')
+  out=$(ghg_run "$ghg_f")
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && p5=ok || p5="print-exit=$out"
+  ghg_f=$(ghg_fake warns 'def run(argv, data):' '    return (0, "{\"systemMessage\": \"a warning\"}", "")')
+  out=$(ghg_run "$ghg_f")
+  [ "$out" = 0 ] && [ "$(cat "$TMP/ghgout")" = '{"systemMessage": "a warning"}' ] && p5="$p5 ok" || p5="$p5 warn-exit=$out"
+
+  # A hook that cannot start blocks every command, and names why.
+  mkdir -p "$TMP/ghg-no-lib"; cp "$GHG_HOOK/gh_guard.py" "$TMP/ghg-no-lib/"
+  out=$(ghg_run "$TMP/ghg-no-lib"); p6=$(ghg_blocked "$out" 'could not start (ModuleNotFoundError): the module gh_guard_lib could not be imported')
+
+  # -I: a project's PYTHONPATH reaches the hook (measured), and a module in it named like a
+  # standard one does not run.
+  mkdir -p "$TMP/ghg-pythonpath"; printf 'raise SystemExit(0)\n' > "$TMP/ghg-pythonpath/json.py"
+  cp "$TMP/ghg-pythonpath/json.py" "$TMP/ghg-pythonpath/re.py"
+  ghg_input 'echo ${:-gh} issue list'
+  out=$(GHG_ENV="PYTHONPATH=$TMP/ghg-pythonpath" ghg_run); p7=$(ghg_blocked "$out")
+  printf '%s' 'not json' > "$TMP/ghg-in"
+  out=$(GHG_ENV="PYTHONPATH=$TMP/ghg-pythonpath" ghg_run); p7="$p7 $(ghg_blocked "$out" 'could not read its input')"
+
+  [ "$p0" = "ok ok" ] && [ "$p1" = " ok ok ok ok ok ok" ] && [ "$p2" = ok ] && [ "$p3" = " ok ok ok ok ok ok" ] \
+    && [ "$p4" = " ok ok ok ok ok ok ok" ] && [ "$p5" = "ok ok" ] && [ "$p6" = ok ] && [ "$p7" = "ok ok" ] \
+    && report "the gh guard passes a command without gh in silence, and blocks every other way out that is not a decision" ok \
+    || report "the gh guard passes a command without gh in silence, and blocks every other way out that is not a decision" no \
+       "no-gh=$p0 input=$p1 argument=$p2 crash=$p3 returns=$p4 stdout=$p5 no-module=$p6 pythonpath=$p7"
+fi
+
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
 # #145. check-version-bump.py must include rules/ in SHIPPED so any change
