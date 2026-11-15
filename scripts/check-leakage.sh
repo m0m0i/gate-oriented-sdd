@@ -234,7 +234,14 @@ if [ "$MODE" = text ] || [ "$MODE" = refs ]; then
     *) what="ref number(s) in the list"; unit="ref name(s)"; none="the list held no ref name" ;;
   esac
   [ ! -t 0 ] || input_fault "standard input is a terminal and --$MODE reads what to scan from it"
-  cat > "$TIERS/in.lines" 2>/dev/null || input_fault "standard input could not be read"
+  cat > "$TIERS/in.read" 2>/dev/null || input_fault "standard input could not be read"
+  # A branch or tag is scanned as its name: with `refs/heads/` or `refs/tags/` left on, an
+  # expression anchored at the start matches none. Any other ref is scanned whole.
+  case "$MODE" in
+    refs) LC_ALL=C sed -e 's|^refs/heads/||' -e 's|^refs/tags/||' "$TIERS/in.read" > "$TIERS/in.lines" ;;
+    *) cat "$TIERS/in.read" > "$TIERS/in.lines" ;;
+  esac
+  [ -f "$TIERS/in.lines" ] || input_fault "what was read could not be written to the temporary directory"
   scan_lines "$TIERS/in.lines" "$what"
   closing
   [ "$fail" -eq 0 ] || exit 1
@@ -358,7 +365,9 @@ if [ "$MODE" = commits ]; then
     && g log --stdin $LOG --format= --name-only $DIFF < "$TIERS/in.ids" > "$TIERS/in.paths" 2>/dev/null \
     && g log --stdin $LOG --format= -p -U0 --text $DIFF < "$TIERS/in.ids" > "$TIERS/in.patch" 2>/dev/null
   } || input_fault "git could not read the commits it was given"
-  LC_ALL=C grep -a '^+' "$TIERS/in.patch" > "$TIERS/in.added"
+  # An added line is scanned as the line it is: with the patch's `+` left on, an expression
+  # anchored at a line's start matches none. A `+++ b/<path>` header keeps two of its three.
+  LC_ALL=C sed -n 's/^+//p' "$TIERS/in.patch" > "$TIERS/in.added"
   [ -f "$TIERS/in.added" ] || input_fault "the added lines of the commits could not be written to the temporary directory"
   ! grep -q '^"' "$TIERS/in.paths" \
     || input_fault "git quotes a path of these commits, which holds a quote, a backslash or a control character and cannot be read by name"
@@ -390,8 +399,10 @@ EOF
     # line that only looks like an id line can misplace a hit, never clear one: the verdict
     # is already made, and a tier this read places nowhere is reported against the set.
     # shellcheck disable=SC2086
-    g log --stdin $LOG --format='@@@ %H%n%B' -p -U0 --text $DIFF < "$TIERS/in.ids" > "$TIERS/in.marked" 2>/dev/null \
-      || : > "$TIERS/in.marked"
+    g log --stdin $LOG --format='@@@ %H%n%B' -p -U0 --text $DIFF < "$TIERS/in.ids" > "$TIERS/in.marked.patch" 2>/dev/null \
+      || : > "$TIERS/in.marked.patch"
+    # Without the `+`, as the first read took the added lines. Line numbers are unchanged.
+    LC_ALL=C sed 's/^+//' "$TIERS/in.marked.patch" > "$TIERS/in.marked"
     : > "$TIERS/in.hitlines"
     while IFS= read -r tier; do
       [ -n "$tier" ] || continue

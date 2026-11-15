@@ -4,10 +4,11 @@
 # $2 is the URL git is pushing to, and standard input holds one line for each ref:
 # `<local ref> <local id> <remote ref> <remote id>`. Three things are scanned: the names being
 # published; the name and the message of every annotated tag pushed, and a blob a tag points
-# at; and every commit the destination does not hold. What it holds is what `git ls-remote` on that URL lists,
-# never the remote-tracking refs: those are what this clone remembers, and they hide commits
-# when a remote's push URL differs from its fetch URL or its history was rewritten since the
-# last fetch. A deletion publishes nothing. The guard is the one beside this script.
+# at; and every commit the destination does not hold. What it holds is what `git ls-remote` on
+# that URL lists, never the remote-tracking refs: those are what this clone remembers, and
+# they hide commits when a remote's push URL differs from its fetch URL or its history was
+# rewritten since the last fetch. A deletion publishes nothing. The guard is the one beside
+# this script.
 guard="$(dirname "$0")/../check-leakage.sh"
 url=${2-}
 

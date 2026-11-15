@@ -12412,7 +12412,20 @@ out=$(printf '%s\n' "$lk_line" | ( PATH="$lk_s:$PATH"; export PATH; lk_pre_push 
 lk_s=$(lk_shim push-no-write "mkdir -p '$TMP/lkg-z-work' && ln -s '$TMP/lkg-not-made/file' '$TMP/lkg-z-work/names' || exit 1" \
   "printf '%s\\n' '$TMP/lkg-z-work'")
 out=$(printf '%s\n' "$lk_line" | ( PATH="$lk_s:$PATH"; export PATH; lk_pre_push "$lk_d" ))
-[ "$out" != 0 ] && z11=ok || z11="exit=$out"
+[ "$out" != 0 ] && grep -q "the hook's temporary directory could not be written" "$TMP/lkerr" && z11=ok || z11="exit=$out"
+
+# An expression anchored at a line's start finds a line a commit adds, as it finds the same
+# line staged: the patch's own `+` is not part of the line. By --commits, and by a push.
+r=$(leak_repo lkg-z-anchored); printf 'clean\nZq_Start of a line\n' > "$r/a.md"; lk_stage "$r" a.md
+out=$(run_leak "$r" "$LKG_PAT2" "" "" --staged); z12=$(lk_report 1 'LEAK [fail] a.md line(s): 2')
+lk_ci "$r" 'adds an anchored line'
+out=$(run_leak "$r" "$LKG_PAT2" "" "" --commits HEAD --not HEAD~1)
+z12="$z12 $(lk_report 1 "LEAK [fail] commit $(lk_id "$r"), a.md line(s): 2")"
+printf 'clean\nZq_Start of a line\n' > "$lk_p/anchored.md"; out=$(lk_git_in "$lk_p" add anchored.md)
+out=$(lk_git_in "$lk_p" commit -q --no-verify -m 'adds an anchored line')
+out=$(LK_PAT="$LKG_PAT2" lk_git_in "$lk_p" push -q origin HEAD:refs/heads/anchored)
+[ "$out" != 0 ] && grep -Fxq -e "LEAK [fail] commit $(lk_id "$lk_p"), anchored.md line(s): 2" "$TMP/lkerr" \
+  && [ -z "$(lk_remote_main "$lk_d" refs/heads/anchored)" ] && z12="$z12 ok" || z12="$z12 push-exit=$out"
 
 # CI: a title or body with CRLF line ends is scanned as its lines, so an expression that ends
 # in `$` still finds the end of one.
@@ -12420,10 +12433,16 @@ r=$(leak_repo lkg-z-crlf); printf 'one\n' > "$r/a.md"; lk_ci "$r" 'a clean commi
 out=$(lk_pr "$r" false "$(base64 < "$LKG_PAT2" | tr -d '\n')" HEAD~1 a-branch 'a title' '"a body\r\nthat ends in Zq_End\r\nand goes on"')
 z9=$(lk_report 1 'LEAK [fail] input line(s): 3')
 
-[ "$z0 $z1 $z2 $z3 $z4 $z5 $z6 $z7 $z8 $z9 $z10 $z11" = "ok ok ok ok ok ok ok ok ok ok ok ok" ] \
+# And a branch or tag name is scanned as the name: `refs/heads/` and `refs/tags/` are where it
+# is kept, so an expression anchored at the start finds a name that starts with it.
+printf 'refs/heads/main\nrefs/heads/Zq_Start-branch\nrefs/tags/Zq_Start-tag\nrefs/notes/Zq_Start\n' > "$TMP/lkg-in"
+out=$(LK_IN="$TMP/lkg-in" run_leak "$r" "$LKG_PAT2" "" "" --refs)
+z13=$(lk_report 1 'LEAK [fail] ref number(s) in the list: 2 3')
+
+[ "$z0 $z1 $z2 $z3 $z4 $z5 $z6 $z7 $z8 $z9 $z10 $z11 $z13" = "ok ok ok ok ok ok ok ok ok ok ok ok ok" ] && [ "$z12" = "ok ok ok" ] \
   && report "the leak checks refuse what the first review found uncased, and say when the hooks were not checked" ok \
   || report "the leak checks refuse what the first review found uncased, and say when the hooks were not checked" no \
-     "staged-git-fails=$z0 quoted-path-in-commits=$z1 path-after-revisions=$z2 empty-hooks-path=$z3 shim-only=$z4 not-checked-said=$z5 common-dir=$z6 blob-seam=$z7 tag-name=$z8 crlf=$z9 push-no-directory=$z10 push-unwritable=$z11"
+     "staged-git-fails=$z0 quoted-path-in-commits=$z1 path-after-revisions=$z2 empty-hooks-path=$z3 shim-only=$z4 not-checked-said=$z5 common-dir=$z6 blob-seam=$z7 tag-name=$z8 crlf=$z9 push-no-directory=$z10 push-unwritable=$z11 anchored-added-line=$z12 anchored-ref-name=$z13"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
