@@ -50,7 +50,7 @@ done
 # Only the working-tree scan reads the checkout this script sits in, so it drops what git sets
 # for a hook, which names the repository the hook ran in (#360).
 if [ "$MODE" = tree ]; then
-  unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX
+  unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX GIT_COMMON_DIR
   ROOT=$(cd "$(dirname "$0")/.." && pwd)
   cd "$ROOT" || exit 1
 fi
@@ -263,6 +263,7 @@ scan_blobs() {
     case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
     case "$tier" in warn*) kind=WARNING ;; *) kind=LEAK ;; esac
     # shellcheck disable=SC2086  # $fold is one option or nothing
+    [ -d "$1" ] || input_fault "the temporary directory lost the content it was to scan"
     hits=$(
       cd "$1" || exit
       { ls | xargs grep -lE $fold -f "$TIERS/$tier" -- 2>/dev/null
@@ -341,7 +342,8 @@ if [ "$MODE" = commits ]; then
     || input_fault "this is not a git repository and --commits reads its history"
   [ "$(g rev-parse --is-shallow-repository 2>/dev/null)" = false ] \
     || input_fault "this repository is shallow, and commits it does not hold cannot be scanned"
-  g rev-list "$@" > "$TIERS/in.ids" 2>/dev/null \
+  # `--` ends the revisions: a word after them is not a path that limits the commits read.
+  g rev-list "$@" -- > "$TIERS/in.ids" 2>/dev/null \
     || input_fault "git could not resolve the revisions it was given"
   count=$(grep -c '' "$TIERS/in.ids")
   # With no revision on its standard input, git log reads HEAD.
@@ -357,6 +359,7 @@ if [ "$MODE" = commits ]; then
     && g log --stdin $LOG --format= -p -U0 --text $DIFF < "$TIERS/in.ids" > "$TIERS/in.patch" 2>/dev/null
   } || input_fault "git could not read the commits it was given"
   LC_ALL=C grep -a '^+' "$TIERS/in.patch" > "$TIERS/in.added"
+  [ -f "$TIERS/in.added" ] || input_fault "the added lines of the commits could not be written to the temporary directory"
   ! grep -q '^"' "$TIERS/in.paths" \
     || input_fault "git quotes a path of these commits, which holds a quote, a backslash or a control character and cannot be read by name"
 
@@ -478,7 +481,8 @@ if [ "$IN_GIT" -eq 1 ] && [ "$HOOK_CHECK" -eq 1 ]; then
   [ -f scripts/git-hooks/shim.sh ] || hooks_fault "this checkout holds no scripts/git-hooks/shim.sh to compare them with"
   want=$(shim_version scripts/git-hooks/shim.sh)
   [ -n "$want" ] || hooks_fault "scripts/git-hooks/shim.sh holds no version line"
-  [ -z "$(git config --get core.hooksPath 2>/dev/null)" ] \
+  # The key, not its value: set to nothing it still sends git elsewhere.
+  ! git config --get core.hooksPath >/dev/null 2>&1 \
     || hooks_fault "core.hooksPath is set, so git runs none of them"
   common=$(git rev-parse --git-common-dir 2>/dev/null) || hooks_fault "git could not name the clone's common directory"
   checked=0
@@ -496,6 +500,10 @@ if [ "$IN_GIT" -eq 1 ] && [ "$HOOK_CHECK" -eq 1 ]; then
       || hooks_fault "$name differs from scripts/git-hooks/shim.sh at the same version"
   done
   [ "$checked" -gt 0 ] || hooks_fault "this checkout holds no hook script under scripts/git-hooks"
+  hooks=""
+else
+  # A run that did not look at the hooks says so, as one without the private patterns does.
+  hooks=", hooks not checked"
 fi
 
 files() {
@@ -732,8 +740,8 @@ closing
 note=""
 [ "$absent" -gt 0 ] && note=", $absent index entr(ies) not in the working tree"
 if [ "$PUBLIC_ONLY" -eq 1 ]; then
-  echo "check-leakage: public tier clean — $scanned file(s) scanned$note, private patterns not run"
+  echo "check-leakage: public tier clean — $scanned file(s) scanned$note, private patterns not run$hooks"
 else
-  echo "check-leakage: clean — $scanned file(s) scanned$note, private patterns loaded"
+  echo "check-leakage: clean — $scanned file(s) scanned$note, private patterns loaded$hooks"
 fi
 exit 0

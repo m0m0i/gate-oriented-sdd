@@ -37,12 +37,16 @@ while read -r local_ref local_id remote_ref remote_id; do
       commit) printf '%s\n' "$id" >> "$work/commits"; break ;;
       tag)
         g cat-file tag "$id" > "$work/tag" 2>/dev/null || refuse "a tag being pushed could not be read"
-        # The header ends at the first empty line, and holds the tagger, who is not scanned.
+        # The header ends at the first empty line. Its `tag` line is the name the object
+        # carries, whatever ref it is pushed under; its tagger is not scanned.
+        sed -n '1,/^$/s/^tag //p' "$work/tag" >> "$work/text"
         sed '1,/^$/d' "$work/tag" >> "$work/text"
         id=$(sed -n 's/^object //p' "$work/tag" | sed -n 1p)
         [ -n "$id" ] || refuse "a tag being pushed names no object" ;;
       blob)
         g cat-file blob "$id" >> "$work/text" 2>/dev/null || refuse "a blob a tag points at could not be read"
+        # A blob need not end in a newline, and the next text must start a line of its own.
+        echo >> "$work/text"
         break ;;
       *) refuse "a tag being pushed points at a tree, which the guard has no way to scan" ;;
     esac

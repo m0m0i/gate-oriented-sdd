@@ -24,7 +24,7 @@ version() {  # $1 = a shim. Prints its number, or nothing when it is not a shim.
 }
 
 common=$(git rev-parse --git-common-dir 2>/dev/null) || refuse "this is not a git repository."
-[ -z "$(git config --get core.hooksPath 2>/dev/null)" ] \
+! git config --get core.hooksPath >/dev/null 2>&1 \
   || refuse "core.hooksPath is set, so git would not run a hook installed here. Unset it: git config --unset core.hooksPath"
 
 new=$(version scripts/git-hooks/shim.sh)

@@ -91,7 +91,7 @@ jobs:
           with open(sys.argv[2] + "/ref", "w", encoding="utf-8") as handle:
               handle.write("refs/heads/" + pull["head"]["ref"] + "\n")
           with open(sys.argv[2] + "/text", "w", encoding="utf-8") as handle:
-              handle.write(pull["title"] + "\n" + (pull.get("body") or ""))
+              handle.write((pull["title"] + "\n" + (pull.get("body") or "")).replace("\r\n", "\n").replace("\r", "\n"))
           ' "${GITHUB_EVENT_PATH-}" "$work" 2>/dev/null; then
                 echo "::error title=Leakage guard::The event's branch name, title and body could not be read from the runner's event file, so they were not scanned."
                 exit 1
