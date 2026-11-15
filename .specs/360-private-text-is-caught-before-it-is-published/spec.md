@@ -89,8 +89,8 @@ Every claim below marked measured was run in a scratch repository on git 2.54.0 
 - [x] T7: failing cases for the absent-hooks refusal, two worktrees on different shim versions, and the exemption's pin; `leak_repo` installs the shims — then the check and `--no-hook-check` on CI's working-tree runs, in one commit, with the install in the maintainer's clone on their go before the turn ends (AC7, AC8)
 - [x] T8: failing cases for the CI step's commit set, forced push, branch-name and title-and-body scans, and the fork's public tier — then the step and the trigger (AC9)
 - [x] T9: measure AC10 and the suite before and after, raising `- Validator budget:` in the same commit if the suite passes 300 s; `CONTRIBUTING.md` with its pinned strings in case 429, ADR-12, M-1's row and the `scripts/` row (AC10, AC11)
-- [ ] T10: `docs/BACKLOG.md` discharges #355 from row 1, shipped as #358, and places #360 and #361 as the open question below is answered
+- [x] T10: `docs/BACKLOG.md` discharges #355 from row 1, shipped as #358, and places #360 and #361 as the open question below is answered
 
 ### Open questions
-- **Where #360 and #361 sit in the backlog.** Row 1 holds only #355, which has shipped, and is the Antigravity row by the maintainer's decision. The refinement that places the refactoring series, one row per phase, has not run. Until it does, `check-backlog-tracker.py` reports both issues as absent; that check is advisory.
+- **Where #360 and #361 sit in the backlog.** Answered 2026-11-15: row 1, which #355 left empty, passes to them. The refinement that places the rest of the refactoring series, one row per phase, has not run.
 - **Whether GitHub still serves a force-pushed `before` commit to a fetch by id.** Not measured. The Design does not depend on it: a forced push scans the whole history.
