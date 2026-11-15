@@ -3,7 +3,15 @@ name: CI
 on:
   push:
     branches: [main]
+  # `edited` beside the default three, so a changed title or body is scanned again by the
+  # leakage step (#360).
   pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+# A newer run of the same pull request replaces an older one. A push to main is its own group.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
 
 jobs:
   guard:
@@ -33,27 +41,76 @@ jobs:
       # can of a malformed value and exits 0. A pull request from a fork is given no secrets,
       # so it runs the public tier alone, which the guard says is not a pass. Both values reach
       # the script through `env:`, never by interpolation into `run:`, and only the exact word
-      # `true` is a fork (#357).
+      # `true` is a fork (#357). A runner has no clone to commit from, so the working-tree run
+      # skips the guard's check that the clone's hooks are installed (#360).
+      #
+      # The step then scans what the event publishes, as the backstop for a clone without the
+      # hooks: a pull request's commits, branch name, title and body, and a push's commits. The
+      # commit ids reach it through `env:`. The branch name, title and body do not, because the
+      # log prints a step's `env:` block: they are read from the runner's event file. A fork
+      # gets the public tier over the same inputs. The title and body are written with a CR,
+      # alone or before a newline, as a line end: the guard reads lines, and no expression
+      # matches across one (#360).
       - name: Leakage guard
         env:
           LEAKAGE_PATTERNS: ${{ secrets.LEAKAGE_PATTERNS }}
           FROM_FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+          FORCED: ${{ github.event.forced }}
         run: |
+          work=$(mktemp -d "${RUNNER_TEMP:-/tmp}/leakage-guard.XXXXXX")
+          trap 'rm -rf "$work"' EXIT
           if [ "${FROM_FORK-}" = true ]; then
-            exec ./scripts/check-leakage.sh --public-only
+            tier=--public-only
+          else
+            tier=
+            if [ -z "${LEAKAGE_PATTERNS-}" ]; then
+              echo "::error title=Leakage guard::The repository secret LEAKAGE_PATTERNS is unset or empty, so the private patterns cannot run."
+              exit 1
+            fi
+            if ! printf '%s' "$LEAKAGE_PATTERNS" | base64 --decode > "$work/patterns" 2>/dev/null \
+              || [ "$(base64 < "$work/patterns" | tr -d '\n')" != "$LEAKAGE_PATTERNS" ]; then
+              echo "::error title=Leakage guard::The repository secret LEAKAGE_PATTERNS does not decode as the pattern file base64-encoded on one line, so the private patterns cannot run."
+              exit 1
+            fi
+            GATE_SDD_LEAKAGE_PATTERNS=$work/patterns
+            export GATE_SDD_LEAKAGE_PATTERNS
           fi
-          if [ -z "${LEAKAGE_PATTERNS-}" ]; then
-            echo "::error title=Leakage guard::The repository secret LEAKAGE_PATTERNS is unset or empty, so the private patterns cannot run."
-            exit 1
-          fi
-          patterns=$(mktemp "${RUNNER_TEMP:-/tmp}/leakage-patterns.XXXXXX")
-          trap 'rm -f "$patterns"' EXIT
-          if ! printf '%s' "$LEAKAGE_PATTERNS" | base64 --decode > "$patterns" 2>/dev/null \
-            || [ "$(base64 < "$patterns" | tr -d '\n')" != "$LEAKAGE_PATTERNS" ]; then
-            echo "::error title=Leakage guard::The repository secret LEAKAGE_PATTERNS does not decode as the pattern file base64-encoded on one line, so the private patterns cannot run."
-            exit 1
-          fi
-          GATE_SDD_LEAKAGE_PATTERNS=$patterns ./scripts/check-leakage.sh
+
+          status=0
+          ./scripts/check-leakage.sh $tier --no-hook-check || status=1
+          case "${EVENT_NAME-}" in
+            pull_request)
+              ./scripts/check-leakage.sh $tier --commits "$HEAD_SHA" --not "$BASE_SHA" || status=1
+              if ! python3 -c '
+          import json, sys
+          with open(sys.argv[1], encoding="utf-8") as handle:
+              pull = json.load(handle)["pull_request"]
+          with open(sys.argv[2] + "/ref", "w", encoding="utf-8") as handle:
+              handle.write("refs/heads/" + pull["head"]["ref"] + "\n")
+          with open(sys.argv[2] + "/text", "w", encoding="utf-8") as handle:
+              handle.write((pull["title"] + "\n" + (pull.get("body") or "")).replace("\r\n", "\n").replace("\r", "\n"))
+          ' "${GITHUB_EVENT_PATH-}" "$work" 2>/dev/null; then
+                echo "::error title=Leakage guard::The event's branch name, title and body could not be read from the runner's event file, so they were not scanned."
+                exit 1
+              fi
+              ./scripts/check-leakage.sh $tier --refs < "$work/ref" || status=1
+              ./scripts/check-leakage.sh $tier --text < "$work/text" || status=1 ;;
+            push)
+              if [ "${FORCED-}" = true ] || ! git cat-file -e "${BEFORE-}^{commit}" 2>/dev/null; then
+                ./scripts/check-leakage.sh $tier --commits "$AFTER" || status=1
+              else
+                ./scripts/check-leakage.sh $tier --commits "$AFTER" --not "$BEFORE" || status=1
+              fi ;;
+            *)
+              echo "::error title=Leakage guard::This step has no commit set for the event it ran on, so what the event publishes was not scanned."
+              exit 1 ;;
+          esac
+          exit "$status"
 
       - name: Both plugin manifests agree
         run: ./scripts/check-manifests.py

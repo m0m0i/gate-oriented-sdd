@@ -44,7 +44,7 @@ The rulebook is the source for every Judgment row and holds each rule's rational
 
 | id | Rule | Tier | Severity | Enforced by |
 | :-- | :-- | :-- | :-- | :-- |
-| M-1 | No private context in the tree | Mechanical | — | `check-leakage.sh` |
+| M-1 | No private context in the tree, or in what a commit or a push publishes | Mechanical | — | `check-leakage.sh`: on the tree at turn end, from the git hooks `scripts/install-git-hooks.sh` installs, and in CI's leakage step (#360) |
 | M-2 | Both manifests agree, the hook shapes are right, each gate's `Stop` timeout in the plugin's hooks file, the Antigravity template and this repository's `.claude/settings.json` is the ceiling `hooks/gate-lib.sh` states, the plugin root holds no `agents/` or `CLAUDE.md`, and each shipped reviewer's frontmatter names it | Mechanical | — | `check-manifests.py`, also after every Write/Edit via `PostToolUse` |
 | M-3 | A ` ```markdown ` fence does not hand-wrap what it quotes | Mechanical | — | `check-markdown-fences.py` |
 | M-4 | The receipt schema agrees across its copies | Mechanical | — | `check-receipt-schema.py` |

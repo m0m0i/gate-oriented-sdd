@@ -8,24 +8,52 @@
 # path in a doc comment.
 #
 # It runs in CI and is safe to run locally: ./scripts/check-leakage.sh
-# Exit 0 = clean. Exit 1 = something private is in the tree, or the guard could not look.
+# Exit 0 = clean. Exit 1 = something private is in what it was given, or the guard could not look.
 set -u
 
-# --public-only is the one argument: the public tier alone, for a pull request from a fork, which
-# has no private patterns to be given. Any other argument is refused, and is not printed (#357).
+# With no mode it scans the working tree. --text scans standard input instead, --refs a list of
+# ref names on it, --staged what the next commit changes, and --commits the commits the
+# revisions after it name: revisions, --not and --all, as git rev-list takes them (#360).
+# --public-only runs the public tier alone, for a pull request from a fork, which has no private
+# patterns to be given. Any other argument is refused, and is not printed (#357).
+# --no-hook-check skips the working-tree scan's check that this clone's hooks are installed,
+# for CI, which has no clone to commit from (#360).
 PUBLIC_ONLY=0
-case "$#:${1-}" in
-  0:) ;;
-  1:--public-only) PUBLIC_ONLY=1 ;;
-  *)
-    echo "check-leakage FAILED — it was given an argument it does not take, so it looked at nothing." >&2
-    echo "  The only argument is --public-only, which runs the public tier alone and is not a" >&2
-    echo "  pass for private context. The argument is withheld: this report can reach a public log." >&2
-    exit 1 ;;
-esac
+HOOK_CHECK=1
+MODE=tree
+refuse_arguments() {
+  echo "check-leakage FAILED — it was given an argument it does not take, so it looked at nothing." >&2
+  echo "  It takes --public-only, which runs the public tier alone and is not a pass for private" >&2
+  echo "  context, --no-hook-check, which CI gives it because it has no clone to commit from, and" >&2
+  echo "  one mode at most: --text, --refs, --staged, or --commits and the revisions" >&2
+  echo "  to scan. The argument is withheld: this report can reach a public log." >&2
+  exit 1
+}
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --public-only) [ "$PUBLIC_ONLY" -eq 0 ] || refuse_arguments; PUBLIC_ONLY=1 ;;
+    --no-hook-check) [ "$HOOK_CHECK" -eq 1 ] || refuse_arguments; HOOK_CHECK=0 ;;
+    --text|--refs|--staged) [ "$MODE" = tree ] || refuse_arguments; MODE=${1#--} ;;
+    --commits)
+      [ "$MODE" = tree ] || refuse_arguments
+      MODE=commits; shift
+      [ "$#" -gt 0 ] || refuse_arguments
+      for revision in "$@"; do
+        case "$revision" in --not|--all) ;; ''|-*) refuse_arguments ;; esac
+      done
+      break ;;
+    *) refuse_arguments ;;
+  esac
+  shift
+done
 
-ROOT=$(cd "$(dirname "$0")/.." && pwd)
-cd "$ROOT" || exit 1
+# Only the working-tree scan reads the checkout this script sits in, so it drops what git sets
+# for a hook, which names the repository the hook ran in (#360).
+if [ "$MODE" = tree ]; then
+  unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_PREFIX GIT_COMMON_DIR
+  ROOT=$(cd "$(dirname "$0")/.." && pwd)
+  cd "$ROOT" || exit 1
+fi
 
 # Nothing is excluded, this script included: an allowlist here is how a guard rots, and its own
 # text is scanned so that a private word written back into it is caught (#357).
@@ -144,10 +172,350 @@ fail ignore-case
 public
 warn ignore-case'
 
+fail=0
+warned=0
+
+# What a clean run says of the private patterns, after what it scanned (#357).
+loaded() {
+  if [ "$PUBLIC_ONLY" -eq 1 ]; then printf 'private patterns not run'; else printf 'private patterns loaded'; fi
+}
+
+# A report that holds a LEAK or a WARNING ends with this, whichever exit it leaves by (#357).
+closing() {
+  [ "$fail" -ne 0 ] || [ "$warned" -ne 0 ] || return 0
+  echo "" >&2
+  if [ "$fail" -ne 0 ]; then
+    echo "Clean-room rule: do not scrub these in place. Scrubbing leaves the shape," >&2
+    echo "and the shape is where the private structure lives. Rewrite the file." >&2
+  else
+    echo "A warning does not fail the guard. Confirm that each one is a generic example." >&2
+  fi
+  echo "The matched text is withheld on purpose, because this report is public wherever CI" >&2
+  echo "prints it. Open the location to see what matched." >&2
+  [ -z "${named-}" ] \
+    || echo "A path number is the line of this command's output that holds the path: $LISTING" >&2
+}
+
+# An input the guard could not read is not an input it read and found clean (#360).
+input_fault() {  # $1 = the fault
+  echo "check-leakage FAILED — $1, so nothing was scanned." >&2
+  exit 1
+}
+
+# Tries every tier against a file of lines, as text in this locale and again as bytes, and
+# reports each tier that hits by the numbers of its lines. $1 = the file, $2 = what the numbers
+# count. Sets fail and warned, and leaves every number that hit in $hit_at (#360).
+scan_lines() {
+  hit_at=""
+  while IFS= read -r tier; do
+    [ -s "$TIERS/$tier" ] || continue
+    case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
+    case "$tier" in warn*) kind=WARNING ;; *) kind=LEAK ;; esac
+    # shellcheck disable=SC2086  # $fold is one option or nothing
+    at=$(
+      { grep -anE $fold -f "$TIERS/$tier" -- "$1" 2>/dev/null
+        LC_ALL=C grep -anE $fold -f "$TIERS/$tier" -- "$1" 2>/dev/null
+      } | LC_ALL=C sed -n 's/^\([0-9][0-9]*\):.*/\1/p' | LC_ALL=C sort -n -u | tr '\n' ' ')
+    at=${at% }
+    [ -n "$at" ] || continue
+    echo "$kind [$tier] $2: $at" >&2
+    hit_at="$hit_at $at"
+    case "$kind" in LEAK) fail=1 ;; *) warned=1 ;; esac
+  done <<EOF
+$TIER_ORDER
+EOF
+}
+
+# --text and --refs: standard input, whole. A terminal is refused: a run that waits on a
+# keyboard has scanned nothing. A ref name is the text, so --refs reports a position (#360).
+if [ "$MODE" = text ] || [ "$MODE" = refs ]; then
+  case "$MODE" in
+    text) what="input line(s)"; unit="line(s) of text"; none="the text held nothing" ;;
+    *) what="ref number(s) in the list"; unit="ref name(s)"; none="the list held no ref name" ;;
+  esac
+  [ ! -t 0 ] || input_fault "standard input is a terminal and --$MODE reads what to scan from it"
+  cat > "$TIERS/in.read" 2>/dev/null || input_fault "standard input could not be read"
+  # A branch or tag is scanned as its name: with `refs/heads/` or `refs/tags/` left on, an
+  # expression anchored at the start matches none. Any other ref is scanned whole.
+  case "$MODE" in
+    refs) LC_ALL=C sed -e 's|^refs/heads/||' -e 's|^refs/tags/||' "$TIERS/in.read" > "$TIERS/in.lines" ;;
+    *) cat "$TIERS/in.read" > "$TIERS/in.lines" ;;
+  esac
+  [ -f "$TIERS/in.lines" ] || input_fault "what was read could not be written to the temporary directory"
+  scan_lines "$TIERS/in.lines" "$what"
+  closing
+  [ "$fail" -eq 0 ] || exit 1
+  count=$(grep -c '' "$TIERS/in.lines")
+  if [ "$count" -eq 0 ]; then
+    echo "check-leakage: clean — $none, $(loaded)"
+  else
+    echo "check-leakage: clean — $count $unit scanned, $(loaded)"
+  fi
+  exit 0
+fi
+
+# Every git call of a mode goes through here, so nothing the caller's configuration holds
+# changes what is read: a replace ref shows another object, and a quoted path is not a path (#360).
+g() { git --no-replace-objects -c core.quotePath=false "$@"; }
+# What every diff of a mode is given: a colour, an external diff, a textconv filter and
+# diff.relative each change or drop the lines a scan reads. A deletion publishes nothing (#360).
+DIFF="--no-color --no-ext-diff --no-textconv --no-relative --no-renames --diff-filter=d"
+
+# Tries every tier against the files of a directory, which are named by number, and reports
+# each file that hits by its label and the numbers of its lines. $1 = the directory, $2 = a file
+# whose line N is the label of file N. Sets fail and warned (#360).
+scan_blobs() {
+  while IFS= read -r tier; do
+    [ -s "$TIERS/$tier" ] || continue
+    case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
+    case "$tier" in warn*) kind=WARNING ;; *) kind=LEAK ;; esac
+    [ -d "$1" ] || input_fault "the temporary directory lost the content it was to scan"
+    # shellcheck disable=SC2086  # $fold is one option or nothing
+    hits=$(
+      cd "$1" || exit
+      { ls | xargs grep -lE $fold -f "$TIERS/$tier" -- 2>/dev/null
+        ls | LC_ALL=C xargs grep -lE $fold -f "$TIERS/$tier" -- 2>/dev/null
+      } | LC_ALL=C sort -n -u | while IFS= read -r n; do
+        [ -n "$n" ] || continue
+        lines=$(
+          { grep -anE $fold -f "$TIERS/$tier" -- "$n" 2>/dev/null
+            LC_ALL=C grep -anE $fold -f "$TIERS/$tier" -- "$n" 2>/dev/null
+          } | LC_ALL=C sed -n 's/^\([0-9][0-9]*\):.*/\1/p' | LC_ALL=C sort -n -u | tr '\n' ' ')
+        printf '%s\n' "$kind [$tier] $(sed -n "${n}p" "$2") line(s): ${lines% }"
+      done
+    )
+    [ -n "$hits" ] || continue
+    printf '%s\n' "$hits" >&2
+    case "$kind" in LEAK) fail=1 ;; *) warned=1 ;; esac
+  done <<EOF
+$TIER_ORDER
+EOF
+}
+
+# --staged: each path the next commit adds or changes, and its content as the index holds it.
+# No git command feeds a pipe: each writes a file, and its status is read first (#360).
+if [ "$MODE" = staged ]; then
+  g rev-parse --git-dir >/dev/null 2>&1 \
+    || input_fault "this is not a git repository and --staged reads its index"
+  # shellcheck disable=SC2086  # $DIFF is a list of options
+  g diff --cached --raw --no-abbrev $DIFF > "$TIERS/in.raw" 2>/dev/null \
+    || input_fault "git could not list what is staged"
+  tab=$(printf '\t')
+  sed "s/^[^$tab]*$tab//" "$TIERS/in.raw" > "$TIERS/in.paths"
+  LISTING="git diff --cached --name-only --no-renames --diff-filter=d"
+
+  quoted=$(grep -n '^"' "$TIERS/in.paths" | sed 's/:.*//' | tr '\n' ' ')
+  [ -z "$quoted" ] || input_fault "git quotes staged path number(s) ${quoted% }, which hold a quote, a backslash or a control character and cannot be read by name. Rename them"
+
+  # A path that matches is the text, so a hit inside it is reported against its number.
+  scan_lines "$TIERS/in.paths" "staged path number(s) in the listing"
+  named=$hit_at
+
+  mkdir "$TIERS/in.blobs" || input_fault "the temporary directory could not hold the staged content"
+  empty=""
+  n=0
+  while IFS= read -r meta <&3 && IFS= read -r path <&4; do
+    n=$((n + 1))
+    case " $named " in
+      *" $n "*) printf 'staged path number %s in the listing,\n' "$n" ;;
+      *) printf '%s\n' "$path" ;;
+    esac >> "$TIERS/in.labels"
+    # $meta is `:<old mode> <new mode> <old id> <new id> <status>`.
+    set -f; set -- $meta; set +f
+    [ "$2" != 160000 ] || continue
+    g cat-file blob "$4" > "$TIERS/in.blobs/$n" 2>/dev/null && continue
+    # A path added with intent to add is listed with the empty blob, which no object holds.
+    [ -n "$empty" ] || empty=$(g hash-object -t blob /dev/null 2>/dev/null)
+    [ "$4" = "$empty" ] && { : > "$TIERS/in.blobs/$n"; continue; }
+    input_fault "the staged content of $(sed -n "${n}p" "$TIERS/in.labels" | sed 's/,$//') could not be read"
+  done 3< "$TIERS/in.raw" 4< "$TIERS/in.paths"
+
+  [ "$n" -eq 0 ] || scan_blobs "$TIERS/in.blobs" "$TIERS/in.labels"
+  closing
+  [ "$fail" -eq 0 ] || exit 1
+  if [ "$n" -eq 0 ]; then
+    echo "check-leakage: clean — nothing is staged, $(loaded)"
+  else
+    echo "check-leakage: clean — $n staged path(s) scanned, $(loaded)"
+  fi
+  exit 0
+fi
+
+# --commits: the verdict comes from three files over every commit at once: the messages, the
+# paths, and the added lines of the patches. Only when a tier hits are the commits that hold a
+# hit read again, one by one, for a location, and a hit that read cannot place still fails (#360).
+if [ "$MODE" = commits ]; then
+  g rev-parse --git-dir >/dev/null 2>&1 \
+    || input_fault "this is not a git repository and --commits reads its history"
+  [ "$(g rev-parse --is-shallow-repository 2>/dev/null)" = false ] \
+    || input_fault "this repository is shallow, and commits it does not hold cannot be scanned"
+  # `--` ends the revisions: a word after them is not a path that limits the commits read.
+  g rev-list "$@" -- > "$TIERS/in.ids" 2>/dev/null \
+    || input_fault "git could not resolve the revisions it was given"
+  count=$(grep -c '' "$TIERS/in.ids")
+  # With no revision on its standard input, git log reads HEAD.
+  if [ "$count" -eq 0 ]; then
+    echo "check-leakage: clean — the revisions name no commit, $(loaded)"
+    exit 0
+  fi
+
+  LOG="--no-walk --diff-merges=separate --root"
+  # shellcheck disable=SC2086  # $LOG and $DIFF are lists of options
+  { g log --no-walk --stdin --format=%B < "$TIERS/in.ids" > "$TIERS/in.messages" 2>/dev/null \
+    && g log --stdin $LOG --format= --name-only $DIFF < "$TIERS/in.ids" > "$TIERS/in.paths" 2>/dev/null \
+    && g log --stdin $LOG --format= -p -U0 --text $DIFF < "$TIERS/in.ids" > "$TIERS/in.patch" 2>/dev/null
+  } || input_fault "git could not read the commits it was given"
+  # An added line is scanned as the line it is: with the patch's `+` left on, an expression
+  # anchored at a line's start matches none. A `+++ b/<path>` header keeps two of its three.
+  LC_ALL=C sed -n 's/^+//p' "$TIERS/in.patch" > "$TIERS/in.added"
+  [ -f "$TIERS/in.added" ] || input_fault "the added lines of the commits could not be written to the temporary directory"
+  ! grep -q '^"' "$TIERS/in.paths" \
+    || input_fault "git quotes a path of these commits, which holds a quote, a backslash or a control character and cannot be read by name"
+
+  hit_tiers=""
+  while IFS= read -r tier; do
+    [ -s "$TIERS/$tier" ] || continue
+    case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
+    for part in messages paths added; do
+      # shellcheck disable=SC2086  # $fold is one option or nothing
+      if grep -aqE $fold -f "$TIERS/$tier" -- "$TIERS/in.$part" 2>/dev/null \
+        || LC_ALL=C grep -aqE $fold -f "$TIERS/$tier" -- "$TIERS/in.$part" 2>/dev/null; then
+        hit_tiers="$hit_tiers
+$tier"
+        break
+      fi
+    done
+  done <<EOF
+$TIER_ORDER
+EOF
+
+  if [ -n "$hit_tiers" ]; then
+    LISTING="git log --no-walk --format= --name-only --diff-merges=separate --root --no-renames --diff-filter=d <commit>"
+    tab=$(printf '\t')
+    any_named=""
+
+    # Which commits to read again: one more pass with each commit's id on a line of its own
+    # before its message and patch, and the commits whose lines a tier that hit matches. A
+    # line that only looks like an id line can misplace a hit, never clear one: the verdict
+    # is already made, and a tier this read places nowhere is reported against the set.
+    # shellcheck disable=SC2086
+    g log --stdin $LOG --format='@@@ %H%n%B' -p -U0 --text $DIFF < "$TIERS/in.ids" > "$TIERS/in.marked.patch" 2>/dev/null \
+      || : > "$TIERS/in.marked.patch"
+    # Without the `+`, as the first read took the added lines. Line numbers are unchanged.
+    LC_ALL=C sed 's/^+//' "$TIERS/in.marked.patch" > "$TIERS/in.marked"
+    : > "$TIERS/in.hitlines"
+    while IFS= read -r tier; do
+      [ -n "$tier" ] || continue
+      case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
+      # shellcheck disable=SC2086
+      { grep -anE $fold -f "$TIERS/$tier" -- "$TIERS/in.marked" 2>/dev/null
+        LC_ALL=C grep -anE $fold -f "$TIERS/$tier" -- "$TIERS/in.marked" 2>/dev/null
+      } | LC_ALL=C sed -n 's/^\([0-9][0-9]*\):.*/\1/p' >> "$TIERS/in.hitlines"
+    done <<EOF
+$hit_tiers
+EOF
+    LC_ALL=C awk '
+      NR == FNR { hit[$1] = 1; next }
+      /^@@@ [0-9a-f]+$/ { id = $2 }
+      (FNR in hit) && id != "" && !seen[id]++ { print id }
+    ' "$TIERS/in.hitlines" "$TIERS/in.marked" > "$TIERS/in.suspects"
+
+    {
+      while IFS= read -r id; do
+        short=$(printf '%s' "$id" | cut -c1-7)
+        if g log --no-walk --format=%B "$id" > "$TIERS/in.message" 2>/dev/null; then
+          scan_lines "$TIERS/in.message" "commit $short, message line(s)"
+        fi
+        # shellcheck disable=SC2086
+        g log $LOG --format= --raw --no-abbrev $DIFF "$id" > "$TIERS/in.raw" 2>/dev/null || continue
+        sed "s/^[^$tab]*$tab//" "$TIERS/in.raw" > "$TIERS/in.listing"
+        scan_lines "$TIERS/in.listing" "commit $short, path number(s) in its listing"
+        named=$hit_at
+        [ -z "$named" ] || any_named=1
+        rm -rf "$TIERS/in.blobs" "$TIERS/in.labels"
+        mkdir "$TIERS/in.blobs" || continue
+        n=0
+        while IFS= read -r meta <&3 && IFS= read -r path <&4; do
+          n=$((n + 1))
+          case " $named " in
+            *" $n "*) printf 'commit %s, path number %s in its listing,\n' "$short" "$n" ;;
+            *) printf 'commit %s, %s\n' "$short" "$path" ;;
+          esac >> "$TIERS/in.labels"
+          set -f; set -- $meta; set +f
+          [ "$2" != 160000 ] || continue
+          g cat-file blob "$4" > "$TIERS/in.blobs/$n" 2>/dev/null || rm -f "$TIERS/in.blobs/$n"
+        done 3< "$TIERS/in.raw" 4< "$TIERS/in.listing"
+        [ "$n" -eq 0 ] || scan_blobs "$TIERS/in.blobs" "$TIERS/in.labels"
+      done < "$TIERS/in.suspects"
+    } 2> "$TIERS/in.report"
+    named=$any_named
+
+    # A tier the first read found fails whatever the second read placed, and one it placed
+    # nowhere is reported against the set.
+    while IFS= read -r tier; do
+      [ -n "$tier" ] || continue
+      case "$tier" in warn*) kind=WARNING; warned=1 ;; *) kind=LEAK; fail=1 ;; esac
+      grep -Fq -e "$kind [$tier] " "$TIERS/in.report" \
+        || echo "$kind [$tier] in the commits scanned, at a place the second read did not find" >> "$TIERS/in.report"
+    done <<EOF
+$hit_tiers
+EOF
+    awk '!seen[$0]++' "$TIERS/in.report" >&2
+  fi
+
+  closing
+  [ "$fail" -eq 0 ] || exit 1
+  echo "check-leakage: clean — $count commit(s) scanned, $(loaded)"
+  exit 0
+fi
+
 # Decided once and read twice: which lister runs, and whether a leading `"` can only be git's
 # doing. In a non-git tree nothing quotes, so a file genuinely named `"quoted".md` must not be
 # mistaken for one git could not represent. Review round 2.
 if git rev-parse --git-dir >/dev/null 2>&1; then IN_GIT=1; else IN_GIT=0; fi
+
+# A hook that is absent is silent, so a clone whose hooks are not the ones this checkout would
+# install fails here, where every turn end and every contributor's run passes. A shim newer
+# than this checkout's passes: worktrees of one clone share the hooks and not the branch (#360).
+hooks_fault() {  # $1 = what is wrong
+  echo "check-leakage FAILED — the leak hooks of this clone are not installed as this checkout has them: $1." >&2
+  echo "  Run: sh scripts/install-git-hooks.sh" >&2
+  echo "" >&2
+  echo "  They scan a commit's message and staged content, and what a push would publish, before" >&2
+  echo "  git publishes it. Without them this scan of the working tree is the only one that runs." >&2
+  exit 1
+}
+shim_version() {  # $1 = a file. Prints its shim number, or nothing when it is not a shim.
+  sed -n 's/^# gate-sdd-shim \([0-9][0-9]*\)$/\1/p' "$1" 2>/dev/null | sed -n 1p
+}
+if [ "$IN_GIT" -eq 1 ] && [ "$HOOK_CHECK" -eq 1 ]; then
+  [ -f scripts/git-hooks/shim.sh ] || hooks_fault "this checkout holds no scripts/git-hooks/shim.sh to compare them with"
+  want=$(shim_version scripts/git-hooks/shim.sh)
+  [ -n "$want" ] || hooks_fault "scripts/git-hooks/shim.sh holds no version line"
+  # The key, not its value: set to nothing it still sends git elsewhere.
+  ! git config --get core.hooksPath >/dev/null 2>&1 \
+    || hooks_fault "core.hooksPath is set, so git runs none of them"
+  common=$(git rev-parse --git-common-dir 2>/dev/null) || hooks_fault "git could not name the clone's common directory"
+  checked=0
+  for script in scripts/git-hooks/*.sh; do
+    name=${script##*/}; name=${name%.sh}
+    [ "$name" != shim ] || continue
+    [ -f "$script" ] || continue
+    checked=$((checked + 1))
+    [ -f "$common/hooks/$name" ] || hooks_fault "$name is not installed"
+    [ -x "$common/hooks/$name" ] || hooks_fault "$name is not executable"
+    have=$(shim_version "$common/hooks/$name")
+    [ -n "$have" ] || hooks_fault "$name is not the shim"
+    [ "$have" -ge "$want" ] || hooks_fault "$name is shim version $have, older than this checkout's $want"
+    [ "$have" -gt "$want" ] || cmp -s "$common/hooks/$name" scripts/git-hooks/shim.sh \
+      || hooks_fault "$name differs from scripts/git-hooks/shim.sh at the same version"
+  done
+  [ "$checked" -gt 0 ] || hooks_fault "this checkout holds no hook script under scripts/git-hooks"
+  hooks=""
+else
+  # A run that did not look at the hooks says so, as one without the private patterns does.
+  hooks=", hooks not checked"
+fi
 
 files() {
   if [ "$IN_GIT" -eq 1 ]; then
@@ -246,9 +614,6 @@ else
   LISTING="find . -type f -not -path './.git/*'"
 fi
 
-fail=0
-warned=0
-
 # The report reaches a public CI log, so it holds a tier and a location and never the text that
 # matched or the pattern. A path that matches is itself that text: it is named by its position
 # in the listing: here, in the refusals below, and wherever a hit inside the file is reported.
@@ -295,22 +660,6 @@ entries() {  # $1 = the entries a refusal names, one to a line. Prints each as `
     [ -n "$entry" ] || continue
     printf '\n  %s' "$(shown "$entry")"
   done
-}
-
-# A report that holds a LEAK or a WARNING ends with this, whichever exit it leaves by (#357).
-closing() {
-  [ "$fail" -ne 0 ] || [ "$warned" -ne 0 ] || return 0
-  echo "" >&2
-  if [ "$fail" -ne 0 ]; then
-    echo "Clean-room rule: do not scrub these in place. Scrubbing leaves the shape," >&2
-    echo "and the shape is where the private structure lives. Rewrite the file." >&2
-  else
-    echo "A warning does not fail the guard. Confirm that each one is a generic example." >&2
-  fi
-  echo "The matched text is withheld on purpose, because this report is public wherever CI" >&2
-  echo "prints it. Open the location to see what matched." >&2
-  [ -z "$named" ] \
-    || echo "A path number is the line of this command's output that holds the path: $LISTING" >&2
 }
 
 # A file this guard was handed and could not open is not a file it read and found clean.
@@ -402,8 +751,8 @@ closing
 note=""
 [ "$absent" -gt 0 ] && note=", $absent index entr(ies) not in the working tree"
 if [ "$PUBLIC_ONLY" -eq 1 ]; then
-  echo "check-leakage: public tier clean — $scanned file(s) scanned$note, private patterns not run"
+  echo "check-leakage: public tier clean — $scanned file(s) scanned$note, private patterns not run$hooks"
 else
-  echo "check-leakage: clean — $scanned file(s) scanned$note, private patterns loaded"
+  echo "check-leakage: clean — $scanned file(s) scanned$note, private patterns loaded$hooks"
 fi
 exit 0
