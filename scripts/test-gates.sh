@@ -11713,6 +11713,151 @@ g14="$(lk_refused --staged --text) $(lk_refused --staged zq_more)"
   || report "check-leakage --staged scans what the next commit changes, from the index git names" no \
      "clean=$g0 index-not-tree=$g1 unstaged=$g2 path=$g3 colon-path=$g4 symlink=$g5 deletion=$g6 unreadable-object=$g7 callers-repo=$g8 hook-env=$g9 no-repository=$g10 quoted=$g11 no-content=$g12 public-only=$g13 grammar=$g14"
 
+# 438. #360 AC1 to AC3 — `--commits` scans a set of commits: each one's message, each path it
+#      adds and each line it adds, so a line a later commit removes is still found. A hit is
+#      reported by the commit's short id and a place in it. Author and committer are not read.
+lk_ci() { ( cd "$1" && git add -A && git commit -qm "$2" ) >/dev/null 2>&1; }
+lk_id() { ( cd "$1" && git rev-parse "${2:-HEAD}" ) | cut -c1-7; }
+
+r=$(leak_repo lkg-h-clean)
+printf 'one\n' > "$r/a.md"; lk_ci "$r" 'a clean message'
+printf 'two\n' > "$r/b.md"; lk_ci "$r" 'another'
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~2)
+[ "$out" = 0 ] && [ ! -s "$TMP/lkerr" ] \
+  && grep -Fxq -e 'check-leakage: clean — 2 commit(s) scanned, private patterns loaded' "$TMP/lkout" \
+  && h0=ok || h0="exit=$out"
+
+# A set that names no commit was read and is empty.
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD)
+[ "$out" = 0 ] && grep -Fxq -e 'check-leakage: clean — the revisions name no commit, private patterns loaded' "$TMP/lkout" \
+  && h1=ok || h1="exit=$out"
+
+r=$(leak_repo lkg-h-message); printf 'one\n' > "$r/a.md"
+lk_ci "$r" "$(printf 'a subject\n\na body holding Zq_Exact here\nand zq_WARN')"
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1)
+lk_s=$(lk_id "$r")
+h2=$(lk_report 1 "LEAK [fail] commit $lk_s, message line(s): 3" "WARNING [warn ignore-case] commit $lk_s, message line(s): 4")
+
+# A path the commit adds, with nothing in the file: an empty file has no patch to find it in.
+r=$(leak_repo lkg-h-path); : > "$r/a-Zq_Exact-empty.md"; printf 'clean\nzq_warn\n' > "$r/b-zq_FOLD.md"
+lk_ci "$r" 'two paths'
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1)
+lk_s=$(lk_id "$r")
+h3=$(lk_report 1 "LEAK [fail] commit $lk_s, path number(s) in its listing: 1" \
+  "LEAK [fail ignore-case] commit $lk_s, path number(s) in its listing: 2" \
+  "WARNING [warn ignore-case] commit $lk_s, path number 2 in its listing, line(s): 2")
+grep -q 'git log --no-walk --format= --name-only' "$TMP/lkerr" || h3="$h3+no-listing-command"
+# Alone, so that no line of a patch stands in for the path.
+r=$(leak_repo lkg-h-path-empty); : > "$r/a-Zq_Exact-empty.md"; lk_ci "$r" 'an empty file'
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1)
+h3="$h3 $(lk_report 1 "LEAK [fail] commit $(lk_id "$r"), path number(s) in its listing: 1")"
+
+# A path that is not ASCII is read as its own bytes, not as git's quoted form of them.
+r=$(leak_repo lkg-h-utf8); printf 'nothing to see\n' > "$r/$odd-Zq_Exact.md"; lk_ci "$r" 'a path'
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1)
+h4=$(lk_report 1 "LEAK [fail] commit $(lk_id "$r"), path number(s) in its listing: 1")
+
+# A line one commit adds and the next removes: the tip is clean and the history is not.
+r=$(leak_repo lkg-h-removed); printf 'clean\na line holding Zq_Exact here\n' > "$r/note.md"; lk_ci "$r" 'adds it'
+lk_s=$(lk_id "$r")
+printf 'clean\n' > "$r/note.md"; lk_ci "$r" 'removes it'
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~2)
+h5=$(lk_report 1 "LEAK [fail] commit $lk_s, note.md line(s): 2")
+out=$(run_leak "$r"); [ "$out" = 0 ] || h5="$h5+tip-control-exit=$out"
+# And the commit that only removes it publishes nothing.
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1); [ "$out" = 0 ] || h5="$h5+removal-exit=$out"
+
+# A line only a merge adds, in a file both sides left clean.
+r=$(leak_repo lkg-h-merge); printf 'base\n' > "$r/f.md"; lk_ci "$r" base
+( cd "$r" && git checkout -qb side && printf 'side\n' > s.md && git add -A && git commit -qm side \
+  && git checkout -q main && printf 'main\n' > m.md && git add -A && git commit -qm main \
+  && git merge -q --no-commit side && printf 'base\nZq_Exact\n' > f.md && git add -A && git commit -qm merged ) >/dev/null 2>&1
+lk_m=$(lk_id "$r")
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD^1 HEAD^2)
+h6=$(lk_report 1 "LEAK [fail] commit $lk_m, f.md line(s): 2")
+
+# Nothing in the caller's git configuration changes what is read. Each setting is put in the
+# fixture's own config, and each one hides the line from a diff that does not refuse it.
+h7=""
+( cd "$r" && git config log.diffMerges off ) >/dev/null 2>&1
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD^1 HEAD^2); h7="$h7$(lk_report 1 "LEAK [fail] commit $lk_m, f.md line(s): 2")"
+r=$(leak_repo lkg-h-config); mkdir -p "$r/sub"; printf 'clean\nZq_Exact\n' > "$r/note.md"; lk_ci "$r" 'adds it'
+lk_s=$(lk_id "$r")
+( cd "$r" && git config color.ui always ) >/dev/null 2>&1
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1); h7="$h7 $(lk_report 1 "LEAK [fail] commit $lk_s, note.md line(s): 2")"
+( cd "$r" && git config color.ui auto && git config diff.relative true ) >/dev/null 2>&1
+out=$(LK_GUARD="$r/scripts/check-leakage.sh" run_leak "$r/sub" "" "" "" --commits HEAD --not HEAD~1)
+h7="$h7 $(lk_report 1 "LEAK [fail] commit $lk_s, note.md line(s): 2")"
+( cd "$r" && git config diff.relative false && git config diff.tc.textconv 'sed s/Zq_Exact/hidden/' \
+  && printf '*.md diff=tc\n' > .git/info/attributes ) >/dev/null 2>&1
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1); h7="$h7 $(lk_report 1 "LEAK [fail] commit $lk_s, note.md line(s): 2")"
+# A replace ref shows another object in place of the one a push sends.
+( cd "$r" && rm .git/info/attributes && lk_real=$(git rev-parse HEAD) \
+  && git checkout -q --detach HEAD~1 && printf 'clean\n' > note.md && git add -A && git commit -qm 'a clean stand-in' \
+  && git replace "$lk_real" HEAD && git checkout -q main ) >/dev/null 2>&1
+out=$(run_leak "$r" "" "" "" --commits main --not main~1); h7="$h7 $(lk_report 1 "LEAK [fail] commit $lk_s, note.md line(s): 2")"
+
+# Author and committer are not scanned.
+r=$(leak_repo lkg-h-identity); printf 'one\n' > "$r/a.md"
+( cd "$r" && git add -A && GIT_AUTHOR_NAME='Zq_Exact Author' GIT_COMMITTER_EMAIL='zq_fold@example.invalid' git commit -qm 'a clean message' ) >/dev/null 2>&1
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1); [ "$out" = 0 ] && h8=ok || h8="exit=$out"
+
+# The faults. A revision git cannot resolve, and a repository with no commits beyond its depth.
+lk_r=$r
+out=$(run_leak "$r" "" "" "" --commits no-such-revision)
+[ "$out" = 1 ] && grep -q 'git could not resolve the revisions' "$TMP/lkerr" && h9=ok || h9="exit=$out"
+if git clone -q --depth 1 "file://$r" "$TMP/lkg-h-shallow" >/dev/null 2>&1 \
+  && [ "$(cd "$TMP/lkg-h-shallow" && git rev-parse --is-shallow-repository)" = true ]; then
+  out=$(run_leak "$TMP/lkg-h-shallow" "" "" "" --commits HEAD)
+  [ "$out" = 1 ] && grep -q 'this repository is shallow' "$TMP/lkerr" && h10=ok || h10="exit=$out"
+else
+  h10=ok; note_skip "leakage/shallow-clone" "this git made no shallow clone of the fixture"
+fi
+out=$(run_leak "$TMP/lkg-x-nogit" "" "" "" --commits HEAD)
+[ "$out" = 1 ] && grep -q 'this is not a git repository' "$TMP/lkerr" && h11=ok || h11="exit=$out"
+
+# A git that exits non-zero after it has printed something, and an object that cannot be read.
+# The stand-in fails the one subcommand it is told to and is git for the rest.
+lk_git() {  # $1 = name, $2 = the subcommand that fails. Prints the directory to put first on PATH.
+  lk_d="$TMP/lkg-git-$1"; mkdir -p "$lk_d"
+  printf '%s\n' '#!/bin/sh' "for a in \"\$@\"; do [ \"\$a\" = $2 ] && { echo 'a partial line'; exit 1; }; done" \
+    "exec '$(command -v git)' \"\$@\"" > "$lk_d/git"; chmod +x "$lk_d/git"
+  printf '%s' "$lk_d"
+}
+r=$(leak_repo lkg-h-partial); printf 'clean\nZq_Exact\n' > "$r/note.md"; lk_ci "$r" 'adds it'
+lk_s=$(lk_git log log)
+out=$(PATH="$lk_s:$PATH"; export PATH; run_leak "$r" "" "" "" --commits HEAD --not HEAD~1)
+[ "$out" = 1 ] && grep -q 'git could not read the commits' "$TMP/lkerr" && h12=ok || h12="exit=$out"
+case "$(cat "$TMP/lkout")" in *clean*) h12="$h12+says-clean" ;; esac
+# A hit the second read cannot place is still a failure, reported against the set.
+lk_s=$(lk_git cat-file cat-file)
+out=$(PATH="$lk_s:$PATH"; export PATH; run_leak "$r" "" "" "" --commits HEAD --not HEAD~1)
+h13=$(lk_report 1 'LEAK [fail] in the commits scanned, at a place the second read did not find')
+lk_o=$(cd "$r" && git rev-parse HEAD:note.md)
+rm -f "$r/.git/objects/$(printf '%s' "$lk_o" | cut -c1-2)/$(printf '%s' "$lk_o" | cut -c3-)"
+out=$(run_leak "$r" "" "" "" --commits HEAD --not HEAD~1)
+[ "$out" = 1 ] && grep -q 'git could not read the commits' "$TMP/lkerr" && h14=ok || h14="exit=$out"
+
+# A bare repository has no working tree and is scanned all the same, by a guard that sits elsewhere.
+r=$(leak_repo lkg-h-bare-src); printf 'one\n' > "$r/a.md"; lk_ci "$r" 'a message holding Zq_Exact'
+lk_s=$(lk_id "$r")
+git clone -q --bare "$r" "$TMP/lkg-h-bare" >/dev/null 2>&1
+out=$(LK_GUARD="$r/scripts/check-leakage.sh" run_leak "$TMP/lkg-h-bare" "" "" "" --commits --all)
+h15=$(lk_report 1 "LEAK [fail] commit $lk_s, message line(s): 1")
+
+out=$(run_leak "$r" - "" "" --public-only --commits HEAD --not HEAD~1)
+[ "$out" = 0 ] && grep -q '1 commit(s) scanned, private patterns not run' "$TMP/lkout" && h16=ok || h16="exit=$out"
+h16="$h16$(lk_noticed)"
+
+# After --commits come revisions, --not and --all, and nothing else that begins with a dash.
+h17="$(lk_refused --commits) $(lk_refused --commits --zq_option) $(lk_refused --commits HEAD --max-count=0) $(lk_refused --commits '') $(lk_refused --text --commits HEAD) $(lk_refused --commits HEAD --text)"
+
+[ "$h0 $h1 $h2 $h4 $h5 $h6" = "ok ok ok ok ok ok" ] && [ "$h3" = "ok ok" ] && [ "$h7" = "ok ok ok ok ok" ] \
+  && [ "$h8 $h9 $h10 $h11 $h12 $h13 $h14 $h15 $h16" = "ok ok ok ok ok ok ok ok ok" ] && [ "$h17" = "ok ok ok ok ok ok" ] \
+  && report "check-leakage --commits scans each commit's message, added paths and added lines" ok \
+  || report "check-leakage --commits scans each commit's message, added paths and added lines" no \
+     "clean=$h0 empty-set=$h1 message=$h2 path=$h3 not-ascii-path=$h4 removed-line=$h5 merge-only=$h6 config=$h7 identity=$h8 unresolvable=$h9 shallow=$h10 no-repository=$h11 partial-git=$h12 unplaced-hit=$h13 unreadable-object=$h14 bare=$h15 public-only=$h16 grammar=$h17"
+
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
 # #145. check-version-bump.py must include rules/ in SHIPPED so any change

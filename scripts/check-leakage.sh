@@ -12,7 +12,8 @@
 set -u
 
 # With no mode it scans the working tree. --text scans standard input instead, --refs a list of
-# ref names on it, and --staged what the next commit changes (#360).
+# ref names on it, --staged what the next commit changes, and --commits the commits the
+# revisions after it name: revisions, --not and --all, as git rev-list takes them (#360).
 # --public-only runs the public tier alone, for a pull request from a fork, which has no private
 # patterns to be given. Any other argument is refused, and is not printed (#357).
 PUBLIC_ONLY=0
@@ -20,14 +21,22 @@ MODE=tree
 refuse_arguments() {
   echo "check-leakage FAILED — it was given an argument it does not take, so it looked at nothing." >&2
   echo "  It takes --public-only, which runs the public tier alone and is not a pass for private" >&2
-  echo "  context, and one mode at most: --text, --refs or --staged. The argument is withheld: this" >&2
-  echo "  report can reach a public log." >&2
+  echo "  context, and one mode at most: --text, --refs, --staged, or --commits and the revisions" >&2
+  echo "  to scan. The argument is withheld: this report can reach a public log." >&2
   exit 1
 }
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --public-only) [ "$PUBLIC_ONLY" -eq 0 ] || refuse_arguments; PUBLIC_ONLY=1 ;;
     --text|--refs|--staged) [ "$MODE" = tree ] || refuse_arguments; MODE=${1#--} ;;
+    --commits)
+      [ "$MODE" = tree ] || refuse_arguments
+      MODE=commits; shift
+      [ "$#" -gt 0 ] || refuse_arguments
+      for revision in "$@"; do
+        case "$revision" in --not|--all) ;; ''|-*) refuse_arguments ;; esac
+      done
+      break ;;
     *) refuse_arguments ;;
   esac
   shift
@@ -314,6 +323,103 @@ if [ "$MODE" = staged ]; then
   else
     echo "check-leakage: clean — $n staged path(s) scanned, $(loaded)"
   fi
+  exit 0
+fi
+
+# --commits: the verdict comes from three files over every commit at once: the messages, the
+# paths, and the added lines of the patches. Only when a tier hits is each commit read again
+# for a location, and a hit that read cannot place still fails (#360).
+if [ "$MODE" = commits ]; then
+  g rev-parse --git-dir >/dev/null 2>&1 \
+    || input_fault "this is not a git repository and --commits reads its history"
+  [ "$(g rev-parse --is-shallow-repository 2>/dev/null)" = false ] \
+    || input_fault "this repository is shallow, and commits it does not hold cannot be scanned"
+  g rev-list "$@" > "$TIERS/in.ids" 2>/dev/null \
+    || input_fault "git could not resolve the revisions it was given"
+  count=$(grep -c '' "$TIERS/in.ids")
+  # With no revision on its standard input, git log reads HEAD.
+  if [ "$count" -eq 0 ]; then
+    echo "check-leakage: clean — the revisions name no commit, $(loaded)"
+    exit 0
+  fi
+
+  LOG="--no-walk --diff-merges=separate --root"
+  # shellcheck disable=SC2086  # $LOG and $DIFF are lists of options
+  { g log --no-walk --stdin --format=%B < "$TIERS/in.ids" > "$TIERS/in.messages" 2>/dev/null \
+    && g log --stdin $LOG --format= --name-only $DIFF < "$TIERS/in.ids" > "$TIERS/in.paths" 2>/dev/null \
+    && g log --stdin $LOG --format= -p -U0 --text $DIFF < "$TIERS/in.ids" > "$TIERS/in.patch" 2>/dev/null
+  } || input_fault "git could not read the commits it was given"
+  LC_ALL=C grep -a '^+' "$TIERS/in.patch" > "$TIERS/in.added"
+  ! grep -q '^"' "$TIERS/in.paths" \
+    || input_fault "git quotes a path of these commits, which holds a quote, a backslash or a control character and cannot be read by name"
+
+  hit_tiers=""
+  while IFS= read -r tier; do
+    [ -s "$TIERS/$tier" ] || continue
+    case "$tier" in *ignore-case) fold=-i ;; *) fold="" ;; esac
+    for part in messages paths added; do
+      # shellcheck disable=SC2086  # $fold is one option or nothing
+      if grep -aqE $fold -f "$TIERS/$tier" -- "$TIERS/in.$part" 2>/dev/null \
+        || LC_ALL=C grep -aqE $fold -f "$TIERS/$tier" -- "$TIERS/in.$part" 2>/dev/null; then
+        hit_tiers="$hit_tiers
+$tier"
+        break
+      fi
+    done
+  done <<EOF
+$TIER_ORDER
+EOF
+
+  if [ -n "$hit_tiers" ]; then
+    LISTING="git log --no-walk --format= --name-only --diff-merges=separate --root --no-renames --diff-filter=d <commit>"
+    tab=$(printf '\t')
+    any_named=""
+    {
+      while IFS= read -r id; do
+        short=$(printf '%s' "$id" | cut -c1-7)
+        if g log --no-walk --format=%B "$id" > "$TIERS/in.message" 2>/dev/null; then
+          scan_lines "$TIERS/in.message" "commit $short, message line(s)"
+        fi
+        # shellcheck disable=SC2086
+        g log $LOG --format= --raw --no-abbrev $DIFF "$id" > "$TIERS/in.raw" 2>/dev/null || continue
+        sed "s/^[^$tab]*$tab//" "$TIERS/in.raw" > "$TIERS/in.listing"
+        scan_lines "$TIERS/in.listing" "commit $short, path number(s) in its listing"
+        named=$hit_at
+        [ -z "$named" ] || any_named=1
+        rm -rf "$TIERS/in.blobs" "$TIERS/in.labels"
+        mkdir "$TIERS/in.blobs" || continue
+        n=0
+        while IFS= read -r meta <&3 && IFS= read -r path <&4; do
+          n=$((n + 1))
+          case " $named " in
+            *" $n "*) printf 'commit %s, path number %s in its listing,\n' "$short" "$n" ;;
+            *) printf 'commit %s, %s\n' "$short" "$path" ;;
+          esac >> "$TIERS/in.labels"
+          set -f; set -- $meta; set +f
+          [ "$2" != 160000 ] || continue
+          g cat-file blob "$4" > "$TIERS/in.blobs/$n" 2>/dev/null || rm -f "$TIERS/in.blobs/$n"
+        done 3< "$TIERS/in.raw" 4< "$TIERS/in.listing"
+        [ "$n" -eq 0 ] || scan_blobs "$TIERS/in.blobs" "$TIERS/in.labels"
+      done < "$TIERS/in.ids"
+    } 2> "$TIERS/in.report"
+    named=$any_named
+
+    # A tier the first read found fails whatever the second read placed, and one it placed
+    # nowhere is reported against the set.
+    while IFS= read -r tier; do
+      [ -n "$tier" ] || continue
+      case "$tier" in warn*) kind=WARNING; warned=1 ;; *) kind=LEAK; fail=1 ;; esac
+      grep -Fq -e "$kind [$tier] " "$TIERS/in.report" \
+        || echo "$kind [$tier] in the commits scanned, at a place the second read did not find" >> "$TIERS/in.report"
+    done <<EOF
+$hit_tiers
+EOF
+    awk '!seen[$0]++' "$TIERS/in.report" >&2
+  fi
+
+  closing
+  [ "$fail" -eq 0 ] || exit 1
+  echo "check-leakage: clean — $count commit(s) scanned, $(loaded)"
   exit 0
 fi
 
