@@ -10,7 +10,7 @@ The version table below carries a date beside each row. Claude Code's row was re
 
 | Component | Version |
 | :-- | :-- |
-| Claude Code | 2.1.300 — the #304 section of 2026-10-16. 2.1.296 — the #239 section of 2026-10-12. 2.1.294 — the #274 section of 2026-10-10: the terminal CLI, started from a desktop-app session whose own copy was 2.1.295; its F3 ran on the maintainer's second machine, the app's copy 2.1.295 and its terminal CLI 2.1.296. 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
+| Claude Code | 2.1.325 — the #361 section of 2026-11-16. 2.1.300 — the #304 section of 2026-10-16. 2.1.296 — the #239 section of 2026-10-12. 2.1.294 — the #274 section of 2026-10-10: the terminal CLI, started from a desktop-app session whose own copy was 2.1.295; its F3 ran on the maintainer's second machine, the app's copy 2.1.295 and its terminal CLI 2.1.296. 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
 | Antigravity CLI (`agy`) | 1.5.6 and 1.5.7 — the #355 section of 2026-11-13, whose E1 ran on 1.5.6 and whose E2 and E3 ran on 1.5.7. 1.4.7 — the #324 section of 2026-10-26, whose R0 ran on 1.4.0. 1.3.3 — the #239 section of 2026-10-12, and verified 2026-10-11 (A1–A14 run sheet from 2026-10-11 deep review, headless `agy -p` in trusted scratch fixture). 1.2.16 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
 | Antigravity IDE | Discontinued; removed from active target matrix. (Historical: 2.3.1 verified 2026-08-21) |
 | Platform | macOS (darwin, arm64) |
@@ -722,6 +722,32 @@ Both remedies the Claude Code block names therefore rest on the documentation. T
 - **A `PATH` set by a terminal's shell.** Each launch `PATH` was set with `env`.
 - **AC2's wording, the timeout block, and a `PATH` holding unusual bytes,** on a real `agy`. Those are `scripts/test-gates.sh` cases only.
 - **An install made by the `init` skill, and `init`'s `PATH` warning.** The fixture was copied by hand, and no session ran `init`.
+
+## The gh guard's entry, through `--settings`, on Claude Code 2.1.325 (#361)
+
+**Run on 2026-11-16, Claude Code 2.1.325**, for #361's T8, before the hook is registered anywhere. Each run was one headless session: `claude -p --settings <file> --setting-sources project,local --allowedTools Bash --strict-mcp-config --model claude-haiku-5-5 --output-format stream-json`, whose prompt asked for one Bash command, verbatim, and no retry. No user-level setting was read, and nothing was sent to GitHub.
+
+- **The entry:** the one `scripts/install-gh-hook.sh` printed, from an install into a scratch `XDG_DATA_HOME`: `PreToolUse`, matcher `Bash|mcp__terminal__run_in_terminal`, exec form with Xcode's `python3.9` (the file `xcrun -f python3` resolves) as the command and `-I <data>/gate-sdd/gh-hook/current/gh_guard.py` as its arguments, `timeout` 30, `onFailure` `block`.
+- **The fixture:** a git repository whose `origin` names a synthetic organisation, with a stub `gh` first on the session's `PATH` that records its arguments and answers `--version` as 2.104.0.
+- **The patterns:** synthetic, through `XDG_CONFIG_HOME` in the environment `claude` was started with. No exempt list.
+
+| Run | Entry and command | Observed |
+| :-- | :-- | :-- |
+| H1 | The printed entry; `gh issue create -t ok -b Zq_Exact` | **Blocked before `gh` ran.** The tool result was `PreToolUse:Bash hook error: [<interpreter> -I <hook>]: gate-sdd gh guard: blocked. LEAK [fail] in the --body value, line 1. The matched text is withheld.`, then the advice naming the exempt list's path. The stub recorded nothing, and the hook's text does not hold the synthetic word. |
+| H2 | The printed entry; `gh issue create -t ok -b fine` | **Passed in silence.** The stub ran with `issue create -t ok -b fine`, and no warning was shown: its version is the table's. |
+| H3 | The printed entry; `echo hello-from-bash` | **Ran**, with nothing from the hook. |
+| H4 | The interpreter, `-I` and an entry script beside a module that raises at import, its message the synthetic word; `echo hello-from-bash` | **Blocked**: `The hook could not start (RuntimeError), so no Bash command can run until it is reinstalled.`, then how to reinstall or edit the entry. The message was not shown. |
+| H5 | The printed entry with `/nonexistent/python3` as its command; `echo hello-from-bash` | **Blocked by Claude Code**: `failed; blocking because onFailure is "block"`, then `Error occurred while executing hook command: ENOENT: no such file or directory, posix_spawn '/nonexistent/python3'`. |
+
+**What this settles for #361's spec.** On 2.1.325, headless, the entry the installer prints runs the hook under the interpreter it names, a block reaches the model as the hook's stderr after the command line, a pass is silent, and the two ways the hook can fail before it decides, a module that cannot load and an interpreter that does not exist, both block, the first with its cause and the second with Claude Code's.
+
+### What these runs do not support
+
+- **The hook registered in user-level settings.** The entry came from `--settings`; registration is T9's, on the maintainer's go.
+- **The desktop app's terminal tool, and Monitor.** Only Bash ran.
+- **A session the desktop app starts, and an interactive one.**
+- **The private patterns and an exempt list.** Both were synthetic or absent.
+- **How long the hook takes.** AC9's measurement is T10's.
 
 ## Still to verify
 
