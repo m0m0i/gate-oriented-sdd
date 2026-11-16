@@ -13210,6 +13210,184 @@ for command, why in LOSES:
           repr(command) + " gave " + repr(got))
 
 
+# -- targets and the exempt list (T6) ----------------------------------------------------------
+# Real repositories in a scratch directory, a HOME with an exempt list, and each write's verdict:
+# exempt (passes, nothing given to the guard), or guarded (given to the guard, and blocked by the
+# recorder's hit on Zq_Exact).
+import shutil  # noqa: E402
+
+R = os.path.join(SCRATCH, "targets")
+HOME6 = os.path.join(SCRATCH, "home6")
+os.makedirs(os.path.join(HOME6, ".config", "gate-sdd"), exist_ok=True)
+GITENV = {"HOME": HOME6, "PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1"}
+
+
+def git(cwd, *args):
+    subprocess.run(["git", "-C", cwd] + list(args), env=GITENV, stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL, check=True)
+
+
+def repo(name, *remotes, **config):
+    path = os.path.join(R, name)
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+    os.makedirs(path)
+    git(path, "init", "-q")
+    for k, (remote, url) in enumerate(remotes):
+        git(path, "remote", "add", remote, url)
+    for key, value in config.items():
+        git(path, "config", key.replace("__", "."), value)
+    return path
+
+
+A = repo("a", ("origin", "https://github.com/acme/public.git"))
+B = repo("b", ("origin", "git@github.com:Priv-Org/secret.git"))
+C = repo("c", ("origin", "git@github.com:priv-org/secret.git"), ("upstream", "https://github.com/acme/public"))
+DD = repo("d", ("origin", "gh-alias:priv-org/secret.git"))
+E = repo("e", ("origin", "pv:secret"), **{"url__git@github.com:priv-org/__insteadOf": "pv:"})
+F = repo("f", ("origin", "git@github.com:priv-org/secret.git"), **{"remote__origin__gh-resolved": "acme/public"})
+G = repo("g")
+P = repo("p", ("origin", "git@github.com:priv-org/secret.git"))
+git(P, "remote", "set-url", "--add", "--push", "origin", "https://github.com/acme/public.git")
+N = os.path.join(R, "not-a-repo")
+os.makedirs(N, exist_ok=True)
+with open(os.path.join(B, "body.md"), "w") as f:
+    f.write("Zq_Exact in a file\n")
+LIST = os.path.join(HOME6, ".config", "gate-sdd", "leakage-exempt-repositories")
+
+
+def exempt_list(text):
+    if text is None:
+        if os.path.exists(LIST):
+            os.remove(LIST)
+        return
+    with open(LIST, "w") as f:
+        f.write(text)
+
+
+GOOD = "# repositories that may hold the private words\n\nPriv-Org/* the private organisation\nsolo/one-repo   one private repository\n"
+
+
+def target(command, cwd, environ=None):
+    del SEEN[:]
+    ctx = g.Context(HOME6, scan=recorder, gh_version=lambda b, w: "2.104",
+                    environ=environ or {})
+    try:
+        code, out, err = g.decide(command, cwd, ctx)
+    except Exception as e:
+        return "raised " + type(e).__name__
+    if code == 2:
+        return "block: " + err.split("blocked. ", 1)[1].split("\n")[0]
+    return "scanned" if SEEN else "exempt"
+
+
+W6 = "gh issue create -t Zq_Exact -b x"
+LEAK = "block: LEAK [fail] in the --title value, line 1."
+TARGETS = [
+    (W6, B, None, "exempt"),
+    (W6, A, None, LEAK),
+    (W6 + " -R priv-org/secret", A, None, "exempt"),
+    (W6 + " -R acme/public", B, None, LEAK),
+    (W6 + " -R https://github.com/Priv-Org/secret.git", A, None, "exempt"),
+    (W6 + " -R github.com/priv-org/secret", A, None, "exempt"),
+    (W6 + " -R git@github.com:priv-org/secret.git", A, None, "exempt"),
+    (W6 + " -R solo/one-repo", A, None, "exempt"),
+    (W6 + " -R solo/one-repo.git", A, None, LEAK),
+    (W6 + " -R solo/other", A, None, LEAK),
+    (W6 + " -R priv-org/x -R acme/public", A, None, LEAK),
+    (W6 + " -R not-a-repo", A, None, LEAK),
+    ("GH_REPO=priv-org/x " + W6, A, None, "exempt"),
+    ("env GH_REPO=priv-org/x " + W6, A, None, "exempt"),
+    ("GH_REPO=priv-org/x " + W6 + " -R acme/public", A, None, LEAK),
+    (W6, B, {"GH_REPO": "acme/public"}, LEAK),
+    (W6, A, {"GH_REPO": "priv-org/x"}, LEAK),
+    (W6, B, {"GIT_DIR": "/elsewhere"}, LEAK),
+    (W6, B, {"GH_HOST": "ghe.example"}, LEAK),
+    ("gh issue comment https://github.com/priv-org/secret/issues/1 -b Zq_Exact", A, None, "exempt"),
+    ("gh issue comment https://github.com/acme/public/issues/1 -b Zq_Exact", B, None,
+     "block: LEAK [fail] in the --body value, line 1."),
+    ("gh issue transfer Zq_Exact acme/public", B, None, "block: LEAK [fail] in argument 1, line 1."),
+    ("gh repo edit priv-org/secret -d Zq_Exact", A, None, "exempt"),
+    ("gh repo create priv-org/new -d Zq_Exact --private", A, None, "exempt"),
+    ("gh repo create new -d Zq_Exact --private", B, None, "block: LEAK [fail] in the --description"),
+    ("gh api repos/priv-org/secret/issues -f body=Zq_Exact", A, None, "exempt"),
+    ("gh api /repos/priv-org/secret/issues -f body=Zq_Exact", A, None, "exempt"),
+    ("gh api https://api.github.com/repos/priv-org/secret/issues -f body=Zq_Exact", A, None, "exempt"),
+    ("gh api repos/priv-org/secret/../../acme/public/issues -f body=Zq_Exact", A, None,
+     "block: LEAK [fail] in the --raw-field value, line 1."),
+    ("gh api repos/priv-org/secret%2F..%2Facme -f body=Zq_Exact", A, None, "block: LEAK"),
+    ("gh api repos/{owner}/{repo}/issues -f body=Zq_Exact", B, None, "exempt"),
+    ("gh api repos/{owner}/{repo}/issues -f body=x -f title={repo}", A, None, "scanned"),
+    ("gh api repos/{owner}/{repo}/issues -f body=x", C, None, "block: Cannot recover the text gh"
+     " would send: {owner}, {repo} or {branch}, with more than one repository a candidate."),
+    ("gh api user -X PATCH -f bio=Zq_Exact", B, None, "block: LEAK"),
+    ("gh api graphql -f query='mutation { x(body: \"Zq_Exact\") }'", B, None, "block: LEAK"),
+    ("gh api --hostname ghe.example repos/priv-org/secret/issues -f b=Zq_Exact", A, None, "block: LEAK"),
+    ("gh gist create -d Zq_Exact body.md", B, None, "block: LEAK"),
+    ("gh secret set X --org priv-org -b Zq_Exact", B, None, "block: LEAK"),
+    ("gh project create --owner priv-org --title Zq_Exact", B, None, "block: LEAK"),
+    (W6, C, None, LEAK),
+    (W6, DD, None, "exempt"),
+    (W6, E, None, "exempt"),
+    (W6, F, None, LEAK),
+    (W6, P, None, LEAK),
+    (W6, G, None, LEAK),
+    (W6, N, None, LEAK),
+    ("env -i PATH=/usr/bin " + W6, B, None, LEAK),
+    ("env -u GH_REPO " + W6, B, None, LEAK),
+    ("unset GH_TOKEN; " + W6, B, None, LEAK),
+    ("unset UNRELATED; " + W6, B, None, "exempt"),
+    ("GIT_DIR=/x " + W6, B, None, LEAK),
+    ("export GH_HOST=x; " + W6, B, None, LEAK),
+    ("git remote add up https://github.com/acme/public && " + W6, B, None, LEAK),
+    ("git -C . config remote.origin.url x; " + W6, B, None, LEAK),
+    ("gh repo set-default acme/public && " + W6, B, None, LEAK),
+    ("gh config set editor vi; " + W6, B, None, LEAK),
+    ("git status && git log -1 && " + W6, B, None, "exempt"),
+    ("cd " + B + " && " + W6, A, None, "exempt"),
+    ("cd " + A + " && " + W6, B, None, LEAK),
+    ("cd " + B + "; " + W6, A, None, LEAK),
+    ("gh pr create -t t -F body.md --fill-first -R acme/public", B, None,
+     "block: Cannot recover the text gh would send: --fill-first."),
+    ("gh pr create --fill", B, None, "exempt"),
+]
+
+exempt_list(GOOD)
+for command, cwd, environ, want in TARGETS:
+    got = target(command, cwd, environ)
+    check("targets", got.startswith(want), repr(command) + " in " + os.path.basename(cwd)
+          + (" with " + repr(environ) if environ else "") + " gave " + got)
+
+# The list itself: absent exempts nothing; a line without a reason, or of any other shape, and
+# a list that cannot be read, block every write and no read.
+LISTS = [
+    (None, W6, LEAK),
+    ("priv-org/*\n", W6, "block: The exempt list could not be loaded: line 1 of the exempt list"),
+    ("# a comment\npriv-org/* a reason\npriv-org a reason\n", W6,
+     "block: The exempt list could not be loaded: line 3 of the exempt list"),
+    ("https://github.com/priv-org/* a reason\n", W6, "block: The exempt list could not be loaded"),
+    ("priv-org/*/x a reason\n", W6, "block: The exempt list could not be loaded"),
+    (b"priv-org/* a reason \xff\n", W6, "block: The exempt list could not be loaded: the exempt"
+     " list is not UTF-8"),
+    ("priv-org/*\n", "gh issue list", "exempt"),
+]
+for text, command, want in LISTS:
+    if isinstance(text, bytes):
+        with open(LIST, "wb") as f:
+            f.write(text)
+    else:
+        exempt_list(text)
+    got = target(command, B)
+    check("exempt-list", got.startswith(want), repr(text) + " gave " + got)
+exempt_list(GOOD)
+if hasattr(os, "geteuid") and os.geteuid() != 0:
+    os.chmod(LIST, 0)
+    got = target(W6, B)
+    os.chmod(LIST, 0o644)
+    check("exempt-list", got.startswith("block: The exempt list could not be loaded: the exempt"
+                                        " list cannot be read"), "an unreadable list gave " + got)
+
+
 for group in sorted(results):
     found = results[group]
     if found is None:
@@ -13339,6 +13517,39 @@ if [ -n "$GHG_PY" ]; then
   [ "$t0 $t1" = "ok ok" ] \
     && report "the gh guard reads a relative path from the terminal tool's own directory" ok \
     || report "the gh guard reads a relative path from the terminal tool's own directory" no "terminal=$t0 bash=$t1"
+fi
+
+# 456. #361 AC3, AC6, AC7 — a write is exempt only when every repository it could reach is in
+#      the exempt list: what the invocation names decides alone (-R in each form, GH_REPO on it,
+#      a URL, a repo argument, an api endpoint), else every remote's fetch and push URL, ssh
+#      aliases and insteadOf included, every gh-resolved value and GH_REPO from the environment.
+#      An owner-level write, an unresolvable target, and anything earlier that moves the target
+#      are guarded. The list's own faults block every write and no read.
+ghg_case targets "the gh guard exempts a write only when every repository it could reach is exempt, and guards what it cannot resolve"
+ghg_case exempt-list "the gh guard's exempt list exempts nothing when absent, and blocks every write and no read when a line is malformed"
+if [ -n "$GHG_PY" ]; then
+  ghg_exempt="$TMP/ghg-home/.config/gate-sdd/leakage-exempt-repositories"
+  printf '%s\n' '# synthetic' 'zq-org/* a synthetic organisation the suite exempts' > "$ghg_exempt"
+  for ghg_r in zq acme; do
+    mkdir -p "$TMP/ghg-repo-$ghg_r"
+    ( cd "$TMP/ghg-repo-$ghg_r" && git init -q && git remote add origin "git@github.com:$ghg_r-org/x.git" ) >/dev/null 2>&1
+  done
+  ghg_json 'gh issue create -t Zq_Exact -b x' mcp__terminal__run_in_terminal "$TMP/ghg-repo-zq"
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin" ghg_run)
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && [ ! -s "$TMP/ghgerr" ] && x0=ok || x0="exit=$out"
+  ghg_json 'gh issue create -t Zq_Exact -b x' mcp__terminal__run_in_terminal "$TMP/ghg-repo-acme"
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin" ghg_run); x1=$(ghg_blocked "$out" 'LEAK [fail] in the --title value, line 1.')
+  ghg_json 'gh issue create -t Zq_Exact -b x' mcp__terminal__run_in_terminal "$TMP/ghg-repo-zq"
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin GIT_DIR=$TMP/ghg-repo-acme/.git" ghg_run)
+  x2=$(ghg_blocked "$out" 'LEAK [fail] in the --title value, line 1.')
+  printf '%s\n' 'zq-org/*' > "$ghg_exempt"
+  ghg_json 'gh issue create -t ok -b x' mcp__terminal__run_in_terminal "$TMP/ghg-repo-zq"
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin" ghg_run); x3=$(ghg_blocked "$out" 'line 1 of the exempt list is not')
+  rm -f "$ghg_exempt"
+  [ "$x0 $x1 $x2 $x3" = "ok ok ok ok" ] \
+    && report "the gh guard lets a write to an exempt repository through unscanned, and scans the rest" ok \
+    || report "the gh guard lets a write to an exempt repository through unscanned, and scans the rest" no \
+       "exempt=$x0 guarded=$x1 git-dir=$x2 malformed=$x3"
 fi
 
 # --- guards: scripts/check-version-bump.py ------------------------------------

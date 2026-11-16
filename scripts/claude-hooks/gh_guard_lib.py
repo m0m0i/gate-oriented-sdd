@@ -816,7 +816,8 @@ class Invocation(object):
     env options before it; state the walk's state where it runs; stdin what its standard input
     is, a Redir, "pipe" or None; where a label for the reason that names it."""
 
-    __slots__ = ("words", "assigns", "env", "redirs", "state", "piped", "simple", "binary")
+    __slots__ = ("words", "assigns", "env", "redirs", "state", "piped", "simple", "binary",
+                 "assigns_named")
 
     def __init__(self, words, assigns, env, redirs, state, piped, simple, binary):
         self.binary = binary
@@ -977,6 +978,22 @@ def unwrap(vals):
         else:
             break
     return k, env
+
+
+def git_subcommand(vals):
+    """git's subcommand, after its global options, or None when it cannot be known."""
+    k = 0
+    while k < len(vals):
+        a = vals[k]
+        if a is None:
+            return None
+        if a in ("-C", "--git-dir", "--work-tree", "--namespace", "-c"):
+            k += 2
+        elif a.startswith("-"):
+            k += 1
+        else:
+            return a
+    return ""
 
 
 def git_quiet(vals):
@@ -1249,12 +1266,13 @@ class Finder(object):
                 self.quiet_gh.append(text.label)
         self.names_files(base, quiet, vals[k + 1:], state)
         self.writes(cmd, (base, vals[k + 1:]), state, streams)
-        if base in ("git",) and k + 1 < len(vals) and vals[k + 1] in ("remote", "config"):
-            state.events.append("git " + vals[k + 1])
+        if base == "git" and git_subcommand(vals[k + 1:]) in ("remote", "config", None):
+            state.events.append("git " + (git_subcommand(vals[k + 1:]) or "with an unknown word"))
         if base == "unset":
             for v in vals[k + 1:]:
                 state.vars.pop(v or "", None)
-                state.events.append("unset")
+                if v is None or v.startswith("GH_") or v.startswith("GIT_"):
+                    state.events.append("unset of " + (v or "a variable it cannot know"))
 
     quiet_gh = None
 
@@ -1856,12 +1874,13 @@ def nodes():
 class Verdict(object):
     """What one invocation is: kind, its path, and for a write, its sources."""
 
-    __slots__ = ("kind", "path", "sources", "result")
+    __slots__ = ("kind", "path", "flags", "positionals", "result")
 
-    def __init__(self, kind, path, sources=None, result=None):
+    def __init__(self, kind, path, flags=None, positionals=None, result=None):
         self.kind = kind
         self.path = path
-        self.sources = sources or []
+        self.flags = flags or []
+        self.positionals = positionals or []
         self.result = result
 
 
@@ -2008,7 +2027,7 @@ def classify(inv):
         kind = api_kind(flags, positionals, inv.state)
     if kind in ("read", "local"):
         return Verdict(kind, path)
-    return write_sources(inv, path, flags, positionals)
+    return Verdict("write", path, flags, positionals)
 
 
 def unknown_flag(path, i):
@@ -2186,13 +2205,6 @@ def file_sources(value, label, state, published=False):
     return out
 
 
-def write_sources(inv, path, flags, positionals):
-    try:
-        return Verdict("write", path, gather(inv, path, flags, positionals))
-    except Lost as why:
-        return lost(str(why))
-
-
 def gather(inv, path, flags, positionals):
     state = inv.state
     sources = []
@@ -2240,6 +2252,283 @@ def gather(inv, path, flags, positionals):
                                       (resolve(r.target, state) or "a file")) + ")"
         sources.append(Source(label, stream(r, state)))
     return sources
+
+
+# ---------------------------------------------------------------------------------------------
+# Targets: which repositories a write could reach, and the exempt list (#361 AC6). A write is
+# exempt only when every repository it could reach is; anything the hook cannot resolve is
+# guarded, and a guarded write is scanned.
+
+class Guarded(Exception):
+    """The write's target cannot be resolved to repositories the exempt list could name."""
+
+
+# Paths whose writes reach an account or an owner, not a repository.
+OWNER_LEVEL = ("gist ", "project ", "ssh-key ", "gpg-key ", "codespace ", "repo fork")
+# The repo subcommands whose first positional names the repository they write to.
+REPO_ARGUMENT = ("repo archive", "repo delete", "repo edit", "repo sync", "repo unarchive",
+                 "repo create")
+_SUSPECT = re.compile(r"\.\.|%2e|%2f|//|\\\\", re.I)
+# What gh reads from its environment that changes which repository or host it writes to.
+TARGET_ENV = ("GH_HOST", "GH_CONFIG_DIR", "GIT_DIR", "GIT_WORK_TREE", "GIT_CONFIG",
+              "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS",
+              "GIT_COMMON_DIR", "GIT_NAMESPACE")
+
+
+def repo_of(value):
+    """OWNER/REPO, lower-cased, from what -R and a remote take: OWNER/REPO, HOST/OWNER/REPO, an
+    https or ssh URL, or scp-style host:owner/repo. .git is stripped only from a URL. None when
+    it does not parse."""
+    if value is None:
+        return None
+    url = False
+    if "://" in value:
+        rest = value.split("://", 1)[1]
+        path = rest.split("/", 1)[1] if "/" in rest else ""
+        url = True
+    elif re.match(r"^[^/:]+:[^/]", value):
+        path = value.split(":", 1)[1]
+        url = True
+    else:
+        path = value
+    path = path.split("?", 1)[0].split("#", 1)[0].strip("/")
+    bits = path.split("/")
+    if not url and len(bits) == 3:
+        bits = bits[1:]
+    if url and len(bits) >= 2:
+        bits = bits[:2]
+    if len(bits) != 2 or not all(re.fullmatch(r"[A-Za-z0-9_.-]+", b) for b in bits):
+        return None
+    repo = bits[1][:-4] if url and bits[1].endswith(".git") else bits[1]
+    if not repo or repo in (".", ".."):
+        return None
+    return (bits[0] + "/" + repo).lower()
+
+
+def url_repo(value):
+    """The repository of an issue, pull request or other GitHub URL given as an argument."""
+    m = re.match(r"^https?://[^/]+/([^/]+)/([^/?#]+)(/|$)", value or "")
+    return (m.group(1) + "/" + m.group(2)).lower() if m else None
+
+
+def named(inv, path, flags, positionals, events):
+    """The repositories an invocation names itself, which decide alone, or None when it names
+    none. Raises Guarded."""
+    repos = [v for n, v, _ in flags if n == "repo"]
+    if repos:
+        r = repo_of(repos[-1])
+        if r is None:
+            raise Guarded("its --repo value does not parse")
+        return [r]
+    hosts = [v for n, v, _ in flags if n == "hostname"]
+    if hosts and (not isinstance(hosts[-1], str) or hosts[-1].lower() != "github.com"):
+        raise Guarded("it names a host other than github.com")
+    if path.startswith(OWNER_LEVEL) or any(n in ("org", "owner", "user") for n, _, _ in flags):
+        raise Guarded("it writes to an account or an owner, not a repository")
+    found = []
+    for _, v in positionals if path != "api" else []:
+        if v is not None and re.match(r"^https?://", v):
+            r = url_repo(v)
+            if r is None:
+                raise Guarded("a URL it is given does not parse")
+            found.append(r)
+    if path == "issue transfer" and len(positionals) >= 2:
+        r = repo_of(positionals[1][1])
+        if r is None:
+            raise Guarded("the repository it transfers to does not parse")
+        found.append(r)
+    if found:
+        return found
+    assigned = [v for n, v in inv.assigns_named if n == "GH_REPO"]
+    if assigned:
+        r = repo_of(assigned[-1])
+        if r is None:
+            raise Guarded("its GH_REPO does not parse")
+        return [r]
+    if path in REPO_ARGUMENT:
+        if not positionals:
+            if path == "repo create":
+                raise Guarded("gh repo create with no name writes to the account")
+            return None
+        v = positionals[0][1]
+        if path == "repo create" and v is not None and "/" not in v:
+            raise Guarded("gh repo create without an owner writes to the account")
+        r = repo_of(v)
+        if r is None:
+            raise Guarded("the repository it names does not parse")
+        return [r]
+    if path == "api":
+        endpoint = positionals[0][1] if positionals else None
+        if endpoint is None:
+            raise Guarded("its endpoint cannot be known")
+        endpoint = re.sub(r"^https://(api|uploads)\.github\.com/", "", endpoint)
+        if _SUSPECT.search(endpoint.split("?", 1)[0]):
+            raise Guarded("its endpoint holds a sequence the hook does not resolve")
+        if endpoint.startswith("/"):
+            endpoint = endpoint[1:]
+        m = re.match(r"^repos/([^/{}?#]+)/([^/{}?#]+)(/|\?|$)", endpoint)
+        if m:
+            return [(m.group(1) + "/" + m.group(2)).lower()]
+        if re.match(r"^repos/\{owner\}/\{repo\}(/|\?|$)", endpoint):
+            return None
+        raise Guarded("its endpoint names no repository")
+    return None
+
+
+def candidates(inv, ctx):
+    """Every repository the directory a write runs in could resolve to. Raises Guarded."""
+    out = []
+    for cwd in inv.state.cwds:
+        if cwd is None:
+            raise Guarded("the directory it runs in cannot be known")
+        out += ctx.remotes(cwd)
+    env_repo = ctx.environ.get("GH_REPO")
+    if env_repo:
+        r = repo_of(env_repo)
+        if r is None:
+            raise Guarded("GH_REPO in the environment does not parse")
+        out.append(r)
+    for name, value in inv.state.vars.items():
+        if name == "GH_REPO":
+            r = repo_of(value)
+            if r is None:
+                raise Guarded("the command sets GH_REPO to a value the hook cannot know")
+            out.append(r)
+    if not out:
+        raise Guarded("the directory it runs in has no remote")
+    return sorted(set(out))
+
+
+def real_remotes(cwd, home, xdg):
+    """The repositories of every remote's fetch and push URLs, insteadOf applied, and every
+    gh-resolved value naming one. Raises Guarded."""
+    import subprocess
+
+    def git(*args):
+        try:
+            r = subprocess.run(["git", "-C", cwd] + list(args), stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, env=child_env(home, xdg), timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            raise Guarded("git could not read the remotes")
+        return r.returncode, r.stdout.decode("utf-8", "replace")
+
+    code, inside = git("rev-parse", "--is-inside-work-tree")
+    if code != 0:
+        code, inside = git("rev-parse", "--is-bare-repository")
+        if code != 0:
+            raise Guarded("the directory it runs in is not in a git repository")
+    code, names = git("remote")
+    if code != 0:
+        raise Guarded("git could not list the remotes")
+    out = []
+    for name in names.split():
+        for args in (("remote", "get-url", "--all", name), ("remote", "get-url", "--push", "--all", name)):
+            code, urls = git(*args)
+            if code != 0:
+                raise Guarded("git could not read a remote's URL")
+            for url in urls.split():
+                r = repo_of(url)
+                if r is None:
+                    raise Guarded("a remote's URL names no repository the hook can read")
+                out.append(r)
+    code, resolved = git("config", "--get-regexp", r"^remote\..*\.gh-resolved$")
+    for line in resolved.splitlines():
+        value = line.split(" ", 1)[1].strip() if " " in line else ""
+        if value and value != "base":
+            r = repo_of(value)
+            if r is None:
+                raise Guarded("a gh-resolved value does not parse")
+            out.append(r)
+    return out
+
+
+class ExemptFault(Exception):
+    pass
+
+
+def exempt_path(home, xdg):
+    base = xdg if xdg else (home or "") + "/.config"
+    return base + "/gate-sdd/leakage-exempt-repositories"
+
+
+def real_exempt(home, xdg):
+    """The exempt entries, as (owner, repo or *), lower-cased. An absent list is empty."""
+    path = exempt_path(home, xdg)
+    try:
+        with open(path, "rb") as f:
+            data = f.read(1024 * 1024 + 1)
+    except FileNotFoundError:
+        return []
+    except OSError:
+        raise ExemptFault("the exempt list cannot be read")
+    if len(data) > 1024 * 1024:
+        raise ExemptFault("the exempt list is over 1 MB")
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raise ExemptFault("the exempt list is not UTF-8")
+    entries = []
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        m = re.fullmatch(r"\s*([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+|\*)\s+(\S.*)", line)
+        if not m:
+            raise ExemptFault("line " + str(n) + " of the exempt list is not `<owner>/<repo>` or"
+                              " `<owner>/*` followed by a reason")
+        entries.append((m.group(1).lower(), m.group(2).lower()))
+    return entries
+
+
+def is_exempt(repo, entries):
+    owner, name = repo.split("/", 1)
+    return any(o == owner and (r == "*" or r == name) for o, r in entries)
+
+
+def target_events(inv, events, environ):
+    """Raises Guarded when something earlier in the command, on the invocation or in the
+    environment gh runs with changes where gh writes in a way the hook does not follow."""
+    for name in environ:
+        if name in TARGET_ENV or name.startswith("GIT_CONFIG"):
+            raise Guarded("its environment holds " + name)
+    if inv.env["clears"] or inv.env["unsets"]:
+        raise Guarded("env clears or unsets its environment")
+    for name, value in inv.assigns_named:
+        if name in TARGET_ENV or name.startswith("GIT_"):
+            raise Guarded("it is given " + name)
+    for e in inv.state.events + events:
+        if e != "assigns GH_REPO":
+            raise Guarded("the command runs " + e + " before it")
+
+
+def placeholders(sources, repos, cwd, ctx):
+    """gh expands {owner}, {repo} and {branch} in an api endpoint and its fields."""
+    out = []
+    for s in sources:
+        if not re.search(rb"\{(owner|repo|branch)\}", s.data):
+            out.append(s)
+            continue
+        if len(repos) != 1:
+            raise Lost("{owner}, {repo} or {branch}, with more than one repository a candidate")
+        owner, name = repos[0].split("/", 1)
+        data = s.data.replace(b"{owner}", _bytes(owner)).replace(b"{repo}", _bytes(name))
+        if b"{branch}" in data:
+            branch = ctx.branch(cwd)
+            if branch is None:
+                raise Lost("{branch}, in a directory whose branch the hook cannot read")
+            data = data.replace(b"{branch}", _bytes(branch))
+        out.append(Source(s.label, data))
+    return out
+
+
+def real_branch(cwd, home, xdg):
+    import subprocess
+    try:
+        r = subprocess.run(["git", "-C", cwd, "symbolic-ref", "--short", "HEAD"],
+                           stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                           env=child_env(home, xdg), timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout.decode("utf-8", "replace").strip() if r.returncode == 0 else None
 
 
 # ---------------------------------------------------------------------------------------------
@@ -2356,13 +2645,19 @@ def real_gh_version(binary, cwd):
 
 
 class Context(object):
-    """What decide() reaches outside the command through: the guard, gh's version."""
+    """What decide() reaches outside the command through: the guard, gh's version, the
+    remotes of a directory, the exempt list, and the environment gh will run with."""
 
-    def __init__(self, home, xdg=None, scan=None, gh_version=None):
+    def __init__(self, home, xdg=None, scan=None, gh_version=None, remotes=None, exempt=None,
+                 environ=None, branch=None):
         self.home = home
         self.xdg = xdg
         self.scan = scan or (lambda sources: real_scan(sources, home, xdg))
         self.gh_version = gh_version or real_gh_version
+        self.remotes = remotes or (lambda cwd: real_remotes(cwd, home, xdg))
+        self.exempt = exempt or (lambda: real_exempt(home, xdg))
+        self.environ = environ if environ is not None else {}
+        self.branch = branch or (lambda cwd: real_branch(cwd, home, xdg))
 
 
 def warning(text):
@@ -2374,15 +2669,46 @@ def decide(command, cwd, ctx):
     found = Finder(ctx.home, cwd).find(parse(command))
     if found.problems:
         return block(found.problems[0], ADVICE_UNEXPLAINED)
-    sources = []
-    binaries = []
+    writes = []
+    events = []
     for inv in found.invocations:
         verdict = classify(inv)
         if verdict.result is not None:
             return verdict.result
+        if verdict.kind == "local" and verdict.path in ("repo set-default", "config set"):
+            events.append("gh " + verdict.path)
         if verdict.kind == "write":
-            sources += verdict.sources
-            binaries.append((inv.binary, inv.state.cwds[0]))
+            writes.append((inv, verdict, list(events)))
+    if not writes:
+        return PASS
+    try:
+        entries = ctx.exempt()
+    except ExemptFault as why:
+        return block("The exempt list could not be loaded: " + str(why) + ", so no gh write can"
+                     " be told apart.", "Fix " + exempt_path(ctx.home, ctx.xdg) + "; every"
+                     " line is `<owner>/<repo>` or `<owner>/*` and a reason.")
+    sources = []
+    binaries = []
+    for inv, verdict, earlier in writes:
+        inv.assigns_named = [(n, resolve(w, inv.state)) for n, w, _ in inv.assigns] \
+            + list(inv.env["assigns"])
+        try:
+            target_events(inv, earlier, ctx.environ)
+            repos = named(inv, verdict.path, verdict.flags, verdict.positionals, earlier)
+            if repos is None:
+                repos = candidates(inv, ctx)
+            if all(is_exempt(r, entries) for r in repos):
+                continue
+        except Guarded:
+            repos = []
+        try:
+            got = gather(inv, verdict.path, verdict.flags, verdict.positionals)
+            if verdict.path == "api":
+                got = placeholders(got, repos, inv.state.cwds[0], ctx)
+        except Lost as why:
+            return lost(str(why)).result
+        sources += got
+        binaries.append((inv.binary, inv.state.cwds[0]))
     if not binaries:
         return PASS
     try:
@@ -2394,8 +2720,8 @@ def decide(command, cwd, ctx):
         where = " ".join("LEAK [" + t + "] in " + label + ", line " + str(n) + "."
                          for t, label, n in hits)
         return block(where + " The matched text is withheld.",
-                     "Rewrite the text without it. If this repository may hold it, exempt the"
-                     " repository with a reason in the exempt list beside the pattern file.")
+                     "Rewrite the text without it. If this repository may hold it, exempt it"
+                     " with a reason in " + exempt_path(ctx.home, ctx.xdg) + ".")
     notes = ["WARNING [" + t + "] in " + label + ", line " + str(n)
              + ": confirm it is a generic example." for t, label, n in warnings]
     for binary, where in binaries:
@@ -2418,4 +2744,5 @@ def run(argv, data):
     command, cwd = hook
     if not mentions_gh(command):
         return PASS
-    return decide(command, cwd, Context(os.environ.get("HOME"), os.environ.get("XDG_CONFIG_HOME")))
+    return decide(command, cwd, Context(os.environ.get("HOME"), os.environ.get("XDG_CONFIG_HOME"),
+                                        environ=dict(os.environ)))
