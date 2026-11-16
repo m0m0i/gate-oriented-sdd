@@ -32,6 +32,8 @@ def block(reason, advice=None):
 ADVICE_CODE = ("If it does not run gh, write the script to a file with the Write tool and run that"
                " file by its path, which the hook does not read; if it does, run gh as a plain"
                " command instead.")
+ADVICE_STRANGER = ("Run the gh write as a command of its own, or after only cd, assignments, echo,"
+                   " printf, cat, tee, test, git and the readers.")
 ADVICE_UNEXPLAINED = ("Run gh as a plain command: `gh <subcommand> ...`, by its name or a path that"
                       " ends in /gh, not through a variable, a substitution or a wrapper the hook"
                       " does not list.")
@@ -238,7 +240,7 @@ _ASSIGN = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)(\+?)=")
 _REDIR = re.compile(r"(\d*)(&>>|&>|>>\||>>!|>>|>\||>!|>&|<&|<>|<<<|<<-|<<|>|<)")
 _ENDS_WORD = " \t\n;&|()<>"
 _RESERVED = {"if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case",
-             "esac", "select", "repeat", "function", "coproc", "foreach", "end", "[[", "]]", "}"}
+             "esac", "select", "repeat", "function", "coproc", "foreach", "end", "]]", "}"}
 _MODIFIERS = "aAcehlpPqQrstuxX&gs"
 _ESCAPES = {"a": "\a", "b": "\b", "e": "\x1b", "E": "\x1b", "f": "\f", "n": "\n", "r": "\r",
             "t": "\t", "v": "\v", "\\": "\\", "'": "'", '"': '"', "?": "?"}
@@ -450,6 +452,10 @@ class Parser(object):
             if c == "\\":
                 j += 2
                 continue
+            if c in "'\"" and open_ == "{":
+                # zsh reads a quote inside ${...} by rules of its own, inside double quotes
+                # and out of them.
+                raise Unsupported("a quote inside ${...}")
             if c == "'":
                 k = s.find("'", j + 1)
                 if k < 0:
@@ -500,7 +506,8 @@ class Parser(object):
             if self.peek() == "[":
                 raw = "$" + name + self.balanced("[", "]")
                 parts.append(Part("opaque", raw, quoted))
-            elif self.peek() == ":" and self.peek(1) != "" and self.peek(1) in _MODIFIERS:
+            elif self.peek() == ":" and self.peek(1) != "" and (self.peek(1).isalpha()
+                                                                 or self.peek(1) in _MODIFIERS):
                 self.i += 2
                 parts.append(Part("opaque", "$" + name + s[self.i - 2:self.i], quoted))
             else:
@@ -636,6 +643,8 @@ class Parser(object):
             body = self.parse_list("}")
             self.i += 1
             return Group("group", body, self.redirections())
+        if self.word_is("[["):
+            return self.test_command()
         for keyword in ("if", "while", "until", "for", "function"):
             if self.word_is(keyword):
                 self.i += len(keyword)
@@ -678,6 +687,30 @@ class Parser(object):
         if not (assigns or words or redirs):
             raise Unsupported("an empty command")
         return Simple(assigns, words, redirs)
+
+    def test_command(self):
+        """[[ ... ]]: its words, with &&, ||, !, (, ), < and > inside it taken as words."""
+        start = self.i
+        self.i += 2
+        words = [Word([Part("lit", "[[")], "[[", "[[")]
+        while True:
+            self.blanks()
+            if self.word_is("]]"):
+                self.i += 2
+                words.append(Word([Part("lit", "]]")], "]]", "]]"))
+                break
+            if self.i >= len(self.s) or self.peek() == "\n":
+                raise Unsupported("a `]]` is missing")
+            m = re.compile(r"&&|\|\||[!()<>]").match(self.s, self.i)
+            if m:
+                self.i = m.end()
+                words.append(Word([Part("lit", m.group(0))], "\0", m.group(0)))
+                continue
+            w = self.word()
+            if w is None:
+                raise Unsupported("a `[[` this hook does not read")
+            words.append(w)
+        return Simple([], words, self.redirections())
 
     def expect_word(self, word):
         self.blank_lines()
@@ -1054,10 +1087,11 @@ class Invocation(object):
     is, a Redir, "pipe" or None; where a label for the reason that names it."""
 
     __slots__ = ("words", "assigns", "env", "redirs", "state", "piped", "simple", "binary",
-                 "assigns_named", "background")
+                 "assigns_named", "background", "strangers")
 
     def __init__(self, words, assigns, env, redirs, state, piped, simple, binary):
         self.background = False
+        self.strangers = []
         self.binary = binary
         self.words = words
         self.assigns = assigns
@@ -1074,7 +1108,7 @@ class Unknown(Exception):
 
 # Commands that never run their arguments, by the name they run as. git and rg are decided
 # by their own arguments.
-QUIET = {"echo", "printf", "print", "which", "type", "whence", "where", "man", "grep", "egrep",
+QUIET = {"[[", "echo", "printf", "print", "which", "type", "whence", "where", "man", "grep", "egrep",
          "fgrep", "cat", "ls", "cd", "pwd", "test", "[", "head", "tail", "wc", "mkdir", "touch",
          "rm", "diff", "sort", "uniq", "cut", "basename", "dirname", "realpath",
          "readlink", "stat", "file", "tee", "true", "false", ":", "chmod"}
@@ -1082,12 +1116,12 @@ QUIET = {"echo", "printf", "print", "which", "type", "whence", "where", "man", "
 # command changes the shell's state that the walk forgets rather than follows (#361).
 ASSIGNERS = {"read", "getopts", "vared", "zparseopts", "let", "typeset", "declare", "local",
              "readonly", "integer", "float", "zstyle"}
-_EXPANSION_ASSIGNS = re.compile(r"^\$\{.*(?<![=!<>])=(?!=)", re.S)
+_EXPANSION_ASSIGNS = re.compile(r"^\$\{.*?[A-Za-z0-9_\]]:{0,2}=(?!=)", re.S)
 _ARITH_ASSIGNS = re.compile(r"(?<![=!<>])=(?!=)|\+\+|--")
 
 # zsh 5.9's builtins (`print -l ${(k)builtins}` under zsh -f), how the walk takes each, and the
 # programs whose effect on files it knows: what they name, and their redirections (#361).
-ZSH_BUILTINS = set("""- . : [ alias autoload bg bindkey break builtin bye cd chdir command compadd
+ZSH_BUILTINS = set("""- . : [ [[ alias autoload bg bindkey break builtin bye cd chdir command compadd
 comparguments compcall compctl compdescribe compfiles compgroups compquote compset comptags
 comptry compvalues continue declare dirs disable disown echo echotc echoti emulate enable eval
 exec exit export false fc fg float functions getln getopts hash history integer jobs kill let
@@ -1095,7 +1129,7 @@ limit local log logout noglob popd print printf private pushd pushln pwd r read 
 return sched set setopt shift source suspend test times trap true ttyctl type typeset ulimit
 umask unalias unfunction unhash unlimit unset unsetopt vared wait whence where which zcompile
 zformat zle zmodload zparseopts zregexparse zstyle""".split())
-SAFE_BUILTINS = set(""": [ test echo true false pwd type whence where which wait jobs dirs times
+SAFE_BUILTINS = set(""": [ [[ test echo true false pwd type whence where which wait jobs dirs times
 shift exit return break continue kill umask ulimit limit unlimit disown bg fg suspend log logout
 bye history echotc echoti ttyctl rehash unhash zcompile alias unalias unfunction hash pushln
 print printf builtin noglob command compadd comparguments compcall compctl compdescribe
@@ -1111,6 +1145,10 @@ SELF_RUN = re.compile(r"^(TRAP[A-Z]+|chpwd|precmd|preexec|periodic|zshexit|zshad
 # Files tools run by convention, without being named.
 CONVENTIONAL = {"makefile", "gnumakefile", "justfile", "package.json", "rakefile",
                 "taskfile.yml", "taskfile.yaml", ".envrc", "pre-commit", "pre-push", "commit-msg"}
+# Variables programs run as commands.
+RUNNER_VARS = {"GIT_SSH_COMMAND", "GIT_SSH", "GIT_EDITOR", "GIT_SEQUENCE_EDITOR", "GIT_PAGER",
+               "GIT_ASKPASS", "SSH_ASKPASS", "EDITOR", "VISUAL", "PAGER", "MANPAGER", "LESSOPEN",
+               "GH_EDITOR", "GH_BROWSER", "GH_PAGER", "BROWSER", "SHELL", "PROMPT_COMMAND"}
 TARGET_VARS = {"HOME", "XDG_CONFIG_HOME", "GH_REPO", "GH_HOST", "GH_CONFIG_DIR", "CDPATH"}
 # git subcommands the walk knows, and those of them that rewrite the working tree.
 GIT_KNOWN = {"status", "log", "show", "diff", "rev-parse", "ls-files", "grep", "blame", "describe",
@@ -1124,12 +1162,27 @@ GIT_TREE = {"checkout", "switch", "restore", "reset", "merge", "pull", "rebase",
             "revert", "stash", "apply", "am", "clean", "rm", "mv", "worktree", "clone", "init",
             "submodule", "format-patch"}
 
+# The commands the walk models exactly. Before a gh write, and anywhere in a command that writes a
+# gh word into a file, any other command blocks (#361, the third bypass hunt): what it does to the
+# text, the files and the target is past what the walk can follow.
+COMPANION_BUILTINS = {"cd", "chdir", "export", "local", "typeset", "declare", "readonly", "integer",
+                      "float", "unset", "echo", "printf", "print", "test", "[", "[[", "true", "false",
+                      ":", "exit", "return", "set", "wait", "which", "type", "whence", "where",
+                      "pwd", "shift", "break", "continue", "noglob", "builtin"}
+COMPANION_PROGRAMS = {"cat", "tee", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "ls",
+                      "mkdir", "rm", "rmdir", "touch", "chmod", "cp", "mv", "ln", "install", "sort",
+                      "uniq", "cut", "basename", "dirname", "realpath", "readlink", "date", "jq",
+                      "diff", "cmp", "stat", "file", "sleep", "tr", "nl", "column", "fold", "paste",
+                      "comm", "md5", "shasum", "sha256sum", "sha1sum", "md5sum", "base64", "od",
+                      "xxd", "printenv", "uname", "whoami", "id", "hostname", "seq", "expr", "du",
+                      "df", "true", "false", "test", "echo", "printf"}
+
 # Commands that read the files they name and change none of them.
-READERS = {"cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "ls", "test", "[", "stat",
+READERS = {"cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "ls", "test", "[", "[[", "stat",
            "file", "diff", "cd", "pwd", "echo", "printf", "print", "which", "type", "whence",
            "where", "man", "realpath", "readlink", "basename", "dirname", "true", "false", ":",
-           "sort", "uniq", "cut", "chmod", "chown", "chgrp", "cmp", "md5", "shasum", "sha256sum",
-           "sha1sum", "md5sum", "od", "xxd", "nl", "jq", "du", "df", "less", "more", "printenv",
+           "sort", "cut", "cmp", "md5", "shasum", "sha256sum",
+           "sha1sum", "md5sum", "od", "nl", "jq", "du", "df", "less", "more", "printenv",
            "comm", "column", "fold", "paste", "tr"}
 STDIN_OPS = ("<", "<<", "<<-", "<<<", "<>")
 # Programs that write the files their arguments name, and nothing else.
@@ -1384,6 +1437,19 @@ def _failed(start, run):
     return out
 
 
+def _assigning_print(vals):
+    """True when print or printf may be given -v or -z: an option before the first word that is
+    not one, or a word the hook cannot know there."""
+    for v in vals:
+        if v is None:
+            return True
+        if not v.startswith("-") or v in ("-", "--"):
+            return False
+        if set("vz") & set(v[1:]):
+            return True
+    return False
+
+
 def _runs_word(script, names):
     """True when a command named one of names appears anywhere in the script."""
     for node, _ in script.items:
@@ -1498,8 +1564,17 @@ class Finder(object):
                 for inv in self.invocations[marks:]:
                     inv.background = True
                 state.absorb(job)
+                for k in list(job.files) + list(job.named):
+                    state.named[k] = "a background job"
             else:
                 self.andor(node, state)
+        if script.unsupported is not None:
+            self.stranger(script.unsupported[1])
+        if script.unsupported is not None and not mentions_gh(script.unsupported[0]) and any(
+                n in state.tainted or mentions_gh(state.vars.get(n) or "")
+                for n in re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)", script.unsupported[0])):
+            self.problem("The hook does not read " + script.unsupported[1] + ", and a variable"
+                         " used there holds a gh word.")
         if script.unsupported is not None and mentions_gh(script.unsupported[0]):
             self.problem("The hook does not read " + script.unsupported[1]
                          + ", and the command holds a gh word there or after it.")
@@ -1547,12 +1622,22 @@ class Finder(object):
     def pipeline(self, pipeline, state):
         n = len(pipeline.commands)
         marks = len(self.problems), len(self.quiet_gh)
+        stages = []
         for k, command in enumerate(pipeline.commands):
-            # Every command of a pipeline but the last runs in a subshell.
+            # Every command of a pipeline but the last runs in a subshell, all at once.
             here = state if k == n - 1 else state.copy()
+            before = (dict(here.files), dict(here.named))
+            first = len(self.invocations)
             self.command(command, here, piped=k > 0, downstream=k < n - 1)
+            wrote = here.files != before[0] or here.named != before[1]
+            stages.append((self.invocations[first:], wrote))
             if here is not state:
                 state.absorb(here)
+        if n > 1:
+            for j, (invs, _) in enumerate(stages):
+                if any(w for i, (_, w) in enumerate(stages) if i != j):
+                    for inv in invs:
+                        inv.background = True
         # A gh word a quiet command printed is accounted for only if nothing after it in the
         # pipeline can run what it reads.
         if n > 1 and self.quiet_gh[marks[1]:]:
@@ -1577,6 +1662,8 @@ class Finder(object):
         return name is not None and (is_gh(name) or self.quiet(name, vals[k + 1:]))
 
     def quiet(self, name, args):
+        if self.aliased:
+            return False
         base = _name(name)
         if base in self.functions or name in self.functions:
             return False
@@ -1636,6 +1723,7 @@ class Finder(object):
                 body.vars["HOME"] = self.home
             body.cwds = (None,)
             body.deferred = True
+            body.stdin_unknown = True
             self.walk(c.parts[0][1], body)
             return
         if c.kind == "if":
@@ -1686,6 +1774,11 @@ class Finder(object):
                     self.walk(cond, after)
                 self.walk(body, after)
             loop.merge([after])
+        if any(_runs_word(body, ("break", "continue")) or (cond is not None and
+                                                             _runs_word(cond, ("break", "continue")))
+               for cond, body in c.parts):
+            # A run cut short leaves any value or file the body was part way through.
+            self.forget(loop, files=True)
         merged = state.copy()
         merged.merge([loop])
         self.adopt(state, merged)
@@ -1740,7 +1833,19 @@ class Finder(object):
         if self.expansion_assigns([w for _, w, _ in cmd.assigns] + list(cmd.words)
                                   + [r.target for r in cmd.redirs]
                                   + [r.heredoc.word for r in cmd.redirs if r.heredoc is not None]):
+            # It may assign zsh's options array, or any variable by name: later words too.
             self.forget(state)
+            state.optioned = True
+        for w in list(cmd.words) + [x for _, x, _ in cmd.assigns] \
+                + [r.target for r in cmd.redirs if r.target is not None] \
+                + [r.heredoc.word for r in cmd.redirs if r.heredoc is not None and r.heredoc.word]:
+            for part in w.parts:
+                if part.kind == "opaque" and (mentions_gh(part.text) or any(
+                        n in state.tainted or mentions_gh(state.vars.get(n) or "")
+                        for n in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", part.text))):
+                    # An expansion the hook does not read may hold a substitution that runs gh.
+                    self.problem("A gh word is inside an expansion the hook does not read, so it"
+                                 " cannot tell what the command runs.")
 
         # zsh drops a word that is only unquoted expansions and expands to nothing.
         pairs = [(w, self.value(w, state)) for w in cmd.words]
@@ -1770,6 +1875,13 @@ class Finder(object):
             # env alone, and the like: it prints, and runs nothing. `exec` with redirections
             # alone moves the shell's own standard input and output for every later command.
             self.check_words(words, state, quiet=True)
+            if not external:
+                # `F=x noglob` and `F=x builtin` run nothing, so their assignments persist.
+                for aname, w, appends in cmd.assigns:
+                    self.assign(aname, w, appends, state, export=False)
+            if any(x.gh for _, x in streams):
+                self.problem("A gh word is in a here-document exec opens for later commands, so"
+                             " the hook cannot tell what reads it.")
             if vals and vals[0] == "exec" and cmd.redirs:
                 if any(r.op in STDIN_OPS or r.op == "<&" for r in cmd.redirs):
                     state.stdin_unknown = True
@@ -1787,6 +1899,7 @@ class Finder(object):
                 return
             self.forget(state, cwd=True, files=True)
             state.events.append("a command whose name cannot be known")
+            self.stranger("a command whose name cannot be known")
             self.writes(cmd, None, state, streams)
             return
         base = _name(name)
@@ -1795,13 +1908,34 @@ class Finder(object):
         if is_gh(name):
             # The words after gh are what it sends; reading them is the classifier's work.
             stdin, piped = self.inherited_stdin(cmd.redirs, piped)
-            self.invocations.append(Invocation(args, list(cmd.assigns), env, stdin,
-                                               state.copy(), piped, cmd, name))
+            inv = Invocation(args, list(cmd.assigns), env, stdin, state.copy(), piped, cmd, name)
+            inv.strangers = list(self.strangers)
+            self.invocations.append(inv)
             self.check_words(words[:k], state, quiet=True)
             self.writes(cmd, None, state, [])
             if gh_writes_locally(rest):
                 self.forget(state, vars_=False, files=True)
             return
+        # An assignment before any command but gh that holds a gh word may be how it runs gh:
+        # GIT_SSH_COMMAND, EDITOR, PAGER.
+        for _, w, _ in cmd.assigns:
+            if self.has_gh(w, state):
+                self.problem("A gh word is in an assignment before " + base + ", which may run"
+                             " it, so the hook cannot tell what the command runs.")
+        for _, v in env.get("assigns", []):
+            if v is not None and mentions_gh(v):
+                self.problem("A gh word is in an assignment env gives " + base + ", which may run"
+                             " it, so the hook cannot tell what the command runs.")
+        if not self.companion(name, base, rest, external):
+            self.stranger(base)
+            # A command the walk does not model is given a gh word only to run it, or to write
+            # it where something may: its words, its input and its substitutions included.
+            if not self.quiet(name, rest) and (any(self.has_gh(w, state) for w in words[k + 1:])
+                                               or any(x.gh for _, x in streams)
+                                               or any(r.target is not None and self.has_gh(r.target, state)
+                                                      for r in cmd.redirs)):
+                self.problem("A gh word is given to " + base + ", which the hook does not"
+                             " follow, so it cannot tell what the command runs.")
         if not external and (name in self.functions or base in self.functions):
             # A function defined in the command runs in this shell: it may set any variable,
             # change the directory and write any file.
@@ -1822,6 +1956,10 @@ class Finder(object):
             else:
                 base = ""   # read already, as a script
         elif base == "git":
+            if any(n.startswith("GIT_CONFIG") or n in RUNNER_VARS for n, _, _ in cmd.assigns) \
+                    and any(x.gh for x in state.files.values()):
+                self.problem("A file the command wrote holds a gh word, and git, through the"
+                             " configuration it is given, can run it.")
             self.git(rest, state)
         elif base not in KNOWN_PROGRAMS:
             self.unknown_program(state, base)
@@ -1837,6 +1975,21 @@ class Finder(object):
             self.runs_written(state, base)
         self.names_files(base, quiet, rest, state)
         self.writes(cmd, (base, rest), state, streams)
+
+    def companion(self, name, base, rest, external):
+        """True for a command the walk models exactly."""
+        if external or "/" in name or name in self.functions or base in self.functions:
+            return False
+        if base == "git":
+            sub = git_subcommand(rest)
+            return bool(sub) and sub in GIT_KNOWN and "-c" not in rest[:rest.index(sub)]
+        if base in ZSH_BUILTINS:
+            return base in COMPANION_BUILTINS
+        return base in COMPANION_PROGRAMS
+
+    def stranger(self, what):
+        if what not in self.strangers:
+            self.strangers.append(what or "a command")
 
     def unknown_program(self, state, base):
         # A program whose effect on files the walk does not know may change any of them, and
@@ -1887,13 +2040,17 @@ class Finder(object):
                     state.optioned = True
         elif base in ("set", "setopt", "unsetopt", "emulate"):
             self.options(base, rest, state)
-        elif base in VAR_BUILTINS or (base in ("print", "printf") and any(
-                v is None or (v.startswith("-") and not v.startswith("--") and set("vz") & set(v[1:]))
-                for v in rest)):
+        elif base in VAR_BUILTINS or (base in ("print", "printf") and _assigning_print(rest)):
             self.forget(state)
             for v in rest:
                 if v is not None and _NAME.fullmatch(v):
                     state.vars[v] = None
+                if v is None or "[" in v or v.startswith("options"):
+                    state.optioned = True
+        elif base == "alias" and rest:
+            # Read when the line is run, not when this command is: every later name may differ.
+            self.aliased = True
+            state.optioned = True
         elif base in SAFE_BUILTINS:
             pass
         else:
@@ -1928,8 +2085,13 @@ class Finder(object):
                     k += 1
                 if "A" in letters:
                     self.forget(state)
-                    if k + 1 < len(vals) and vals[k + 1] is not None:
-                        state.vars[vals[k + 1]] = None
+                    target = vals[k + 1] if k + 1 < len(vals) else None
+                    if target is not None:
+                        state.vars[target] = None
+                    if target is None or target.endswith("_functions") or target == "options":
+                        # zsh's hook arrays and its options array change what runs and expands.
+                        state.optioned = True
+                        self.forget(state, cwd=True, files=True)
                     return
                 if "a" in letters:
                     state.events.append("set -a")
@@ -1964,6 +2126,10 @@ class Finder(object):
             if any(t.gh for t in state.files.values()):
                 self.problem("A file the command wrote holds a gh word, and git, through an alias"
                              " or a config it is given, can run it.")
+        if sub == "grep" and any(v is None or v.startswith("-O") or v.startswith("--open-files")
+                                 for v in vals):
+            self.stranger("git grep -O")
+            self.unknown_program(state, "git grep -O")
         if not sub or sub not in GIT_KNOWN:
             self.unknown_program(state, "git " + (sub or "?"))
         elif sub in ("remote", "config"):
@@ -1983,6 +2149,9 @@ class Finder(object):
                                  " arguments, so the hook cannot tell what it runs.")
 
     def assign(self, name, word, appends, state, export):
+        if (export or name in RUNNER_VARS or name in state.exported) and self.has_gh(word, state):
+            self.problem("A gh word is in " + name + ", which a later program may run, so the hook"
+                         " cannot tell what the command runs.")
         value = word.literal(state.env(), pattern_ok=True)
         if appends:
             old = state.vars.get(name, "")
@@ -2034,6 +2203,11 @@ class Finder(object):
                                  " read.")
                 continue
             if v.startswith("-") or v.startswith("+"):
+                continue
+            if "[" in v.split("=", 1)[0]:
+                # NAME[...]=: an element, zsh's options array among them.
+                self.forget(state)
+                state.optioned = True
                 continue
             m = _ASSIGN.match(v)
             if m:
@@ -2276,10 +2450,22 @@ class Finder(object):
         if base == "tee":
             appends = "-a" in vals or "--append" in vals
             targets += [(v, appends, True) for v in files]
+        fails = False
+        # zsh opens the redirections in order and runs nothing when one fails: a target whose
+        # directory is missing, and not made earlier in the command, leaves every target as it was.
+        for r in cmd.redirs:
+            if r.target is None or r.op in STDIN_OPS or r.op in (">&", "<&"):
+                continue
+            q = state.path(r.target.literal(state.env()))
+            if q is not None and q != "/dev/null" and not os.path.isdir(os.path.dirname(q)) \
+                    and _named(state, _fold(os.path.dirname(q))) is None:
+                fails = True
+                break
         for v, appends, out in targets:
             p = state.path(v)
             if self.config_path(p, state) or (p is None and v is not None and ".git" in v):
                 state.events.append("a write to a path that decides where gh writes")
+                self.stranger("a write into .git or git's or gh's configuration")
             if p is None:
                 # A path it cannot know may be any file, a body file or .git/config.
                 state.deferred = True
@@ -2287,10 +2473,13 @@ class Finder(object):
                 continue
             if p == "/dev/null":
                 continue
-            if os.path.lexists(p) and not os.access(p, os.W_OK):
-                # The redirection fails and the file keeps what it held.
+            if (os.path.lexists(p) and not os.access(p, os.W_OK)) \
+                    or state.named.get(_fold(p)) in ("chmod", "chown", "chgrp", "a background job"):
+                # The redirection may fail, or a job still running may write after it, and the
+                # file keeps what it held.
                 out = False
-            text = Text(content if out else None, gh and out, "a file this command wrote", p)
+            text = Text(content if out and not fails else None, gh and out,
+                        "a file this command wrote", p)
             k = _fold(p)
             old = state.files.get(k)
             if appends and old is None and _named(state, k) is None:
@@ -2301,6 +2490,8 @@ class Finder(object):
                 else:
                     text = Text(old.content + text.content, text.gh or old.gh, text.label, p)
             state.files[k] = text
+            if text.gh:
+                self.gh_text = True
 
     def printed(self, base, vals):
         if any(v is None for v in vals):
@@ -2311,7 +2502,14 @@ class Finder(object):
         self.quiet_gh = []
         self.stdin = []
         self.functions = set()
+        self.strangers = []
+        self.gh_text = False
+        self.aliased = False
         self.walk(script, self.start.copy())
+        if self.gh_text and self.strangers:
+            self.problem("The command writes a gh word into a file, and runs "
+                         + ", ".join(self.strangers[:3]) + ", which the hook does not follow and"
+                         " which may run it.")
         return self
 
 
@@ -3183,7 +3381,7 @@ def gather(inv, path, flags, positionals):
     if inv.piped:
         raise Lost("standard input from a pipe")
     if inv.state.stdin_unknown and not inv.redirs:
-        raise Lost("standard input, which an earlier exec moved")
+        raise Lost("standard input, which an earlier exec moved, or a function's caller gives")
     for r in inv.redirs:
         label = "standard input (" + ("a here-document" if r.heredoc is not None else
                                       "a here-string" if r.op == "<<<" else
@@ -3208,7 +3406,8 @@ REPO_ARGUMENT = ("repo archive", "repo delete", "repo edit", "repo sync", "repo 
                  "repo create")
 _SUSPECT = re.compile(r"\.\.|%2e|%2f|//|\\\\", re.I)
 # What gh reads from its environment that changes which repository or host it writes to.
-TARGET_ENV = ("GH_HOST", "GH_CONFIG_DIR", "GIT_DIR", "GIT_WORK_TREE", "GIT_CONFIG",
+TARGET_ENV = ("GH_HOST", "GH_CONFIG_DIR", "HOME", "XDG_CONFIG_HOME", "GIT_DIR", "GIT_WORK_TREE",
+              "GIT_CONFIG",
               "GIT_CONFIG_GLOBAL", "GIT_CONFIG_SYSTEM", "GIT_CONFIG_COUNT", "GIT_CONFIG_PARAMETERS",
               "GIT_COMMON_DIR", "GIT_NAMESPACE")
 
@@ -3316,7 +3515,7 @@ def named(inv, path, flags, positionals, events, has_repo_flag=True):
             raise Guarded("its endpoint holds a sequence the hook does not resolve")
         if endpoint.startswith("/"):
             endpoint = endpoint[1:]
-        if re.match(r"^repos/[^/]+/[^/]+/(generate|forks|transfer)(/|\?|$)", endpoint):
+        if re.match(r"^repos/[^/]+/[^/]+/(generate|forks|transfer)(/|\?|$)", endpoint, re.I):
             raise Guarded("its endpoint makes or moves a repository under another owner")
         m = re.match(r"^repos/([^/{}:?#]+)/([^/{}:?#]+)(/|\?|$)", endpoint)
         if m:
@@ -3453,6 +3652,9 @@ def target_events(inv, events, environ):
     """Raises Guarded when something earlier in the command, on the invocation or in the
     environment gh runs with changes where gh writes in a way the hook does not follow."""
     for name in environ:
+        # HOME and XDG_CONFIG_HOME are where the hook itself reads git's and gh's configuration.
+        if name in ("HOME", "XDG_CONFIG_HOME"):
+            continue
         if name in TARGET_ENV or name.startswith("GIT_CONFIG"):
             raise Guarded("its environment holds " + name)
     if inv.env["clears"] or inv.env["unsets"]:
@@ -3649,6 +3851,10 @@ def decide(command, cwd, ctx):
         if verdict.kind == "local" and verdict.path in ("repo set-default", "config set"):
             events.append("gh " + verdict.path)
         if verdict.kind == "write":
+            if inv.strangers:
+                return block("A gh write runs after " + ", ".join(inv.strangers[:3]) + ", which"
+                             " the hook does not follow, so it cannot tell what gh would send or"
+                             " where.", ADVICE_STRANGER)
             writes.append((inv, verdict, list(events)))
     if not writes:
         return PASS
