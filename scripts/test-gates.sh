@@ -12243,7 +12243,8 @@ y11=$(lk_hooks "$r" 'this checkout holds no scripts/git-hooks/shim.sh')
 
 # 445. #360 AC8 — `--no-hook-check` exempts a run from that refusal, for CI, which has no clone to
 #      commit from. The CI step's one working-tree run carries it. The `- Validators:` line and
-#      the hook scripts do not: a turn end or a hook that took the exemption would hide an absent hook.
+#      the hook scripts do not, nor the gh guard's (#361): a turn end or a hook that took the exemption
+#      would hide an absent hook.
 lk_c=$(hook_repo lkg-y-exempt)
 out=$(run_leak "$lk_c" "" "" "" --no-hook-check)
 [ "$out" = 0 ] && grep -q 'file(s) scanned, private patterns loaded' "$TMP/lkout" && v0=ok || v0="exit=$out"
@@ -12256,7 +12257,8 @@ grep 'check-leakage\.sh' "$TMP/lkg-step.sh" | grep -v -e '--no-hook-check' | gre
   && v2="$v2+a working-tree run without the exemption"
 v3=ok
 grep -q -e '--no-hook-check' "$ROOT/.steering/tech.md" && v3="in .steering/tech.md"
-cat "$ROOT"/scripts/git-hooks/*.sh "$ROOT/scripts/install-git-hooks.sh" "$ROOT"/hooks/*.sh | grep -q -e '--no-hook-check' && v3="$v3+in a hook script"
+cat "$ROOT"/scripts/git-hooks/*.sh "$ROOT/scripts/install-git-hooks.sh" "$ROOT"/hooks/*.sh \
+  "$ROOT"/scripts/claude-hooks/* "$ROOT/scripts/install-gh-hook.sh" | grep -q -e '--no-hook-check' && v3="$v3+in a hook script"
 
 [ "$v0 $v1 $v2 $v3" = "ok ok ok ok ok" ] \
   && report "--no-hook-check exempts a run, is on CI's working-tree run, and is on no validator line or hook" ok \
@@ -12906,10 +12908,10 @@ BLOCKED = [
     ("env -S 'gh x'", "The hook cannot read env -S"),
     ("nice --weird gh", "The hook cannot read nice --weird"),
     ("timeout $T gh x", "a wrapper's argument cannot be known"),
-    ("G=$(echo gh); bash -c \"$G x\"", "A shell is given a script the hook cannot read"),
+    ("G=$(echo gh); bash -c \"$G x\"", "A shell is given a word the hook cannot know"),
     ("gh issue list && $(echo gh) x", "A command's name cannot be known"),
     ("sh <<EOF\n$(echo gh) x\nEOF", "A shell reads a here-document the hook cannot know"),
-    ("export X=$(echo gh); sh -c \"$X\"", "A shell is given a script the hook cannot read"),
+    ("export X=$(echo gh); sh -c \"$X\"", "A shell is given a word the hook cannot know"),
 ]
 
 for command, want in BLOCKED:
@@ -13496,6 +13498,126 @@ for command, cwd, want in HUNT:
     got = target(command, cwd)
     check("hunt", got.startswith(want), repr(command) + " gave " + got)
 
+# Round two of the hunt: the shapes it confirmed, one or more per root cause, each now blocked,
+# and what the new rules leave alone.
+for name, body in (("notes.md", "clean\n"), ("AGENTS.md", "clean\n"), ("draft.md", "draft\n")):
+    with open(os.path.join(A, name), "w") as f:
+        f.write(body)
+link = os.path.join(A, "CLAUDE.md")
+if not os.path.lexists(link):
+    os.symlink("AGENTS.md", link)
+ro = os.path.join(A, "ro.md")
+if os.path.exists(ro):
+    os.chmod(ro, 0o644)
+with open(ro, "w") as f:
+    f.write("Zq_Exact\n")
+os.chmod(ro, 0o444)
+os.makedirs(os.path.join(A, "docs"), exist_ok=True)
+LOST = "block: Cannot recover the text gh would send:"
+NAME = "block: A command's name cannot be known"
+RUNS = "block: "
+GW = "gh issue create --title Zq_Exact --body x"
+HUNT2 = [
+    # invocation
+    ("printf 'x\\n" + GW + "\\n' > s; sh s", A, LEAK),
+    ("bash -c $'set -e\\n" + GW + "'", A, LEAK),
+    ("bash --norc -c '" + GW + "'", A, LEAK),
+    ("bash -c -- '" + GW + "'", A, LEAK),
+    ("sh -c '\"$@\"' sh " + GW, A, "block: A gh word is an argument of a command that can run"),
+    ("sh /dev/stdin <<'EOF'\n" + GW + "\nEOF", A, LEAK),
+    ("cat > s <<'EOF'\n" + GW + "\nEOF\nsh < s", A, LEAK),
+    ("mkdir -p bin && cat > bin/s <<'EOF'\n#!/bin/sh\n" + GW + "\nEOF\nchmod +x bin/s && bin/s", A, LEAK),
+    ("cat > a <<'EOF'\n" + GW + "\nEOF\ncp a b && sh b", A, "block: The command runs a file it changed"),
+    ("cp ../bin/gh ./g && ./g issue create --title Zq_Exact --body x", A, "block: A gh word is an argument"),
+    ("cat > Makefile <<'EOF'\nall:\n\t" + GW + "\nEOF\nmake", A, "block: A file the command wrote holds a gh word, and make can run it."),
+    ("bash --surprise -c '" + GW + "'", A, "block: A shell is given an option the hook does not read"),
+    # text off the command line
+    ("(echo Zq_Exact > notes.md); gh issue create -t t --body-file notes.md", A, LOST + " notes.md, which the command writes"),
+    ("{ echo a; echo Zq_Exact; } > notes.md; gh issue create -t t -F notes.md", A, LOST + " notes.md, which the command writes"),
+    ("sed -i '' s/clean/Zq_Exact/ notes.md 2>&1 | head -1; gh issue create -t t -F notes.md", A, LOST + " notes.md, which sed names"),
+    ("git checkout -q feature && gh issue create -t t -F notes.md", A, LOST + " notes.md, which a function, a source"),
+    ("python3 -c 'pass'; gh issue create -t t -F notes.md", A, LOST + " notes.md, which a function, a source"),
+    ("echo Zq_Exact > n.md; cp n.md docs/; gh issue create -t t -F docs/n.md", A, LOST + " docs/n.md, which cp names"),
+    ("echo Zq_Exact > AGENTS.md; gh issue create -t t -F CLAUDE.md", A, "block: LEAK [fail] in the --body-file file (CLAUDE.md), line 1."),
+    ("echo clean > ro.md; gh issue create -t t -F ro.md", A, LOST + " ro.md, which the command writes"),
+    ("gh issue comment 1 --body-file - <<EOF\nRun make \\\nEOF\ngit commit -qm 'Zq_Exact'\nEOF", A,
+     "block: LEAK [fail] in standard input (a here-document), line 2."),
+    ("printf 'Zq_Exact\\n' > b.md\nexec < b.md\ngh issue create -t t --body-file -", A, LOST + " standard input, which an earlier exec moved"),
+    ("cat < draft.md <<EOF > b.md\nclean\nEOF\ngh issue create -t t --body-file b.md", A, LOST + " b.md, which the command writes"),
+    ("echo Zq_Exact > \"$PWD/n.md\" && gh issue create -t t --body-file n.md", A, "block: LEAK [fail] in the --body-file file (n.md), line 1."),
+    ("echo Zq_Exact 1<> notes.md; gh issue create -t t --body-file notes.md", A, LOST + " notes.md, which the command writes"),
+    ("echo Zq_Exact > 'n.md#x'; gh gist create 'n.md#x'", A, "block: LEAK [fail] in the file in argument 1 (n.md#x), line 1."),
+    # gh's own parsing
+    ("gh issue create --title Zq_Exact --body b --help=0", A, LEAK),
+    ("gh issue create --title t --body b --help=yes", A, "block: gh issue create was given a flag"),
+    ("gh gist - create <<< Zq_Exact", A, "block: LEAK [fail] in standard input (a here-string), line 1."),
+    ("gh api graphql -F query='mutation { x(b: \"Zq_Exact\") }' -f query='{ viewer { login } }'", A, "block: LEAK"),
+    ("echo Zq_Exact > s.txt; gh gist edit abc s.txt --add notes.md", A, "block: LEAK [fail] in the file in argument 2 (s.txt), line 1."),
+    ("gh api repos/priv-org/secret/generate -f owner=acme -f name=n -f description=Zq_Exact", A, "block: LEAK"),
+    ("gh issue develop 1 -R priv-org/secret --branch-repo acme/public --name Zq_Exact", A, "block: LEAK"),
+    ("gh discussion comment https://github.com/acme/public/discussions/1 --body Zq_Exact", B, "block: LEAK"),
+    ("GH_REPO=priv-org/secret gh repo edit acme/public --description Zq_Exact", A, "block: LEAK"),
+    ("gh issue comment HTTPS://github.com/acme/public/issues/1 -R priv-org/secret --body Zq_Exact", B, "block: LEAK"),
+    ("gh variable set N --org acme -R priv-org/secret --body Zq_Exact", B, "block: LEAK"),
+    ("gh skill publish ./skills", A, LOST + " the files under the directory gh skill publish publishes."),
+    # how words expand
+    ("gh api repos/o/r/issues --jq $(echo . -f title=Zq_Exact)", A, "block: Cannot recover"),
+    ("E=; gh pr merge 1 --squash --subject $E --match-head-commit --body=Zq_Exact", A, "block: LEAK"),
+    ("T=x; E=; T=Zq_Exact $E; gh issue create --title \"$T\" --body b", A, LEAK),
+    ("IFS=,; gh pr merge 1 --squash --match-head-commit $(echo abc,--body,Zq_Exact)", A, LOST + " its words, whose expansion"),
+    ("setopt SH_WORD_SPLIT; H='abc --body Zq_Exact'; gh pr merge 1 --squash --match-head-commit $H", A, LOST + " its words, whose expansion"),
+    ("setopt BRACE_CCL; gh issue create --title t --body Zq_Exac{t}", A, LOST + " its words, whose expansion"),
+    # targets
+    ("GH_REPO=priv-org/x gh api repos/acme/public/issues -f title=Zq_Exact", A, "block: LEAK"),
+    ("(cd " + B + " && git remote add up https://github.com/acme/public); cd " + B + " && " + W6, A, LEAK),
+    ("cd " + B + " && sh -c 'git remote add up https://github.com/acme/public' && " + W6, A, LEAK),
+    ("cd " + B + " && python3 -c 'pass' && " + W6, A, LEAK),
+    ("cd " + B + " && GH_REPO=acme/public sh -c '" + W6 + "'", A, LEAK),
+    ("read GIT_DIR <<< x; declare -x GIT_DIR; cd " + B + " && " + W6, A, LEAK),
+    ("cd " + R + " && mv b old-b && mv a b && cd b && " + W6, A, LEAK),
+    ("cd " + B + " && git -c alias.ra='remote add' ra up x && " + W6, A, LEAK),
+    ("export \"GH_REPO=acme/public\"; cd " + B + " && " + W6, A, LEAK),
+    # state
+    ("echo draft > d.md; sed -i '' s/draft/Zq_Exact/ d.md; gh issue create -t t -F d.md", A, LOST + " d.md, which sed names"),
+    ("echo draft > d.md; echo Zq_Exact > n.md; mv n.md d.md; gh issue create -t t -F d.md", A, LOST + " d.md, which mv names"),
+    ("TITLE=U; for t in 'Zq_Exact n' U; do TITLE=$t; [ -n \"$t\" ] && break; done; gh issue create --title \"$TITLE\" --body b", A, UNKNOWN),
+    ("T=draft; trap 'T=Zq_Exact' DEBUG; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; TRAPZERR() { T=Zq_Exact; }; false; gh issue create --title \"$T\" --body b", A, LOST + " its words, whose expansion"),
+    ("chpwd() { T=Zq_Exact; }; T=draft; cd .; gh issue create --title \"$T\" --body b", A, LOST + " its words, whose expansion"),
+    ("printf 'x\\ngh issue create --title Zq_Exact --body x\\n' > s; sh s", A, LEAK),
+    ("gh issue create --title t --body-file b.md & echo Zq_Exact > b.md; wait", A, LOST + " what a gh write run in the background"),
+    ("mkdir -p a/b docs && ln -s ../a/b docs/link && echo Zq_Exact > a/body.md && gh issue create -t t --body-file docs/link/../body.md", A, LOST + " docs/link/../body.md, whose `..`"),
+    ("gh issue create -R 'https://github.com/priv-org/secret/../../acme/public' -t Zq_Exact -b x", A, "block: LEAK"),
+    ("gh issue create --repo=acme/public -Rpriv-org/secret -t Zq_Exact -b x", B, "block: LEAK"),
+    ("setopt SH_WORD_SPLIT; J='. -f title=Zq_Exact'; gh api repos/o/r/issues --jq $J", A, LOST + " its words, whose expansion"),
+    ("gh api repos/o/r/issues --jq {.,-ftitle=Zq_Exact}", A, "block: Cannot recover"),
+    ("cat > inc.cfg <<'EOF'\n[alias]\n\tic = !gh issue create --title Zq_Exact --body x\nEOF\ngit -c include.path=$PWD/inc.cfg ic", A, "block: A file the command wrote holds a gh word, and git"),
+    ("T=draft; exit() { :; }; true && exit && T=Zq_Exact; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("env cd " + B + " && " + W6, A, LEAK),
+    ("command cd " + B + " && " + W6, A, LEAK),
+    ("CDPATH=" + R + "; cd b && " + W6, A, LEAK),
+    ("echo Zq_Exact > d.md; setopt noclobber; echo draft > d.md; gh issue create -t t -F d.md", A, LOST + " its words, whose expansion"),
+    ("T=draft; set -A T Zq_Exact; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; T[1,-1]=Zq_Exact; gh issue create --title \"$T\" --body b", A, "block: The hook does not read an array assignment"),
+    ("T=draft; : ${${T::=Zq_Exact}:-x}; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("cd " + B + " && - cd " + A + " && " + W6, A, LEAK),
+    ("echo draft > d.md; echo Zq_Exact > n.md && ln -sf n.md d.md; gh issue create -t t -F d.md", A, LOST + " d.md"),
+    # and what the new rules leave alone
+    ("set -euo pipefail; cd " + B + " && " + W6, A, "exempt"),
+    ("git push -u origin \"$(git branch --show-current)\" && gh pr create -t t -F notes.md", A, "scanned"),
+    ("export PATH=\"$(dirname \"$(command -v python3)\"):$PATH\" && cd " + B + " && " + W6, A, "exempt"),
+    ("cmp -s notes.md draft.md || gh issue create -t t -F notes.md", A, "scanned"),
+]
+# The fast path: an escape before gh never hides it, and gh in a word or a path never counts.
+for text, want in (("printf 'x\\ngh issue create' > s", True), ("bash -c $'set -e\\ngh x'", True),
+                   ("g\\h issue list", True), ("echo ${:-gh}", True), ("ls gh-pages x.gh gh_x", False),
+                   ("cat .specs/361-before-gh-writes-it/spec.md", False)):
+    check("hunt2", g.mentions_gh(text) == want, "mentions_gh(" + repr(text) + ") is not " + repr(want))
+for command, cwd, want in HUNT2:
+    got = target(command, cwd)
+    check("hunt2", got.startswith(want), repr(command[:120]) + " gave " + got)
+os.chmod(ro, 0o644)
+
 
 for group in sorted(results):
     found = results[group]
@@ -13669,6 +13791,10 @@ fi
 #      of a target variable read earlier, a write into .git, -R beside an issue URL, and a URL
 #      that is only a label's name. And what the fixes leave alone.
 ghg_case hunt "the gh guard follows, or forgets, every way a command changes its own state before gh runs"
+#      Round two: a program of unknown effect, a copied state's files and events, a shell's
+#      options and arguments, a written file a tool runs by convention, path aliasing, shell
+#      options and IFS, a value zsh may split, gh's ParseBool and field order, and more targets.
+ghg_case hunt2 "the gh guard holds against every shape the second bypass hunt confirmed"
 
 # 458. #361 AC7 — the installer: a fresh install into a versioned directory that `current` names,
 #      compiled and probed; a re-run that changes nothing; an older version refused; a failed
