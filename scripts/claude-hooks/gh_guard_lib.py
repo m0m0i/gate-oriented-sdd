@@ -347,6 +347,9 @@ class Parser(object):
             elif c == "\\":
                 nx = self.peek(1)
                 if nx == "\n":
+                    if self.peek(2) in ("<", ">"):
+                        # zsh joins `2\<newline>>f` into the redirection `2>f`.
+                        raise Unsupported("a backslash-newline before a redirection")
                     self.i += 2
                 elif nx == "":
                     raise Unsupported("the command ends in a backslash")
@@ -371,8 +374,12 @@ class Parser(object):
                 j = self.i + 1
                 while j < len(s) and s[j] not in _ENDS_WORD and s[j] not in "/:\"'\\$`":
                     j += 1
-                if j == self.i + 1:
+                if j == self.i + 1 and (j >= len(s) or s[j] in _ENDS_WORD or s[j] == "/"):
                     parts.append(Part("home", "~"))
+                elif j == self.i + 1:
+                    # zsh takes the prefix after quote removal and expansion: ~\+, ~'-', ~$u
+                    # and ~:x are not HOME (#361, the fourth hunt).
+                    parts.append(Part("opaque", "~"))
                 else:
                     parts.append(Part("opaque", s[self.i:j]))
                 skel.append("\0")
@@ -396,6 +403,11 @@ class Parser(object):
             return True
         if assignment and len(parts) == 1 and parts[0].kind == "lit" and not parts[0].quoted:
             return _ASSIGN.fullmatch(parts[0].text) is not None
+        # And after an unquoted `:` in an assignment's value (measured, the fourth hunt).
+        if assignment and parts[0].kind == "lit" and not parts[0].quoted \
+                and _ASSIGN.match(parts[0].text) and parts[-1].kind == "lit" \
+                and not parts[-1].quoted and parts[-1].text.endswith(":"):
+            return True
         return False
 
     def lit(self, parts, text, quoted):
@@ -476,6 +488,17 @@ class Parser(object):
     def dollar(self, parts, quoted):
         s = self.s
         nx = self.peek(1)
+        if nx == "\\" and self.peek(2) == "\n":
+            # zsh removes a backslash-newline before it reads what follows the $.
+            raise Unsupported("a `$` before a backslash-newline")
+        if nx != "" and ord(nx) > 127:
+            # A name zsh reads in a UTF-8 locale and this lexer does not.
+            j = self.i + 1
+            while j < len(s) and (s[j].isalnum() or s[j] == "_" or ord(s[j]) > 127):
+                j += 1
+            parts.append(Part("opaque", s[self.i:j], quoted))
+            self.i = j
+            return
         if nx == "(":
             if self.peek(2) == "(":
                 self.i += 1
@@ -502,6 +525,15 @@ class Parser(object):
             m = _NAME.match(s, self.i + 1)
             self.i = m.end()
             name = m.group(0)
+            if self.peek() == "\\" and self.peek(1) == "\n":
+                raise Unsupported("a name before a backslash-newline")
+            if self.peek() != "" and ord(self.peek()) > 127:
+                j = self.i
+                while j < len(s) and (s[j].isalnum() or s[j] == "_" or ord(s[j]) > 127):
+                    j += 1
+                parts.append(Part("opaque", "$" + name + s[self.i:j], quoted))
+                self.i = j
+                return
             # zsh subscripts $NAME[...] and modifies $NAME:h (measured).
             if self.peek() == "[":
                 raw = "$" + name + self.balanced("[", "]")
@@ -512,9 +544,10 @@ class Parser(object):
                 parts.append(Part("opaque", "$" + name + s[self.i - 2:self.i], quoted))
             else:
                 parts.append(Part("param", name, quoted))
-        elif nx != "" and nx in "=~^" and re.compile(r"[=~^]+([A-Za-z_{])").match(s, self.i + 1):
-            # zsh's $=NAME, $~NAME and $^NAME: NAME's value, split, globbed or brace-expanded.
-            m = re.compile(r"[=~^]+").match(s, self.i + 1)
+        elif nx != "" and nx in "=~^+" and re.compile(r"[=~^+]+([A-Za-z_{])").match(s, self.i + 1):
+            # zsh's $=NAME, $~NAME and $^NAME: NAME's value, split, globbed or brace-expanded;
+            # $+NAME, whether it is set.
+            m = re.compile(r"[=~^+]+").match(s, self.i + 1)
             start = self.i
             self.i = m.end()
             if self.peek() == "{":
@@ -556,6 +589,13 @@ class Parser(object):
             if m and nx != "":
                 code = int(next(g for g in m.groups() if g is not None),
                            8 if m.group(4) is not None else 16)
+                if m.group(4) is not None:
+                    code &= 0xff    # zsh keeps the low byte of \NNN
+                if code > 0x7f and (m.group(1) is not None or m.group(4) is not None):
+                    # A byte, not a character: zsh's word is not UTF-8 text.
+                    known = False
+                    self.i = m.end()
+                    continue
                 try:
                     out.append(chr(code))
                 except (ValueError, OverflowError):
@@ -654,6 +694,10 @@ class Parser(object):
         redirs = []
         while True:
             self.blanks()
+            if re.compile(r"\{[A-Za-z_][A-Za-z0-9_]*\}[<>]").match(self.s, self.i):
+                raise Unsupported("a named descriptor, {NAME}> or {NAME}<")
+            if re.compile(r"<\d*-\d*>").match(self.s, self.i):
+                raise Unsupported("a numeric glob <N-M>")
             r = self.redirection()
             if r is not None:
                 redirs.append(r)
@@ -666,7 +710,11 @@ class Parser(object):
                     self.i = m.end()
                     return self.function(words[0].literal(pattern_ok=True))
                 raise Unsupported("an array" if words or assigns else "a `(` inside a command")
-            w = self.word(assignment=not words)
+            # The declare family takes NAME=value words as assignments, ~ after the = included.
+            w = self.word(assignment=not words or (
+                len(words) == 1 and not any(p.quoted for p in words[0].parts)
+                and words[0].literal() in ("export", "typeset", "declare", "local", "readonly",
+                                           "integer", "float")))
             if w is None:
                 break
             if not words and re.match(r"^[A-Za-z_][A-Za-z0-9_]*\[[^\]]*\]\+?=", w.raw):
@@ -941,7 +989,7 @@ class State(object):
     events what it did that changes where a later gh write goes."""
 
     __slots__ = ("vars", "exported", "tainted", "cwds", "files", "named", "events", "deferred",
-                 "optioned", "stdin_unknown")
+                 "optioned", "stdin_unknown", "branches")
 
     def __init__(self, home, cwd):
         # deferred: no file a later word reads can be known (a program of unknown effect ran, or
@@ -951,6 +999,9 @@ class State(object):
         self.deferred = False
         self.optioned = False
         self.stdin_unknown = False
+        # branches: the names the current branch may have been given by the command, None
+        # among them for one the hook cannot know; empty while it is the hook-time branch.
+        self.branches = ()
         self.vars = {"HOME": home} if home else {}
         self.exported = set(self.vars)
         self.tainted = set()
@@ -971,6 +1022,7 @@ class State(object):
         c.deferred = self.deferred
         c.optioned = self.optioned
         c.stdin_unknown = self.stdin_unknown
+        c.branches = self.branches
         return c
 
     def absorb(self, child):
@@ -988,6 +1040,7 @@ class State(object):
                 self.files.pop(k, None)
         self.events += [e for e in child.events if e not in self.events]
         self.deferred = self.deferred or child.deferred
+        self.branches = self.branches + tuple(b for b in child.branches if b not in self.branches)
 
     def merge(self, others):
         """Becomes what is known after any one of these states: a value the states disagree on,
@@ -1009,6 +1062,7 @@ class State(object):
             self.deferred = self.deferred or s.deferred
             self.optioned = self.optioned or s.optioned
             self.stdin_unknown = self.stdin_unknown or s.stdin_unknown
+            self.branches = self.branches + tuple(b for b in s.branches if b not in self.branches)
         cwds = []
         for s in states:
             cwds += [c for c in s.cwds if c not in cwds]
@@ -1035,7 +1089,9 @@ class State(object):
 
     def env(self):
         env = dict((k, v) for k, v in self.vars.items() if v is not None)
-        if "PWD" not in self.vars and len(self.cwds) == 1 and self.cwds[0] is not None:
+        # zsh sets PWD on every cd, whatever the command assigned it.
+        env.pop("PWD", None)
+        if len(self.cwds) == 1 and self.cwds[0] is not None:
             env["PWD"] = self.cwds[0]
         return env
 
@@ -1052,10 +1108,20 @@ class State(object):
 
 
 def _fold(path):
-    """A path as the command's files are keyed: without case on macOS, whose volumes are."""
+    """A path as the command's files are keyed: on macOS without case and without Unicode
+    normalization, as its volumes compare names."""
     if path is None:
         return None
-    return path.lower() if sys.platform == "darwin" else path
+    if sys.platform != "darwin":
+        return path
+    import unicodedata
+    return unicodedata.normalize("NFD", path).lower()
+
+
+def _loose(key):
+    """A wider fold: two keys that agree here and not in _fold may still be one file."""
+    import unicodedata
+    return unicodedata.normalize("NFKD", key).casefold()
 
 
 def _named(state, key):
@@ -1213,6 +1279,49 @@ GIT_QUIET = {"status", "log", "show", "diff", "add", "commit", "push", "pull", "
              "cherry-pick", "revert", "describe", "shortlog", "reflog", "notes", "apply", "am",
              "format-patch", "rev-list", "cat-file", "ls-remote", "symbolic-ref", "for-each-ref",
              "merge-base", "name-rev", "check-ignore", "gc", "prune", "clean", "rebase"}
+
+# Parameters zsh sets by itself, or ties to another (#361, the fourth hunt): an assignment to one
+# is never trusted, since zsh rewrites it on a cd, a set --, a shift, a =~ or any command.
+ZSH_SPECIAL = set("""_ PWD OLDPWD argv ARGC MATCH MBEGIN MEND match mbegin mend BASH_REMATCH REPLY
+reply status pipestatus RANDOM SECONDS LINENO EPOCHSECONDS EPOCHREALTIME SHLVL PPID UID EUID GID
+EGID USERNAME HISTCMD ERRNO OPTARG OPTIND TRY_BLOCK_ERROR ZSH_SUBSHELL ZSH_EVAL_CONTEXT funcstack
+funcfiletrace funcsourcetrace functrace PATH path MANPATH manpath FPATH fpath CDPATH cdpath
+MAILPATH mailpath PSVAR psvar FIGNORE fignore MODULE_PATH module_path WATCH watch ZSH_ARGZERO
+options parameters commands functions aliases builtins jobstates jobtexts history""".split())
+# The variables a companion program may be given, or inherit from the command, and still be
+# modelled: any other may change what it runs (PERL5OPT, STRIPBIN, GIT_EXTERNAL_DIFF, PATH).
+SAFE_ENV = set("""LANG LC_ALL LC_CTYPE LC_COLLATE LC_MESSAGES LC_NUMERIC LC_TIME LC_MONETARY TZ
+NO_COLOR CLICOLOR CLICOLOR_FORCE FORCE_COLOR TERM COLUMNS LINES GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL
+GIT_AUTHOR_DATE GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL GIT_COMMITTER_DATE GIT_TERMINAL_PROMPT
+GIT_OPTIONAL_LOCKS GH_REPO GH_HOST GH_PROMPT_DISABLED GH_NO_UPDATE_NOTIFIER
+GH_SPINNER_DISABLED""".split())
+# The options a companion program is modelled with: an option word outside its pattern makes it
+# a stranger (#361, the fourth hunt). A program not listed here writes nothing and runs nothing,
+# whatever its options; sort, base64, uniq and tee name their output, and are listed.
+COMPANION_OPTIONS = {
+    "cp": r"-[aRrHLPfinpvXcxN]+",
+    "mv": r"-[fhinv]+",
+    "ln": r"-[FfhinsvwLP]+",
+    "install": r"-[cdpvC]+|-m\S*",
+    "mkdir": r"-[pv]+|-m\S*",
+    "rm": r"-[dfiIPRrvWx]+",
+    "rmdir": r"-[pv]+",
+    "touch": r"-[acfhm]+|-[rtdA]",
+    "tee": r"-[ai]+|--append|--ignore-interrupts",
+    "cat": r"-[benstuvl]+",
+    "sort": r"-[bdfghiMmnRrsuVcCz]+|-[bdfghiMmnRrsuVcCz]*[ktST].*|--(reverse|numeric-sort|unique"
+            r"|ignore-case|version-sort|human-numeric-sort|general-numeric-sort|month-sort"
+            r"|random-sort|stable|check|merge|dictionary-order|ignore-leading-blanks"
+            r"|zero-terminated|ignore-nonprinting)|--(key|field-separator|buffer-size|parallel"
+            r"|temporary-directory)(=.*)?",
+    "uniq": r"-[cdiuD]+|-[fs]\d*|--(count|repeated|unique|ignore-case)",
+    "base64": r"-[dDh]+|-b\d*|-i\S*|--decode|--break=\d+|--input=\S+",
+    "file": r"-[^C-]*|--(brief|mime|mime-type|mime-encoding|no-dereference|dereference)",
+    "rg": r"(?!--pre).*",
+}
+PRECOMMANDS = ("noglob", "builtin", "command", "exec", "-", "nocorrect")
+# Their options that write a path the walk does not name: what any file holds after is unknown.
+OUTPUT_OPTIONS = {"sort": r"-[^-]*o.*|--o.*", "base64": r"-o.*|--o.*"}
 
 
 def _name(value):
@@ -1396,6 +1505,128 @@ def git_quiet(vals):
     return True
 
 
+GIT_CONFIG_READS = {"--get", "--get-all", "--get-regexp", "--get-urlmatch", "--get-color",
+                    "--get-colorbool", "--list", "-l", "--show-origin", "--show-scope", "--null",
+                    "-z", "--name-only", "--bool", "--int", "--bool-or-int", "--path",
+                    "--expiry-date", "--local", "--global", "--system", "--worktree", "--includes",
+                    "--no-includes"}
+
+
+def git_companion(vals, seen=None):
+    """True for git given a subcommand the walk models, that runs nothing it is given: no -c,
+    no --exec-path, no template, no upload or receive pack, and `config` only to read. seen is
+    each word, or for one the hook cannot know its literal text when that starts with `-`."""
+    seen = seen or vals
+    if any(v is not None and re.match(r"--(template|upload-pack|receive-pack|exec|ext-diff"
+                                      r"|textconv|config)", v) for v in seen):
+        return False
+    sub = git_subcommand(vals)
+    if not sub or sub not in GIT_KNOWN or "-c" in vals[:vals.index(sub)]:
+        return False
+    rest = vals[vals.index(sub) + 1:]
+    if any(v is None for v in vals[:vals.index(sub)]) or any(
+            v.startswith("--exec-path") or v.startswith("--config-env") for v in vals[:vals.index(sub)]):
+        return False
+    if any(v is not None and (v.startswith("--template") or v.startswith("--upload-pack")
+                              or v.startswith("--receive-pack") or v.startswith("--exec")
+                              or (sub == "clone" and v == "-u") or v.startswith("--ext-diff")
+                              or v.startswith("--textconv") or v.startswith("--config"))
+           for v in rest):
+        return False
+    if sub == "config":
+        reads = False
+        operands = []
+        k = 0
+        while k < len(rest):
+            v = rest[k]
+            if v is None:
+                return False
+            if v in ("-f", "--file", "--blob", "--type", "--default"):
+                k += 2
+                continue
+            if v.startswith("--file=") or v.startswith("--blob=") or v.startswith("--type=") \
+                    or v.startswith("--default="):
+                k += 1
+                continue
+            if v.startswith("-"):
+                if v not in GIT_CONFIG_READS:
+                    return False
+                reads = reads or v.startswith("--get") or v in ("--list", "-l")
+            else:
+                operands.append(v)
+            k += 1
+        if operands[:1] in (["get"], ["list"]):
+            return True
+        if operands[:1] and operands[0] in ("set", "unset", "rename-section", "remove-section",
+                                             "edit"):
+            return False
+        return reads or len(operands) <= 1
+    return git_quiet(vals)
+
+
+def _git_remote_changes(rest):
+    """True for a git remote that may change a remote: anything but a listing, show or get-url."""
+    operands = _operands(rest)
+    return bool(operands) and operands[0] not in ("show", "get-url") or any(
+        v is None or v not in ("-v", "--verbose") for v in _options(rest))
+
+
+def _new_branch(sub, rest):
+    """The names the branch may have after git checkout, switch or branch -m: the one -b, -c or
+    -m gives, or any word that could be one, and None for one the hook cannot know."""
+    names = []
+    k = 0
+    while k < len(rest):
+        v = rest[k]
+        if v is None:
+            return [None]
+        if v == "--":
+            break
+        if v in ("-b", "-B", "-c", "-C", "--orphan", "-m", "-M", "--move", "--create",
+                 "--force-create"):
+            if k + 1 >= len(rest) or rest[k + 1] is None:
+                return [None]
+            names.append(rest[k + 1])
+            k += 2
+            continue
+        if v == "-":
+            return [None]
+        if not v.startswith("-"):
+            names.append(v)
+        k += 1
+    return names
+
+
+def _stdin_of(redirs):
+    """The redirections of standard input itself, descriptor 0: a here-document or a file on
+    descriptor 3 is not gh's standard input, and `0<&3` is (#361, the fourth hunt)."""
+    return [r for r in redirs if (r.op in STDIN_OPS or r.op == "<&") and r.fd in ("", "0")]
+
+
+def _options(vals):
+    """The option words before `--`."""
+    out = []
+    for v in vals:
+        if v == "--":
+            break
+        if v is None or (v.startswith("-") and v != "-"):
+            out.append(v)
+    return out
+
+
+def _operands(vals):
+    """The words that are not options: every word after `--`, and `-` itself."""
+    out = []
+    after = False
+    for v in vals:
+        if not after and v == "--":
+            after = True
+            continue
+        if after or v is None or not v.startswith("-") or v == "-":
+            out.append(v)
+    return out
+
+
 def printed(base, vals):
     """What echo or printf prints, when it is literal text: zsh's echo reads backslash escapes,
     so one with a backslash is not known; printf's format is, with no % and a few escapes."""
@@ -1437,6 +1668,48 @@ def _failed(start, run):
     return out
 
 
+def _may_fail(redirs, state):
+    """True when zsh may fail to open one of these redirections, and then runs nothing: a
+    target that is empty, a directory, not writable, in a directory that does not exist, or
+    one a chmod changed; a file read from that does not exist (#361, the fourth hunt)."""
+    for r in redirs:
+        if r.target is None or r.op in (">&", "<&") or r.op == "<<<":
+            continue
+        v = r.target.literal(state.env())
+        q = state.path(v)
+        if q is None:
+            continue
+        k = _fold(q)
+        if v == "" or (q != "/dev/null" and os.path.isdir(q)) or state.named.get(k) == "mkdir":
+            return True
+        if r.op == "<":
+            if k not in state.files and not os.path.exists(q):
+                return True
+            continue
+        if q == "/dev/null":
+            continue
+        if not os.path.isdir(os.path.dirname(q)) and _named(state, _fold(os.path.dirname(q))) is None:
+            return True
+        if (os.path.lexists(q) and not os.access(q, os.W_OK)) \
+                or state.named.get(k) in ("chmod", "chown", "chgrp"):
+            return True
+    return False
+
+
+LOOP_LIMIT = 8
+
+
+def _same(a, b):
+    """True when two states know the same."""
+    return (a.vars == b.vars and a.cwds == b.cwds and a.tainted == b.tainted
+            and set(a.named) == set(b.named) and a.deferred == b.deferred
+            and a.optioned == b.optioned and a.stdin_unknown == b.stdin_unknown
+            and a.branches == b.branches and a.events == b.events
+            and set(a.files) == set(b.files)
+            and all((a.files[k].content, a.files[k].gh) == (b.files[k].content, b.files[k].gh)
+                    for k in a.files))
+
+
 def _assigning_print(vals):
     """True when print or printf may be given -v or -z: an option before the first word that is
     not one, or a word the hook cannot know there."""
@@ -1451,12 +1724,18 @@ def _assigning_print(vals):
 
 
 def _runs_word(script, names):
-    """True when a command named one of names appears anywhere in the script."""
+    """True when a command named one of names appears anywhere in the script, after any
+    precommand word (`noglob continue`)."""
     for node, _ in script.items:
         for p in node.pipelines:
             for c in p.commands:
-                if isinstance(c, Simple) and c.words and c.words[0].literal() in names:
-                    return True
+                if isinstance(c, Simple):
+                    for w in c.words:
+                        v = w.literal()
+                        if v in names:
+                            return True
+                        if v not in PRECOMMANDS:
+                            break
                 if isinstance(c, Group) and _runs_word(c.body, names):
                     return True
                 if isinstance(c, Compound) and any(
@@ -1471,12 +1750,22 @@ def _vanishes(word):
     return all(not p.quoted and p.kind != "lit" for p in word.parts) and bool(word.parts)
 
 
+GH_STORES = {("config", "set"), ("alias", "set"), ("alias", "import"), ("extension", "install"),
+             ("extension", "upgrade")}
+GH_LOCAL = {("release", "download"), ("run", "download"), ("repo", "clone"), ("gist", "clone"),
+            ("attestation", "download"), ("pr", "checkout"), ("repo", "sync"), ("repo", "read-file"),
+            ("artifact", "download"), ("issue", "develop"), ("skill", "install"),
+            ("skill", "update"), ("extension", "install"), ("extension", "upgrade"),
+            ("repo", "create"), ("repo", "fork"), ("codespace", "cp"), ("cache", "download")}
+
+
 def gh_writes_locally(vals):
-    """True for the gh commands that write files in this directory: downloads and clones."""
-    words = [v for v in vals if v is not None and not v.startswith("-")][:2]
-    return " ".join(words) in ("release download", "run download", "repo clone", "gist clone",
-                               "attestation download", "pr checkout", "repo sync", "co",
-                               "repo read-file", "issue artifact download") or None in vals[:2]
+    """True for the gh commands that may write files here: downloads, clones and checkouts,
+    wherever global flags put their words (#361, the fourth hunt)."""
+    if None in vals:
+        return True
+    words = [v for v in vals if not v.startswith("-")]
+    return "co" in words[:3] or any(p in GH_LOCAL for p in zip(words, words[1:]))
 
 
 def _either(a, b):
@@ -1617,7 +1906,9 @@ class Finder(object):
         if len(last) != 1 or not isinstance(last[0], Simple) or not last[0].words:
             return False
         word = last[0].words[0].literal()
-        return word in ("exit", "return") and word not in self.functions
+        # exit with more than one argument, or a redirection that fails, does not exit.
+        return word in ("exit", "return") and word not in self.functions \
+            and len(last[0].words) <= 2 and not last[0].redirs
 
     def pipeline(self, pipeline, state):
         n = len(pipeline.commands)
@@ -1674,12 +1965,24 @@ class Finder(object):
         return base in QUIET
 
     def command(self, command, state, piped, downstream):
+        redirs = command.redirs
+        if _may_fail(redirs, state):
+            # zsh runs nothing when a redirection fails to open: both outcomes are followed.
+            start = state.copy()
+            self.command_(command, state, piped, downstream)
+            out = state.copy()
+            out.merge([start])
+            self.adopt(state, out)
+            return
+        self.command_(command, state, piped, downstream)
+
+    def command_(self, command, state, piped, downstream):
         if isinstance(command, Compound):
             if self.expansion_assigns([r.target for r in command.redirs]
                                       + [r.heredoc.word for r in command.redirs if r.heredoc]):
                 self.forget(state)
             self.redirect_targets(command.redirs, state)
-            own = [r for r in command.redirs if r.op in STDIN_OPS]
+            own = _stdin_of(command.redirs)
             self.stdin.append((own, piped))
             try:
                 self.compound(command, state)
@@ -1694,7 +1997,7 @@ class Finder(object):
             inner = state if command.kind == "group" else state.copy()
             self.redirect_targets(command.redirs, inner)
             # A group's standard input is every command's in it that has none of its own.
-            own = [r for r in command.redirs if r.op in STDIN_OPS]
+            own = _stdin_of(command.redirs)
             self.stdin.append((own, piped))
             try:
                 self.walk(command.body, inner)
@@ -1744,7 +2047,7 @@ class Finder(object):
             self.adopt(state, first)
             return
         # while, until and for: the body may run no time, once, or again with what a run before
-        # it changed, so it is walked twice, the second time from what either may leave.
+        # it changed.
         loop = state.copy()
         if c.kind == "for":
             for w in c.words or []:
@@ -1767,13 +2070,28 @@ class Finder(object):
             loop.tainted.discard(c.var)
             if any(self.has_gh(w, state) for w in c.words or []):
                 loop.tainted.add(c.var)
-        for _ in range(2):
-            after = loop.copy()
-            for cond, body in c.parts:
-                if cond is not None:
-                    self.walk(cond, after)
-                self.walk(body, after)
-            loop.merge([after])
+        # Walked until what it knows stops changing: each run starts from what any run before
+        # it may leave. A while or until loop leaves after its condition fails, so its outcome
+        # is the condition's, run from there (#361, the fourth hunt).
+        cond, body = c.parts[0]
+        exits = None
+        for n in range(LOOP_LIMIT + 1):
+            here = loop.copy()
+            if cond is not None:
+                self.walk(cond, here)
+            exits = here.copy()
+            self.walk(body, here)
+            nxt = loop.copy()
+            nxt.merge([here])
+            if _same(nxt, loop):
+                break
+            if n == LOOP_LIMIT - 1:
+                # It has not settled: what any run touches is unknown, and one more run from
+                # there finds the gh commands it may run.
+                self.forget(nxt, cwd=True, files=True)
+            loop = nxt
+        if cond is not None:
+            loop = exits
         if any(_runs_word(body, ("break", "continue")) or (cond is not None and
                                                              _runs_word(cond, ("break", "continue")))
                for cond, body in c.parts):
@@ -1788,7 +2106,7 @@ class Finder(object):
             setattr(state, name, getattr(other, name))
 
     def inherited_stdin(self, redirs, piped):
-        own = [r for r in redirs if r.op in STDIN_OPS]
+        own = _stdin_of(redirs)
         for outer, outer_piped in reversed(self.stdin):
             piped = piped or outer_piped
             if not own:
@@ -1812,15 +2130,41 @@ class Finder(object):
         if files:
             state.deferred = True
 
-    def expansion_assigns(self, words):
-        # ${N:=w}, ${N=w}, ${N::=w} and $((N=1)) assign while they expand.
+    def expansion_assigns(self, words, state=None):
+        # ${N:=w}, ${N=w}, ${N::=w}, $((N=1)), $[N=1] and a subscript, $x[N=1], assign while
+        # they expand; so does arithmetic over a name whose value is an expression.
         for w in words:
             if w is None:
                 continue
             for p in w.parts:
-                if p.kind == "opaque" and (_EXPANSION_ASSIGNS.match(p.text) or (
-                        p.text.startswith("$((") and _ARITH_ASSIGNS.search(p.text))):
+                if p.kind != "opaque":
+                    continue
+                if _EXPANSION_ASSIGNS.match(p.text):
                     return True
+                arith = p.text.startswith("$((") or p.text.startswith("$[")
+                k = p.text.find("[")
+                if (arith and _ARITH_ASSIGNS.search(p.text)) \
+                        or (k >= 0 and _ARITH_ASSIGNS.search(p.text[k:])):
+                    return True
+        return False
+
+    def arith_assigns(self, words, state):
+        """True when arithmetic in these words runs over a name whose value is an expression,
+        which may assign any variable, or one the hook cannot know."""
+        for w in words:
+            for p in (w.parts if w is not None else []):
+                if p.kind == "opaque" and (p.text.startswith("$((") or p.text.startswith("$[")) \
+                        and self.arith_names(p.text, state):
+                    return True
+        return False
+
+    def arith_names(self, text, state):
+        """True when arithmetic over this text may assign: a name in it holds anything but a
+        number, or cannot be known."""
+        for n in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text):
+            v = state.vars.get(n)
+            if v is None or not re.fullmatch(r"\s*-?\d+\s*", v):
+                return True
         return False
 
     def simple(self, cmd, state, piped, downstream):
@@ -1836,6 +2180,9 @@ class Finder(object):
             # It may assign zsh's options array, or any variable by name: later words too.
             self.forget(state)
             state.optioned = True
+        elif self.arith_assigns(list(cmd.words) + [w for _, w, _ in cmd.assigns]
+                                + [r.target for r in cmd.redirs], state):
+            self.forget(state)
         for w in list(cmd.words) + [x for _, x, _ in cmd.assigns] \
                 + [r.target for r in cmd.redirs if r.target is not None] \
                 + [r.heredoc.word for r in cmd.redirs if r.heredoc is not None and r.heredoc.word]:
@@ -1862,6 +2209,15 @@ class Finder(object):
             # It may expand to nothing, which makes its assignments the shell's.
             for name, _, _ in cmd.assigns:
                 state.vars[name] = None
+        for v in vals:
+            # A function named like a precommand word runs in its place (#361, the fourth hunt).
+            if v is None or v not in PRECOMMANDS:
+                break
+            if v in self.functions:
+                self.check_words(words, state, quiet=False)
+                self.forget(state, cwd=True, files=True)
+                self.stranger(v)
+                return
 
         try:
             k, env, external = unwrap(vals)
@@ -1912,6 +2268,19 @@ class Finder(object):
             inv.strangers = list(self.strangers)
             self.invocations.append(inv)
             self.check_words(words[:k], state, quiet=True)
+            for aname, w, _ in cmd.assigns:
+                if self.has_gh(w, state):
+                    self.problem("A gh word is in an assignment before gh, " + aname + ", which gh"
+                                 " may run (a browser, a pager or an editor), so the hook cannot"
+                                 " tell what the command runs.")
+            plain = [v for v in rest if v is not None and not v.startswith("-")]
+            if any(p in GH_STORES for p in zip(plain, plain[1:])):
+                # What it stores, gh runs later: an editor, a browser, a pager or an alias.
+                self.stranger("gh " + " ".join(next(p for p in zip(plain, plain[1:])
+                                                    if p in GH_STORES)))
+                if any(self.has_gh(w, state) for w in args):
+                    self.problem("A gh word is in what gh stores for a later gh to run, so the"
+                                 " hook cannot tell what the command runs.")
             self.writes(cmd, None, state, [])
             if gh_writes_locally(rest):
                 self.forget(state, vars_=False, files=True)
@@ -1926,7 +2295,8 @@ class Finder(object):
             if v is not None and mentions_gh(v):
                 self.problem("A gh word is in an assignment env gives " + base + ", which may run"
                              " it, so the hook cannot tell what the command runs.")
-        if not self.companion(name, base, rest, external):
+        if not self.companion(name, base, rest, external, state, cmd, env,
+                              [w.plain() for w in args]):
             self.stranger(base)
             # A command the walk does not model is given a gh word only to run it, or to write
             # it where something may: its words, its input and its substitutions included.
@@ -1960,7 +2330,7 @@ class Finder(object):
                     and any(x.gh for x in state.files.values()):
                 self.problem("A file the command wrote holds a gh word, and git, through the"
                              " configuration it is given, can run it.")
-            self.git(rest, state)
+            self.git(rest, state, [w.plain() for w in args])
         elif base not in KNOWN_PROGRAMS:
             self.unknown_program(state, base)
         quiet = self.quiet(name, rest)
@@ -1974,18 +2344,57 @@ class Finder(object):
         if not quiet and not builtin and base and base not in KNOWN_PROGRAMS:
             self.runs_written(state, base)
         self.names_files(base, quiet, rest, state)
-        self.writes(cmd, (base, rest), state, streams)
+        self.writes(cmd, (base, rest), state, streams, piped)
 
-    def companion(self, name, base, rest, external):
-        """True for a command the walk models exactly."""
+    def companion(self, name, base, rest, external, state, cmd, env, raws=None):
+        """True for a command the walk models exactly: a companion builtin, or a companion
+        program given only the options it is modelled with, no variable that may change what
+        it runs, and found on a PATH the command has not changed (#361, the fourth hunt)."""
         if external or "/" in name or name in self.functions or base in self.functions:
             return False
-        if base == "git":
-            sub = git_subcommand(rest)
-            return bool(sub) and sub in GIT_KNOWN and "-c" not in rest[:rest.index(sub)]
-        if base in ZSH_BUILTINS:
+        if base in ZSH_BUILTINS and base != "git":
             return base in COMPANION_BUILTINS
-        return base in COMPANION_PROGRAMS
+        if base != "git" and base not in COMPANION_PROGRAMS:
+            return False
+        if "assigns PATH" in state.events:
+            return False
+        given = [n for n, _, _ in cmd.assigns] + [n for n, _ in env.get("assigns", [])]
+        given += [n for n in state.exported if n != "HOME"]
+        if state.vars.get("HOME", self.home) != self.home or any(
+                "allexport" in e or e == "set -a" for e in state.events):
+            return False
+        if any(n not in SAFE_ENV and not (re.fullmatch(r"[a-z_][a-z0-9_]*", n)
+                                           and n not in ZSH_SPECIAL) for n in given):
+            return False
+        # A word the hook cannot know is read by its own text: what it starts with is literal.
+        seen = [v if v is not None else (r if r and r.startswith("-") else None)
+                for v, r in zip(rest, raws or [None] * len(rest))]
+        if base == "git":
+            return git_companion(rest, seen)
+        pattern = COMPANION_OPTIONS.get(base)
+        if pattern is None:
+            return True
+        for v in seen:
+            if v is None:
+                continue
+            if v == "--":
+                break
+            if v.startswith("-") and v != "-" and not re.fullmatch(pattern, v) \
+                    and not re.fullmatch(OUTPUT_OPTIONS.get(base, "(?!)"), v):
+                return False
+        return True
+
+    def test_arith(self, vals, state):
+        """[[ evaluates the operands of -eq and the rest as arithmetic, which may assign."""
+        for j, v in enumerate(vals):
+            if v not in ("-eq", "-ne", "-lt", "-le", "-gt", "-ge"):
+                continue
+            for o in (vals[j - 1] if j > 0 else None, vals[j + 1] if j + 1 < len(vals) else None):
+                if o is None or not (re.fullmatch(r"\s*-?\d+\s*", o) or (
+                        _NAME.fullmatch(o) and re.fullmatch(r"\s*-?\d+\s*",
+                                                            state.vars.get(o) or "x"))):
+                    self.forget(state)
+                    return
 
     def stranger(self, what):
         if what not in self.strangers:
@@ -2015,8 +2424,10 @@ class Finder(object):
     def builtin(self, base, cmd, words, k, rest, state, streams):
         """A zsh builtin's effect on what the walk tracks. Returns True when it is done."""
         if base in DECLARE:
-            self.declare(base, words[k + 1:], rest, state)
+            self.declare(base, words[k + 1:], rest, state, precommand=k > 0)
             return True
+        if base == "[[":
+            self.test_arith(rest, state)
         if base in ("cd", "chdir"):
             self.cd(rest, state)
         elif base in ("pushd", "popd"):
@@ -2111,7 +2522,7 @@ class Finder(object):
             if norm not in SAFE_OPTIONS:
                 state.optioned = True
 
-    def git(self, vals, state):
+    def git(self, vals, state, raws=None):
         sub = git_subcommand(vals)
         for j, v in enumerate(vals):
             if sub and v == sub:
@@ -2132,10 +2543,28 @@ class Finder(object):
             self.unknown_program(state, "git grep -O")
         if not sub or sub not in GIT_KNOWN:
             self.unknown_program(state, "git " + (sub or "?"))
-        elif sub in ("remote", "config"):
-            state.events.append("git " + sub)
+        elif sub == "config" and not git_companion(vals):
+            state.events.append("git config")
+        elif sub == "remote" and _git_remote_changes(vals[vals.index(sub) + 1:]):
+            state.events.append("git remote")
         elif sub in GIT_TREE:
             self.forget(state, vars_=False, files=True)
+        rest = vals[vals.index(sub) + 1:] if sub in vals else []
+        seen = [v if v is not None else r for v, r in zip(vals, raws or [None] * len(vals))]
+        seen = seen[vals.index(sub) + 1:] if sub in vals else []
+        if any(v is not None and (v.startswith("--ou") or (sub == "config" and (
+                v in ("-f", "--file") or v.startswith("--file=")))) for v in seen):
+            # --output=FILE, and config --file FILE, write a file the walk does not name.
+            self.forget(state, vars_=False, files=True)
+        if sub in ("worktree", "clone", "init", "submodule"):
+            # The directories it makes or fills: a later gh write there goes where they say.
+            for v in _operands(rest):
+                k = _fold(state.path(v)) if v is not None else None
+                if k is not None:
+                    state.named.setdefault(k, "git " + sub)
+        if sub in ("checkout", "switch") or (sub == "branch" and any(
+                v is None or v in ("-m", "-M", "--move") for v in rest)):
+            state.branches = state.branches + tuple(_new_branch(sub, rest))
 
     quiet_gh = None
 
@@ -2153,6 +2582,11 @@ class Finder(object):
             self.problem("A gh word is in " + name + ", which a later program may run, so the hook"
                          " cannot tell what the command runs.")
         value = word.literal(state.env(), pattern_ok=True)
+        if name in ZSH_SPECIAL:
+            # zsh sets it itself, or ties it to another (#361, the fourth hunt).
+            value = None
+        if name in ("PATH", "path"):
+            state.events.append("assigns PATH")
         if appends:
             old = state.vars.get(name, "")
             value = None if old is None or value is None else old + value
@@ -2180,10 +2614,22 @@ class Finder(object):
                     return True
         return False
 
-    def declare(self, base, args, vals, state):
+    def declare(self, base, args, vals, state, precommand=False):
         export = base == "export" or any(v is not None and v.startswith("-") and "x" in v[1:]
                                          for v in vals)
-        if any(v is not None and v.startswith("-") and set(v[1:]) & set("aAg") for v in vals):
+        letters = set()
+        for v in vals:
+            if v is not None and len(v) > 1 and v[0] in "-+" and not _ASSIGN.match(v[1:]):
+                letters |= set(v[1:])
+        if precommand or base in ("integer", "float") or letters - set("xgraA"):
+            # An attribute that changes a value (-l, -u, -L, -Z, -i, -T, -n), one that does
+            # not assign (-p, -f, -m), an option zsh refuses, or a declare under `builtin`,
+            # which brace-expands its words: later words are past what the walk follows (#361,
+            # the fourth hunt).
+            self.forget(state)
+            state.optioned = True
+            return
+        if letters & set("aAg"):
             # Arrays and globals in functions: not followed.
             self.forget(state)
         for w, v in zip(args, vals):
@@ -2377,11 +2823,12 @@ class Finder(object):
         git's or gh's configuration under HOME."""
         if p is None:
             return False
+        p = _fold(p)
         bits = p.split("/")
         if ".git" in bits or any(b.startswith(".git") and b != ".github" and b != ".gitignore"
                                  and b != ".gitattributes" and b != ".gitkeep" for b in bits):
             return True
-        home = self.home or ""
+        home = _fold(self.home or "")
         return bool(home) and (p.startswith(home + "/.config/git") or p.startswith(home + "/.config/gh")
                                or p == home + "/.gitconfig")
 
@@ -2395,42 +2842,58 @@ class Finder(object):
                                  + " reads it and can run what it reads.")
         # A path any command but a reader names may change before gh reads it (T5). git's
         # subcommands are decided by what they do (Finder.git), and a flag names no path.
-        if base == "sort" and any(v is None or v.startswith("-o") or v.startswith("--output")
-                                  for v in vals):
-            base = "sort -o"
-        elif base in READERS or base == "git":
+        outputs = OUTPUT_OPTIONS.get(base)
+        if outputs and any(v is None or re.fullmatch(outputs, v) for v in _options(vals)):
+            # An output it names inside an option: any file may hold anything after it.
+            state.deferred = True
+            state.events.append(base + " writing a file an option names")
             return
-        for v in vals:
-            if v is not None and v.startswith("-"):
-                continue
+        if base == "ln":
+            # A link makes two paths one file, which the walk keys apart (the fourth hunt).
+            state.deferred = True
+        if base in READERS or base == "git":
+            return
+        for v in _operands(vals):
             p = state.path(v) if v else None
             k = _fold(p)
             if k is not None:
-                # What it names may now hold anything, and so may whatever is under it.
-                state.named.setdefault(k, base or "a command")
-                for f in [f for f in state.files if f == k or f.startswith(k + "/")]:
-                    del state.files[f]
+                # What it names may now hold anything, and so may whatever is under it; chmod
+                # changes a file's mode, not what it holds.
+                if base == "chmod":
+                    # A later redirection to it may fail: the walk reads that from this name.
+                    state.named[k] = "chmod"
+                else:
+                    state.named.setdefault(k, base or "a command")
+                if base != "chmod":
+                    for f in [f for f in state.files if f == k or f.startswith(k + "/")]:
+                        del state.files[f]
             if base and self.config_path(p, state):
                 state.events.append(base + " of a path that decides where gh writes")
+                if base != "chmod" or any(t.gh for t in state.files.values()):
+                    self.stranger(base + " into .git or git's or gh's configuration")
             elif v is None and base in FILE_WRITERS:
                 # An argument it cannot know may be any path, under .git included.
                 state.deferred = True
                 state.events.append(base + " of a path the hook cannot know")
 
-    def writes(self, cmd, who, state, streams):
+    def writes(self, cmd, who, state, streams, piped=False):
         """Records each file a command writes, a redirection's target or one of tee's files,
         with what it writes when that is known: a here-document cat or tee copies, or the
         literal text echo or printf prints. A file it cannot resolve is not recorded, and a
         later read of it is decided by where it is read (T5)."""
         base, vals = who if who is not None else ("", [])
-        files = [v for v in vals if v is None or not v.startswith("-")]
+        files = _operands(vals)
         content, gh = None, False
-        # zsh joins every input redirection a command has (MULTIOS), so cat or tee copies a
-        # known text only when a here-document or a here-string is its one input.
-        inputs = [r for r in cmd.redirs if r.op in STDIN_OPS or r.op == "<&"]
-        one = len(inputs) == 1 and len(streams) == 1
-        if (base == "cat" and one and not files) or (base == "tee" and one):
-            content, gh = streams[-1][1].content, streams[-1][1].gh
+        # zsh joins every input redirection a command has (MULTIOS), and a pipe into it, so cat
+        # or tee copies a known text only when a here-document or a here-string on its standard
+        # input is its one input, and cat only with no option, which may rewrite bytes.
+        inputs = [r for r in cmd.redirs if (r.op in STDIN_OPS or r.op == "<&") and r.fd in ("", "0")]
+        mine = [x for r, x in streams if r.fd in ("", "0")]
+        one = len(inputs) == 1 and len(mine) == 1 and not piped
+        if (base == "cat" and one and not files and not _options(vals)) or (
+                base == "tee" and one and all(re.fullmatch(r"-[ai]+|--append|--ignore-interrupts", v)
+                                              for v in _options(vals))):
+            content, gh = mine[0].content, mine[0].gh
         elif base in ("echo", "printf"):
             content, gh = self.printed(base, vals)
         targets = []
@@ -2448,7 +2911,8 @@ class Finder(object):
             out = r.fd in ("", "1") or r.op.startswith("&>") or r.op == ">&"
             targets.append((v, r.op.startswith(">>") or r.op == "&>>", out))
         if base == "tee":
-            appends = "-a" in vals or "--append" in vals
+            appends = any(v == "--append" or (v and re.fullmatch(r"-[^-]*a.*", v))
+                          for v in _options(vals))
             targets += [(v, appends, True) for v in files]
         fails = False
         # zsh opens the redirections in order and runs nothing when one fails: a target whose
@@ -2853,6 +3317,7 @@ ROLES = {
     # "unsent": the value shapes gh's own output or is checked and kept nowhere, so it is not
     # scanned and may be unknown. issue create's and pr create's --template are "lost" above.
     ("*", "jq"): "unsent", ("*", "template"): "unsent", ("*", "json"): "unsent",
+    # GitHub takes --match-head-commit as a commit id, and stores nothing that is not one.
     ("pr merge", "match-head-commit"): "unsent",
     ("variable set", "env-file"): "file", ("gist edit", "add"): "file",
     ("*", "attach"): "attach",
@@ -3195,7 +3660,7 @@ def resolve(word, state):
                 v = substitution(p.script, state)
             except Lost:
                 return None
-            if v is None or (not p.quoted and (v == "" or re.search(r"[ \t\n]", v))):
+            if v is None or (not p.quoted and (v == "" or re.search(r"[ \t\n\0]", v))):
                 return None
             out.append(v)
         else:
@@ -3215,10 +3680,13 @@ def substitution(script, state):
     vals = [resolve(w, state) for w in cmd.words]
     if None in vals:
         return None
-    stdin = [r for r in cmd.redirs if r.op in STDIN_OPS]
-    if any(r.op not in STDIN_OPS for r in cmd.redirs):
+    stdin = _stdin_of(cmd.redirs)
+    if any(r not in stdin for r in cmd.redirs):
         return None
     if vals[0] == "cat" and len(vals) == 1:
+        if not stdin:
+            # It reads the shell's own standard input, which a group or an exec may give it.
+            return None
         data = b"".join(stream(r, state) for r in stdin)
     elif vals[0] == "cat" and len(vals) == 2 and not stdin and not vals[1].startswith("-"):
         data = read_file(vals[1], state)
@@ -3233,6 +3701,11 @@ def substitution(script, state):
 
 def stream(r, state):
     """What a redirection of standard input gives its command, as bytes. Raises Lost."""
+    if r.op == "<&":
+        v = r.target.literal() if r.target is not None else None
+        if v == "-":
+            return b""
+        raise Lost("standard input taken from descriptor " + (v or "that cannot be known"))
     if r.heredoc is not None:
         h = r.heredoc
         if h.quoted:
@@ -3273,6 +3746,10 @@ def read_file(value, state):
     if p is None:
         raise Lost("a relative path, " + value + ", in a directory the hook cannot know")
     k = _fold(p)
+    if ".git" in _fold(raw).split("/") or ".git" in k.split("/"):
+        raise Lost(value + ", inside .git, which git commands change")
+    if any(_loose(x) == _loose(k) and x != k for x in list(state.files) + list(state.named)):
+        raise Lost(value + ", which the command may write under another spelling")
     if k in state.files:
         text = state.files[k]
         if text.content is None:
@@ -3350,7 +3827,9 @@ def gather(inv, path, flags, positionals):
             raise Lost("a word whose value cannot be known before the command runs (word "
                        + str(i + 1) + " after gh)")
         if role in ("file", "attach"):
-            sources += file_sources(value, "the --" + name + " file", state)
+            # An attached file, and one gist edit --add adds, are published under their names.
+            sources += file_sources(value, "the --" + name + " file", state,
+                                    published=role == "attach" or (path, name) == ("gist edit", "add"))
         elif role == "field" and value.partition("=")[2][:1] == "@":
             key, _, rest = value.partition("=")
             sources.append(Source("the --" + name + " key", _bytes(key)))
@@ -3360,8 +3839,17 @@ def gather(inv, path, flags, positionals):
     if path == "gist edit" and not any(n in ("add", "desc", "remove") for n, _, _ in flags) \
             and len(positionals) < 2:
         raise Lost("gh gist edit's editor")
-    if path == "skill publish" and positionals:
+    if path == "skill publish":
         raise Lost("the files under the directory gh skill publish publishes")
+    if path == "repo create" and not positionals:
+        # gh names the repository after the --source directory (#361, the fourth hunt).
+        for name, value, _ in flags:
+            if name == "source":
+                where = state.path(value) if isinstance(value, str) else None
+                if where is None or _named(state, _fold(where)):
+                    raise Lost("the name gh repo create takes from its --source directory")
+                sources.append(Source("the repository name from --source",
+                                      _bytes(os.path.basename(where))))
     if path == "agent-task create" and not positionals \
             and not any(n == "from-file" for n, _, _ in flags):
         raise Lost("gh agent-task create's editor")
@@ -3404,7 +3892,7 @@ OWNER_LEVEL = ("gist ", "project ", "ssh-key ", "gpg-key ", "codespace ", "repo 
 # The repo subcommands whose first positional names the repository they write to.
 REPO_ARGUMENT = ("repo archive", "repo delete", "repo edit", "repo sync", "repo unarchive",
                  "repo create")
-_SUSPECT = re.compile(r"\.\.|%2e|%2f|//|\\\\", re.I)
+_SUSPECT = re.compile(r"\.\.|%2e|%2f|//|\\\\|[#;\s]|/\./|/\.$|\.$|(^|/)\.(/|$)", re.I)
 # What gh reads from its environment that changes which repository or host it writes to.
 TARGET_ENV = ("GH_HOST", "GH_CONFIG_DIR", "HOME", "XDG_CONFIG_HOME", "GIT_DIR", "GIT_WORK_TREE",
               "GIT_CONFIG",
@@ -3515,7 +4003,7 @@ def named(inv, path, flags, positionals, events, has_repo_flag=True):
             raise Guarded("its endpoint holds a sequence the hook does not resolve")
         if endpoint.startswith("/"):
             endpoint = endpoint[1:]
-        if re.match(r"^repos/[^/]+/[^/]+/(generate|forks|transfer)(/|\?|$)", endpoint, re.I):
+        if re.search(r"(generate|forks|transfer)", endpoint, re.I):
             raise Guarded("its endpoint makes or moves a repository under another owner")
         m = re.match(r"^repos/([^/{}:?#]+)/([^/{}:?#]+)(/|\?|$)", endpoint)
         if m:
@@ -3528,8 +4016,11 @@ def named(inv, path, flags, positionals, events, has_repo_flag=True):
                 return [r]
             return None
         raise Guarded("its endpoint names no repository")
-    if selectors or extra:
+    if selectors:
         return selectors + extra
+    if extra:
+        # The issue's own repository comes from the directory: both are reached.
+        raise Guarded("it writes to a repository beside the one it names")
     # gh reads GH_REPO only where it takes --repo.
     if assigned and has_repo_flag:
         r = repo_of(assigned[-1])
@@ -3662,8 +4153,12 @@ def target_events(inv, events, environ):
     for name, value in inv.assigns_named:
         if name in TARGET_ENV or name.startswith("GIT_"):
             raise Guarded("it is given " + name)
+    if (any(n in ("PATH", "path") for n, _ in inv.assigns_named) or "assigns PATH" in inv.state.events) \
+            and (inv.state.files or inv.state.named or inv.state.deferred):
+        # A git the command wrote, found first on that PATH, answers gh's question of the remotes.
+        raise Guarded("it runs with a PATH the command changed, after the command wrote files")
     for e in inv.state.events + events:
-        if e != "assigns GH_REPO":
+        if e not in ("assigns GH_REPO", "assigns PATH"):
             raise Guarded("the command runs " + e + " before it")
     for cwd in inv.state.cwds:
         k = _fold(os.path.realpath(cwd)) if cwd else None
@@ -3689,6 +4184,26 @@ def placeholders(sources, repos, cwd, ctx):
             data = data.replace(b"{branch}", _bytes(branch))
         out.append(Source(s.label, data))
     return out
+
+
+# The gh commands that change where a later gh command writes.
+GH_RETARGETS = ("repo set-default", "config set", "repo create", "repo fork", "repo clone",
+                "repo rename", "auth switch", "auth login", "auth logout", "alias set",
+                "alias import")
+
+
+def head_sources(inv, ctx):
+    """gh pr create with no --head pushes the current branch and names it as the head: the
+    branch the hook reads, and every name the command may give it (#361, the fourth hunt)."""
+    if None in inv.state.branches:
+        raise Lost("the branch gh pr create pushes, which the command changes to a name the hook"
+                   " cannot know")
+    cwd = inv.state.cwds[0] if len(inv.state.cwds) == 1 else None
+    names = list(inv.state.branches)
+    here = ctx.branch(cwd) if cwd else None
+    if here:
+        names.append(here)
+    return [Source("the branch gh pushes as the head", _bytes(b)) for b in names]
 
 
 def real_branch(cwd, home, xdg):
@@ -3848,14 +4363,15 @@ def decide(command, cwd, ctx):
         verdict = classify(inv)
         if verdict.result is not None:
             return verdict.result
-        if verdict.kind == "local" and verdict.path in ("repo set-default", "config set"):
-            events.append("gh " + verdict.path)
         if verdict.kind == "write":
             if inv.strangers:
                 return block("A gh write runs after " + ", ".join(inv.strangers[:3]) + ", which"
                              " the hook does not follow, so it cannot tell what gh would send or"
                              " where.", ADVICE_STRANGER)
             writes.append((inv, verdict, list(events)))
+        if verdict.path in GH_RETARGETS:
+            # It changes where a later gh command writes, not where it writes itself.
+            events.append("gh " + verdict.path)
     if not writes:
         return PASS
     try:
@@ -3882,7 +4398,11 @@ def decide(command, cwd, ctx):
         try:
             got = gather(inv, verdict.path, verdict.flags, verdict.positionals)
             if verdict.path == "api":
+                if inv.state.branches and any(re.search(rb"\{branch\}", x.data) for x in got):
+                    raise Lost("{branch}, after the command changes the branch")
                 got = placeholders(got, repos, inv.state.cwds[0], ctx)
+            if verdict.path == "pr create" and not any(n == "head" for n, _, _ in verdict.flags):
+                got += head_sources(inv, ctx)
         except Lost as why:
             return lost(str(why)).result
         sources += got
