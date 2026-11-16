@@ -13552,6 +13552,108 @@ if [ -n "$GHG_PY" ]; then
        "exempt=$x0 guarded=$x1 git-dir=$x2 malformed=$x3"
 fi
 
+# 457. #361 AC7 — the installer: a fresh install into a versioned directory that `current` names,
+#      compiled and probed; a re-run that changes nothing; an older version refused; a failed
+#      install leaving the old version running; the interpreter named by its real path, a shim
+#      refused; and the entry it prints, which it never writes, and whether the settings hold it.
+ghg_install() {  # $1 = the checkout, $2 = HOME; then the installer's arguments. Prints the status.
+  ghg_co=$1; ghg_h=$2; shift 2
+  ( env -i PATH=/usr/bin:/bin HOME="$ghg_h" sh "$ghg_co/scripts/install-gh-hook.sh" "$@" \
+      >"$TMP/ghgiout" 2>"$TMP/ghgierr"; printf '%s' "$?" )
+}
+ghg_checkout() {  # $1 = name: a copy of what the installer reads from a checkout
+  ghg_c="$TMP/ghg-co-$1"; mkdir -p "$ghg_c/scripts/claude-hooks"
+  cp "$ROOT/scripts/install-gh-hook.sh" "$ROOT/scripts/check-leakage.sh" "$ghg_c/scripts/"
+  cp "$GHG_HOOK/gh_guard.py" "$GHG_HOOK/gh_guard_lib.py" "$ghg_c/scripts/claude-hooks/"
+  echo "$ghg_c"
+}
+if [ -z "$GHG_PY" ]; then
+  note_skip "gh-guard/installer" "no python3 on PATH"
+else
+  GHG_REALPY=$("$GHG_PY" -I -c 'import os, sys; print(os.path.realpath(sys.executable))')
+  ghg_ih="$TMP/ghg-ihome"; mkdir -p "$ghg_ih"
+  ghg_data="$ghg_ih/.local/share/gate-sdd/gh-hook"
+  out=$(ghg_install "$ROOT" "$ghg_ih" --python "$GHG_PY")
+  ghg_cur=$(readlink "$ghg_data/current" 2>/dev/null)
+  i0=ok
+  [ "$out" = 0 ] || i0="exit=$out:$(cat "$TMP/ghgierr")"
+  case "$ghg_cur" in v[0-9]*-*) ;; *) i0="$i0+current=$ghg_cur" ;; esac
+  for f in gh_guard.py gh_guard_lib.py check-leakage.sh; do [ -f "$ghg_data/current/$f" ] || i0="$i0+no-$f"; done
+  ls "$ghg_data/current/__pycache__/" 2>/dev/null | grep -q '^gh_guard_lib\..*\.pyc$' || i0="$i0+not-compiled"
+  grep -Fq "\"command\": \"$GHG_REALPY\"" "$TMP/ghgiout" || i0="$i0+entry-interpreter"
+  grep -Fq "\"$ghg_data/current/gh_guard.py\"" "$TMP/ghgiout" || i0="$i0+entry-hook"
+  grep -Fq '"onFailure": "block"' "$TMP/ghgiout" && grep -Fq '"matcher": "Bash|mcp__terminal__run_in_terminal"' "$TMP/ghgiout" || i0="$i0+entry-shape"
+  grep -Fq 'does not hold the entry yet.' "$TMP/ghgiout" || i0="$i0+said-held"
+  [ ! -e "$ghg_ih/.claude/settings.json" ] || i0="$i0+wrote-settings"
+  ls -a "$ghg_data" | grep -q '^\.install\.' && i0="$i0+left-work"
+  # The installed copy runs, from current, as the entry says.
+  ghg_input 'ls'; out=$(ghg_run "$ghg_data/current"); [ "$out" = 0 ] || i0="$i0+installed-exit=$out"
+
+  # A re-run changes nothing, and finds the entry once the settings hold it.
+  out=$(ghg_install "$ROOT" "$ghg_ih" --python "$GHG_PY")
+  [ "$out" = 0 ] && [ "$(readlink "$ghg_data/current")" = "$ghg_cur" ] && i1=ok || i1="exit=$out"
+  [ "$(ls "$ghg_data" | grep -c '^v')" = 1 ] || i1="$i1+dirs=$(ls "$ghg_data" | grep -c '^v')"
+  mkdir -p "$ghg_ih/.claude"
+  "$GHG_PY" -I -c 'import json, sys
+e = json.loads(sys.stdin.read().split(":\n", 1)[1].rsplit("\ninstall-gh-hook:", 1)[0])
+json.dump({"hooks": {"PreToolUse": [e]}}, open(sys.argv[1], "w"))' "$ghg_ih/.claude/settings.json" < "$TMP/ghgiout"
+  out=$(ghg_install "$ROOT" "$ghg_ih" --python "$GHG_PY")
+  grep -Fq "$ghg_ih/.claude/settings.json holds the entry." "$TMP/ghgiout" || i1="$i1+not-found-held"
+
+  # An older version is refused, and current stays.
+  ghg_c=$(ghg_checkout old)
+  sed 's/^GH_GUARD_VERSION = .*/GH_GUARD_VERSION = 0/' "$GHG_HOOK/gh_guard_lib.py" > "$ghg_c/scripts/claude-hooks/gh_guard_lib.py"
+  out=$(ghg_install "$ghg_c" "$ghg_ih" --python "$GHG_PY")
+  [ "$out" = 1 ] && grep -q 'newer than this checkout' "$TMP/ghgierr" && [ "$(readlink "$ghg_data/current")" = "$ghg_cur" ] && i2=ok || i2="exit=$out"
+
+  # A newer version that does not compile, or does not decide, leaves the old one running.
+  ghg_c=$(ghg_checkout broken)
+  { cat "$GHG_HOOK/gh_guard_lib.py"; printf 'def broken(:\n'; } | sed 's/^GH_GUARD_VERSION = .*/GH_GUARD_VERSION = 999/' > "$ghg_c/scripts/claude-hooks/gh_guard_lib.py"
+  out=$(ghg_install "$ghg_c" "$ghg_ih" --python "$GHG_PY")
+  [ "$out" = 1 ] && grep -q 'did not compile' "$TMP/ghgierr" && [ "$(readlink "$ghg_data/current")" = "$ghg_cur" ] && i3=ok || i3="exit=$out"
+  ghg_c=$(ghg_checkout opens)
+  sed -e 's/^GH_GUARD_VERSION = .*/GH_GUARD_VERSION = 999/' -e 's/^    if not mentions_gh(command):$/    if True:/' "$GHG_HOOK/gh_guard_lib.py" > "$ghg_c/scripts/claude-hooks/gh_guard_lib.py"
+  out=$(ghg_install "$ghg_c" "$ghg_ih" --python "$GHG_PY")
+  [ "$out" = 1 ] && grep -q 'did not block a gh it cannot account for' "$TMP/ghgierr" && [ "$(readlink "$ghg_data/current")" = "$ghg_cur" ] || i3="$i3+opens-exit=$out"
+  ls -a "$ghg_data" | grep -q '^\.install\.' && i3="$i3+left-work"
+
+  # The interpreter: a link is followed to its file; a shim, a script, a relative path refused.
+  mkdir -p "$TMP/ghg-pylink" "$TMP/ghg-shims/shims"
+  ln -sf "$GHG_REALPY" "$TMP/ghg-pylink/python3"
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python "$TMP/ghg-pylink/python3")
+  [ "$out" = 0 ] && grep -Fq "\"command\": \"$GHG_REALPY\"" "$TMP/ghgiout" && i4=ok || i4="link-exit=$out"
+  ln -sf "$GHG_REALPY" "$TMP/ghg-shims/shims/python3"
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python "$TMP/ghg-shims/shims/python3")
+  [ "$out" = 0 ] && grep -Fq "\"command\": \"$GHG_REALPY\"" "$TMP/ghgiout" || i4="$i4+linked-shim-exit=$out"
+  printf '#!/bin/sh\nexec %s "$@"\n' "$GHG_REALPY" > "$TMP/ghg-shims/shims/py"; chmod +x "$TMP/ghg-shims/shims/py"
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python "$TMP/ghg-shims/shims/py")
+  [ "$out" = 1 ] && grep -q "a version manager's shim" "$TMP/ghgierr" || i4="$i4+shim-exit=$out"
+  cp "$TMP/ghg-shims/shims/py" "$TMP/ghg-pylink/py"
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python "$TMP/ghg-pylink/py")
+  [ "$out" = 1 ] && grep -q 'is a script, which is a shim' "$TMP/ghgierr" || i4="$i4+script-exit=$out"
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python python3)
+  [ "$out" = 1 ] && grep -q 'absolute path' "$TMP/ghgierr" || i4="$i4+relative-exit=$out"
+  if [ "$(uname -s)" = Darwin ]; then
+    out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python /usr/bin/python3)
+    [ "$out" = 1 ] && grep -q 'under /usr/bin' "$TMP/ghgierr" || i4="$i4+usr-bin-exit=$out"
+  fi
+  # With no --python, macOS names the file xcrun resolves, past every link.
+  if [ "$(uname -s)" = Darwin ] && ghg_x=$(/usr/bin/xcrun -f python3 2>/dev/null); then
+    ghg_x=$("$GHG_PY" -I -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$ghg_x")
+    out=$(ghg_install "$ROOT" "$TMP/ghg-ihome3")
+    [ "$out" = 0 ] && grep -Fq "\"command\": \"$ghg_x\"" "$TMP/ghgiout" || i4="$i4+xcrun-exit=$out"
+  elif [ "$(uname -s)" = Darwin ]; then
+    note_skip "gh-guard/installer-xcrun" "xcrun finds no python3 here"
+  fi
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --surprise)
+  [ "$out" = 1 ] && grep -q 'does not take' "$TMP/ghgierr" || i4="$i4+argument-exit=$out"
+
+  [ "$i0 $i1 $i2 $i3 $i4" = "ok ok ok ok ok" ] \
+    && report "the gh guard's installer swaps in a compiled, probed version, refuses an older one and a shim, and prints the entry" ok \
+    || report "the gh guard's installer swaps in a compiled, probed version, refuses an older one and a shim, and prints the entry" no \
+       "fresh=$i0 rerun=$i1 older=$i2 failed=$i3 interpreter=$i4"
+fi
+
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
 # #145. check-version-bump.py must include rules/ in SHIPPED so any change
