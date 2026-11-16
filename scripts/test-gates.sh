@@ -12826,6 +12826,7 @@ FOUND = [
     ("for x in a; do gh issue list; done", [["issue", "list"]]),
     ("until gh pr checks 1; do sleep 10; done", [["pr", "checks", "1"], ["pr", "checks", "1"]]),
     ("for c in gh; do $c issue list; done", [["issue", "list"]]),
+    ("eval \"gh issue list\"", [["issue", "list"]]),
     ("if gh pr view 1; then gh issue list; else echo no; fi", [["pr", "view", "1"], ["issue", "list"]]),
     ("for n in 1 2; do gh issue view $n; done", [["issue", "view", "1"], ["issue", "view", "2"]]),
     ("f() { gh issue view $1; }; f 3", [["issue", "view", None]]),
@@ -12889,7 +12890,7 @@ BLOCKED = [
     ("node -e \"require('child_process').execSync('gh pr list')\"", "can run its arguments"),
     ("alias g=gh", "can run its arguments"),
     ("hash gh=/tmp/x", "can run its arguments"),
-    ("eval \"gh issue list\"", "can run its arguments"),
+    ("eval \"$X gh issue list\"", "A gh word is an argument of eval"),
     ("watch gh pr checks", "can run its arguments"),
     ("rg --pre gh x", "can run its arguments"),
     ("git -c alias.x='!gh issue list' x", "can run its arguments"),
@@ -12980,7 +12981,8 @@ CLASSIFY = [
     ("X=a; f() { gh issue create -t t -b $X; }; X=Zq_Exact; f", "block: Cannot recover the text"
      " gh would send: a word whose value cannot be known", []),
     ("f() { gh issue create -t t -F /etc/hosts; }; f", "block: Cannot recover the text gh would"
-     " send: /etc/hosts, read in a function's body, where it is called.", []),
+     " send: /etc/hosts, which a function, a source, an eval or an exec earlier in the command"
+     " may change, or read in a function's body.", []),
     ("if true; then gh issue comment 1 -b ok; else gh issue comment 1 -b Zq_Exact; fi",
      "block: LEAK [fail] in the --body value, line 1.", ["the --body value", "argument 1",
                                                         "the --body value", "argument 1"]),
@@ -13447,6 +13449,53 @@ if hasattr(os, "geteuid") and os.geteuid() != 0:
     check("exempt-list", got.startswith("block: The exempt list could not be loaded: the exempt"
                                         " list cannot be read"), "an unreadable list gave " + got)
 
+# The fail-opens the bypass hunt confirmed, each now blocked. A is guarded, B exempt; the text
+# reaches gh at run time by a way the walk had not followed.
+with open(os.path.join(A, "title.txt"), "w") as f:
+    f.write("Zq_Exact\n")
+with open(os.path.join(A, "vars.sh"), "w") as f:
+    f.write("TITLE=Zq_Exact\n")
+UNKNOWN = "block: Cannot recover the text gh would send: a word whose value cannot be known"
+HUNT = [
+    ("TITLE=untitled; read -r TITLE < title.txt; gh issue create --title \"$TITLE\" --body b", A, UNKNOWN),
+    ("T=draft; read -r T <<< Zq_Exact; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("TITLE=untitled; source vars.sh; gh issue create --title \"$TITLE\" --body b", A, UNKNOWN),
+    ("T=; : ${T:=Zq_Exact}; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; : ${T::=Zq_Exact}; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; : $((T=1)); gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; printf -v T %s Zq_Exact; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; print -v T Zq_Exact; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("f() { T=Zq_Exact; }; T=a; f; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=a; eval T=Zq_Exact; gh issue create --title \"$T\" --body b", A, LEAK),
+    ("T=Zq_Exact; gh issue create --title $=T --body b", A, UNKNOWN),
+    ("CMD=gh; $=CMD issue create --title Zq_Exact --body b", A, "block: A command's name cannot be known"),
+    ("exec > out.md; echo Zq_Exact; gh issue create -t t -F out.md", A,
+     "block: Cannot recover the text gh would send: out.md, which a function, a source"),
+    ("true || cd " + B + " && " + W6, A, LEAK),
+    ("cd " + A + " || cd " + B + " && " + W6, A, LEAK),
+    ("cd " + B + " || " + W6, A, LEAK),
+    ("gh issue comment https://github.com/acme/public/issues/1 -R priv-org/secret --body Zq_Exact", B,
+     "block: LEAK [fail] in the --body value, line 1."),
+    ("gh label create https://github.com/priv-org/secret --description Zq_Exact", A,
+     "block: LEAK [fail] in the --description value, line 1."),
+    ("pushd " + B + " && cd " + B + " && popd && " + W6, A, LEAK),
+    ("cd " + B + " && pushd " + A + " && " + W6, A, LEAK),
+    ("cd " + B + " && echo 'cd " + A + "' > back.sh && . ./back.sh && " + W6, A, LEAK),
+    ("cd " + B + " && printf 'GH_REPO=acme/public\\n' > .env && set -a && . ./.env && set +a && " + W6, A, LEAK),
+    ("back() { cd " + A + "; }; cd " + B + " && back && " + W6, A, LEAK),
+    ("cd " + B + " && eval \"cd " + A + "\" && " + W6, A, LEAK),
+    ("cd " + B + " && read -r GH_REPO <<< acme/public && export GH_REPO && " + W6, A, LEAK),
+    ("cd " + B + " && cp " + A + "/.git/config .git/config && " + W6, A, LEAK),
+    ("cd " + B + " && printf '[remote \"origin\"]\\n' >> .git/config && " + W6, A, LEAK),
+    # and what the fixes leave alone
+    ("cd " + B + " && " + W6, A, "exempt"),
+    ("cd " + B + " && set -euo pipefail && " + W6, A, "exempt"),
+    ("cd " + B + " && git status && " + W6, A, "exempt"),
+]
+for command, cwd, want in HUNT:
+    got = target(command, cwd)
+    check("hunt", got.startswith(want), repr(command) + " gave " + got)
+
 
 for group in sorted(results):
     found = results[group]
@@ -13614,7 +13663,14 @@ if [ -n "$GHG_PY" ]; then
        "exempt=$x0 guarded=$x1 git-dir=$x2 malformed=$x3"
 fi
 
-# 457. #361 AC7 — the installer: a fresh install into a versioned directory that `current` names,
+# 457. #361 AC1, AC3, AC6 — the fail-opens a bypass hunt confirmed, each now blocked: a builtin
+#      that assigns (read, printf -v, ${N:=w}, $((N=1))), a source, an eval, a function call, an
+#      `exec >f`, zsh's $=NAME, a cd an and-or list may skip, pushd and popd, set -a, an export
+#      of a target variable read earlier, a write into .git, -R beside an issue URL, and a URL
+#      that is only a label's name. And what the fixes leave alone.
+ghg_case hunt "the gh guard follows, or forgets, every way a command changes its own state before gh runs"
+
+# 458. #361 AC7 — the installer: a fresh install into a versioned directory that `current` names,
 #      compiled and probed; a re-run that changes nothing; an older version refused; a failed
 #      install leaving the old version running; the interpreter named by its real path, a shim
 #      refused; and the entry it prints, which it never writes, and whether the settings hold it.
