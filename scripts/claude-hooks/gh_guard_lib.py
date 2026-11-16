@@ -839,6 +839,12 @@ QUIET = {"echo", "printf", "print", "which", "type", "whence", "where", "man", "
          "fgrep", "cat", "ls", "cd", "pwd", "test", "[", "head", "tail", "wc", "mkdir", "touch",
          "rm", "cp", "mv", "diff", "sort", "uniq", "cut", "basename", "dirname", "realpath",
          "readlink", "stat", "file", "tee", "true", "false", ":", "chmod"}
+# Commands that read the files they name and change none of them.
+READERS = {"cat", "head", "tail", "wc", "grep", "egrep", "fgrep", "rg", "ls", "test", "[", "stat",
+           "file", "diff", "cd", "pwd", "echo", "printf", "print", "which", "type", "whence",
+           "where", "man", "realpath", "readlink", "basename", "dirname", "true", "false", ":",
+           "sort", "uniq", "cut"}
+STDIN_OPS = ("<", "<<", "<<-", "<<<", "<>")
 DECLARE = {"export", "typeset", "declare", "local", "readonly", "integer", "float"}
 SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
 # The git subcommands that never run their arguments. `git -c`, `config`, `rebase --exec`,
@@ -997,6 +1003,40 @@ def git_quiet(vals):
     return True
 
 
+def printed(base, vals):
+    """What echo or printf prints, when it is literal text: zsh's echo reads backslash escapes,
+    so one with a backslash is not known; printf's format is, with no % and a few escapes."""
+    if base == "echo":
+        if vals and vals[0].startswith("-") or any("\\" in v for v in vals):
+            return None
+        return " ".join(vals) + "\n"
+    if len(vals) != 1 or "%" in vals[0]:
+        return None
+    text = re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t", "\\": "\\", '"': '"', "'": "'"}
+                  .get(m.group(1), "\0"), vals[0])
+    return None if "\0" in text or vals[0].endswith("\\") else text
+
+
+def on_disk(path):
+    """A file's current content as a Text, for a command that appends to it: empty when it does
+    not exist, and unknown when it is not a regular file the hook can read."""
+    import stat
+    try:
+        st = os.stat(path)
+    except FileNotFoundError:
+        return Text("", False, "a file")
+    except OSError:
+        return Text(None, False, "a file")
+    if not stat.S_ISREG(st.st_mode) or st.st_size > MAX_FILE:
+        return Text(None, False, "a file")
+    try:
+        with open(path, "rb") as f:
+            data = f.read().decode("utf-8", "surrogateescape")
+    except OSError:
+        return Text(None, False, "a file")
+    return Text(data, mentions_gh(data), "a file")
+
+
 def own_text(word):
     """A word's text with its substitutions left out: they are walked as commands of their own."""
     return "".join(p.text if p.kind == "lit" else _source(p) for p in word.parts
@@ -1123,9 +1163,23 @@ class Finder(object):
         if isinstance(command, Group):
             inner = state if command.kind == "group" else state.copy()
             self.redirect_targets(command.redirs, inner)
-            self.walk(command.body, inner)
+            # A group's standard input is every command's in it that has none of its own.
+            own = [r for r in command.redirs if r.op in STDIN_OPS]
+            self.stdin.append((own, piped))
+            try:
+                self.walk(command.body, inner)
+            finally:
+                self.stdin.pop()
             return
         self.simple(command, state, piped, downstream)
+
+    def inherited_stdin(self, redirs, piped):
+        own = [r for r in redirs if r.op in STDIN_OPS]
+        for outer, outer_piped in reversed(self.stdin):
+            piped = piped or outer_piped
+            if not own:
+                own = outer
+        return own, piped
 
     def redirect_targets(self, redirs, state):
         for r in redirs:
@@ -1168,9 +1222,11 @@ class Finder(object):
         args = cmd.words[k + 1:]
         if is_gh(name):
             # The words after gh are what it sends; reading them is the classifier's work.
-            self.invocations.append(Invocation(args, list(cmd.assigns), env, cmd.redirs,
+            stdin, piped = self.inherited_stdin(cmd.redirs, piped)
+            self.invocations.append(Invocation(args, list(cmd.assigns), env, stdin,
                                                state.copy(), piped, cmd, name))
             self.check_words(cmd.words[:k], state, quiet=True)
+            self.writes(cmd, None, state, [])
             return
         if base in DECLARE:
             self.declare(base, args, vals[k + 1:], state)
@@ -1326,6 +1382,12 @@ class Finder(object):
             self.reparse(text.content, state.copy())
 
     def names_files(self, base, quiet, vals, state):
+        # A path any command but a reader names may change before gh reads it (T5).
+        if base not in READERS:
+            for v in vals:
+                p = state.path(v) if v else None
+                if p is not None and p not in state.named:
+                    state.named[p] = base
         # A file this command wrote, with a gh word in it, named by a command that can run it.
         if quiet:
             return
@@ -1365,6 +1427,8 @@ class Finder(object):
                 continue
             text = Text(content if out else None, gh and out, "a file this command wrote")
             old = state.files.get(p)
+            if appends and old is None and p not in state.named:
+                old = on_disk(p)
             if appends:
                 if old is None or old.content is None or text.content is None:
                     text = Text(None, text.gh or (old is not None and old.gh), text.label)
@@ -1375,18 +1439,11 @@ class Finder(object):
     def printed(self, base, vals):
         if any(v is None for v in vals):
             return None, any(v is None or mentions_gh(v) for v in vals)
-        gh = any(mentions_gh(v) for v in vals)
-        if base == "echo":
-            if vals and vals[0].startswith("-"):
-                return None, gh
-            text = " ".join(vals)
-            return (None if "\\" in text else text + "\n"), gh
-        if not vals or "%" in vals[0] or "\\" in vals[0] or len(vals) > 1:
-            return None, gh
-        return vals[0], gh
+        return printed(base, vals), any(mentions_gh(v) for v in vals)
 
     def find(self, script):
         self.quiet_gh = []
+        self.stdin = []
         self.walk(script, self.start.copy())
         return self
 
@@ -1834,8 +1891,7 @@ def lost(what):
 def classify(inv):
     """Reads one gh invocation as gh would: the path, then every flag by that path's table."""
     table = nodes()
-    env = inv.state.env()
-    vals = [w.literal(env) for w in inv.words]
+    vals = [resolve(w, inv.state) for w in inv.words]
     node = table[""]
     used = set()
     k = 0
@@ -1949,7 +2005,7 @@ def classify(inv):
     if helps and helps[-1] is True:
         return Verdict("read", path)
     if kind == "api":
-        kind = api_kind(flags, positionals)
+        kind = api_kind(flags, positionals, inv.state)
     if kind in ("read", "local"):
         return Verdict(kind, path)
     return write_sources(inv, path, flags, positionals)
@@ -1961,56 +2017,229 @@ def unknown_flag(path, i):
         + str(i + 1) + " after gh), so it cannot tell what gh would send.", ADVICE_FLAG))
 
 
-def api_kind(flags, positionals):
+def api_kind(flags, positionals, state):
     methods = [v for n, v, _ in flags if n == "method"]
     if methods:
         return "read" if isinstance(methods[-1], str) and methods[-1].upper() == "GET" else "write"
     if any(n in ("field", "raw-field", "input") for n, _, _ in flags):
         endpoint = positionals[0][1] if positionals else None
         if endpoint == "graphql":
-            queries = [v for n, v, _ in flags if n in ("field", "raw-field")
+            queries = [(n, v[6:]) for n, v, _ in flags if n in ("field", "raw-field")
                        and isinstance(v, str) and v.startswith("query=")]
-            if queries and not queries[-1].startswith("query=@") \
-                    and not re.search(r"\bmutation\b", queries[-1]) \
+            text = None
+            if queries and queries[-1][0] == "field" and queries[-1][1].startswith("@"):
+                try:
+                    data = read_file(queries[-1][1][1:], state)
+                    text = None if data is STDIN else data.decode("utf-8", "replace")
+                except Lost:
+                    text = None
+            elif queries:
+                text = queries[-1][1]
+            if text is not None and not re.search(r"\bmutation\b", text) \
                     and not any(n == "input" for n, _, _ in flags):
                 return "read"
         return "write"
     return "read"
 
 
+# ---------------------------------------------------------------------------------------------
+# Text off the command line: what a file, standard input or a substitution gives gh, read where
+# gh would read it, at hook time (#361 AC2). Anything else is unrecoverable, which blocks.
+
+MAX_FILE = 50 * 1024 * 1024
+STDIN = object()
+
+
+class Lost(Exception):
+    pass
+
+
+def resolve(word, state):
+    """A word's value, with the substitutions whose output can be known before the command runs
+    (cat of a here-document, a here-string or a file, and echo or printf of literal text), or
+    None. An unquoted substitution is split into words by zsh, so one with a blank is None."""
+    if word.pattern():
+        return None
+    env = state.env()
+    out = []
+    for p in word.parts:
+        if p.kind == "lit":
+            out.append(p.text)
+        elif p.kind == "home" and "HOME" in env:
+            out.append(env["HOME"])
+        elif p.kind == "param" and p.text in env:
+            out.append(env[p.text])
+        elif p.kind == "cmdsub":
+            try:
+                v = substitution(p.script, state)
+            except Lost:
+                return None
+            if v is None or (not p.quoted and (v == "" or re.search(r"[ \t\n]", v))):
+                return None
+            out.append(v)
+        else:
+            return None
+    return "".join(out)
+
+
+def substitution(script, state):
+    if script.unsupported is not None or len(script.items) != 1:
+        return None
+    node = script.items[0][0]
+    if len(node.pipelines) != 1 or len(node.pipelines[0].commands) != 1:
+        return None
+    cmd = node.pipelines[0].commands[0]
+    if not isinstance(cmd, Simple) or cmd.assigns or not cmd.words:
+        return None
+    vals = [resolve(w, state) for w in cmd.words]
+    if None in vals:
+        return None
+    stdin = [r for r in cmd.redirs if r.op in STDIN_OPS]
+    if any(r.op not in STDIN_OPS for r in cmd.redirs):
+        return None
+    if vals[0] == "cat" and len(vals) == 1:
+        data = b"".join(stream(r, state) for r in stdin)
+    elif vals[0] == "cat" and len(vals) == 2 and not stdin and not vals[1].startswith("-"):
+        data = read_file(vals[1], state)
+        if data is STDIN:
+            return None
+    elif vals[0] in ("echo", "printf") and not stdin and printed(vals[0], vals[1:]) is not None:
+        data = _bytes(printed(vals[0], vals[1:]))
+    else:
+        return None
+    return data.decode("utf-8", "surrogateescape").rstrip("\n")
+
+
+def stream(r, state):
+    """What a redirection of standard input gives its command, as bytes. Raises Lost."""
+    if r.heredoc is not None:
+        h = r.heredoc
+        if h.quoted:
+            return _bytes(h.body)
+        v = resolve(h.word, state)
+        if v is None:
+            raise Lost("a here-document whose expansions cannot be known before the command runs")
+        return _bytes(v)
+    v = resolve(r.target, state)
+    if r.op == "<<<":
+        if v is None:
+            raise Lost("a here-string whose value cannot be known before the command runs")
+        return _bytes(v + "\n")
+    if r.fd not in ("", "0"):
+        raise Lost("a file opened on descriptor " + r.fd)
+    data = read_file(v, state)
+    if data is STDIN:
+        raise Lost("standard input redirected from standard input")
+    return data
+
+
+def read_file(value, state):
+    """A file's content as gh would read it, or STDIN for a path that is standard input."""
+    if value is None:
+        raise Lost("a file whose path cannot be known before the command runs")
+    if value == "-" or value in ("/dev/stdin", "/dev/fd/0") or re.fullmatch(r"/proc/[^/]+/fd/0", value):
+        return STDIN
+    p = state.path(value)
+    if p is None:
+        raise Lost("a relative path, " + value + ", in a directory the hook cannot know")
+    if p in state.files:
+        text = state.files[p]
+        if text.content is None:
+            raise Lost(value + ", which the command writes before gh reads it")
+        return _bytes(text.content)
+    if p in state.named:
+        raise Lost(value + ", which " + state.named[p] + " names earlier in the command")
+    if p == "/dev/null":
+        return b""
+    if p.startswith("/dev/") or p.startswith("/proc/"):
+        raise Lost(value + ", which is not a file")
+    import stat
+    try:
+        st = os.stat(p)
+    except OSError as e:
+        raise Lost(value + ", which " + ("does not exist" if isinstance(e, FileNotFoundError)
+                                         else "cannot be read") + " when the hook runs")
+    if not stat.S_ISREG(st.st_mode):
+        raise Lost(value + ", which is not a regular file")
+    if st.st_size > MAX_FILE:
+        raise Lost(value + ", which is over 50 MB")
+    try:
+        with open(p, "rb") as f:
+            return f.read(MAX_FILE + 1)
+    except OSError:
+        raise Lost(value + ", which cannot be read when the hook runs")
+
+
+def file_sources(value, label, state, published=False):
+    """The sources a file argument gives: its content, and for a published file its name and
+    the label after `#`."""
+    path, sep, tag = value.partition("#") if published or label.startswith("the --attach") \
+        else (value, "", "")
+    out = []
+    data = read_file(path, state)
+    if data is not STDIN:
+        out.append(Source(label + " (" + path + ")", data))
+    if published and data is not STDIN:
+        out.append(Source(label + "'s name (" + path + ")", _bytes(path.rsplit("/", 1)[-1])))
+    if sep:
+        out.append(Source(label + "'s label", _bytes(tag)))
+    return out
+
+
 def write_sources(inv, path, flags, positionals):
+    try:
+        return Verdict("write", path, gather(inv, path, flags, positionals))
+    except Lost as why:
+        return lost(str(why))
+
+
+def gather(inv, path, flags, positionals):
+    state = inv.state
     sources = []
     for name, value, i in flags:
         role = ROLES.get((path, name)) or ROLES.get(("*", name))
         if role == "lost":
             if value is not False:
-                return lost("--" + name)
+                raise Lost("--" + name)
             continue
         if value is True or value is False:
             continue
         if value is None:
-            return lost("a word whose value cannot be known before the command runs (word "
-                        + str(i + 1) + " after gh)")
-        if role in ("file", "attach") or role == "field" and value.split("=", 1)[-1][:1] == "@":
-            return lost("the content of the file --" + name + " names, which this version of"
-                        " the hook does not read")
-        sources.append(Source("the --" + name + " value", _bytes(value)))
+            raise Lost("a word whose value cannot be known before the command runs (word "
+                       + str(i + 1) + " after gh)")
+        if role in ("file", "attach"):
+            sources += file_sources(value, "the --" + name + " file", state)
+        elif role == "field" and value.partition("=")[2][:1] == "@":
+            key, _, rest = value.partition("=")
+            sources.append(Source("the --" + name + " key", _bytes(key)))
+            sources += file_sources(rest[1:], "the --" + name + " file", state)
+        else:
+            sources.append(Source("the --" + name + " value", _bytes(value)))
     if path == "gist edit" and not any(n in ("add", "desc", "remove") for n, _, _ in flags):
-        return lost("gh gist edit's editor")
+        raise Lost("gh gist edit's editor")
     if path == "agent-task create" and not positionals \
             and not any(n == "from-file" for n, _, _ in flags):
-        return lost("gh agent-task create's editor")
+        raise Lost("gh agent-task create's editor")
     spec = POSITIONAL.get(path, "v*").split()
     for n, (i, value) in enumerate(positionals):
         role = spec[min(n, len(spec) - 1)].rstrip("*")
+        if value is None:
+            raise Lost("a word whose value cannot be known before the command runs (word "
+                       + str(i + 1) + " after gh)")
         if role == "f":
-            return lost("the content of a file gh " + path + " publishes, which this version of"
-                        " the hook does not read")
-        sources.append(Source("argument " + str(n + 1), _bytes(value)))
-    stdin = [r for r in inv.redirs if r.op in ("<", "<<", "<<-", "<<<", "<>")]
-    if stdin or inv.piped:
-        return lost("standard input, which this version of the hook does not read")
-    return Verdict("write", path, sources)
+            sources += file_sources(value, "the file in argument " + str(n + 1), state,
+                                    published=True)
+        else:
+            sources.append(Source("argument " + str(n + 1), _bytes(value)))
+    # Standard input, for every write whatever its flags: gh reads it for more than `-`.
+    if inv.piped:
+        raise Lost("standard input from a pipe")
+    for r in inv.redirs:
+        label = "standard input (" + ("a here-document" if r.heredoc is not None else
+                                      "a here-string" if r.op == "<<<" else
+                                      (resolve(r.target, state) or "a file")) + ")"
+        sources.append(Source(label, stream(r, state)))
+    return sources
 
 
 # ---------------------------------------------------------------------------------------------

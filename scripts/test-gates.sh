@@ -12955,8 +12955,8 @@ CLASSIFY = [
     ("gh api graphql -f query='query { viewer { login } }'", "pass", []),
     ("gh api graphql -f query='mutation { addComment }'", "pass",
      ["the --raw-field value", "argument 1"]),
-    ("gh api graphql -F query=@q.graphql", "block: Cannot recover the text gh would send: the"
-     " content of the file --field names, which this version of the hook does not read.", []),
+    ("gh api graphql -F query=@missing.graphql", "block: Cannot recover the text gh would send:"
+     " missing.graphql, which does not exist when the hook runs.", []),
     ("gh zz", "block: gh zz is not a gh command the hook knows", []),
     ("gh co 12", "block: gh co is not a gh command the hook knows", []),
     ("gh issue zz", "block: gh issue zz is not a gh command the hook knows", []),
@@ -13050,6 +13050,164 @@ check("guard-map", g.locate([1, 2, 4, 5], spans) == [("a", 1), ("c", 1), ("c", 3
       repr(g.locate([1, 2, 4, 5], spans)))
 check("guard-map", sorted(g.child_env("/h", None)) == ["HOME", "LC_ALL", "PATH"]
       and g.child_env("/h", None)["PATH"] == "/usr/bin:/bin", repr(g.child_env("/h", None)))
+
+
+# -- text off the command line (T5) ------------------------------------------------------------
+# Files in a scratch directory, read where gh would read them; what each write sends, by label
+# and content, and the reason for each one the hook cannot recover.
+D = os.path.join(SCRATCH, "offline")
+os.makedirs(os.path.join(D, "sub"), exist_ok=True)
+for name, body in (("body.md", b"clean body\n"), ("leak.md", b"line one\nZq_Exact here\n"),
+                   ("exists.md", b"old\n"), ("sub/inner.md", b"inner\n"), ("q.graphql", b"query { viewer { login } }\n"),
+                   ("m.graphql", b"mutation { addStar }\n"), ("asset.bin", b"\x00\x01Zq_Exact\n"),
+                   ("vars.env", b"A=1\n")):
+    with open(os.path.join(D, name), "wb") as f:
+        f.write(body)
+with open(os.path.join(D, "big.bin"), "wb") as f:
+    f.truncate(g.MAX_FILE + 1)
+
+
+def sent(command, cwd=D):
+    del SEEN[:]
+    ctx = g.Context("/H", scan=recorder, gh_version=lambda binary, where: "2.104")
+    try:
+        code, out, err = g.decide(command, cwd, ctx)
+    except Exception as e:
+        return "raised " + type(e).__name__, []
+    srcs = SEEN[0] if SEEN else []
+    if code == 2:
+        return "block: " + err.split("blocked. ", 1)[1].split("\n")[0], srcs
+    return "pass", srcs
+
+
+OFFLINE = [
+    ("gh issue create -t t -F body.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (body.md)", b"clean body\n")]),
+    ("gh issue create -t t --body-file=leak.md", "block: LEAK [fail] in the --body-file file"
+     " (leak.md), line 2.", [("the --title value", b"t"), ("the --body-file file (leak.md)",
+                                                         b"line one\nZq_Exact here\n")]),
+    ("gh release create v1 -n x --notes-file body.md", "pass",
+     [("the --notes value", b"x"), ("the --notes-file file (body.md)", b"clean body\n"),
+      ("argument 1", b"v1")]),
+    ("gh api repos/o/r/issues --input body.md", "pass",
+     [("the --input file (body.md)", b"clean body\n"), ("argument 1", b"repos/o/r/issues")]),
+    ("gh agent-task create -F body.md", "pass", [("the --from-file file (body.md)", b"clean body\n")]),
+    ("gh variable set A -f vars.env", "pass", [("the --env-file file (vars.env)", b"A=1\n"),
+                                              ("argument 1", b"A")]),
+    ("gh gist edit 12 --add body.md", "pass", [("the --add file (body.md)", b"clean body\n"),
+                                              ("argument 1", b"12")]),
+    ("gh issue create -t t --attach 'body.md#Zq_Exact alt'", "block: LEAK [fail] in the --attach"
+     " file's label, line 1.", [("the --title value", b"t"), ("the --attach file (body.md)",
+                                                            b"clean body\n"),
+                                ("the --attach file's label", b"Zq_Exact alt")]),
+    ("gh api repos/o/r/issues -F body=@body.md -f title=t", "pass",
+     [("the --field key", b"body"), ("the --field file (body.md)", b"clean body\n"),
+      ("the --raw-field value", b"title=t"), ("argument 1", b"repos/o/r/issues")]),
+    ("gh api repos/o/r/issues -f body=@leak.md", "pass",
+     [("the --raw-field value", b"body=@leak.md"), ("argument 1", b"repos/o/r/issues")]),
+    ("gh workflow run w.yml -F a=@body.md", "pass",
+     [("the --field key", b"a"), ("the --field file (body.md)", b"clean body\n"),
+      ("argument 1", b"w.yml")]),
+    ("gh api graphql -F query=@q.graphql", "pass", []),
+    ("gh api graphql -F query=@m.graphql", "pass",
+     [("the --field key", b"query"), ("the --field file (m.graphql)", b"mutation { addStar }\n"),
+      ("argument 1", b"graphql")]),
+    # A published file's content, name and label.
+    ("gh gist create body.md", "pass", [("the file in argument 1 (body.md)", b"clean body\n"),
+                                        ("the file in argument 1's name (body.md)", b"body.md")]),
+    ("gh release upload v1 'asset.bin#a label'", "block: LEAK [fail] in the file in argument 2"
+     " (asset.bin), line 1.", [("argument 1", b"v1"), ("the file in argument 2 (asset.bin)",
+                                                      b"\x00\x01Zq_Exact\n"),
+                               ("the file in argument 2's name (asset.bin)", b"asset.bin"),
+                               ("the file in argument 2's label", b"a label")]),
+    ("gh release create v1 sub/inner.md -n x", "pass",
+     [("the --notes value", b"x"), ("argument 1", b"v1"),
+      ("the file in argument 2 (sub/inner.md)", b"inner\n"),
+      ("the file in argument 2's name (sub/inner.md)", b"inner.md")]),
+    # Standard input, in each form, for a write whatever its flags.
+    ("gh issue create -t t -F - <<'EOF'\nquoted $HOME\nEOF", "pass",
+     [("the --title value", b"t"), ("standard input (a here-document)", b"quoted $HOME\n")]),
+    ("gh issue create -t t -F - <<EOF\nunquoted $HOME\nEOF", "pass",
+     [("the --title value", b"t"), ("standard input (a here-document)", b"unquoted /H\n")]),
+    ("gh variable set A <<< Zq_Exact", "block: LEAK [fail] in standard input (a here-string),"
+     " line 1.", [("argument 1", b"A"), ("standard input (a here-string)", b"Zq_Exact\n")]),
+    ("gh secret set A < body.md", "pass", [("argument 1", b"A"),
+                                          ("standard input (body.md)", b"clean body\n")]),
+    ("{ gh issue create -t t -F -; } < body.md", "pass",
+     [("the --title value", b"t"), ("standard input (body.md)", b"clean body\n")]),
+    ("gh issue create -t t -F /dev/stdin <<< hs", "pass",
+     [("the --title value", b"t"), ("standard input (a here-string)", b"hs\n")]),
+    ("gh issue create -t t -F -", "pass", [("the --title value", b"t")]),
+    ("gh workflow run w.yml --json <<< '{\"a\": \"Zq_Exact\"}'", "block: LEAK [fail] in standard"
+     " input (a here-string), line 1.", [("argument 1", b"w.yml"),
+                                         ("standard input (a here-string)",
+                                          b'{"a": "Zq_Exact"}\n')]),
+    # A substitution whose output is known before the command runs.
+    ("gh issue create -t t --body \"$(cat <<'EOF'\nfrom a here-document\n\nEOF\n)\"", "pass",
+     [("the --title value", b"t"), ("the --body value", b"from a here-document")]),
+    ("gh issue create -t t -b \"$(cat leak.md)\"", "block: LEAK [fail] in the --body value, line 2.",
+     [("the --title value", b"t"), ("the --body value", b"line one\nZq_Exact here")]),
+    ("gh issue create -t \"$(echo a title)\" -b \"$(printf 'x\\ty')\"", "pass",
+     [("the --title value", b"a title"), ("the --body value", b"x\ty")]),
+    # A file the same command writes before gh reads it.
+    ("cat > n.md <<'EOF'\nwritten here\nEOF\ngh issue create -t t -F n.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (n.md)", b"written here\n")]),
+    ("printf 'a\\n' > n.md && echo b >> n.md && gh issue create -t t -F n.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (n.md)", b"a\nb\n")]),
+    ("echo more >> exists.md; gh issue create -t t -F exists.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (exists.md)", b"old\nmore\n")]),
+    ("tee n.md <<'EOF' >/dev/null\nby tee\nEOF\ngh issue create -t t -F n.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (n.md)", b"by tee\n")]),
+    # cd moves where a relative path is read; the terminal tool's own directory is the start.
+    ("cd sub && gh issue create -t t -F inner.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (inner.md)", b"inner\n")]),
+    ("D=" + D + "/sub; gh issue create -t t -F $D/inner.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (" + D + "/sub/inner.md)", b"inner\n")]),
+]
+
+LOSES = [
+    ("gh issue create -t t -F missing.md", "missing.md, which does not exist when the hook runs."),
+    ("gh issue view 1 > n.md; gh issue create -t t -F n.md", "n.md, which the command writes"
+     " before gh reads it."),
+    ("mv a.md body.md; gh issue create -t t -F body.md", "body.md, which mv names earlier in the"
+     " command."),
+    ("sed -i '' s/a/b/ body.md && gh issue create -t t -F body.md", "body.md, which sed names"
+     " earlier in the command."),
+    ("cp leak.md body.md && gh issue create -t t -F body.md", "body.md, which cp names earlier"),
+    ("echo x | gh issue create -t t -F -", "standard input from a pipe."),
+    ("cat body.md | gh variable set A", "standard input from a pipe."),
+    ("echo x | { gh issue create -t t -F -; }", "standard input from a pipe."),
+    ("gh issue create -t t -F /dev/fd/3", "/dev/fd/3, which is not a file."),
+    ("gh issue create -t t -F /dev/tty", "/dev/tty, which is not a file."),
+    ("gh issue create -t t -F sub", "sub, which is not a regular file."),
+    ("gh issue create -t t -F big.bin", "big.bin, which is over 50 MB."),
+    ("gh issue create -t t -F \"$X\"", "a word whose value cannot be known before the command"
+     " runs (word 6 after gh)."),
+    ("gh issue create -t t -F <(echo x)", "a word whose value cannot be known"),
+    ("gh issue create -t t -b $(cat body.md)", "a word whose value cannot be known"),
+    ("gh issue create -t t -b \"$(git log -1)\"", "a word whose value cannot be known"),
+    ("gh issue create -t t -F - <<EOF\n$(git log -1)\nEOF", "a here-document whose expansions"
+     " cannot be known before the command runs."),
+    ("gh issue create -t t -F x.md 3< body.md", "x.md, which does not exist"),
+    ("gh issue create -t t 0< body.md 4< leak.md", "a file opened on descriptor 4."),
+    ("cd \"$X\" && gh issue create -t t -F body.md", "a relative path, body.md, in a directory"
+     " the hook cannot know."),
+    ("cd sub; gh issue create -t t -F inner.md", "a relative path, inner.md, in a directory the"
+     " hook cannot know."),
+    ("gh gist create", None),
+]
+
+for command, want, labels in OFFLINE:
+    got, srcs = sent(command)
+    check("offline", got.startswith(want) and srcs == labels, repr(command) + " gave "
+          + repr((got, srcs)))
+for command, why in LOSES:
+    got, srcs = sent(command)
+    if why is None:
+        check("offline-lost", got == "pass" and srcs == [], repr(command) + " gave " + repr(got))
+        continue
+    check("offline-lost", got.startswith("block: Cannot recover the text gh would send: " + why),
+          repr(command) + " gave " + repr(got))
 
 
 for group in sorted(results):
@@ -13160,6 +13318,27 @@ else
     && report "the gh guard runs the real guard over what a write sends, and blocks on a hit, a fault or a missing guard" ok \
     || report "the gh guard runs the real guard over what a write sends, and blocks on a hit, a fault or a missing guard" no \
        "clean=$e0 hit=$e1 fold=$e2 warn=$e3 crlf=$e4 no-patterns=$e5 env-patterns=$e6 old-gh=$e7 no-guard=$e8"
+fi
+
+# 455. #361 AC2, AC3 — text off the command line is read where gh would read it: each flag that
+#      names a file, an attachment's label, a published file's content, name and label, standard
+#      input in every form and through a group, a substitution whose output is known, and a file
+#      the same command writes or appends to first; a pipe, a device, a missing, changed or
+#      oversized file, and an expansion it cannot know are unrecoverable. The terminal tool's
+#      own directory is where a relative path is read from.
+ghg_case offline "the gh guard reads each file, standard input and known substitution a write sends, where gh would read it"
+ghg_case offline-lost "the gh guard blocks a pipe, a device, a missing, changed or oversized file, and a path or text it cannot know"
+if [ -n "$GHG_PY" ]; then
+  mkdir -p "$TMP/ghg-term"; printf 'one\nZq_Exact\n' > "$TMP/ghg-term/body.md"
+  ghg_json 'gh issue create -t ok -F body.md' mcp__terminal__run_in_terminal "$TMP/ghg-term"
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin" ghg_run)
+  t0=$(ghg_blocked "$out" 'LEAK [fail] in the --body-file file (body.md), line 2.')
+  ghg_json 'gh issue create -t ok -F body.md'
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin" ghg_run)
+  t1=$(ghg_blocked "$out" 'body.md, which does not exist when the hook runs.')
+  [ "$t0 $t1" = "ok ok" ] \
+    && report "the gh guard reads a relative path from the terminal tool's own directory" ok \
+    || report "the gh guard reads a relative path from the terminal tool's own directory" no "terminal=$t0 bash=$t1"
 fi
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
