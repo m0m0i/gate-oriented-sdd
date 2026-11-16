@@ -163,13 +163,15 @@ class Heredoc(object):
 
 
 class Redir(object):
-    __slots__ = ("fd", "op", "target", "heredoc")
+    __slots__ = ("fd", "op", "target", "heredoc", "pinned", "key")
 
     def __init__(self, fd, op, target, heredoc=None):
         self.fd = fd
         self.op = op
         self.target = target
         self.heredoc = heredoc
+        self.pinned = None   # a compound's standard input, read at entry, or why it is lost
+        self.key = None      # the file it opened, and what the walk knew of it at entry
 
 
 class Simple(object):
@@ -237,7 +239,12 @@ class Script(object):
 
 _NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 _ASSIGN = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)(\+?)=")
-_REDIR = re.compile(r"(\d*)(&>>|&>|>>\||>>!|>>|>\||>!|>&|<&|<>|<<<|<<-|<<|>|<)")
+_REDIR = re.compile(r"(\d*)(&>>[!|]|&>>|&>[!|]|&>|>>&[!|]?|>>\||>>!|>>|>\||>!|>&[!|]|>&|<&|<>"
+                    r"|<<<|<<-|<<|>|<)")
+# zsh's clobbering spellings of both streams to a file, as the walk reads them (#361, the fifth
+# hunt): `>&!` is `&>`, and `>>&` is `&>>`.
+_CLOBBER = {"&>>!": "&>>", "&>>|": "&>>", "&>!": "&>", "&>|": "&>", ">&!": "&>", ">&|": "&>",
+            ">>&": "&>>", ">>&!": "&>>", ">>&|": "&>>"}
 _ENDS_WORD = " \t\n;&|()<>"
 _RESERVED = {"if", "then", "else", "elif", "fi", "for", "while", "until", "do", "done", "case",
              "esac", "select", "repeat", "function", "coproc", "foreach", "end", "]]", "}"}
@@ -297,12 +304,11 @@ class Parser(object):
             line = self.s[self.i:] if j < 0 else self.s[self.i:j]
             self.i = len(self.s) if j < 0 else j + 1
             # In an unquoted here-document zsh joins a line that ends in an odd number of
-            # backslashes with the next before it compares it with the delimiter.
-            while not h.quoted and (len(line) - len(line.rstrip("\\"))) % 2 == 1 \
-                    and self.i < len(self.s):
-                j = self.s.find("\n", self.i)
-                line = line + "\n" + (self.s[self.i:] if j < 0 else self.s[self.i:j])
-                self.i = len(self.s) if j < 0 else j + 1
+            # backslashes with the next, and removes the join, before it compares the line
+            # with the delimiter: where that ends the body is past this lexer (#361, the fifth
+            # hunt).
+            if not h.quoted and (len(line) - len(line.rstrip("\\"))) % 2 == 1:
+                raise Unsupported("a backslash-newline in an unquoted here-document")
             if h.strip:
                 line = line.lstrip("\t")
             if line == h.delim:
@@ -374,7 +380,9 @@ class Parser(object):
                 j = self.i + 1
                 while j < len(s) and s[j] not in _ENDS_WORD and s[j] not in "/:\"'\\$`":
                     j += 1
-                if j == self.i + 1 and (j >= len(s) or s[j] in _ENDS_WORD or s[j] == "/"):
+                if self.tilde_here(parts, assignment) == "opaque":
+                    parts.append(Part("opaque", s[self.i:j]))
+                elif j == self.i + 1 and (j >= len(s) or s[j] in _ENDS_WORD or s[j] == "/"):
                     parts.append(Part("home", "~"))
                 elif j == self.i + 1:
                     # zsh takes the prefix after quote removal and expansion: ~\+, ~'-', ~$u
@@ -401,6 +409,16 @@ class Parser(object):
         # A ~ expands at the start of a word, and after the = of an assignment (measured).
         if not parts:
             return True
+        # It still does after an empty quote, '' or "", or an expansion that may be empty:
+        # what it expands to then is not read here (#361, the fifth hunt).
+        lead = parts
+        if assignment and parts[0].kind == "lit" and not parts[0].quoted:
+            m = _ASSIGN.match(parts[0].text)
+            if m and m.end() == len(parts[0].text):
+                lead = parts[1:]
+        if lead and all((p.kind == "lit" and p.quoted and p.text == "") or p.kind != "lit"
+                        for p in lead):
+            return "opaque"
         if assignment and len(parts) == 1 and parts[0].kind == "lit" and not parts[0].quoted:
             return _ASSIGN.fullmatch(parts[0].text) is not None
         # And after an unquoted `:` in an assignment's value (measured, the fourth hunt).
@@ -555,6 +573,14 @@ class Parser(object):
             else:
                 self.i = _NAME.match(s, self.i).end()
             parts.append(Part("opaque", s[start:self.i], quoted))
+        elif nx != "" and nx in "=~^":
+            # A flag before anything else still takes a parameter: an empty one before a quote,
+            # or a special one, $$ or $1 (measured, the fifth hunt). $+ alone stays literal.
+            start = self.i
+            self.i = re.compile(r"[=~^+]+").match(s, self.i + 1).end()
+            if self.peek() != "" and self.peek() in "0123456789#?$!@*-":
+                self.i += 1
+            parts.append(Part("opaque", s[start:self.i], quoted))
         elif nx != "" and nx in "0123456789#?$!@*-":
             self.i += 2
             parts.append(Part("opaque", "$" + nx, quoted))
@@ -647,6 +673,10 @@ class Parser(object):
             return None
         self.i = m.end()
         fd = m.group(1)
+        if op in _CLOBBER:
+            if fd:
+                raise Unsupported("a descriptor before " + op)
+            op = _CLOBBER[op]
         self.blanks()
         if op in ("<<", "<<-"):
             w = self.word()
@@ -710,10 +740,14 @@ class Parser(object):
                     self.i = m.end()
                     return self.function(words[0].literal(pattern_ok=True))
                 raise Unsupported("an array" if words or assigns else "a `(` inside a command")
-            # The declare family takes NAME=value words as assignments, ~ after the = included.
+            # The declare family takes NAME=value words as assignments, ~ after the = included,
+            # in every word it is given, after noglob, builtin or nocorrect too, but not after
+            # `-` (measured, the fifth hunt).
+            lead = [x.literal() if not any(p.quoted for p in x.parts) else None for x in words]
+            while lead and lead[0] in ("noglob", "builtin", "nocorrect"):
+                lead = lead[1:]
             w = self.word(assignment=not words or (
-                len(words) == 1 and not any(p.quoted for p in words[0].parts)
-                and words[0].literal() in ("export", "typeset", "declare", "local", "readonly",
+                bool(lead) and lead[0] in ("export", "typeset", "declare", "local", "readonly",
                                            "integer", "float")))
             if w is None:
                 break
@@ -779,7 +813,13 @@ class Parser(object):
             name = w.literal(pattern_ok=True) if w is not None else None
             if name is None:
                 raise Unsupported("a function whose name is not literal")
+            if "{" in name or "}" in name:
+                # `function { ... }` runs at once, with scopes of its own (#361, the fifth hunt).
+                raise Unsupported("an anonymous function")
             self.blanks()
+            if self.peek() not in ("(", "{", "\n", ";", "") and not self.word_is("{"):
+                # zsh defines every name before the body.
+                raise Unsupported("a function with more than one name")
             m = re.compile(r"\(\s*\)").match(self.s, self.i)
             if m:
                 self.i = m.end()
@@ -1035,9 +1075,10 @@ class State(object):
                 self.files[k] = Text(None, text.gh or (old is not None and old.gh),
                                      "a file a subshell or a child wrote")
         for k, who in child.named.items():
-            self.named.setdefault(k, who)
-            if k not in child.files:
-                self.files.pop(k, None)
+            _tag(self, k, who)
+            for f in [f for f in self.files if f not in child.files
+                      and (f == k or f.startswith(k.rstrip("/") + "/"))]:
+                del self.files[f]
         self.events += [e for e in child.events if e not in self.events]
         self.deferred = self.deferred or child.deferred
         self.branches = self.branches + tuple(b for b in child.branches if b not in self.branches)
@@ -1057,7 +1098,8 @@ class State(object):
         for s in others:
             self.exported |= s.exported
             self.tainted |= s.tainted
-            self.named.update(s.named)
+            for k, who in s.named.items():
+                _tag(self, k, who)
             self.events += [e for e in s.events if e not in self.events]
             self.deferred = self.deferred or s.deferred
             self.optioned = self.optioned or s.optioned
@@ -1078,7 +1120,7 @@ class State(object):
             # An outcome that did not write the file leaves what is on disk; when nothing is
             # there, gh fails to read it there, and sends nothing.
             absent_ok = first.path is not None and not os.path.lexists(first.path) \
-                and not any(path in s.named for s, x in zip(states, texts) if x is None)
+                and not any(_fills(s, path) for s, x in zip(states, texts) if x is None)
             if all(x.content == first.content for x in present) and first.content is not None \
                     and (len(present) == len(texts) or absent_ok):
                 files[path] = first
@@ -1124,6 +1166,44 @@ def _loose(key):
     return unicodedata.normalize("NFKD", key).casefold()
 
 
+# Who names a path, by what it may have done there (#361, the fifth hunt): a mode change or a job
+# still running outranks a copy, a copy outranks making, touching or removing it, and the later
+# of two equal ones is kept.
+MODE_TAGS = ("chmod", "chown", "chgrp", "a background job")
+EMPTY_TAGS = ("mkdir", "touch", "rm", "rmdir")
+
+
+def _rank(who):
+    return 3 if who in MODE_TAGS else 1 if who in EMPTY_TAGS else 2
+
+
+def _tag(state, key, who):
+    old = state.named.get(key)
+    if old is None or _rank(who) >= _rank(old):
+        state.named[key] = who
+
+
+def _moded(state, key):
+    """True when a mode change, or a job still running, reached the path or a directory above."""
+    if key is None:
+        return False
+    return any(who in MODE_TAGS and (key == k or key.startswith(k.rstrip("/") + "/"))
+               for k, who in state.named.items())
+
+
+def _fills(state, key):
+    """True when a command that may put files there named the path or a directory above it."""
+    if key is None:
+        return False
+    return any(key == k or (key.startswith(k.rstrip("/") + "/") and who not in EMPTY_TAGS)
+               for k, who in state.named.items())
+
+
+def _above(state, key):
+    """True when the command named a path under this one, which makes it a directory."""
+    return key is not None and any(k.startswith(key.rstrip("/") + "/") for k in state.named)
+
+
 def _named(state, key):
     """Who named the path or a directory above it earlier in the command, or None."""
     if key is None:
@@ -1132,6 +1212,51 @@ def _named(state, key):
         if key == k or key.startswith(k.rstrip("/") + "/"):
             return who
     return None
+
+
+def _refused(path, state):
+    """True when the kernel may refuse an absolute path that _norm reads as text: a part before
+    a `..` or a `.` that is not a directory when the hook runs, or that the command names
+    (#361, the fifth hunt)."""
+    bits = path.split("/")
+    for n in range(1, len(bits)):
+        if bits[n] in ("..", ".") and bits[n - 1] != "":
+            prefix = "/".join(bits[:n]) or "/"
+            if not os.path.isdir(prefix) or _named(state, _fold(os.path.realpath(prefix))):
+                return True
+    return False
+
+
+def _unfollowed(value, state):
+    """The path a value names with its last part not followed, as cp and mv read a link."""
+    if not value:
+        return None
+    head, leaf = os.path.split(value.rstrip("/") or "/")
+    parent = state.path(head or ".")
+    return None if parent is None else os.path.join(parent, leaf)
+
+
+def _links(path, state, limit=2000):
+    """True unless the path is known to be, and to hold, no symbolic link: on disk when the hook
+    runs, unchanged by the command, and small enough to walk."""
+    if path is None or _named(state, _fold(path)) or state.deferred:
+        return True
+    if _fold(path) in state.files:
+        return os.path.islink(path)
+    if not os.path.lexists(path):
+        # Nothing there to copy: cp and mv fail.
+        return False
+    if os.path.islink(path):
+        return True
+    if not os.path.isdir(path):
+        return False
+    seen = 0
+    for root, dirs, files in os.walk(path, followlinks=False):
+        for n in dirs + files:
+            seen += 1
+            if seen > limit or os.path.islink(os.path.join(root, n)):
+                return True
+    return False
 
 
 def _norm(path):
@@ -1273,6 +1398,12 @@ SHELL_LONG = {"--norc", "--noprofile", "--login", "--posix", "--noediting", "--v
 SHELL_LONG_ARG = {"--rcfile", "--init-file"}
 # The git subcommands that never run their arguments. `git -c`, `config`, `rebase --exec`,
 # `bisect`, `submodule`, `filter-branch`, `difftool` and `mergetool` can, so they are not here.
+# The git subcommands that run hooks, or a remote's: once the command has written a gh word
+# anywhere, they may run it (#361, the fifth hunt).
+GIT_HOOKS = {"commit", "push", "merge", "am", "rebase", "checkout", "switch", "pull", "clone",
+             "worktree", "gc", "fetch", "cherry-pick", "revert", "reset", "stash", "apply",
+             "notes", "init", "submodule", "restore", "add", "mv", "rm", "status", "diff",
+             "log", "show"}
 GIT_QUIET = {"status", "log", "show", "diff", "add", "commit", "push", "pull", "fetch",
              "checkout", "switch", "branch", "tag", "remote", "merge", "reset", "restore", "rm",
              "mv", "stash", "worktree", "clone", "init", "rev-parse", "ls-files", "grep", "blame",
@@ -1287,7 +1418,9 @@ reply status pipestatus RANDOM SECONDS LINENO EPOCHSECONDS EPOCHREALTIME SHLVL P
 EGID USERNAME HISTCMD ERRNO OPTARG OPTIND TRY_BLOCK_ERROR ZSH_SUBSHELL ZSH_EVAL_CONTEXT funcstack
 funcfiletrace funcsourcetrace functrace PATH path MANPATH manpath FPATH fpath CDPATH cdpath
 MAILPATH mailpath PSVAR psvar FIGNORE fignore MODULE_PATH module_path WATCH watch ZSH_ARGZERO
-options parameters commands functions aliases builtins jobstates jobtexts history""".split())
+options parameters commands functions aliases builtins jobstates jobtexts history PS1 PS2 PS3
+PS4 PROMPT PROMPT2 PROMPT3 PROMPT4 prompt RPS1 RPS2 RPROMPT RPROMPT2 histchars HISTCHARS
+TERMINFO_DIRS terminfo_dirs ZSH_EVAL_CONTEXT zsh_eval_context""".split())
 # The variables a companion program may be given, or inherit from the command, and still be
 # modelled: any other may change what it runs (PERL5OPT, STRIPBIN, GIT_EXTERNAL_DIFF, PATH).
 SAFE_ENV = set("""LANG LC_ALL LC_CTYPE LC_COLLATE LC_MESSAGES LC_NUMERIC LC_TIME LC_MONETARY TZ
@@ -1668,10 +1801,29 @@ def _failed(start, run):
     return out
 
 
+def _kernel_refuses(v, state):
+    """True when the kernel may refuse a path that realpath reads as text: one ending in `/` or
+    `/.`, a `..` or `.` after a part that may not be a directory, or a name or path longer
+    than the kernel takes (#361, the fifth hunt)."""
+    if v is None:
+        return False
+    if v.endswith("/") or v.endswith("/.") or len(v.encode("utf-8", "surrogateescape")) >= 1024 \
+            or any(len(b.encode("utf-8", "surrogateescape")) > 255 for b in v.split("/")):
+        return True
+    if v.startswith("/"):
+        full = v
+    elif len(state.cwds) == 1 and state.cwds[0] is not None:
+        full = state.cwds[0] + "/" + v
+    else:
+        return False
+    return _refused(full, state)
+
+
 def _may_fail(redirs, state):
     """True when zsh may fail to open one of these redirections, and then runs nothing: a
-    target that is empty, a directory, not writable, in a directory that does not exist, or
-    one a chmod changed; a file read from that does not exist (#361, the fourth hunt)."""
+    target that is empty, a directory, not writable, in a directory that does not exist, one a
+    chmod or a copy changed, or a path the kernel refuses; a file read from that does not
+    exist or cannot be read (#361, the fourth and fifth hunts)."""
     for r in redirs:
         if r.target is None or r.op in (">&", "<&") or r.op == "<<<":
             continue
@@ -1680,18 +1832,20 @@ def _may_fail(redirs, state):
         if q is None:
             continue
         k = _fold(q)
-        if v == "" or (q != "/dev/null" and os.path.isdir(q)) or state.named.get(k) == "mkdir":
+        if v == "" or (q != "/dev/null" and os.path.isdir(q)) or _kernel_refuses(v, state) \
+                or state.named.get(k) not in (None, "touch", "rm", "rmdir") or _moded(state, k) \
+                or _above(state, k):
             return True
         if r.op == "<":
-            if k not in state.files and not os.path.exists(q):
+            if k not in state.files and (not os.path.exists(q) or not os.access(q, os.R_OK)):
                 return True
             continue
         if q == "/dev/null":
             continue
-        if not os.path.isdir(os.path.dirname(q)) and _named(state, _fold(os.path.dirname(q))) is None:
+        if not os.path.isdir(os.path.dirname(q)):
+            # Made earlier in the command or not, both outcomes are followed.
             return True
-        if (os.path.lexists(q) and not os.access(q, os.W_OK)) \
-                or state.named.get(k) in ("chmod", "chown", "chgrp"):
+        if os.path.lexists(q) and not os.access(q, os.W_OK):
             return True
     return False
 
@@ -1878,6 +2032,9 @@ class Finder(object):
         ok = state.copy()
         self.pipeline(node.pipelines[0], ok)
         failed = _failed(state, ok)
+        if node.pipelines[0].bang:
+            # `! p` succeeds when p fails (#361, the fifth hunt).
+            ok, failed = failed, ok
         if self.exits(node.pipelines[0]):
             ok = failed = None
         for op, p in zip(node.ops, node.pipelines[1:]):
@@ -1891,6 +2048,8 @@ class Finder(object):
             else:
                 new_ok = run
                 new_failed = _failed(start, run)
+                if p.bang:
+                    new_ok, new_failed = new_failed, new_ok
             if op == "&&":
                 ok, failed = new_ok, _either(failed, new_failed)
             else:
@@ -1982,13 +2141,15 @@ class Finder(object):
                                       + [r.heredoc.word for r in command.redirs if r.heredoc]):
                 self.forget(state)
             self.redirect_targets(command.redirs, state)
-            own = _stdin_of(command.redirs)
+            entry = state.copy()
+            own = [self.pin(r, entry) for r in _stdin_of(command.redirs)]
+            self.opens(command.redirs, state, entry)
             self.stdin.append((own, piped))
             try:
                 self.compound(command, state)
             finally:
                 self.stdin.pop()
-            self.writes(Simple([], [], command.redirs), None, state, [])
+            self.writes(Simple([], [], command.redirs), None, state, [], at=entry)
             return
         if isinstance(command, Group):
             if self.expansion_assigns([r.target for r in command.redirs]
@@ -1996,8 +2157,12 @@ class Finder(object):
                 self.forget(state)
             inner = state if command.kind == "group" else state.copy()
             self.redirect_targets(command.redirs, inner)
+            entry = inner.copy()
             # A group's standard input is every command's in it that has none of its own.
-            own = _stdin_of(command.redirs)
+            own = [self.pin(r, entry) for r in _stdin_of(command.redirs)]
+            self.opens(command.redirs, inner, entry)
+            if inner is not state:
+                self.opens(command.redirs, state, entry)
             self.stdin.append((own, piped))
             try:
                 self.walk(command.body, inner)
@@ -2005,7 +2170,7 @@ class Finder(object):
                 self.stdin.pop()
             if inner is not state:
                 state.absorb(inner)
-            self.writes(Simple([], [], command.redirs), None, state, [])
+            self.writes(Simple([], [], command.redirs), None, state, [], at=entry)
             return
         self.simple(command, state, piped, downstream)
 
@@ -2100,6 +2265,44 @@ class Finder(object):
         merged = state.copy()
         merged.merge([loop])
         self.adopt(state, merged)
+
+    def pin(self, r, entry):
+        """A compound's standard input as zsh opens it, once, before the body runs: its text from
+        the state at entry, or why it is lost (#361, the fifth hunt)."""
+        out = Redir(r.fd, r.op, r.target, r.heredoc)
+        out.pinned = None
+        out.key = None
+        try:
+            out.pinned = stream(r, entry)
+        except Lost as why:
+            out.pinned = why
+        if r.op in ("<", "<>") and r.target is not None:
+            v = resolve(r.target, entry)
+            p = entry.path(v) if v is not None else None
+            if p is not None:
+                k = _fold(p)
+                out.key = (k, entry.files.get(k), entry.named.get(k), entry.deferred)
+        return out
+
+    def opens(self, redirs, state, entry):
+        """zsh opens a compound's output redirections, and empties those it truncates, before
+        the body runs: in the body, what they hold is unknown (#361, the fifth hunt)."""
+        for r in redirs:
+            if r.target is None or not (r.op.startswith(">") or r.op.startswith("&>") or r.op == "<>"):
+                continue
+            v = r.target.literal(entry.env())
+            if r.op in (">&", "<&") and v is not None and (v.isdigit() or v == "-"):
+                continue
+            p = entry.path(v)
+            if p is None:
+                state.deferred = True
+                continue
+            if p == "/dev/null":
+                continue
+            k = _fold(p)
+            old = state.files.get(k)
+            state.files[k] = Text(None, old is not None and old.gh,
+                                  "a file a compound's redirection opens", p)
 
     def adopt(self, state, other):
         for name in State.__slots__:
@@ -2343,8 +2546,11 @@ class Finder(object):
                 self.quiet_gh.append(text.label)
         if not quiet and not builtin and base and base not in KNOWN_PROGRAMS:
             self.runs_written(state, base)
+        # What earlier commands named decides whether this one's writes may fail; its own
+        # files, tee's, are named for later commands.
+        before = state.copy()
         self.names_files(base, quiet, rest, state)
-        self.writes(cmd, (base, rest), state, streams, piped)
+        self.writes(cmd, (base, rest), state, streams, piped, at=before)
 
     def companion(self, name, base, rest, external, state, cmd, env, raws=None):
         """True for a command the walk models exactly: a companion builtin, or a companion
@@ -2429,7 +2635,7 @@ class Finder(object):
         if base == "[[":
             self.test_arith(rest, state)
         if base in ("cd", "chdir"):
-            self.cd(rest, state)
+            self.cd(rest, state, [n for n, _, _ in cmd.assigns])
         elif base in ("pushd", "popd"):
             self.forget(state, vars_=False, cwd=True)
         elif base == "eval":
@@ -2524,6 +2730,8 @@ class Finder(object):
 
     def git(self, vals, state, raws=None):
         sub = git_subcommand(vals)
+        if sub is None or sub in GIT_HOOKS or sub not in GIT_KNOWN:
+            self.runners.append("git " + (sub or "?"))
         for j, v in enumerate(vals):
             if sub and v == sub:
                 break
@@ -2561,7 +2769,7 @@ class Finder(object):
             for v in _operands(rest):
                 k = _fold(state.path(v)) if v is not None else None
                 if k is not None:
-                    state.named.setdefault(k, "git " + sub)
+                    _tag(state, k, "git " + sub)
         if sub in ("checkout", "switch") or (sub == "branch" and any(
                 v is None or v in ("-m", "-M", "--move") for v in rest)):
             state.branches = state.branches + tuple(_new_branch(sub, rest))
@@ -2577,11 +2785,13 @@ class Finder(object):
                     self.problem("A gh word is an argument of a command that can run its"
                                  " arguments, so the hook cannot tell what it runs.")
 
-    def assign(self, name, word, appends, state, export):
-        if (export or name in RUNNER_VARS or name in state.exported) and self.has_gh(word, state):
+    def assign(self, name, word, appends, state, export, at=None):
+        # at: the state the value expands in, a declare's from before any of its words assign.
+        at = at or state
+        if (export or name in RUNNER_VARS or name in state.exported) and self.has_gh(word, at):
             self.problem("A gh word is in " + name + ", which a later program may run, so the hook"
                          " cannot tell what the command runs.")
-        value = word.literal(state.env(), pattern_ok=True)
+        value = word.literal(at.env(), pattern_ok=True)
         if name in ZSH_SPECIAL:
             # zsh sets it itself, or ties it to another (#361, the fourth hunt).
             value = None
@@ -2594,7 +2804,8 @@ class Finder(object):
         if export:
             state.exported.add(name)
         state.tainted.discard(name)
-        if value is None and self.taints(word):
+        if value is None and (self.taints(word) or any(
+                p.kind == "param" and p.text in at.tainted for p in word.parts)):
             state.tainted.add(name)
         if name.startswith("GIT_") or name in TARGET_VARS:
             state.events.append("assigns " + name)
@@ -2632,6 +2843,8 @@ class Finder(object):
         if letters & set("aAg"):
             # Arrays and globals in functions: not followed.
             self.forget(state)
+        # zsh expands every word before it assigns any (#361, the fifth hunt).
+        pre = state.copy()
         for w, v in zip(args, vals):
             first = w.parts[0] if w.parts else None
             m = _ASSIGN.match(first.text) if first is not None and first.kind == "lit" \
@@ -2639,7 +2852,7 @@ class Finder(object):
             if m and m.end() <= len(first.text):
                 # NAME=value with the name in plain sight: only NAME is assigned.
                 self.assign(m.group(1), _after_assign(w, m.end()), m.group(2) == "+", state,
-                            export=export)
+                            export=export, at=pre)
                 continue
             if v is None:
                 self.forget(state)
@@ -2669,7 +2882,11 @@ class Finder(object):
             elif self.has_gh(w, state):
                 self.problem("A gh word is an argument of " + base + " that the hook cannot read.")
 
-    def cd(self, vals, state):
+    def cd(self, vals, state, given=()):
+        if set(given) & {"CDPATH", "cdpath", "HOME", "PWD", "OLDPWD"}:
+            # `CDPATH=x cd y` searches x first (#361, the fifth hunt).
+            state.cwds = (None,)
+            return
         cdpath = "CDPATH" in self.environ or "CDPATH" in state.vars or "cdpath" in state.vars
         if vals and vals[0] is not None and cdpath and not (
                 vals[0].startswith("/") or vals[0].startswith("./") or vals[0].startswith("../")
@@ -2683,6 +2900,9 @@ class Finder(object):
             if target is None and len(state.cwds) == 1 and state.cwds[0] is not None:
                 target = state.cwds[0] + "/" + vals[0]
         else:
+            target = None
+        if target and _refused(target, state):
+            # The kernel refuses `missing/..`, which _norm takes as text.
             target = None
         state.cwds = (_norm(target) if target else None,)
 
@@ -2851,6 +3071,15 @@ class Finder(object):
         if base == "ln":
             # A link makes two paths one file, which the walk keys apart (the fourth hunt).
             state.deferred = True
+        if base in ("cp", "mv", "install", "ln") and (not _operands(vals) or any(
+                v is None or state.path(v) is None for v in _operands(vals))):
+            # A copy to a path the hook cannot know may be a git hook (#361, the fifth hunt).
+            self.runners.append(base + " to a path the hook cannot know")
+        if base == "mv" or (base == "cp" and any(v is None or (not v.startswith("--") and set(
+                v[1:]) & set("RrPaH")) for v in _options(vals))):
+            # mv, and cp -R, -P, -a or -H, copy a link as a link (#361, the fifth hunt).
+            if any(_links(_unfollowed(v, state), state) for v in _operands(vals)[:-1]):
+                state.deferred = True
         if base in READERS or base == "git":
             return
         for v in _operands(vals):
@@ -2859,11 +3088,13 @@ class Finder(object):
             if k is not None:
                 # What it names may now hold anything, and so may whatever is under it; chmod
                 # changes a file's mode, not what it holds.
-                if base == "chmod":
-                    # A later redirection to it may fail: the walk reads that from this name.
-                    state.named[k] = "chmod"
+                if base == "chmod" or (base in ("mkdir", "install") and any(
+                        v is None or v.startswith("-m") for v in _options(vals))):
+                    # A later redirection to it, or under it, may fail: the walk reads that
+                    # from this name, a mode given to mkdir or install included.
+                    _tag(state, k, "chmod")
                 else:
-                    state.named.setdefault(k, base or "a command")
+                    _tag(state, k, base or "a command")
                 if base != "chmod":
                     for f in [f for f in state.files if f == k or f.startswith(k + "/")]:
                         del state.files[f]
@@ -2876,11 +3107,13 @@ class Finder(object):
                 state.deferred = True
                 state.events.append(base + " of a path the hook cannot know")
 
-    def writes(self, cmd, who, state, streams, piped=False):
+    def writes(self, cmd, who, state, streams, piped=False, at=None):
         """Records each file a command writes, a redirection's target or one of tee's files,
         with what it writes when that is known: a here-document cat or tee copies, or the
         literal text echo or printf prints. A file it cannot resolve is not recorded, and a
-        later read of it is decided by where it is read (T5)."""
+        later read of it is decided by where it is read (T5). at is the state the targets are
+        expanded in, a compound's from before its body (#361, the fifth hunt)."""
+        at = at or state
         base, vals = who if who is not None else ("", [])
         files = _operands(vals)
         content, gh = None, False
@@ -2896,12 +3129,18 @@ class Finder(object):
             content, gh = mine[0].content, mine[0].gh
         elif base in ("echo", "printf"):
             content, gh = self.printed(base, vals)
+        if base in ("cat", "head", "tail", "sort", "uniq", "cut", "tr", "base64", "tee", "fold",
+                    "nl", "paste", "column"):
+            # What it copies holds a gh word when what it reads does.
+            gh = gh or any(x.gh for x in mine) or any(
+                (state.files.get(_fold(state.path(f))) or Text(None, False, "")).gh
+                for f in files if f is not None and state.path(f) is not None)
         targets = []
         for r in cmd.redirs:
             if r.target is None or not (r.op.startswith(">") or r.op.startswith("&>")
                                         or r.op == "<>"):
                 continue
-            v = r.target.literal(state.env())
+            v = r.target.literal(at.env())
             if r.op == "<>":
                 # Opened to read and write, unshortened: what it ends up holding is unknown.
                 targets.append((v, False, False))
@@ -2920,27 +3159,34 @@ class Finder(object):
         for r in cmd.redirs:
             if r.target is None or r.op in STDIN_OPS or r.op in (">&", "<&"):
                 continue
-            q = state.path(r.target.literal(state.env()))
-            if q is not None and q != "/dev/null" and not os.path.isdir(os.path.dirname(q)) \
-                    and _named(state, _fold(os.path.dirname(q))) is None:
+            v = r.target.literal(at.env())
+            q = at.path(v)
+            if q is not None and q != "/dev/null" and (_kernel_refuses(v, at) or (
+                    not os.path.isdir(os.path.dirname(q))
+                    and _named(at, _fold(os.path.dirname(q))) in (None, "rm", "rmdir"))):
                 fails = True
                 break
         for v, appends, out in targets:
-            p = state.path(v)
+            p = at.path(v)
             if self.config_path(p, state) or (p is None and v is not None and ".git" in v):
                 state.events.append("a write to a path that decides where gh writes")
                 self.stranger("a write into .git or git's or gh's configuration")
             if p is None:
-                # A path it cannot know may be any file, a body file or .git/config.
+                # A path it cannot know may be any file, a body file, .git/config or a git
+                # hook: a gh word written there counts as written (#361, the fifth hunt).
                 state.deferred = True
                 state.events.append("a write to a path the hook cannot know")
+                if gh or content is None and any(x.gh for x in mine):
+                    self.gh_text = True
                 continue
             if p == "/dev/null":
                 continue
-            if (os.path.lexists(p) and not os.access(p, os.W_OK)) \
-                    or state.named.get(_fold(p)) in ("chmod", "chown", "chgrp", "a background job"):
-                # The redirection may fail, or a job still running may write after it, and the
-                # file keeps what it held.
+            if (os.path.lexists(p) and not os.access(p, os.W_OK)) or _moded(at, _fold(p)) \
+                    or at.named.get(_fold(p)) not in (None, "touch", "rm", "rmdir") \
+                    or _above(at, _fold(p)) or _kernel_refuses(v, at):
+                # The redirection may fail, or a job still running may write after it: a mode
+                # changed there or above, or a copy that kept its source's mode, leaves the
+                # file what it held (#361, the fifth hunt).
                 out = False
             text = Text(content if out and not fails else None, gh and out,
                         "a file this command wrote", p)
@@ -2967,13 +3213,14 @@ class Finder(object):
         self.stdin = []
         self.functions = set()
         self.strangers = []
+        self.runners = []
         self.gh_text = False
         self.aliased = False
         self.walk(script, self.start.copy())
-        if self.gh_text and self.strangers:
+        if self.gh_text and (self.strangers or self.runners):
             self.problem("The command writes a gh word into a file, and runs "
-                         + ", ".join(self.strangers[:3]) + ", which the hook does not follow and"
-                         " which may run it.")
+                         + ", ".join((self.strangers + self.runners)[:3]) + ", which the hook"
+                         " does not follow and which may run it.")
         return self
 
 
@@ -3500,7 +3747,9 @@ def classify(inv):
                 # flag, which leaves an api call's method unknown.
                 first = inv.words[i].parts[0] if inv.words[i].parts else None
                 if not (first is not None and first.kind == "lit" and first.text
-                        and not first.text.startswith("-")):
+                        and not first.text.startswith("-")) or not _one_word(inv.words[i]):
+                    # A word zsh may split may hold a flag after its first part (#361, the
+                    # fifth hunt).
                     flaglike = True
                 positionals.append((i, None))
                 j += 1
@@ -3701,6 +3950,15 @@ def substitution(script, state):
 
 def stream(r, state):
     """What a redirection of standard input gives its command, as bytes. Raises Lost."""
+    pinned = getattr(r, "pinned", None)
+    if pinned is not None:
+        if isinstance(pinned, Lost):
+            raise pinned
+        key = r.key
+        if key is not None and (state.deferred or state.files.get(key[0]) is not key[1]
+                                or state.named.get(key[0]) != key[2]):
+            raise Lost("standard input a compound opened, which its body may change")
+        return pinned
     if r.op == "<&":
         v = r.target.literal() if r.target is not None else None
         if v == "-":
@@ -3938,6 +4196,9 @@ def url_repo(value):
     return (m.group(1) + "/" + m.group(2)).lower() if m else None
 
 
+# The issue flags that name another issue, which the write changes too.
+RELATIONS = {"parent", "blocked-by", "blocking", "add-blocked-by", "add-blocking", "add-sub-issue",
+             "remove-blocked-by", "remove-blocking", "remove-sub-issue"}
 # The paths whose URL arguments select the repository, beside -R.
 SELECTS = ("issue ", "pr ", "discussion ")
 
@@ -3966,6 +4227,20 @@ def named(inv, path, flags, positionals, events, has_repo_flag=True):
                 r = repo_of(v)
                 if r is None:
                     raise Guarded("its --branch-repo does not parse")
+                extra.append(r)
+    if path in ("issue create", "issue edit"):
+        # A relation writes onto the other issue too (#361, the fifth hunt).
+        for n, v, _ in flags:
+            if n not in RELATIONS:
+                continue
+            for piece in (v if isinstance(v, str) else "?").split(","):
+                piece = piece.strip()
+                if re.fullmatch(r"#?\d+", piece):
+                    continue
+                r = url_repo(piece) if re.match(r"^https?://", piece, re.I) else repo_of(
+                    piece.split("#", 1)[0] if re.fullmatch(r"[^#]+#\d+", piece) else None)
+                if r is None:
+                    raise Guarded("its --" + n + " does not parse")
                 extra.append(r)
     if path == "issue transfer" and len(positionals) >= 2:
         r = repo_of(positionals[1][1])

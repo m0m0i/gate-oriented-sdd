@@ -13806,6 +13806,98 @@ for command, cwd, want in KEEP4:
     got = target(command, cwd)
     check("hunt4", got.startswith(want), repr(command[:110]) + " gave " + got)
 
+exempt_list(GOOD)
+# Round five: unresolved writes and git's hooks, modes, links and copies, paths the kernel
+# refuses, compound commands' redirections, declare's order, and more of zsh's words, by family,
+# each now blocked.
+LINKS = os.path.join(R, "links")
+os.makedirs(LINKS, exist_ok=True)
+if not os.path.lexists(os.path.join(LINKS, "vi")):
+    os.symlink("target", os.path.join(LINKS, "vi"))
+HP = "\"$(git rev-parse --git-path hooks)/pre-commit\""
+HUNT5 = [
+    # a gh word written where the hook cannot see, and git commands that run hooks
+    ("printf '#!/bin/sh\\n" + GW + "\\n' > " + HP + "; git commit -q --allow-empty -m x", A),
+    ("cat > " + HP + " <<'EOF'\n#!/bin/sh\n" + GW + "\nEOF\ngit push -q origin HEAD", A),
+    ("printf '#!/bin/sh\\n" + GW + "\\n' > h.sh && cp h.sh " + HP + " && git commit -q --allow-empty -m x", A),
+    ("mkdir -p bare/hooks && printf '#!/bin/sh\\n" + GW + "\\n' > bare/hooks/post-receive && git push -q ./bare HEAD", A),
+    # modes, links and copies
+    ("echo Zq_Exact > src.md; chmod 444 src.md; cp src.md body.md; echo clean > body.md; gh issue create -t T -F body.md", A),
+    ("mkdir d; echo Zq_Exact > d/body.md; chmod -R a-w d; echo clean > d/body.md; gh issue create -t T -F d/body.md", A),
+    ("mkdir ro; chmod 555 ro; echo Zq_Exact > b.md; echo benign > ro/x > b.md; gh issue create -t t -F b.md", A),
+    ("mkdir -m 555 ro; echo Zq_Exact > b.md; echo benign > ro/x > b.md; gh issue create -t t -F b.md", A),
+    ("touch b.md; echo Zq_Exact > b.md; if true; then chmod 444 b.md; fi; echo benign > b.md; gh issue create -t t -F b.md", A),
+    ("echo Zq_Exact > b.md; (chmod 444 b.md); echo benign > b.md; gh issue create -t t -F b.md", A),
+    ("echo clean > target; cp -R " + LINKS + "/vi alias; echo Zq_Exact > alias; gh issue create -t T -F target", A),
+    ("echo clean > target; cp -P " + LINKS + "/vi alias; echo Zq_Exact >> alias; gh issue create -t T -F target", A),
+    ("echo clean > target; mv " + LINKS + "/vi alias; echo Zq_Exact > alias; gh issue create -t T -F target", A),
+    ("mkdir src; cp -R src d; echo Zq_Exact > b.md; echo benign > d > b.md; gh issue create -t t -F b.md", A),
+    ("mkdir -p x/d; echo Zq_Exact > b.md; echo benign > x > b.md; gh issue create -t t -F b.md", A),
+    ("mkdir d; echo Zq_Exact > b.md; rm -r d; { echo benign > b.md; } > d/log; gh issue create -t t -F b.md", A),
+    ("mkdir s d; echo Zq_Exact > s/b.md; cp s/b.md d; test -s d/b.md || echo 'No description.' > d/b.md; gh pr create -t t -F d/b.md", A),
+    ("mkdir s d; echo benign > d/b.md; echo Zq_Exact > s/b.md; (cd s && cp b.md ../d/); gh issue create -t t -F d/b.md", A),
+    # paths the kernel refuses
+    ("printf Zq_Exact > body.md; cat > build/../body.md <<'EOF'\nclean\nEOF\ngh issue create -t hi -F body.md", A),
+    ("printf Zq_Exact > body.md; printf clean > body.md/; gh issue create -t hi -F body.md", A),
+    ("echo Zq_Exact > b.md; tee b.md/ <<< benign > /dev/null; gh issue create -t t -F b.md", A),
+    ("printf Zq_Exact > body.md; tee nonexist/../body.md <<< clean; gh issue create -t hi -F body.md", A),
+    ("X=Zq_Exact; { X=clean; } > nonexist/../log; gh issue create -t hi -b \"$X\"", A),
+    ("X=Zq_Exact; X=clean > nonexist/../log; gh issue create -t hi -b \"$X\"", A),
+    ("! cd " + B + "/nonexist/.. && gh issue create -t hi -b Zq_Exact", A),
+    ("cd " + B + "/nonexist/..; " + W6, A),
+    # compound commands' redirections, from the state before the body
+    ("BODY='draft Zq_Exact'\n{\n  BODY=final\n  gh issue create -t hi -F -\n} <<EOF\n$BODY\nEOF", A),
+    ("x=Zq_Exact; { x=benign; gh issue create -t t -F -; } <<EOF\n$x\nEOF", A),
+    ("mkdir -p sub; printf clean > sub/body.md; printf Zq_Exact > body.md; { cd sub && gh issue create -t hi -F -; } < body.md", A),
+    ("printf Zq_Exact > m.md; printf clean > c.md; F=m.md; { F=c.md; gh issue create -t hi -F -; } < \"$F\"", A),
+    ("printf clean > body.md; F=body.md; { F=other.md; printf Zq_Exact; } > \"$F\"; gh issue create -t hi -F body.md", A),
+    ("printf clean > body.md; F=body.md; if F=other.md; then printf Zq_Exact; fi > $F; gh issue create -t hi -F body.md", A),
+    ("echo benign > b.md; { echo Zq_Exact; gh issue create -t t -F b.md; } > b.md", A),
+    # declare's order, the function keyword, cd's own CDPATH
+    ("NOTE=Zq_Exact; typeset NOTE='release notes' BODY=\"$NOTE\"; gh issue create -t hi -b \"$BODY\"", A),
+    ("ROOT=" + A + "; export ROOT=" + B + " WORK=\"$ROOT\" && cd \"$WORK\" && " + W6, A),
+    ("cd " + B + " && function { cd " + A + " } && " + W6, A),
+    ("cd " + B + " && function { export GH_REPO=acme/public } && gh pr comment 1 -b Zq_Exact", A),
+    ("function f cd { : } && cd " + B + " && " + W6, A),
+    ("cd " + B + " && CDPATH=" + R + ":. cd a && " + W6, A),
+    # gh's own words
+    ("gh api repos/acme/public/issues$(printf ' -f title=Zq_Exact')", A),
+    ("X='issues -f title=Zq_Exact'; gh api repos/acme/public/$=X", A),
+    ("X='issues -f title=Zq_Exact'; gh api repos/acme/public/${=X}", A),
+    ("gh issue create -R priv-org/secret -t Zq_Exact -b x --parent https://github.com/acme/public/issues/1", B),
+    ("gh issue edit 1 -R priv-org/secret -t Zq_Exact --add-blocked-by acme/public#2", B),
+    ("gh issue create -R priv-org/secret -t Zq_Exact -b x --blocking ${N}", B),
+    # zsh's words
+    ("cat <<EOF > /dev/null\nEO\\\nF\ngh issue create --title t --body Zq_Exact\nEOF", A),
+    ("gh issue create --title t --body Zq_Ex$^\"act\"", A),
+    ("gh issue create --title t --body \"Zq_Ex$=\"act", A),
+    ("gh issue create --title t --body \"Zq_Ex$~\"'act'", A),
+    ("PS1=safe; PROMPT=Zq_Exact; gh issue create --title t --body \"$PS1\"", A),
+    ("histchars=ab; HISTCHARS=Zq; gh issue create --title t --body \"${histchars}_Exact\"", A),
+    ("HOME=Zq_Exact; export A=1 T=~; gh issue create --title t --body \"$T\"", A),
+    ("HOME=Zq_Exact; gh issue create --title t --body ''~", A),
+    ("HOME=Zq_Exact; x=''~; gh issue create --title t --body \"$x\"", A),
+    ("echo safe > b.md; echo Zq_Exact >&! b.md; gh issue create --title t --body-file b.md", A),
+    ("echo safe > b.md; echo Zq_Exact &>! b.md; gh issue create --title t --body-file b.md", A),
+    ("echo safe > b.md; echo Zq_Exact &>>| b.md; gh issue create --title t --body-file b.md", A),
+]
+KEEP5 = [
+    ("mkdir -p d && echo hello > d/b.md && gh issue create -t t -F d/b.md", A, "scanned"),
+    ("tee body.md <<< hello > /dev/null && gh issue create -t t -F body.md", A, "scanned"),
+    ("git commit -qm x && gh pr create -t t -b b", A, "scanned"),
+    ("X=1; typeset Y=$X Z=2; gh issue create -t \"$Y\" -b x", A, "scanned"),
+    ("gh issue create -t t -b x --parent 12", A, "scanned"),
+    ("gh api repos/acme/public/issues -f title=hello", A, "scanned"),
+    ("printf 'hello\\n' > body.md; gh issue create -t t -F body.md", A, "scanned"),
+    ("echo hello &>! log.txt; cd " + B + " && " + W6, A, "exempt"),
+]
+for command, cwd in HUNT5:
+    got = target(command, cwd)
+    check("hunt5", got.startswith("block"), repr(command[:110]) + " gave " + got)
+for command, cwd, want in KEEP5:
+    got = target(command, cwd)
+    check("hunt5", got.startswith(want), repr(command[:110]) + " gave " + got)
+
 
 for group in sorted(results):
     found = results[group]
@@ -13992,6 +14084,11 @@ ghg_case hunt3 "the gh guard holds against every shape the third bypass hunt con
 #      declare family's attributes, loops walked until they settle, a redirection that may fail,
 #      more of the lexer, standard input by descriptor, and the names gh publishes and pushes.
 ghg_case hunt4 "the gh guard holds against every shape the fourth bypass hunt confirmed, and lets ordinary commands beside a write through"
+#      Round five: a gh word written where the hook cannot see, and git commands that run hooks;
+#      modes, links and copies; paths the kernel refuses; a compound command's redirections,
+#      from the state before its body; declare's order; the function keyword; and more of zsh's
+#      words and redirections.
+ghg_case hunt5 "the gh guard holds against every shape the fifth bypass hunt confirmed, and lets ordinary commands beside a write through"
 
 # 458. #361 AC7 — the installer: a fresh install into a versioned directory that `current` names,
 #      compiled and probed; a re-run that changes nothing; an older version refused; a failed
