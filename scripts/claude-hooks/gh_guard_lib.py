@@ -7,6 +7,7 @@ It must run on Python 3.9: no syntax or library newer than that.
 """
 
 import json
+import os
 import re
 
 # The installer and the registration check compare this line; raise it with every change.
@@ -670,15 +671,18 @@ class Parser(object):
 
     def parse_list(self, end, top=False):
         items = []
-        last = 0
+        # The item that declared the oldest here-document whose lines are still to come: its
+        # lines follow it at the next newline, so when they never come, it is opaque too.
+        held = None
         while True:
             try:
                 self.blank_lines()
             except Unsupported as why:
-                # A here-document's lines follow the item that declared it, so it goes too.
                 if not top:
                     raise
-                return Script(items[:-1], (self.s[last:], why.reason))
+                return Script(items[:held[0]], (self.s[held[1]:], why.reason))
+            if not self.pending:
+                held = None
             if self.at_end(end):
                 break
             start = self.i
@@ -700,13 +704,16 @@ class Parser(object):
             except Unsupported as why:
                 if not top:
                     raise
+                if held is not None:
+                    return Script(items[:held[0]], (self.s[held[1]:], why.reason))
                 return Script(items, (self.s[start:], why.reason))
+            if self.pending and held is None:
+                held = (len(items), start)
             items.append((node, sep))
-            last = start
         if self.pending:
             if not top:
                 raise Unsupported("a here-document has no end line")
-            return Script(items[:-1], (self.s[last:], "a here-document has no end line"))
+            return Script(items[:held[0]], (self.s[held[1]:], "a here-document has no end line"))
         return Script(items)
 
     def parse_top(self, nested=False):
@@ -727,6 +734,659 @@ def _after_assign(w, k):
 def parse(command):
     """The command's parse. A construct the lexer does not handle ends it, as `unsupported`."""
     return Parser(command).parse_top()
+
+
+# ---------------------------------------------------------------------------------------------
+# The finder. Every gh word in a command must be accounted for, or the command blocks: it is the
+# command word of a gh invocation, an argument of a command that never runs its arguments, a
+# value a gh invocation sends, or text written into a file that nothing in the command then runs
+# (#361). It walks the parse in the order zsh runs it, tracking what a later word depends on.
+
+class Text(object):
+    """What a file or a stream holds: content, when it is known before the command runs, and
+    whether its source holds a gh word."""
+
+    __slots__ = ("content", "gh", "label")
+
+    def __init__(self, content, gh, label):
+        self.content = content
+        self.gh = gh
+        self.label = label
+
+
+class State(object):
+    """What the walk knows at a point in the command. vars maps a name to its value, None when
+    it cannot be known; tainted holds the names whose unknown value was built from a gh word;
+    cwds the directories the command may be in, None for one it cannot know; files what the
+    command has written so far, by absolute path; named the paths it changed some other way;
+    events what it did that changes where a later gh write goes."""
+
+    __slots__ = ("vars", "exported", "tainted", "cwds", "files", "named", "events")
+
+    def __init__(self, home, cwd):
+        self.vars = {"HOME": home} if home else {}
+        self.exported = set(self.vars)
+        self.tainted = set()
+        self.cwds = (cwd,)
+        self.files = {}
+        self.named = {}
+        self.events = []
+
+    def copy(self):
+        c = State(None, None)
+        c.vars = dict(self.vars)
+        c.exported = set(self.exported)
+        c.tainted = set(self.tainted)
+        c.cwds = self.cwds
+        c.files = dict(self.files)
+        c.named = dict(self.named)
+        c.events = list(self.events)
+        return c
+
+    def env(self):
+        return dict((k, v) for k, v in self.vars.items() if v is not None)
+
+    def path(self, value):
+        """The absolute path a value names, or None when the directory is not known."""
+        if value is None:
+            return None
+        if value.startswith("/"):
+            return _norm(value)
+        if len(self.cwds) != 1 or self.cwds[0] is None:
+            return None
+        return _norm(self.cwds[0] + "/" + value)
+
+
+def _norm(path):
+    out = []
+    for bit in path.split("/"):
+        if bit in ("", "."):
+            continue
+        if bit == "..":
+            if out:
+                out.pop()
+            continue
+        out.append(bit)
+    return "/" + "/".join(out)
+
+
+class Invocation(object):
+    """A gh command the walk found. words are its words after gh; assigns the assignments and
+    env options before it; state the walk's state where it runs; stdin what its standard input
+    is, a Redir, "pipe" or None; where a label for the reason that names it."""
+
+    __slots__ = ("words", "assigns", "env", "redirs", "state", "piped", "simple")
+
+    def __init__(self, words, assigns, env, redirs, state, piped, simple):
+        self.words = words
+        self.assigns = assigns
+        self.env = env
+        self.redirs = redirs
+        self.state = state
+        self.piped = piped
+        self.simple = simple
+
+
+class Unknown(Exception):
+    pass
+
+
+# Commands that never run their arguments, by the name they run as. git and rg are decided
+# by their own arguments.
+QUIET = {"echo", "printf", "print", "which", "type", "whence", "where", "man", "grep", "egrep",
+         "fgrep", "cat", "ls", "cd", "pwd", "test", "[", "head", "tail", "wc", "mkdir", "touch",
+         "rm", "cp", "mv", "diff", "sort", "uniq", "cut", "basename", "dirname", "realpath",
+         "readlink", "stat", "file", "tee", "true", "false", ":", "chmod"}
+DECLARE = {"export", "typeset", "declare", "local", "readonly", "integer", "float"}
+SHELLS = {"sh", "bash", "zsh", "dash", "ksh"}
+# The git subcommands that never run their arguments. `git -c`, `config`, `rebase --exec`,
+# `bisect`, `submodule`, `filter-branch`, `difftool` and `mergetool` can, so they are not here.
+GIT_QUIET = {"status", "log", "show", "diff", "add", "commit", "push", "pull", "fetch",
+             "checkout", "switch", "branch", "tag", "remote", "merge", "reset", "restore", "rm",
+             "mv", "stash", "worktree", "clone", "init", "rev-parse", "ls-files", "grep", "blame",
+             "cherry-pick", "revert", "describe", "shortlog", "reflog", "notes", "apply", "am",
+             "format-patch", "rev-list", "cat-file", "ls-remote", "symbolic-ref", "for-each-ref",
+             "merge-base", "name-rev", "check-ignore", "gc", "prune", "clean", "rebase"}
+
+
+def _name(value):
+    return value.rsplit("/", 1)[-1]
+
+
+def is_gh(value):
+    return value is not None and (value == "gh" or value.endswith("/gh"))
+
+
+def unwrap(vals):
+    """The index of the command that runs, after the wrappers that run their arguments as a
+    command, with what env did to the environment. Raises Unknown for a wrapper's option this
+    does not read. A lookup (`command -v`) runs nothing: its index is None."""
+    k = 0
+    env = {"assigns": [], "clears": False, "unsets": []}
+
+    def need(j):
+        if j >= len(vals) or vals[j] is None:
+            raise Unknown("a wrapper's argument cannot be known")
+        return vals[j]
+
+    while k < len(vals) and vals[k] is not None:
+        name = _name(vals[k])
+        if name == "env":
+            k += 1
+            while k < len(vals):
+                a = need(k)
+                if a in ("-i", "-", "--ignore-environment"):
+                    env["clears"] = True
+                    k += 1
+                elif a in ("-u", "--unset"):
+                    env["unsets"].append(need(k + 1))
+                    k += 2
+                elif a.startswith("--unset="):
+                    env["unsets"].append(a[8:])
+                    k += 1
+                elif a.startswith("-u"):
+                    env["unsets"].append(a[2:])
+                    k += 1
+                elif a == "--":
+                    k += 1
+                    break
+                elif a.startswith("-"):
+                    raise Unknown("env " + a)
+                elif _ASSIGN.match(a):
+                    m = _ASSIGN.match(a)
+                    env["assigns"].append((m.group(1), a[m.end():]))
+                    k += 1
+                else:
+                    break
+        elif name == "command":
+            k += 1
+            while k < len(vals) and need(k).startswith("-") and vals[k] != "-":
+                a = vals[k]
+                if a == "--":
+                    k += 1
+                    break
+                if set(a[1:]) - set("pvV"):
+                    raise Unknown("command " + a)
+                if "v" in a or "V" in a:
+                    return None, env
+                k += 1
+        elif name == "exec":
+            k += 1
+            while k < len(vals) and need(k).startswith("-"):
+                a = vals[k]
+                if a == "--":
+                    k += 1
+                    break
+                if a == "-a":
+                    k += 2
+                elif set(a[1:]) <= set("cl"):
+                    k += 1
+                else:
+                    raise Unknown("exec " + a)
+        elif name in ("builtin", "noglob", "nocorrect", "nohup", "time"):
+            k += 1
+            if name == "nohup" and k < len(vals) and vals[k] == "--":
+                k += 1
+        elif name == "nice":
+            k += 1
+            while k < len(vals) and need(k).startswith("-"):
+                a = vals[k]
+                if a == "--":
+                    k += 1
+                    break
+                if a == "-n":
+                    k += 2
+                elif re.fullmatch(r"-n?-?\d+|--adjustment=-?\d+", a):
+                    k += 1
+                else:
+                    raise Unknown("nice " + a)
+        elif name == "caffeinate":
+            k += 1
+            while k < len(vals) and need(k).startswith("-"):
+                a = vals[k]
+                if a in ("-t", "-w"):
+                    k += 2
+                elif re.fullmatch(r"-[dimsu]+", a):
+                    k += 1
+                else:
+                    raise Unknown("caffeinate " + a)
+        elif name in ("timeout", "gtimeout"):
+            k += 1
+            while k < len(vals) and need(k).startswith("-"):
+                a = vals[k]
+                if a == "--":
+                    k += 1
+                    break
+                if a in ("-s", "-k"):
+                    k += 2
+                elif a in ("-v", "--verbose", "--preserve-status", "--foreground") \
+                        or a.startswith("--signal=") or a.startswith("--kill-after="):
+                    k += 1
+                else:
+                    raise Unknown("timeout " + a)
+            need(k)
+            k += 1
+        else:
+            break
+    return k, env
+
+
+def git_quiet(vals):
+    """True when git, given these arguments, runs none of them as a command."""
+    k = 0
+    while k < len(vals):
+        a = vals[k]
+        if a is None:
+            return False
+        if a in ("-C", "--git-dir", "--work-tree", "--namespace"):
+            k += 2
+        elif a in ("--no-pager", "-P", "--bare", "--no-replace-objects", "--literal-pathspecs",
+                   "--no-optional-locks") or a.startswith("--git-dir=") \
+                or a.startswith("--work-tree=") or a.startswith("--namespace="):
+            k += 1
+        else:
+            break
+    if k >= len(vals) or vals[k] not in GIT_QUIET:
+        return False
+    rest = vals[k + 1:]
+    if vals[k] == "rebase" and any(a is None or a in ("-x", "--exec") or a.startswith("--exec=")
+                                   or (a.startswith("-x") and len(a) > 2) for a in rest):
+        return False
+    return True
+
+
+def own_text(word):
+    """A word's text with its substitutions left out: they are walked as commands of their own."""
+    return "".join(p.text if p.kind == "lit" else _source(p) for p in word.parts
+                   if p.kind not in ("cmdsub", "procsub"))
+
+
+class Finder(object):
+    def __init__(self, home, cwd):
+        self.home = home
+        self.start = State(home, cwd)
+        self.invocations = []
+        self.problems = []
+
+    def problem(self, reason):
+        if reason not in self.problems:
+            self.problems.append(reason)
+
+    # -- words -----------------------------------------------------------------------------
+
+    def value(self, word, state):
+        if word is None:
+            return None
+        if len(word.parts) == 1 and word.parts[0].kind == "equals":
+            return "=/" + word.parts[0].text
+        return word.literal(state.env())
+
+    def has_gh(self, word, state):
+        if self.taints(word):
+            return True
+        if any(p.kind == "param" and p.text in state.tainted for p in word.parts):
+            return True
+        v = self.value(word, state)
+        return v is not None and mentions_gh(v)
+
+    def substitutions(self, word, state):
+        # A substitution runs before the command holding it, in a subshell of its own.
+        for p in word.parts:
+            if p.kind in ("cmdsub", "procsub"):
+                self.walk(p.script, state.copy())
+
+    def heredoc_text(self, r, state):
+        """The Text a here-document or a here-string gives its command."""
+        if r.heredoc is not None:
+            h = r.heredoc
+            if h.quoted:
+                return Text(h.body, mentions_gh(h.body), "a here-document")
+            self.substitutions(h.word, state)
+            return Text(h.word.literal(state.env(), pattern_ok=True), self.has_gh(h.word, state),
+                        "a here-document")
+        self.substitutions(r.target, state)
+        v = r.target.literal(state.env(), pattern_ok=True)
+        return Text(None if v is None else v + "\n", self.has_gh(r.target, state),
+                    "a here-string")
+
+    # -- the walk --------------------------------------------------------------------------
+
+    def walk(self, script, state):
+        for node, sep in script.items:
+            if sep == "&":
+                self.andor(node, state.copy())
+            else:
+                self.andor(node, state)
+        if script.unsupported is not None and mentions_gh(script.unsupported[0]):
+            self.problem("The hook does not read " + script.unsupported[1]
+                         + ", and the command holds a gh word there or after it.")
+        return state
+
+    def andor(self, node, state):
+        before = state.cwds
+        for k, pipeline in enumerate(node.pipelines):
+            self.pipeline(pipeline, state)
+        # A cd that may have failed leaves the command in either directory, unless the item
+        # ends in `|| exit` or `|| return`, which stops the command when it does.
+        if state.cwds != before and not self.stops(node):
+            state.cwds = tuple(sorted(set(before) | set(state.cwds), key=str))
+
+    def stops(self, node):
+        if not node.ops or node.ops[-1] != "||":
+            return False
+        last = node.pipelines[-1].commands
+        if len(last) != 1 or not isinstance(last[0], Simple) or not last[0].words:
+            return False
+        return last[0].words[0].literal() in ("exit", "return")
+
+    def pipeline(self, pipeline, state):
+        n = len(pipeline.commands)
+        marks = len(self.problems), len(self.quiet_gh)
+        for k, command in enumerate(pipeline.commands):
+            # Every command of a pipeline but the last runs in a subshell.
+            here = state if k == n - 1 else state.copy()
+            self.command(command, here, piped=k > 0, downstream=k < n - 1)
+        # A gh word a quiet command printed is accounted for only if nothing after it in the
+        # pipeline can run what it reads.
+        if n > 1 and self.quiet_gh[marks[1]:]:
+            for command in pipeline.commands[1:]:
+                if not self.consumes_quietly(command, state):
+                    self.problem("A gh word is printed into a pipe that a command which can run"
+                                 " it reads.")
+                    break
+        del self.quiet_gh[marks[1]:]
+
+    def consumes_quietly(self, command, state):
+        if not isinstance(command, Simple):
+            return False
+        vals = [self.value(w, state) for w in command.words]
+        try:
+            k, _ = unwrap(vals)
+        except Unknown:
+            return False
+        if k is None or k >= len(vals):
+            return True
+        name = vals[k]
+        return name is not None and (is_gh(name) or self.quiet(name, vals[k + 1:]))
+
+    def quiet(self, name, args):
+        base = _name(name)
+        if base == "git":
+            return git_quiet(args)
+        if base == "rg":
+            return not any(a is None or a.startswith("--pre") for a in args)
+        return base in QUIET
+
+    def command(self, command, state, piped, downstream):
+        if isinstance(command, Group):
+            inner = state if command.kind == "group" else state.copy()
+            self.redirect_targets(command.redirs, inner)
+            self.walk(command.body, inner)
+            return
+        self.simple(command, state, piped, downstream)
+
+    def redirect_targets(self, redirs, state):
+        for r in redirs:
+            if r.target is not None:
+                self.substitutions(r.target, state)
+
+    def simple(self, cmd, state, piped, downstream):
+        for _, w, _ in cmd.assigns:
+            self.substitutions(w, state)
+        for w in cmd.words:
+            self.substitutions(w, state)
+        self.redirect_targets(cmd.redirs, state)
+        streams = [(r, self.heredoc_text(r, state)) for r in cmd.redirs if r.op in ("<<", "<<-", "<<<")]
+
+        if not cmd.words:
+            for name, w, appends in cmd.assigns:
+                self.assign(name, w, appends, state, export=False)
+            self.writes(cmd, None, state, streams)
+            return
+
+        vals = [self.value(w, state) for w in cmd.words]
+        try:
+            k, env = unwrap(vals)
+        except Unknown as why:
+            self.problem("The hook cannot read " + str(why) + ", so it cannot tell what the"
+                         " command runs.")
+            return
+        if k is None:
+            return
+        if k >= len(vals):
+            # env alone, and the like: it prints, and runs nothing.
+            self.check_words(cmd.words, state, quiet=True)
+            return
+        name = vals[k]
+        if name is None:
+            self.problem("A command's name cannot be known before it runs, so the hook cannot"
+                         " tell what it runs.")
+            return
+        base = _name(name)
+        args = cmd.words[k + 1:]
+        if is_gh(name):
+            # The words after gh are what it sends; reading them is the classifier's work.
+            self.invocations.append(Invocation(args, list(cmd.assigns), env, cmd.redirs,
+                                               state.copy(), piped, cmd))
+            self.check_words(cmd.words[:k], state, quiet=True)
+            return
+        if base in DECLARE:
+            self.declare(base, args, vals[k + 1:], state)
+            return
+        if base in SHELLS:
+            self.shell(cmd, args, vals[k + 1:], state, streams, piped)
+            return
+        if base == "cd":
+            self.cd(vals[k + 1:], state)
+        if base in ("source", ".") or name.startswith("/") or name.startswith("."):
+            self.runs_file(state.path(name) if base not in ("source", ".")
+                           else state.path(vals[k + 1] if k + 1 < len(vals) else None), state)
+        quiet = self.quiet(name, vals[k + 1:])
+        self.check_words(cmd.words, state, quiet)
+        for r, text in streams:
+            if text.gh and not quiet:
+                self.problem("A gh word is in " + text.label + " that " + base
+                             + " reads, and it can run what it reads.")
+            elif text.gh:
+                self.quiet_gh.append(text.label)
+        self.names_files(base, quiet, vals[k + 1:], state)
+        self.writes(cmd, (base, vals[k + 1:]), state, streams)
+        if base in ("git",) and k + 1 < len(vals) and vals[k + 1] in ("remote", "config"):
+            state.events.append("git " + vals[k + 1])
+        if base == "unset":
+            for v in vals[k + 1:]:
+                state.vars.pop(v or "", None)
+                state.events.append("unset")
+
+    quiet_gh = None
+
+    def check_words(self, words, state, quiet):
+        for w in words:
+            if self.has_gh(w, state):
+                if quiet:
+                    self.quiet_gh.append("an argument")
+                else:
+                    self.problem("A gh word is an argument of a command that can run its"
+                                 " arguments, so the hook cannot tell what it runs.")
+
+    def assign(self, name, word, appends, state, export):
+        value = word.literal(state.env(), pattern_ok=True)
+        if appends:
+            old = state.vars.get(name, "")
+            value = None if old is None or value is None else old + value
+        state.vars[name] = value
+        if export:
+            state.exported.add(name)
+        state.tainted.discard(name)
+        if value is None and self.taints(word):
+            state.tainted.add(name)
+        if name.startswith("GIT_") or name in ("GH_CONFIG_DIR", "GH_HOST", "GH_REPO"):
+            state.events.append("assigns " + name)
+
+    def taints(self, word):
+        # An unknown value built from a gh word, unless it is only the output of a gh command.
+        if mentions_gh(own_text(word)):
+            return True
+        for p in word.parts:
+            if p.kind in ("cmdsub", "procsub") and mentions_gh(p.text):
+                items = p.script.items
+                first = items[0][0].pipelines[0].commands[0] if items else None
+                if not (len(items) == 1 and isinstance(first, Simple) and first.words
+                        and is_gh(first.words[0].literal())):
+                    return True
+        return False
+
+    def declare(self, base, args, vals, state):
+        for w, v in zip(args, vals):
+            first = w.parts[0] if w.parts else None
+            m = _ASSIGN.match(first.text) if first is not None and first.kind == "lit" \
+                and not first.quoted else None
+            if m:
+                self.assign(m.group(1), _after_assign(w, m.end()), m.group(2) == "+", state,
+                            export=base == "export")
+            elif v is not None and _NAME.fullmatch(v):
+                if base == "export":
+                    state.exported.add(v)
+            elif self.has_gh(w, state):
+                self.problem("A gh word is an argument of " + base + " that the hook cannot read.")
+
+    def cd(self, vals, state):
+        if not vals:
+            target = state.vars.get("HOME")
+        elif len(vals) == 1 and vals[0] is not None and vals[0] != "-":
+            target = vals[0] if vals[0].startswith("/") else None
+            if target is None and len(state.cwds) == 1 and state.cwds[0] is not None:
+                target = state.cwds[0] + "/" + vals[0]
+        else:
+            target = None
+        state.cwds = (_norm(target) if target else None,)
+
+    def shell(self, cmd, args, vals, state, streams, piped):
+        # sh -c <script>, sh <file>, and sh reading its script from standard input.
+        k = 0
+        script = None
+        while k < len(vals):
+            a = vals[k]
+            if a is None:
+                if self.has_gh(args[k], state):
+                    self.problem("A shell is given a gh word the hook cannot read.")
+                return
+            if a == "--":
+                k += 1
+                break
+            if a in ("-o", "+o", "-O", "+O"):
+                k += 2
+                continue
+            if a.startswith("-") or a.startswith("+"):
+                if "c" in a[1:]:
+                    script = k + 1
+                    break
+                k += 1
+                continue
+            break
+        child = state.copy()
+        child.vars = dict((n, v) for n, v in state.vars.items() if n in state.exported)
+        if script is not None:
+            if script >= len(vals) or vals[script] is None:
+                if script < len(args) and self.has_gh(args[script], state):
+                    self.problem("A shell is given a script the hook cannot read, and it holds"
+                                 " a gh word.")
+                return
+            self.reparse(vals[script], child)
+            return
+        if k < len(vals):
+            self.runs_file(state.path(vals[k]), state, ran_by_shell=True)
+            return
+        if piped:
+            self.problem("A shell reads its script from a pipe, so the hook cannot tell what it"
+                         " runs.")
+            return
+        for r, text in streams:
+            if text.content is None:
+                if text.gh:
+                    self.problem("A shell reads " + text.label + " the hook cannot know.")
+            else:
+                self.reparse(text.content, child)
+
+    def reparse(self, text, state):
+        if not mentions_gh(text):
+            return
+        self.walk(parse(text), state)
+
+    def runs_file(self, path, state, ran_by_shell=False):
+        if path is None or path not in state.files:
+            return
+        text = state.files[path]
+        if text.content is None:
+            self.problem("The command runs a file it wrote, and the hook cannot know what it"
+                         " holds.")
+        else:
+            self.reparse(text.content, state.copy())
+
+    def names_files(self, base, quiet, vals, state):
+        # A file this command wrote, with a gh word in it, named by a command that can run it.
+        if quiet:
+            return
+        for v in vals:
+            p = state.path(v) if v else None
+            if p in state.files and state.files[p].gh:
+                self.problem("A file the command wrote holds a gh word, and " + base
+                             + " reads it and can run what it reads.")
+
+    def writes(self, cmd, who, state, streams):
+        """Records each file a command writes, a redirection's target or one of tee's files,
+        with what it writes when that is known: a here-document cat or tee copies, or the
+        literal text echo or printf prints. A file it cannot resolve is not recorded, and a
+        later read of it is decided by where it is read (T5)."""
+        base, vals = who if who is not None else ("", [])
+        files = [v for v in vals if v is None or not v.startswith("-")]
+        content, gh = None, False
+        if base == "cat" and streams and not files or base == "tee" and streams:
+            content, gh = streams[-1][1].content, streams[-1][1].gh
+        elif base in ("echo", "printf"):
+            content, gh = self.printed(base, vals)
+        targets = []
+        for r in cmd.redirs:
+            if r.target is None or not (r.op.startswith(">") or r.op.startswith("&>")):
+                continue
+            v = r.target.literal(state.env())
+            if r.op in (">&", "<&") and v is not None and (v.isdigit() or v == "-"):
+                continue
+            out = r.fd in ("", "1") or r.op.startswith("&>") or r.op == ">&"
+            targets.append((v, r.op.startswith(">>") or r.op == "&>>", out))
+        if base == "tee":
+            appends = "-a" in vals or "--append" in vals
+            targets += [(v, appends, True) for v in files]
+        for v, appends, out in targets:
+            p = state.path(v)
+            if p is None or p == "/dev/null":
+                continue
+            text = Text(content if out else None, gh and out, "a file this command wrote")
+            old = state.files.get(p)
+            if appends:
+                if old is None or old.content is None or text.content is None:
+                    text = Text(None, text.gh or (old is not None and old.gh), text.label)
+                else:
+                    text = Text(old.content + text.content, text.gh or old.gh, text.label)
+            state.files[p] = text
+
+    def printed(self, base, vals):
+        if any(v is None for v in vals):
+            return None, any(v is None or mentions_gh(v) for v in vals)
+        gh = any(mentions_gh(v) for v in vals)
+        if base == "echo":
+            if vals and vals[0].startswith("-"):
+                return None, gh
+            text = " ".join(vals)
+            return (None if "\\" in text else text + "\n"), gh
+        if not vals or "%" in vals[0] or "\\" in vals[0] or len(vals) > 1:
+            return None, gh
+        return vals[0], gh
+
+    def find(self, script):
+        self.quiet_gh = []
+        self.walk(script, self.start.copy())
+        return self
 
 
 def read_input(data):
@@ -752,10 +1412,26 @@ def read_input(data):
     return command, cwd
 
 
-def decide(command, cwd):
+def judge(inv):
+    """The decision for one gh invocation, or None when it may run. Until the table lands,
+    every subcommand is one the hook does not know, which blocks."""
+    first = inv.words[0].literal(inv.state.env()) if inv.words else None
+    return block("gh " + (first if first and first.isalnum() else "<this subcommand>")
+                 + " is not a gh command the hook knows, so it can run anything: an alias,"
+                 " an extension, or a command newer than the hook's table.",
+                 "Run it yourself outside the session, or file the gap against the hook.")
+
+
+def decide(command, cwd, home):
     """The slow path, for a command that holds a gh word."""
-    return block("The command holds a gh word the hook cannot account for, so it cannot tell"
-                 " what the command runs.", ADVICE_UNEXPLAINED)
+    found = Finder(home, cwd).find(parse(command))
+    if found.problems:
+        return block(found.problems[0], ADVICE_UNEXPLAINED)
+    for inv in found.invocations:
+        result = judge(inv)
+        if result is not None:
+            return result
+    return PASS
 
 
 def run(argv, data):
@@ -768,4 +1444,4 @@ def run(argv, data):
     command, cwd = hook
     if not mentions_gh(command):
         return PASS
-    return decide(command, cwd)
+    return decide(command, cwd, os.environ.get("HOME"))

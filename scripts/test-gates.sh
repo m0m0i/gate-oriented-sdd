@@ -12541,7 +12541,7 @@ else
   # standard one does not run.
   mkdir -p "$TMP/ghg-pythonpath"; printf 'raise SystemExit(0)\n' > "$TMP/ghg-pythonpath/json.py"
   cp "$TMP/ghg-pythonpath/json.py" "$TMP/ghg-pythonpath/re.py"
-  ghg_input 'echo ${:-gh} issue list'
+  ghg_input '${:-gh} issue list'
   out=$(GHG_ENV="PYTHONPATH=$TMP/ghg-pythonpath" ghg_run); p7=$(ghg_blocked "$out")
   printf '%s' 'not json' > "$TMP/ghg-in"
   out=$(GHG_ENV="PYTHONPATH=$TMP/ghg-pythonpath" ghg_run); p7="$p7 $(ghg_blocked "$out" 'could not read its input')"
@@ -12768,6 +12768,9 @@ UNSUPPORTED = [
     ("gh ${unterminated", 0, "an expansion is not closed"),
     ("gh a <<EOF\nno end", 0, "a here-document has no end line"),
     ("gh a <<EOF", 0, "a here-document has no end line"),
+    ("gh a <<EOF & echo b; gh c", 0, "a here-document has no end line"),
+    ("gh a <<EOF; gh 'b", 0, "a quote is not closed"),
+    ("echo a; gh b <<EOF && c; d\nno end", 8, "a here-document has no end line"),
     ("gh a \\", 0, "the command ends in a backslash"),
     ("echo a; echo $(for x in y; do gh; done)", 8, "`for`"),
     ("echo ok\necho `if x; then gh; fi`", 8, "`if`"),
@@ -12785,6 +12788,118 @@ for command, at, why in UNSUPPORTED:
     except Exception as e:
         got = ("raised", type(e).__name__)
     check("lexer-unsupported", got == (command[at:], why), repr(command) + " gave " + repr(got))
+
+
+# -- the finder (T3) ---------------------------------------------------------------------------
+# What the walk finds in a command: the gh invocations, each as the values of its words after
+# gh, and the first reason a gh word is not accounted for.
+def find(command, cwd="/w"):
+    f = g.Finder("/H", cwd).find(g.parse(command))
+    calls = [[w.literal(i.state.env()) for w in i.words] for i in f.invocations]
+    return f.problems, calls
+
+
+# Accounted for: each one's invocations, and no reason to block.
+FOUND = [
+    ("echo \"use gh to file it\"", []),
+    ("git commit -m 'gh hook' && git log --grep gh && git push origin gh-pages", []),
+    ("grep -rn gh scripts/ ; rg -n 'gh ' . ; which gh ; type gh ; command -v gh ; man gh", []),
+    ("cat <<'EOF' > notes.md\nuse gh\nEOF", []),
+    ("ls ~/.config/gh && cd gh-pages && cat gh.txt | wc -l", []),
+    ("gh issue list", [["issue", "list"]]),
+    ("/opt/homebrew/bin/gh pr list", [["pr", "list"]]),
+    ("=gh pr list", [["pr", "list"]]),
+    ("env GH_REPO=o/r gh issue list", [["issue", "list"]]),
+    ("command gh a; exec gh b; builtin exec gh c; noglob gh d; nocorrect gh e; time gh f",
+     [["a"], ["b"], ["c"], ["d"], ["e"], ["f"]]),
+    ("nohup gh a; nice -n 5 gh b; nice gh c; caffeinate -i gh d; timeout 10 gh e;"
+     " timeout -s KILL 5 gh f", [["a"], ["b"], ["c"], ["d"], ["e"], ["f"]]),
+    ("G=gh; $G issue list", [["issue", "list"]]),
+    ("G=/opt/homebrew/bin/gh; \"$G\" pr list", [["pr", "list"]]),
+    ("export G=gh; $G x", [["x"]]),
+    ("sh -c 'gh issue list'; bash -lc \"gh pr list\"; zsh -c 'cd x && gh y'",
+     [["issue", "list"], ["pr", "list"], ["y"]]),
+    ("sh <<'EOF'\ngh issue list\nEOF", [["issue", "list"]]),
+    ("cat > /tmp/x.sh <<'EOF'\ngh issue list\nEOF\nsh /tmp/x.sh", [["issue", "list"]]),
+    ("cat > x.sh <<'EOF'\ngh a\nEOF\nchmod +x x.sh; ./x.sh", [["a"]]),
+    ("echo 'gh b' > y.sh && bash y.sh", [["b"]]),
+    ("X=$(gh pr view --json url -q .url); echo \"$X\"",
+     [["pr", "view", "--json", "url", "-q", ".url"]]),
+    ("gh issue create --body \"$(cat <<'EOF'\nuse gh\nEOF\n)\"",
+     [["issue", "create", "--body", None]]),
+    ("gh api user | grep gh", [["api", "user"]]),
+    ("ls # gh issue create in a comment", []),
+]
+
+for command, want in FOUND:
+    try:
+        problems, calls = find(command)
+    except Exception as e:
+        problems, calls = ["raised " + type(e).__name__], None
+    check("finder", not problems and calls == want,
+          repr(command) + " gave " + repr((problems, calls)))
+
+# Not accounted for: each one's reason, and nothing let through.
+BLOCKED = [
+    ("${:-gh} issue list", "A command's name cannot be known"),
+    ("$(echo gh) issue list", "A command's name cannot be known"),
+    ("\"${commands[gh]}\" issue list", "A command's name cannot be known"),
+    ("G=$(echo gh); $G issue list", "A command's name cannot be known"),
+    ("xargs gh issue close < ids", "an argument of a command that can run its arguments"),
+    ("find . -exec gh issue list \\;", "an argument of a command that can run its arguments"),
+    ("sudo gh x", "an argument of a command that can run its arguments"),
+    ("python3 -c 'import os; os.system(\"gh issue list\")'", "can run its arguments"),
+    ("node -e \"require('child_process').execSync('gh pr list')\"", "can run its arguments"),
+    ("alias g=gh", "can run its arguments"),
+    ("hash gh=/tmp/x", "can run its arguments"),
+    ("eval \"gh issue list\"", "can run its arguments"),
+    ("watch gh pr checks", "can run its arguments"),
+    ("rg --pre gh x", "can run its arguments"),
+    ("git -c alias.x='!gh issue list' x", "can run its arguments"),
+    ("git rebase -i --exec 'gh pr comment 1 -b x' HEAD~3", "can run its arguments"),
+    ("git bisect run gh issue list", "can run its arguments"),
+    ("G=$(echo gh); xargs $G", "can run its arguments"),
+    ("echo gh issue list | sh", "A shell reads its script from a pipe"),
+    ("printf 'gh x' | xargs -I{} sh -c {}", "printed into a pipe"),
+    ("echo $(echo gh) issue list | xargs -I{} sh -c {}", "printed into a pipe"),
+    ("python3 <<'EOF'\nos.system('gh issue list')\nEOF", "that python3 reads"),
+    ("cat > x.py <<'EOF'\nos.system(\"gh x\")\nEOF\npython3 x.py", "python3 reads it"),
+    ("cat a > x.sh; sh x.sh; gh y", "runs a file it wrote"),
+    ("env -S 'gh x'", "The hook cannot read env -S"),
+    ("nice --weird gh", "The hook cannot read nice --weird"),
+    ("timeout $T gh x", "a wrapper's argument cannot be known"),
+    ("G=$(echo gh); bash -c \"$G x\"", "A shell is given a script the hook cannot read"),
+    ("for x in a; do gh issue list; done", "The hook does not read `for`"),
+    ("f() { gh \"$@\"; }; f issue list", "The hook does not read a function definition"),
+    ("gh issue list && $(echo gh) x", "A command's name cannot be known"),
+    ("sh <<EOF\n$(echo gh) x\nEOF", "A shell reads a here-document the hook cannot know"),
+    ("export X=$(echo gh); sh -c \"$X\"", "A shell is given a script the hook cannot read"),
+]
+
+for command, want in BLOCKED:
+    try:
+        problems, calls = find(command)
+    except Exception as e:
+        problems, calls = ["raised " + type(e).__name__], None
+    check("finder-blocks", bool(problems) and want in problems[0],
+          repr(command) + " gave " + repr((problems, calls)))
+
+# A cd moves the directory later commands of the same list run in; one that may have failed
+# leaves either, and a subshell's stays in it.
+CWDS = [
+    ("cd /x && gh a", [("/x",)]),
+    ("cd /x; gh a", [("/w", "/x")]),
+    ("cd /x || exit 1; gh a", [("/x",)]),
+    ("(cd /x); gh a", [("/w",)]),
+    ("cd sub && cd .. && cd /y/z && gh a", [("/y/z",)]),
+    ("cd \"$UNKNOWN\" && gh a", [(None,)]),
+    ("cd && gh a", [("/H",)]),
+    ("cd /x | cat; gh a", [("/w",)]),
+]
+for command, want in CWDS:
+    f = g.Finder("/H", "/w").find(g.parse(command))
+    got = [i.state.cwds for i in f.invocations]
+    check("finder-cwd", got == want and not f.problems, repr(command) + " gave " + repr(got))
 
 
 for group in sorted(results):
@@ -12823,6 +12938,14 @@ ghg_case lexer-zsh "the gh guard's lexer gives every word it knows the value zsh
 # 451. #361 AC3 — a construct the lexer does not handle makes the rest of the command opaque,
 #      from the start of the list item that holds it, so a gh word anywhere in that item is in it.
 ghg_case lexer-unsupported "the gh guard's lexer makes the rest of the command opaque from the item that holds a construct it does not handle"
+
+# 452. #361 AC1, AC3 — every gh word is accounted for, or the command blocks: an invocation by
+#      name, path, `=gh`, a tracked variable, each wrapper, `sh -c`, a here-document or a written
+#      file a shell runs; an argument of a command that never runs its arguments; a value gh
+#      sends; text written to a file nothing then runs. Each form that hides gh blocks.
+ghg_case finder "the gh guard finds gh run by name, path, variable, wrapper or shell, and lets a gh word no command runs pass"
+ghg_case finder-blocks "the gh guard blocks a gh word in a variable, a substitution, xargs, inline code, a pipe a command runs, or a construct it does not read"
+ghg_case finder-cwd "the gh guard follows cd within a list, keeps either directory after a cd that may fail, and leaves a subshell's cd in it"
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
