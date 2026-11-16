@@ -12747,15 +12747,16 @@ if not ZSH:
 # A construct the lexer does not handle makes the rest of the command opaque, from the start of
 # the list item that holds it, so a gh word before it in the same item is in the opaque text.
 UNSUPPORTED = [
-    ("gh a | while read x; do echo; done", 0, "`while`"),
-    ("echo a; for x in y; do gh b; done", 8, "`for`"),
-    ("echo a && if true; then gh b; fi", 0, "`if`"),
+    ("x=(a b) gh z", 0, "an array assignment"),
+    ("gh a | while read x; do case $x in y) ;; esac; done", 0, "`case`"),
+    ("echo a; for ((i=0; i<2; i++)); do gh b; done", 8, "a `for` this hook does not read"),
+    ("echo a; for x (a b) gh b", 8, "a `for` this hook does not read"),
+    ("if x; then gh y", 0, "a `fi` is missing"),
+    ("while x; do gh y", 0, "a `done` is missing"),
+    ("echo a; echo $(case x in y) gh;; esac)", 8, "`case`"),
     ("gh a && case x in y) ;; esac", 0, "`case`"),
-    ("f() { gh x; }", 0, "a function definition or an array"),
-    ("function f { gh x; }", 0, "`function`"),
     ("(( x )) && gh a", 0, "arithmetic `((`"),
     ("[[ -f x ]] && gh y", 0, "`[[`"),
-    ("x=(a b) gh z", 0, "an array assignment"),
     ("select x in a; do gh; done", 0, "`select`"),
     ("repeat 2 gh a", 0, "`repeat`"),
     ("coproc gh a", 0, "`coproc`"),
@@ -12772,14 +12773,35 @@ UNSUPPORTED = [
     ("gh a <<EOF; gh 'b", 0, "a quote is not closed"),
     ("echo a; gh b <<EOF && c; d\nno end", 8, "a here-document has no end line"),
     ("gh a \\", 0, "the command ends in a backslash"),
-    ("echo a; echo $(for x in y; do gh; done)", 8, "`for`"),
-    ("echo ok\necho `if x; then gh; fi`", 8, "`if`"),
     ("gh a ;; gh b", 0, "a case pattern's end"),
     ("gh a <<$X\nb\n$X", 0, "a here-document's delimiter is not literal"),
     ("gh a > ", 0, "a redirection has no target"),
     ("gh a && && gh b", 0, "an empty command"),
     ("{ gh a", 0, "a } is missing"),
 ]
+
+COMPOUND = [
+    ("for x in a b; do gh issue view $x; done", "for x [a, b]"),
+    ("for x\ndo echo $x\ndone", "for x None"),
+    ("while true; do gh pr checks 1 && break; sleep 5; done", "while"),
+    ("until gh pr checks 1; do sleep 10; done", "until"),
+    ("if a; then b; elif c; then d; else e; fi", "if 3"),
+    ("f() { gh issue view $1; }", "function f"),
+    ("function g { gh x; }", "function g"),
+    ("function h() ( gh y )", "function h"),
+    ("for f in *.md; do gh issue create -F $f; done > log", "for f [None]"),
+]
+for command, want in COMPOUND:
+    try:
+        node = g.parse(command).items[0][0].pipelines[0].commands[0]
+        got = node.kind + (" " + node.var if node.var else "")
+        if node.kind == "for":
+            got += " " + (repr([w.literal() for w in node.words]).replace("'", "") if node.words is not None else "None")
+        if node.kind == "if":
+            got += " " + str(len(node.parts))
+    except Exception as e:
+        got = "raised " + type(e).__name__
+    check("lexer-compound", got == want, repr(command) + " gave " + got)
 
 for command, at, why in UNSUPPORTED:
     try:
@@ -12801,6 +12823,16 @@ def find(command, cwd="/w"):
 
 # Accounted for: each one's invocations, and no reason to block.
 FOUND = [
+    ("for x in a; do gh issue list; done", [["issue", "list"]]),
+    ("until gh pr checks 1; do sleep 10; done", [["pr", "checks", "1"], ["pr", "checks", "1"]]),
+    ("for c in gh; do $c issue list; done", [["issue", "list"]]),
+    ("if gh pr view 1; then gh issue list; else echo no; fi", [["pr", "view", "1"], ["issue", "list"]]),
+    ("for n in 1 2; do gh issue view $n; done", [["issue", "view", "1"], ["issue", "view", "2"]]),
+    ("f() { gh issue view $1; }; f 3", [["issue", "view", None]]),
+    ("git push origin gh-pages && python3 x.py .specs/9-before-gh-writes-it/spec.md", []),
+    ("\"$(xcrun -f python3)\" -c 'print(1)'; gh --version", [["--version"]]),
+    ("git -c credential.helper='!gh auth git-credential' push -u origin x", []),
+    ("echo gh.txt gh- x-gh-y", []),
     ("echo \"use gh to file it\"", []),
     ("git commit -m 'gh hook' && git log --grep gh && git push origin gh-pages", []),
     ("grep -rn gh scripts/ ; rg -n 'gh ' . ; which gh ; type gh ; command -v gh ; man gh", []),
@@ -12841,6 +12873,11 @@ for command, want in FOUND:
 
 # Not accounted for: each one's reason, and nothing let through.
 BLOCKED = [
+    ("for c in $(echo gh); do $c issue list; done", "A command's name cannot be known"),
+    ("$(which gh) issue list", "A command's name cannot be known"),
+    ("G=$(echo gh); \"$G\" -c x", "A command's name cannot be known"),
+    ("git -c core.sshCommand='gh x' fetch", "can run its arguments"),
+    ("git -c credential.helper='!gh issue list' push", "can run its arguments"),
     ("${:-gh} issue list", "A command's name cannot be known"),
     ("$(echo gh) issue list", "A command's name cannot be known"),
     ("\"${commands[gh]}\" issue list", "A command's name cannot be known"),
@@ -12869,8 +12906,6 @@ BLOCKED = [
     ("nice --weird gh", "The hook cannot read nice --weird"),
     ("timeout $T gh x", "a wrapper's argument cannot be known"),
     ("G=$(echo gh); bash -c \"$G x\"", "A shell is given a script the hook cannot read"),
-    ("for x in a; do gh issue list; done", "The hook does not read `for`"),
-    ("f() { gh \"$@\"; }; f issue list", "The hook does not read a function definition"),
     ("gh issue list && $(echo gh) x", "A command's name cannot be known"),
     ("sh <<EOF\n$(echo gh) x\nEOF", "A shell reads a here-document the hook cannot know"),
     ("export X=$(echo gh); sh -c \"$X\"", "A shell is given a script the hook cannot read"),
@@ -12939,6 +12974,31 @@ import json  # noqa: E402
 
 # Reads, writes, local state and arbitrary execution, with what each write sends.
 CLASSIFY = [
+    ("f() { gh \"$@\"; }; f issue list", "block: Which gh command runs depends on a word", []),
+    ("X=a; while true; do gh issue create -t t -b $X; X=Zq_Exact; done", "block: Cannot recover"
+     " the text gh would send: a word whose value cannot be known", []),
+    ("X=a; f() { gh issue create -t t -b $X; }; X=Zq_Exact; f", "block: Cannot recover the text"
+     " gh would send: a word whose value cannot be known", []),
+    ("f() { gh issue create -t t -F /etc/hosts; }; f", "block: Cannot recover the text gh would"
+     " send: /etc/hosts, read in a function's body, where it is called.", []),
+    ("if true; then gh issue comment 1 -b ok; else gh issue comment 1 -b Zq_Exact; fi",
+     "block: LEAK [fail] in the --body value, line 1.", ["the --body value", "argument 1",
+                                                        "the --body value", "argument 1"]),
+    ("V=ok; if test -f x; then V=Zq_Exact; fi; gh issue comment 1 -b $V", "block: Cannot recover"
+     " the text gh would send: a word whose value cannot be known", []),
+    ("V=ok; if test -f x; then V=ok; else V=ok; fi; gh issue comment 1 -b $V", "pass",
+     ["the --body value", "argument 1"]),
+    ("for b in ok Zq_Exact; do gh issue comment 1 -b $b; done", "block: LEAK [fail] in the --body"
+     " value, line 1.", ["the --body value", "argument 1", "the --body value", "argument 1"]),
+    ("gh api \"repos/$R/issues/$i\"", "pass", []),
+    ("gh api graphql -f query='query($o: String!) { x }' -f o=\"$O\"", "pass", []),
+    ("gh api \"$EP\"", "block: Cannot recover the text gh would send: a word whose value", []),
+    ("gh api -X \"$M\" repos/o/r/issues", "block: Cannot recover the text gh would send: a word"
+     " whose value", []),
+    ("gh pr merge 1 --merge --match-head-commit \"$(git rev-parse HEAD)\"", "pass", ["argument 1"]),
+    ("gh api -X POST repos/o/r/issues -f title=t --jq .number -t '{{.id}}'", "pass",
+     ["the --method value", "the --raw-field value", "argument 1"]),
+    ("gh auth git-credential get", "pass", []),
     ("gh issue list", "pass", []),
     ("gh pr view 12 --json body", "pass", []),
     ("gh issue new -t 'a title' -b body", "pass", ["the --title value", "the --body value"]),
@@ -13039,7 +13099,7 @@ missing = sorted(p for p in table if p not in g.KINDS)
 extra = sorted(p for p in g.KINDS if p not in table)
 check("classify-table", not missing and not extra, "no kind: " + repr(missing) + " no path: "
       + repr(extra))
-check("classify-table", len(table) == 238, "the table holds " + str(len(table)) + " paths")
+check("classify-table", len(table) == 239, "the table holds " + str(len(table)) + " paths")
 
 # The text the guard is given: each source on lines of its own, a carriage return before a line
 # end and one alone made line ends, and each line number mapped back to its source.
@@ -13423,7 +13483,9 @@ ghg_case lexer-zsh "the gh guard's lexer gives every word it knows the value zsh
 
 # 451. #361 AC3 — a construct the lexer does not handle makes the rest of the command opaque,
 #      from the start of the list item that holds it, so a gh word anywhere in that item is in it.
+#      if, while, until, for and a function's definition it reads.
 ghg_case lexer-unsupported "the gh guard's lexer makes the rest of the command opaque from the item that holds a construct it does not handle"
+ghg_case lexer-compound "the gh guard's lexer reads if, while, until, for and a function's definition"
 
 # 452. #361 AC1, AC3 — every gh word is accounted for, or the command blocks: an invocation by
 #      name, path, `=gh`, a tracked variable, each wrapper, `sh -c`, a here-document or a written

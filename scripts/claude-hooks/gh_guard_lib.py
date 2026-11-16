@@ -27,14 +27,21 @@ def block(reason, advice=None):
     return (2, "", text)
 
 
+# For a gh word given to something that can run code (python3, a pipe, xargs, a file it writes):
+# the hook cannot tell text about gh from a call of it, and it does not read a script run by name.
+ADVICE_CODE = ("If it does not run gh, write the script to a file with the Write tool and run that"
+               " file by its path, which the hook does not read; if it does, run gh as a plain"
+               " command instead.")
 ADVICE_UNEXPLAINED = ("Run gh as a plain command: `gh <subcommand> ...`, by its name or a path that"
                       " ends in /gh, not through a variable, a substitution or a wrapper the hook"
                       " does not list.")
 
 
-# The fast path: a command passes unread unless `gh` stands at a word boundary once quotes and
-# backslashes are taken out. No file is read and no pattern is loaded before this (#361 AC4).
-_GH_WORD = re.compile(r"\bgh\b", re.ASCII)
+# The fast path: a command passes unread unless `gh` stands as a word once quotes and backslashes
+# are taken out: no letter, digit or `_` before it, and none of those, `.` or `-` after it. A gh
+# that runs is never followed by `-` or `.`, and `${:-gh}` has a `-` before it. No file is read
+# and no pattern is loaded before this (#361 AC4).
+_GH_WORD = re.compile(r"(?<![A-Za-z0-9_])gh(?![A-Za-z0-9_.-])")
 
 
 def mentions_gh(command):
@@ -175,6 +182,25 @@ class Group(object):
         self.kind = kind         # "subshell" for (...), "group" for { ...; }
         self.body = body
         self.redirs = redirs
+
+
+class Compound(object):
+    """if, while, until, for, and a function's definition. parts is a list of (condition,
+    body), each a Script; a condition is None where there is none (for, else, a function).
+    var is for's variable or the function's name, and words for's list, None for `for x;`."""
+
+    __slots__ = ("kind", "parts", "var", "words", "redirs")
+
+    def __init__(self, kind, parts, var=None, words=None, redirs=None):
+        self.kind = kind
+        self.parts = parts
+        self.var = var
+        self.words = words
+        self.redirs = redirs or []
+
+
+def _script_of(command):
+    return Script([(AndOr([Pipeline([command], False)], []), "")])
 
 
 class Pipeline(object):
@@ -589,6 +615,10 @@ class Parser(object):
             body = self.parse_list("}")
             self.i += 1
             return Group("group", body, self.redirections())
+        for keyword in ("if", "while", "until", "for", "function"):
+            if self.word_is(keyword):
+                self.i += len(keyword)
+                return self.compound(keyword)
         assigns = []
         words = []
         redirs = []
@@ -600,8 +630,12 @@ class Parser(object):
                 continue
             c = self.peek()
             if c == "(":
-                raise Unsupported("a function definition or an array" if words or assigns
-                                  else "a `(` inside a command")
+                m = re.compile(r"\(\s*\)").match(self.s, self.i)
+                if m and len(words) == 1 and not assigns and not redirs \
+                        and words[0].literal(pattern_ok=True) is not None:
+                    self.i = m.end()
+                    return self.function(words[0].literal(pattern_ok=True))
+                raise Unsupported("an array" if words or assigns else "a `(` inside a command")
             w = self.word(assignment=not words)
             if w is None:
                 break
@@ -621,6 +655,89 @@ class Parser(object):
         if not (assigns or words or redirs):
             raise Unsupported("an empty command")
         return Simple(assigns, words, redirs)
+
+    def expect_word(self, word):
+        self.blank_lines()
+        if not self.word_is(word):
+            raise Unsupported("a `" + word + "` is missing")
+        self.i += len(word)
+
+    def function(self, name):
+        self.blank_lines()
+        body = self.command()
+        return Compound("function", [(None, _script_of(body))], var=name,
+                        redirs=self.redirections())
+
+    def compound(self, kind):
+        if kind == "function":
+            self.blanks()
+            w = self.word()
+            name = w.literal(pattern_ok=True) if w is not None else None
+            if name is None:
+                raise Unsupported("a function whose name is not literal")
+            self.blanks()
+            m = re.compile(r"\(\s*\)").match(self.s, self.i)
+            if m:
+                self.i = m.end()
+            return self.function(name)
+        if kind in ("while", "until"):
+            cond = self.parse_list(("do",))
+            self.expect_word("do")
+            body = self.parse_list(("done",))
+            self.expect_word("done")
+            return Compound(kind, [(cond, body)], redirs=self.redirections())
+        if kind == "if":
+            parts = []
+            cond = self.parse_list(("then",))
+            self.expect_word("then")
+            body = self.parse_list(("elif", "else", "fi"))
+            parts.append((cond, body))
+            while True:
+                self.blank_lines()
+                if self.word_is("elif"):
+                    self.i += 4
+                    cond = self.parse_list(("then",))
+                    self.expect_word("then")
+                    parts.append((cond, self.parse_list(("elif", "else", "fi"))))
+                elif self.word_is("else"):
+                    self.i += 4
+                    parts.append((None, self.parse_list(("fi",))))
+                    self.expect_word("fi")
+                    break
+                else:
+                    self.expect_word("fi")
+                    break
+            return Compound("if", parts, redirs=self.redirections())
+        # for NAME [in WORDS] ; do LIST done
+        self.blanks()
+        m = _NAME.match(self.s, self.i)
+        if not m or (m.end() < len(self.s) and self.s[m.end()] not in " \t\n;"):
+            raise Unsupported("a `for` this hook does not read")
+        var = m.group(0)
+        self.i = m.end()
+        self.blanks()
+        if self.peek() == "(":
+            raise Unsupported("a `for` this hook does not read")
+        words = None
+        if self.word_is("in"):
+            self.i += 2
+            words = []
+            while True:
+                self.blanks()
+                if self.peek() in (";", "\n", ""):
+                    break
+                if self.peek() in "&|()<>":
+                    raise Unsupported("a `for` this hook does not read")
+                w = self.word()
+                if w is None:
+                    raise Unsupported("a `for` this hook does not read")
+                words.append(w)
+        if self.peek() == ";":
+            self.i += 1
+        self.expect_word("do")
+        body = self.parse_list(("done",))
+        self.expect_word("done")
+        return Compound("for", [(None, body)], var=var, words=words, redirs=self.redirections())
 
     def redirections(self):
         out = []
@@ -661,9 +778,13 @@ class Parser(object):
 
     def at_end(self, end):
         if self.i >= len(self.s):
+            if isinstance(end, tuple):
+                raise Unsupported("a `" + end[-1] + "` is missing")
             if end:
                 raise Unsupported("a " + end + " is missing")
             return True
+        if isinstance(end, tuple):
+            return any(self.word_is(w) for w in end)
         if end == ")":
             return self.peek() == ")"
         if end == "}":
@@ -762,9 +883,12 @@ class State(object):
     command has written so far, by absolute path; named the paths it changed some other way;
     events what it did that changes where a later gh write goes."""
 
-    __slots__ = ("vars", "exported", "tainted", "cwds", "files", "named", "events")
+    __slots__ = ("vars", "exported", "tainted", "cwds", "files", "named", "events", "deferred")
 
     def __init__(self, home, cwd):
+        # In a function's body, which runs where and when it is called: no file it reads can be
+        # known from where it is defined.
+        self.deferred = False
         self.vars = {"HOME": home} if home else {}
         self.exported = set(self.vars)
         self.tainted = set()
@@ -782,7 +906,45 @@ class State(object):
         c.files = dict(self.files)
         c.named = dict(self.named)
         c.events = list(self.events)
+        c.deferred = self.deferred
         return c
+
+    def merge(self, others):
+        """Becomes what is known after any one of these states: a value the states disagree on,
+        or that one lacks, is unknown."""
+        states = [self] + list(others)
+        names = set()
+        for s in states:
+            names |= set(s.vars)
+        merged = {}
+        for n in names:
+            values = [s.vars[n] if n in s.vars else None for s in states]
+            merged[n] = values[0] if all(v == values[0] for v in values) else None
+        self.vars = merged
+        for s in others:
+            self.exported |= s.exported
+            self.tainted |= s.tainted
+            self.named.update(s.named)
+            self.events += [e for e in s.events if e not in self.events]
+            self.deferred = self.deferred or s.deferred
+        cwds = []
+        for s in states:
+            cwds += [c for c in s.cwds if c not in cwds]
+        self.cwds = tuple(sorted(cwds, key=str))
+        paths = set()
+        for s in states:
+            paths |= set(s.files)
+        files = {}
+        for path in paths:
+            texts = [s.files.get(path) for s in states]
+            first = texts[0]
+            if all(x is not None and first is not None and x.content == first.content
+                   for x in texts):
+                files[path] = first
+            else:
+                files[path] = Text(None, any(x is not None and x.gh for x in texts),
+                                   "a file this command may write")
+        self.files = files
 
     def env(self):
         return dict((k, v) for k, v in self.vars.items() if v is not None)
@@ -996,6 +1158,11 @@ def git_subcommand(vals):
     return ""
 
 
+# The one `git -c` value that runs gh: its credential helper, which prints a token and sends
+# nothing. Any other -c can name a command, so git with one is not quiet.
+GH_CREDENTIAL = re.compile(r"credential(\.[^=]*)?\.helper=!gh auth git-credential")
+
+
 def git_quiet(vals):
     """True when git, given these arguments, runs none of them as a command."""
     k = 0
@@ -1003,7 +1170,15 @@ def git_quiet(vals):
         a = vals[k]
         if a is None:
             return False
-        if a in ("-C", "--git-dir", "--work-tree", "--namespace"):
+        if a == "-c":
+            v = vals[k + 1] if k + 1 < len(vals) else None
+            if v is None or (mentions_gh(v) and not GH_CREDENTIAL.fullmatch(v)) \
+                    or re.match(r"(alias\.|core\.(sshCommand|editor|pager|hooksPath|fsmonitor)|"
+                                r".*\.(command|helper|cmd|textconv|process|clean|smudge)=)", v, re.I) \
+                    and not GH_CREDENTIAL.fullmatch(v):
+                return False
+            k += 2
+        elif a in ("-C", "--git-dir", "--work-tree", "--namespace"):
             k += 2
         elif a in ("--no-pager", "-P", "--bare", "--no-replace-objects", "--literal-pathspecs",
                    "--no-optional-locks") or a.startswith("--git-dir=") \
@@ -1177,6 +1352,16 @@ class Finder(object):
         return base in QUIET
 
     def command(self, command, state, piped, downstream):
+        if isinstance(command, Compound):
+            self.redirect_targets(command.redirs, state)
+            own = [r for r in command.redirs if r.op in STDIN_OPS]
+            self.stdin.append((own, piped))
+            try:
+                self.compound(command, state)
+            finally:
+                self.stdin.pop()
+            self.writes(Simple([], [], command.redirs), None, state, [])
+            return
         if isinstance(command, Group):
             inner = state if command.kind == "group" else state.copy()
             self.redirect_targets(command.redirs, inner)
@@ -1189,6 +1374,72 @@ class Finder(object):
                 self.stdin.pop()
             return
         self.simple(command, state, piped, downstream)
+
+    def compound(self, c, state):
+        if c.kind == "function":
+            # Walked where it is defined, as if it ran there with nothing about the call known.
+            body = state.copy()
+            body.vars = dict((n, None) for n in state.vars)
+            if self.home:
+                body.vars["HOME"] = self.home
+            body.cwds = (None,)
+            body.deferred = True
+            self.walk(c.parts[0][1], body)
+            return
+        if c.kind == "if":
+            outcomes = []
+            here = state.copy()
+            for cond, body in c.parts:
+                if cond is not None:
+                    self.walk(cond, here)
+                branch = here.copy()
+                self.walk(body, branch)
+                outcomes.append(branch)
+                if cond is None:
+                    break
+            else:
+                outcomes.append(here)
+            first = outcomes[0]
+            first.merge(outcomes[1:])
+            self.adopt(state, first)
+            return
+        # while, until and for: the body may run no time, once, or again with what a run before
+        # it changed, so it is walked twice, the second time from what either may leave.
+        loop = state.copy()
+        if c.kind == "for":
+            for w in c.words or []:
+                self.substitutions(w, loop)
+            values = [w.literal(loop.env()) for w in c.words or []]
+            if c.words and None not in values and len(values) <= 32:
+                # A list of literal words: the body runs once with each, in order.
+                for v in values:
+                    loop.vars[c.var] = v
+                    loop.tainted.discard(c.var)
+                    if mentions_gh(v):
+                        loop.tainted.add(c.var)
+                    self.walk(c.parts[0][1], loop)
+                merged = state.copy()
+                merged.merge([loop])
+                self.adopt(state, merged)
+                return
+            loop.vars[c.var] = None
+            loop.tainted.discard(c.var)
+            if any(self.has_gh(w, state) for w in c.words or []):
+                loop.tainted.add(c.var)
+        for _ in range(2):
+            after = loop.copy()
+            for cond, body in c.parts:
+                if cond is not None:
+                    self.walk(cond, after)
+                self.walk(body, after)
+            loop.merge([after])
+        merged = state.copy()
+        merged.merge([loop])
+        self.adopt(state, merged)
+
+    def adopt(self, state, other):
+        for name in State.__slots__:
+            setattr(state, name, getattr(other, name))
 
     def inherited_stdin(self, redirs, piped):
         own = [r for r in redirs if r.op in STDIN_OPS]
@@ -1232,8 +1483,13 @@ class Finder(object):
             return
         name = vals[k]
         if name is None:
-            self.problem("A command's name cannot be known before it runs, so the hook cannot"
-                         " tell what it runs.")
+            # It cannot be gh unless a gh word is in it: the name, an argument, or a stream.
+            if any(self.has_gh(w, state) for w in cmd.words) or any(x.gh for _, x in streams):
+                self.problem("A command's name cannot be known before it runs, so the hook"
+                             " cannot tell what it runs.")
+                return
+            self.names_files("", False, vals[k + 1:], state)
+            self.writes(cmd, None, state, streams)
             return
         base = _name(name)
         args = cmd.words[k + 1:]
@@ -1742,7 +1998,7 @@ workflow view||-r,--ref= -w,--web -y,--yaml --help -R,--repo=
 KINDS_TEXT = """
 read: |help|version|agent-task|agent-task list|agent-task view|alias|alias list|attestation
 read: attestation download|attestation trusted-root|attestation verify|auth|auth status|auth token
-read: browse|cache|cache list|codespace|codespace list|codespace logs|codespace view|codespace ports
+read: auth git-credential|browse|cache|cache list|codespace|codespace list|codespace logs|codespace view|codespace ports
 read: completion|config|config get|config list|discussion|discussion list|discussion view
 read: extension|extension browse|extension create|extension list|extension search|gist|gist clone
 read: gist list|gist view|gpg-key|gpg-key list|issue|issue artifact|issue artifact download
@@ -1803,6 +2059,10 @@ ROLES = {
     ("issue comment", "edit-last"): "lost", ("pr comment", "edit-last"): "lost",
     ("*", "body-file"): "file", ("*", "notes-file"): "file", ("api", "input"): "file",
     ("agent-task create", "from-file"): "file", ("secret set", "env-file"): "file",
+    # "unsent": the value shapes gh's own output or is checked and kept nowhere, so it is not
+    # scanned and may be unknown. issue create's and pr create's --template are "lost" above.
+    ("*", "jq"): "unsent", ("*", "template"): "unsent", ("*", "json"): "unsent",
+    ("pr merge", "match-head-commit"): "unsent",
     ("variable set", "env-file"): "file", ("gist edit", "add"): "file",
     ("*", "attach"): "attach",
     ("api", "field"): "field", ("workflow run", "field"): "field",
@@ -1867,6 +2127,10 @@ def nodes():
     for word in ("help", "version"):
         found[word] = Node(word)
         found[""].children[word] = word
+    # gh's credential helper is hidden from its reference; git runs it as `gh auth git-credential`.
+    found["auth git-credential"] = Node("auth git-credential")
+    found["auth git-credential"].longs.update({"hostname": True, "help": False})
+    found["auth"].children["git-credential"] = "auth git-credential"
     _NODES = found
     return found
 
@@ -1964,11 +2228,18 @@ def classify(inv):
     flags = []        # (long name, value or True/False, the word's index)
     positionals = []  # (index, value)
     rest = [(i, vals[i]) for i in range(len(vals)) if i not in used]
+    flaglike = False
     j = 0
     while j < len(rest):
         i, a = rest[j]
         if a is None:
-            if kind in ("read", "local") or (kind == "exec"):
+            if kind in ("read", "local", "exec", "api"):
+                # A word whose literal start is not `-` is a positional; any other may be a
+                # flag, which leaves an api call's method unknown.
+                first = inv.words[i].parts[0] if inv.words[i].parts else None
+                if not (first is not None and first.kind == "lit" and first.text
+                        and not first.text.startswith("-")):
+                    flaglike = True
                 positionals.append((i, None))
                 j += 1
                 continue
@@ -2024,7 +2295,7 @@ def classify(inv):
     if helps and helps[-1] is True:
         return Verdict("read", path)
     if kind == "api":
-        kind = api_kind(flags, positionals, inv.state)
+        kind = "write" if flaglike else api_kind(flags, positionals, inv.state)
     if kind in ("read", "local"):
         return Verdict(kind, path)
     return Verdict("write", path, flags, positionals)
@@ -2158,6 +2429,8 @@ def read_file(value, state):
         raise Lost("a file whose path cannot be known before the command runs")
     if value == "-" or value in ("/dev/stdin", "/dev/fd/0") or re.fullmatch(r"/proc/[^/]+/fd/0", value):
         return STDIN
+    if state.deferred:
+        raise Lost(value + ", read in a function's body, where it is called")
     p = state.path(value)
     if p is None:
         raise Lost("a relative path, " + value + ", in a directory the hook cannot know")
@@ -2214,7 +2487,7 @@ def gather(inv, path, flags, positionals):
             if value is not False:
                 raise Lost("--" + name)
             continue
-        if value is True or value is False:
+        if value is True or value is False or role == "unsent":
             continue
         if value is None:
             raise Lost("a word whose value cannot be known before the command runs (word "
@@ -2668,7 +2941,9 @@ def decide(command, cwd, ctx):
     """The slow path, for a command that holds a gh word."""
     found = Finder(ctx.home, cwd).find(parse(command))
     if found.problems:
-        return block(found.problems[0], ADVICE_UNEXPLAINED)
+        reason = found.problems[0]
+        code = re.search(r"can run (what it reads|its arguments|it reads)|into a pipe", reason)
+        return block(reason, ADVICE_CODE if code else ADVICE_UNEXPLAINED)
     writes = []
     events = []
     for inv in found.invocations:
