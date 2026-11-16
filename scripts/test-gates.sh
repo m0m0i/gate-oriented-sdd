@@ -12553,6 +12553,277 @@ else
        "no-gh=$p0 input=$p1 argument=$p2 crash=$p3 returns=$p4 stdout=$p5 no-module=$p6 pythonpath=$p7"
 fi
 
+
+# The in-process harness: one Python file, written here and run once, that imports gh_guard_lib
+# from the repository and asks it about each input. The cases below report its groups. A group
+# it cannot run, such as the zsh oracle on a machine without zsh, is a spoken skip (#361).
+cat > "$TMP/ghg-harness.py" <<'GHG_HARNESS'
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, sys.argv[1])
+import gh_guard_lib as g  # noqa: E402
+
+ZSH = sys.argv[2] if len(sys.argv) > 2 else ""
+SCRATCH = sys.argv[3] if len(sys.argv) > 3 else "."
+results = {}
+
+
+def check(group, ok, detail):
+    found = results.setdefault(group, [])
+    if not ok:
+        found.append(detail)
+
+
+def fmt(s):
+    s = s.replace("\n", "\\n")
+    return '"' + s + '"' if s == "" or " " in s else s
+
+
+def ow(w, env):
+    return fmt(ow_raw(w, env))
+
+
+def ow_raw(w, env):
+    v = w.literal(env)
+    if v is not None:
+        return v
+    out = "*" if w.pattern() else ""
+    for p in w.parts:
+        if p.kind == "lit":
+            out += p.text
+        elif p.kind == "param":
+            out += "${" + p.text + "}"
+        elif p.kind == "home":
+            out += "~"
+        elif p.kind == "equals":
+            out += "=" + p.text
+        elif p.kind in ("cmdsub", "procsub"):
+            out += "$(" + oscript(p.script, env) + ")"
+        else:
+            out += "<" + p.text + ">"
+    return out
+
+
+def oredir(r, env):
+    if r.heredoc is not None:
+        h = r.heredoc
+        if h.quoted:
+            return r.fd + r.op + "Q:" + fmt(h.body)
+        return r.fd + r.op + fmt(ow_raw(h.word, env))
+    return r.fd + r.op + ow(r.target, env)
+
+
+def ocmd(c, env):
+    if isinstance(c, g.Simple):
+        bits = [n + ("+=" if a else "=") + ow(v, env) for n, v, a in c.assigns]
+        bits += [ow(w, env) for w in c.words]
+        bits += [oredir(r, env) for r in c.redirs]
+        return "[" + " ".join(bits) + "]"
+    inner = oscript(c.body, env)
+    tail = "".join(" " + oredir(r, env) for r in c.redirs)
+    return ("(" + inner + ")" if c.kind == "subshell" else "{" + inner + "}") + tail
+
+
+def oscript(s, env):
+    out = []
+    for node, sep in s.items:
+        bits = []
+        for k, p in enumerate(node.pipelines):
+            if k:
+                bits.append(node.ops[k - 1])
+            bits.append(("! " if p.bang else "") + " | ".join(ocmd(c, env) for c in p.commands))
+        out.append(" ".join(bits) + (" " + sep if sep else ""))
+    if s.unsupported is not None:
+        out.append("!!" + repr(s.unsupported[0]) + ":" + s.unsupported[1])
+    return " ".join(out)
+
+
+def outline(command, env=None):
+    try:
+        return oscript(g.parse(command), {"HOME": "/H"} if env is None else env)
+    except g.Unsupported as why:
+        return "RAISED:" + why.reason
+
+
+# -- the lexer (T2) ----------------------------------------------------------------------------
+# Each command's outline: its lists, pipelines and commands, each word's value where it is known
+# before the command runs, `*` before a word zsh globs or brace-expands, ${NAME} and ~ before
+# they are expanded, $(...) around a substitution's own outline, and <...> around the source of
+# an expansion that is never known here.
+LEXER = [
+    ('gh issue create --title \'a b\' --body "x $HOME y"',
+     '[gh issue create --title "a b" --body "x /H y"]'),
+    ('cd /x && gh pr create -b "$(cat <<\'Q\'\nline one\nQ\n)" ; echo done',
+     '[cd /x] && [gh pr create -b "$([cat <<Q:"line one\\n"])"] ; [echo done]'),
+    ('a | b |& c || d && e & f &| g',
+     '[a] | [b] | [c] || [d] && [e] & [f] & [g]'),
+    ('(cd x; gh issue list) > out 2>&1 && { gh pr list; }',
+     '([cd x] ; [gh issue list]) >out 2>&1 && {[gh pr list] ;}'),
+    ('X=1 Y=~/a Z+=b gh api repos/{owner}/{repo}/issues',
+     '[X=1 Y=/H/a Z+=b gh api repos/{owner}/{repo}/issues]'),
+    ('gh issue create --body-file - <<EOF\nhi $HOME \\$x `echo z`\nEOF',
+     '[gh issue create --body-file - <<"hi ${HOME} $x $([echo z])\\n"]'),
+    ("cat <<-'A' <<B\n\ttab\n\tA\nb\nB",
+     '[cat <<-Q:tab\\n <<b\\n]'),
+    ("gh x <<< 'here' 2>/dev/null >&2 &>> log",
+     '[gh x <<<here 2>/dev/null >&2 &>>log]'),
+    ('gh a `echo b`',
+     '[gh a "$([echo b])"]'),
+    ('echo $(echo $(echo deep))',
+     '[echo "$([echo "$([echo deep])"])"]'),
+    ('w a{b,c} *.md [x] "{a,b}" {} {owner}',
+     '[w *a{b,c} **.md *[x] {a,b} {} {owner}]'),
+    ('=gh issue list; =(echo x) <(echo y)',
+     '[=gh issue list] ; ["$([echo x])" "$([echo y])"]'),
+    ('w ${:-gh} ${HOME} $HOME[1] $HOME:h $1 $? ${#x} $((1+2))',
+     '[w <${:-gh}> /H <$HOME[1]> <$HOME:h> <$1> <$?> <${#x}> <$((1+2))>]'),
+    ('gh a # a comment with gh\ngh b',
+     '[gh a] [gh b]'),
+    ('! gh a',
+     '! [gh a]'),
+    ('gh a \\\n  --body b\n',
+     '[gh a --body b]'),
+    ('a &&\n\n b ||\n c |\n d',
+     '[a] && [b] || [c] | [d]'),
+    ("gh a <<'X' && gh b <<Y\none\nX\ntwo $HOME\nY\n",
+     '[gh a <<Q:one\\n] && [gh b <<"two /H\\n"]'),
+    ('echo "$(gh issue view 1 --json body)" > f',
+     '[echo "$([gh issue view 1 --json body])" >f]'),
+    ("tee <<'Q' out >/dev/null\n$(not run)\nQ",
+     '[tee out <<Q:"$(not run)\\n" >/dev/null]'),
+]
+
+for command, want in LEXER:
+    got = outline(command)
+    check("lexer", got == want, repr(command) + " gave " + got)
+
+# Each word's value, where the lexer says it is known, against the word zsh gives `w`. A word
+# the lexer cannot know is None, and zsh is not asked about it.
+WORDS = [
+    ("w $'Zq_\\x45xact' a\\ b \"c$HOME\" ~/x", ["Zq_Exact", "a b", "c/H", "/H/x"]),
+    ("w \"a\"b'c'\\d", ["abcd"]),
+    ("w --body=~/x X=~/y", ["--body=~/x", "X=~/y"]),
+    ("w $'a\\'b' $'\\101\\x41\\u0041\\n\\t'", ["a'b", "AAA\n\t"]),
+    ("w $\"x\"", ["$x"]),
+    ("w a#b #c", ["a#b"]),
+    ("w ${HOME}x \"$HOME\"y", ["/Hx", "/Hy"]),
+    ("w '' \"\" x", ["", "", "x"]),
+    ("w \"a\\$b\\\"c\\d\\\\e\" 'x\\y' \"\\`\"", ["a$b\"c\\d\\e", "x\\y", "`"]),
+    ("w a\\\nb", ["ab"]),
+    ("w \"{a,b}\" {} {owner} x,y \"*\" '[x]' a~b", ["{a,b}", "{}", "{owner}", "x,y", "*", "[x]", "a~b"]),
+    ("w \"a\nb\" -b\"x y\" --body='z'", ["a\nb", "-bx y", "--body=z"]),
+    ("w $'\\0101'", ["\b1"]),
+    ("w a{b,c} *.md [x] ${:-gh} $HOME[1] $HOME:h $1 =ls $'\\cA' ~nosuchuser $(echo a) `echo a` <(echo)",
+     [None] * 13),
+]
+
+
+def zsh_words(command):
+    # What zsh, set as the Bash tool sets it, passes to `w`, one word to each NUL.
+    pre = ("setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL NO_BRACE_CCL NO_MAGIC_EQUAL_SUBST; "
+           "w() { printf '%s\\0' \"$@\"; }; ")
+    r = subprocess.run([ZSH, "-f", "-c", pre + 'eval "$1"', "zsh", command], cwd=SCRATCH,
+                       env={"HOME": "/H", "PATH": "/usr/bin:/bin"}, stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+    return r.stdout.decode("utf-8", "surrogateescape").split("\0")[:-1]
+
+
+for command, want in WORDS:
+    try:
+        script = g.parse(command)
+        words = script.items[0][0].pipelines[0].commands[0].words[1:]
+        got = [w.literal({"HOME": "/H"}) for w in words]
+    except Exception as e:
+        got = ["raised " + type(e).__name__]
+    check("lexer-words", got == want, repr(command) + " gave " + repr(got))
+    if ZSH and None not in want:
+        real = zsh_words(command)
+        check("lexer-zsh", real == want, repr(command) + ": zsh gave " + repr(real))
+if not ZSH:
+    results["lexer-zsh"] = None
+
+# A construct the lexer does not handle makes the rest of the command opaque, from the start of
+# the list item that holds it, so a gh word before it in the same item is in the opaque text.
+UNSUPPORTED = [
+    ("gh a | while read x; do echo; done", 0, "`while`"),
+    ("echo a; for x in y; do gh b; done", 8, "`for`"),
+    ("echo a && if true; then gh b; fi", 0, "`if`"),
+    ("gh a && case x in y) ;; esac", 0, "`case`"),
+    ("f() { gh x; }", 0, "a function definition or an array"),
+    ("function f { gh x; }", 0, "`function`"),
+    ("(( x )) && gh a", 0, "arithmetic `((`"),
+    ("[[ -f x ]] && gh y", 0, "`[[`"),
+    ("x=(a b) gh z", 0, "an array assignment"),
+    ("select x in a; do gh; done", 0, "`select`"),
+    ("repeat 2 gh a", 0, "`repeat`"),
+    ("coproc gh a", 0, "`coproc`"),
+    ("foreach x (a) gh; end", 0, "`foreach`"),
+    ("gh \"unterminated", 0, "a quote is not closed"),
+    ("gh 'unterminated", 0, "a quote is not closed"),
+    ("gh $'unterminated", 0, "a quote is not closed"),
+    ("gh `unterminated", 0, "a backtick is not closed"),
+    ("gh $(unterminated", 0, "a ) is missing"),
+    ("gh ${unterminated", 0, "an expansion is not closed"),
+    ("gh a <<EOF\nno end", 0, "a here-document has no end line"),
+    ("gh a <<EOF", 0, "a here-document has no end line"),
+    ("gh a \\", 0, "the command ends in a backslash"),
+    ("echo a; echo $(for x in y; do gh; done)", 8, "`for`"),
+    ("echo ok\necho `if x; then gh; fi`", 8, "`if`"),
+    ("gh a ;; gh b", 0, "a case pattern's end"),
+    ("gh a <<$X\nb\n$X", 0, "a here-document's delimiter is not literal"),
+    ("gh a > ", 0, "a redirection has no target"),
+    ("gh a && && gh b", 0, "an empty command"),
+    ("{ gh a", 0, "a } is missing"),
+]
+
+for command, at, why in UNSUPPORTED:
+    try:
+        script = g.parse(command)
+        got = script.unsupported
+    except Exception as e:
+        got = ("raised", type(e).__name__)
+    check("lexer-unsupported", got == (command[at:], why), repr(command) + " gave " + repr(got))
+
+
+for group in sorted(results):
+    found = results[group]
+    if found is None:
+        print(group, "skip")
+    elif found:
+        print(group, "FAIL " + " || ".join(found)[:3000])
+    else:
+        print(group, "ok")
+GHG_HARNESS
+GHG_ZSH=$(command -v zsh 2>/dev/null)
+mkdir -p "$TMP/ghg-scratch"
+: > "$TMP/ghg-harness.out"
+[ -z "$GHG_PY" ] || "$GHG_PY" -I "$TMP/ghg-harness.py" "$GHG_HOOK" "$GHG_ZSH" "$TMP/ghg-scratch" \
+  > "$TMP/ghg-harness.out" 2>&1
+ghg_case() {  # $1 = the harness's group, $2 = the case's sentence
+  ghg_l=$(grep "^$1 " "$TMP/ghg-harness.out")
+  if [ -z "$GHG_PY" ]; then note_skip "gh-guard/$1" "no python3 on PATH"
+  elif [ "$ghg_l" = "$1 ok" ]; then report "$2" ok
+  elif [ "$ghg_l" = "$1 skip" ]; then note_skip "gh-guard/$1" "what it compares against is not on this machine"
+  else report "$2" no "${ghg_l:-the harness printed nothing for $1: $(tail -n 3 "$TMP/ghg-harness.out")}"
+  fi
+}
+
+# 449. #361 AC1, AC3 — the lexer reads a command as the Bash tool's zsh does: lists, pipelines,
+#      subshells and groups, assignments, redirections, here-documents quoted and not, and
+#      substitutions nested in words, each word's value known where it can be.
+ghg_case lexer "the gh guard's lexer reads lists, pipelines, groups, redirections, here-documents and substitutions as zsh does"
+
+# 450. #361 AC1, AC3 — each quoting form's value, as zsh gives it to a command (where zsh is
+#      installed, it is asked), and every expansion it cannot know left unknown, not guessed.
+ghg_case lexer-words "the gh guard's lexer rebuilds each quoting form's value, and leaves each expansion it cannot know unknown"
+ghg_case lexer-zsh "the gh guard's lexer gives every word it knows the value zsh gives it"
+
+# 451. #361 AC3 — a construct the lexer does not handle makes the rest of the command opaque,
+#      from the start of the list item that holds it, so a gh word anywhere in that item is in it.
+ghg_case lexer-unsupported "the gh guard's lexer makes the rest of the command opaque from the item that holds a construct it does not handle"
+
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #
 # #145. check-version-bump.py must include rules/ in SHIPPED so any change
