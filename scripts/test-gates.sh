@@ -12902,6 +12902,156 @@ for command, want in CWDS:
     check("finder-cwd", got == want and not f.problems, repr(command) + " gave " + repr(got))
 
 
+# -- classification and values (T4) ------------------------------------------------------------
+# decide() with the guard call recorded rather than run: the recorder hits any line holding
+# Zq_Exact, warns on any holding zq_warn, and keeps every source it was given.
+SEEN = []
+
+
+def recorder(sources):
+    SEEN.append([(s.label, s.data) for s in sources])
+    hits, warns = [], []
+    for s in sources:
+        for n, line in enumerate(s.data.replace(b"\r\n", b"\n").split(b"\n"), 1):
+            if b"Zq_Exact" in line:
+                hits.append(("fail", s.label, n))
+            if b"zq_warn" in line:
+                warns.append(("warn ignore-case", s.label, n))
+    return hits, warns
+
+
+def verdict(command, version="2.104", cwd="/w"):
+    del SEEN[:]
+    ctx = g.Context("/H", scan=recorder, gh_version=lambda binary, where: version)
+    try:
+        code, out, err = g.decide(command, cwd, ctx)
+    except Exception as e:
+        return "raised " + type(e).__name__, []
+    labels = [label for label, _ in SEEN[0]] if SEEN else []
+    if code == 2:
+        return "block: " + err.split("blocked. ", 1)[1].split("\n")[0], labels
+    if out:
+        return "warn: " + json.loads(out)["systemMessage"], labels
+    return "pass", labels
+
+
+import json  # noqa: E402
+
+# Reads, writes, local state and arbitrary execution, with what each write sends.
+CLASSIFY = [
+    ("gh issue list", "pass", []),
+    ("gh pr view 12 --json body", "pass", []),
+    ("gh issue new -t 'a title' -b body", "pass", ["the --title value", "the --body value"]),
+    ("gh issue create -t ok -b 'line\nZq_Exact'", "block: LEAK [fail] in the --body value, line 2.",
+     ["the --title value", "the --body value"]),
+    ("gh pr ls; gh pr co 3; gh ext ls; gh cs ls; gh rs ls; gh skills add x", "pass", []),
+    ("gh api repos/o/r/issues", "pass", []),
+    ("gh api -X GET repos/o/r/issues -f state=open", "pass", []),
+    ("gh api --method=get repos/o/r", "pass", []),
+    ("gh api repos/o/r/issues -f title=t", "pass", ["the --raw-field value", "argument 1"]),
+    ("gh api -X GET -X POST repos/o/r/issues", "pass", ["the --method value", "the --method value",
+                                                       "argument 1"]),
+    ("gh api -X POST -X GET repos/o/r/issues", "pass", []),
+    ("gh api graphql -f query='query { viewer { login } }'", "pass", []),
+    ("gh api graphql -f query='mutation { addComment }'", "pass",
+     ["the --raw-field value", "argument 1"]),
+    ("gh api graphql -F query=@q.graphql", "block: Cannot recover the text gh would send: the"
+     " content of the file --field names, which this version of the hook does not read.", []),
+    ("gh zz", "block: gh zz is not a gh command the hook knows", []),
+    ("gh co 12", "block: gh co is not a gh command the hook knows", []),
+    ("gh issue zz", "block: gh issue zz is not a gh command the hook knows", []),
+    ("gh copilot -p hi", "block: gh copilot can run anything", []),
+    ("gh extension exec x; gh codespace ssh", "block: gh extension exec can run anything", []),
+    ("gh repo set-default o/r && gh config set editor vim && gh alias set x 'issue list'", "pass", []),
+    ("gh issue create -b x --help", "pass", []),
+    ("gh issue create -b x --help=false", "pass", ["the --body value"]),
+    ("gh help issue && gh --version && gh", "pass", []),
+    ("gh issue create --bogus x", "block: gh issue create was given a flag the hook's table does"
+     " not list for it (word 3 after gh)", []),
+    ("gh issue create -Z", "block: gh issue create was given a flag", []),
+    ("gh repo clone o/r -- --upload-pack=x", "block: gh repo clone passes the words after `--`", []),
+    ("gh $SUB create -b x", "block: Which gh command runs depends on a word", []),
+    ("gh issue view $N", "pass", []),
+    ("gh issue create -b \"$BODY\"", "block: Cannot recover the text gh would send: a word whose"
+     " value cannot be known before the command runs (word 4 after gh).", []),
+    ("gh issue create -b *.md", "block: Cannot recover the text gh would send: a word whose value"
+     " cannot be known", []),
+]
+
+# Each flag that makes the text unrecoverable, in each form, and the forms that leave it alone.
+for flag in ("--fill", "-f", "--fill-first", "--fill-verbose", "-e", "--editor", "-w", "--web",
+             "--recover=x", "-T x", "--template=x", "--editor=true", "-fd"):
+    CLASSIFY.append(("gh pr create -t t -b b " + flag, "block: Cannot recover the text gh would"
+                     " send: --", []))
+for flag in ("--notes-from-tag", "--generate-notes"):
+    CLASSIFY.append(("gh release create v1 " + flag, "block: Cannot recover the text gh would"
+                     " send: " + flag + ".", []))
+CLASSIFY += [
+    ("gh pr create -t t -b b --web=false -w=false", "pass", ["the --title value", "the --body value"]),
+    ("gh issue comment 1 --edit-last", "block: Cannot recover the text gh would send: --edit-last.", []),
+    ("gh gist edit 12", "block: Cannot recover the text gh would send: gh gist edit's editor.", []),
+    ("gh agent-task create", "block: Cannot recover the text gh would send: gh agent-task create's"
+     " editor.", []),
+]
+
+# How a flag's value is read: attached, after `=`, combined with other short flags, and every
+# occurrence of a repeated one.
+CLASSIFY += [
+    ("gh issue comment 1 -bZq_Exact", "block: LEAK [fail] in the --body value, line 1.",
+     ["the --body value", "argument 1"]),
+    ("gh issue comment 1 --body=Zq_Exact", "block: LEAK [fail] in the --body value, line 1.",
+     ["the --body value", "argument 1"]),
+    ("gh issue comment 1 -b=Zq_Exact", "block: LEAK [fail] in the --body value, line 1.",
+     ["the --body value", "argument 1"]),
+    ("gh pr review 1 -cbZq_Exact", "block: LEAK [fail] in the --body value, line 1.",
+     ["the --body value", "argument 1"]),
+    ("gh issue comment 1 -b Zq_Exact -b clean", "block: LEAK [fail] in the --body value, line 1.",
+     ["the --body value", "the --body value", "argument 1"]),
+    ("gh -R o/Zq_Exact issue comment 1 -b x", "block: LEAK [fail] in the --repo value, line 1.",
+     ["the --repo value", "the --body value", "argument 1"]),
+    ("gh issue -R o/r comment 1 -b x", "pass", ["the --repo value", "the --body value", "argument 1"]),
+    ("gh release create Zq_Exact -n notes", "block: LEAK [fail] in argument 1, line 1.",
+     ["the --notes value", "argument 1"]),
+    ("gh issue comment 1 -b $'line\\r\\nZq_Exact'", "block: LEAK [fail] in the --body value, line 2.",
+     ["the --body value", "argument 1"]),
+    ("gh issue comment 1 -b zq_warn", "warn: gate-sdd gh guard: WARNING [warn ignore-case] in the"
+     " --body value, line 1: confirm it is a generic example.", ["the --body value", "argument 1"]),
+]
+
+for command, want, labels in CLASSIFY:
+    got, seen = verdict(command)
+    check("classify", got.startswith(want) and seen == labels,
+          repr(command) + " gave " + repr((got, seen)))
+
+# A gh whose version is not the table's passes a clean write with a warning, and a read without.
+got, _ = verdict("gh issue comment 1 -b x", version="2.99")
+check("classify-version", got.startswith("warn: gate-sdd gh guard: gh is 2.99, and the hook's"
+                                         " table is gh 2.104's"), repr(got))
+got, _ = verdict("gh issue comment 1 -b x", version=None)
+check("classify-version", got.startswith("warn: gate-sdd gh guard: gh is a version the hook could"
+                                         " not read"), repr(got))
+got, _ = verdict("gh issue list", version="2.99")
+check("classify-version", got == "pass", repr(got))
+
+# Every path in the table has a kind, and every kind names a path in it.
+table = g.nodes()
+missing = sorted(p for p in table if p not in g.KINDS)
+extra = sorted(p for p in g.KINDS if p not in table)
+check("classify-table", not missing and not extra, "no kind: " + repr(missing) + " no path: "
+      + repr(extra))
+check("classify-table", len(table) == 238, "the table holds " + str(len(table)) + " paths")
+
+# The text the guard is given: each source on lines of its own, a carriage return before a line
+# end and one alone made line ends, and each line number mapped back to its source.
+data, spans = g.assemble([g.Source("a", b"one"), g.Source("b", b""), g.Source("c", b"x\r\ny\rz\n"),
+                          g.Source("d", b"last")])
+check("guard-map", data == b"one\nx\ny\nz\nlast\n", repr(data))
+check("guard-map", g.locate([1, 2, 4, 5], spans) == [("a", 1), ("c", 1), ("c", 3), ("d", 1)],
+      repr(g.locate([1, 2, 4, 5], spans)))
+check("guard-map", sorted(g.child_env("/h", None)) == ["HOME", "LC_ALL", "PATH"]
+      and g.child_env("/h", None)["PATH"] == "/usr/bin:/bin", repr(g.child_env("/h", None)))
+
+
 for group in sorted(results):
     found = results[group]
     if found is None:
@@ -12946,6 +13096,71 @@ ghg_case lexer-unsupported "the gh guard's lexer makes the rest of the command o
 ghg_case finder "the gh guard finds gh run by name, path, variable, wrapper or shell, and lets a gh word no command runs pass"
 ghg_case finder-blocks "the gh guard blocks a gh word in a variable, a substitution, xargs, inline code, a pipe a command runs, or a construct it does not read"
 ghg_case finder-cwd "the gh guard follows cd within a list, keeps either directory after a cd that may fail, and leaves a subshell's cd in it"
+
+# 453. #361 AC1, AC3 — each path read as gh reads it: built-in aliases, reads, writes, local state
+#      and arbitrary execution; the api method and GraphQL; `--help=false`; every flag form; an
+#      unknown flag, path or alias; each flag that makes the text unrecoverable. And what a write
+#      sends, each value labelled, the guard's line numbers mapped back to it.
+ghg_case classify "the gh guard reads each gh path and flag as gh does, blocks what it cannot know, and labels what a write sends"
+ghg_case classify-table "every path of the gh guard's table has a kind, and every kind a path"
+ghg_case classify-version "the gh guard passes a clean write with a warning when gh is not the table's version"
+ghg_case guard-map "the gh guard gives the guard each source on lines of its own, line ends made as CI makes them"
+
+# 454. #361 AC1, AC3, AC7 — the real guard, run by the hook as the registered entry runs it: a
+#      hit blocks with its tier, source and line and never its text; a warning passes with a
+#      systemMessage; a CRLF line still ends where `$` finds it; a missing pattern file, or a
+#      missing guard, blocks a write and not a read; the environment's pattern file is not the
+#      guard's; a gh of another version warns.
+GHG_PAT="$TMP/ghg-home/.config/gate-sdd/leakage-patterns"
+printf '%s\n' '[fail]' 'Zq_Exact' 'Zq_End$' '[fail ignore-case]' 'zq_fold' '[warn ignore-case]' 'zq_warn' > "$GHG_PAT"
+mkdir -p "$TMP/ghg-bin" "$TMP/ghg-bin-old"
+printf '#!/bin/sh\necho "gh version 2.104.0 (stub)"\n' > "$TMP/ghg-bin/gh"
+printf '#!/bin/sh\necho "gh version 2.99.1 (stub)"\n' > "$TMP/ghg-bin-old/gh"
+chmod +x "$TMP/ghg-bin/gh" "$TMP/ghg-bin-old/gh"
+ghg_json() {  # $1 = the command, any bytes; $2 = the tool, Bash by default; $3 = its cwd
+  "$GHG_PY" -I -c 'import json, sys
+c = {"command": sys.argv[1]}
+if sys.argv[3]: c["cwd"] = sys.argv[3]
+print(json.dumps({"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": sys.argv[2],
+                  "tool_input": c, "cwd": sys.argv[4]}))' "$1" "${2:-Bash}" "${3:-}" "$TMP/ghg-cwd" > "$TMP/ghg-in"
+}
+ghg_e2e() {  # $1 = the command; the hook runs with the stub gh first on PATH. Prints the status.
+  ghg_json "$1"; GHG_ENV="PATH=${GHG_GHBIN:-$TMP/ghg-bin}:/usr/bin:/bin ${GHG_ENV:-}" ghg_run "${GHG_DIR:-}"
+}
+if [ -z "$GHG_PY" ]; then
+  note_skip "gh-guard/real-guard" "no python3 on PATH"
+else
+  out=$(ghg_e2e 'gh issue create -t ok -b fine')
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && [ ! -s "$TMP/ghgerr" ] && e0=ok || e0="exit=$out:$(cat "$TMP/ghgerr")"
+  out=$(ghg_e2e "gh issue create -t ok -b 'x Zq_Exact y'")
+  e1=$(ghg_blocked "$out" 'LEAK [fail] in the --body value, line 1.' 'The matched text is withheld.')
+  out=$(ghg_e2e 'gh issue create -t ZQ_FOLD -b fine')
+  e2=$(ghg_blocked "$out" 'LEAK [fail ignore-case] in the --title value, line 1.')
+  grep -q 'ZQ_FOLD' "$TMP/ghgerr" && e2="$e2+holds-the-text"
+  out=$(ghg_e2e 'gh issue create -t ok -b zq_warn')
+  [ "$out" = 0 ] && grep -Fq 'WARNING [warn ignore-case] in the --body value, line 1' "$TMP/ghgout" \
+    && "$GHG_PY" -I -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(list(d) != ["systemMessage"])' "$TMP/ghgout" \
+    && e3=ok || e3="exit=$out"
+  out=$(ghg_e2e "gh issue create -t ok -b \$'a\\r\\nZq_End\\r\\nb'")
+  e4=$(ghg_blocked "$out" 'LEAK [fail] in the --body value, line 2.')
+  out=$(GHG_HOME="$TMP/ghg-bare-home" ghg_e2e 'gh issue create -t ok -b fine')
+  e5=$(ghg_blocked "$out" 'The guard could not scan what gh would send: the private patterns were not loaded')
+  out=$(GHG_HOME="$TMP/ghg-bare-home" ghg_e2e 'gh issue list --label x')
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && e5="$e5 ok" || e5="$e5 read-exit=$out"
+  printf '%s\n' '[fail]' 'Zq_Nothing' > "$TMP/ghg-env-patterns"
+  out=$(GHG_ENV="GATE_SDD_LEAKAGE_PATTERNS=$TMP/ghg-env-patterns" \
+    ghg_e2e "gh issue create -t ok -b Zq_Exact")
+  e6=$(ghg_blocked "$out" 'LEAK [fail] in the --body value, line 1.')
+  out=$(GHG_GHBIN="$TMP/ghg-bin-old" ghg_e2e 'gh issue create -t ok -b fine')
+  [ "$out" = 0 ] && grep -Fq "gh is 2.99, and the hook's table is gh 2.104's" "$TMP/ghgout" && e7=ok || e7="exit=$out"
+  mkdir -p "$TMP/ghg-noguard/hook"; cp "$GHG_HOOK"/gh_guard.py "$GHG_HOOK"/gh_guard_lib.py "$TMP/ghg-noguard/hook/"
+  out=$(GHG_DIR="$TMP/ghg-noguard/hook" ghg_e2e 'gh issue create -t ok -b fine')
+  e8=$(ghg_blocked "$out" 'the guard, check-leakage.sh, is not beside the hook')
+  [ "$e0 $e1 $e2 $e3 $e4 $e5 $e6 $e7 $e8" = "ok ok ok ok ok ok ok ok ok ok" ] \
+    && report "the gh guard runs the real guard over what a write sends, and blocks on a hit, a fault or a missing guard" ok \
+    || report "the gh guard runs the real guard over what a write sends, and blocks on a hit, a fault or a missing guard" no \
+       "clean=$e0 hit=$e1 fold=$e2 warn=$e3 crlf=$e4 no-patterns=$e5 env-patterns=$e6 old-gh=$e7 no-guard=$e8"
+fi
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #

@@ -9,6 +9,7 @@ It must run on Python 3.9: no syntax or library newer than that.
 import json
 import os
 import re
+import sys
 
 # The installer and the registration check compare this line; raise it with every change.
 GH_GUARD_VERSION = 1
@@ -815,9 +816,10 @@ class Invocation(object):
     env options before it; state the walk's state where it runs; stdin what its standard input
     is, a Redir, "pipe" or None; where a label for the reason that names it."""
 
-    __slots__ = ("words", "assigns", "env", "redirs", "state", "piped", "simple")
+    __slots__ = ("words", "assigns", "env", "redirs", "state", "piped", "simple", "binary")
 
-    def __init__(self, words, assigns, env, redirs, state, piped, simple):
+    def __init__(self, words, assigns, env, redirs, state, piped, simple, binary):
+        self.binary = binary
         self.words = words
         self.assigns = assigns
         self.env = env
@@ -1167,7 +1169,7 @@ class Finder(object):
         if is_gh(name):
             # The words after gh are what it sends; reading them is the classifier's work.
             self.invocations.append(Invocation(args, list(cmd.assigns), env, cmd.redirs,
-                                               state.copy(), piped, cmd))
+                                               state.copy(), piped, cmd, name))
             self.check_words(cmd.words[:k], state, quiet=True)
             return
         if base in DECLARE:
@@ -1412,26 +1414,769 @@ def read_input(data):
     return command, cwd
 
 
-def judge(inv):
-    """The decision for one gh invocation, or None when it may run. Until the table lands,
-    every subcommand is one the hook does not know, which blocks."""
-    first = inv.words[0].literal(inv.state.env()) if inv.words else None
-    return block("gh " + (first if first and first.isalnum() else "<this subcommand>")
-                 + " is not a gh command the hook knows, so it can run anything: an alias,"
-                 " an extension, or a command newer than the hook's table.",
-                 "Run it yourself outside the session, or file the gap against the hook.")
+# ---------------------------------------------------------------------------------------------
+# The table: each path of gh, its built-in aliases and its flags, from gh's own help.
+
+# BEGIN TABLE (regenerate-table.py writes this block; do not edit it by hand)
+TABLE_VERSION = "2.104"
+# gh 2.104.0: <path>|<aliases, by ;>|<flags, by space; = takes a value>
+TABLE = """
+||--help --version
+agent-task|agent-tasks;agent;agents|--help
+agent-task create||-b,--base= -a,--custom-agent= --follow -F,--from-file= -R,--repo= --help
+agent-task list||-q,--jq= --json= -L,--limit= -t,--template= -w,--web --help
+agent-task view||--follow -q,--jq= --json= --log -R,--repo= -t,--template= -w,--web --help
+alias||--help
+alias delete||--all --help
+alias import||--clobber --help
+alias list|alias ls|--help
+alias set||--clobber -s,--shell --help
+api||--allow-escape-sequences --cache= -F,--field= -H,--header= --hostname= -i,--include --input= -q,--jq= -X,--method= --paginate -p,--preview= -f,--raw-field= --silent --slurp -t,--template= --verbose --help
+attestation|at|--help
+attestation download||-d,--digest-alg= --hostname= -L,--limit= -o,--owner= --predicate-type= -R,--repo= --help
+attestation trusted-root||--hostname= --tuf-root= --tuf-url= --verify-only --help
+attestation verify||-b,--bundle= --bundle-from-oci --cert-identity= -i,--cert-identity-regex= --cert-oidc-issuer= --custom-trusted-root= --deny-self-hosted-runners -d,--digest-alg= --format= --hostname= -q,--jq= -L,--limit= --no-public-good -o,--owner= --predicate-type= -R,--repo= --signer-digest= --signer-repo= --signer-workflow= --source-digest= --source-ref= -t,--template= --help
+auth||--help
+auth login||-c,--clipboard --expiring -p,--git-protocol= -h,--hostname= --insecure-storage -s,--scopes= --skip-ssh-key -w,--web --with-token --help
+auth logout||-h,--hostname= -u,--user= --help
+auth refresh||-c,--clipboard --expiring -h,--hostname= --insecure-storage -r,--remove-scopes= --reset-scopes -s,--scopes= --help
+auth setup-git||-f,--force -h,--hostname= --help
+auth status||-a,--active -h,--hostname= --jq= --json= --no-refresh -t,--show-token --template= --help
+auth switch||-h,--hostname= -u,--user= --help
+auth token||-h,--hostname= --no-refresh -u,--user= --help
+browse||-a,--actions --blame -b,--branch= -c,--commit= -n,--no-browser -p,--projects -r,--releases -R,--repo= -s,--settings -w,--wiki --help
+cache||-R,--repo= --help
+cache delete||-a,--all -r,--ref= --succeed-on-no-caches --help -R,--repo=
+cache list|cache ls|-q,--jq= --json= -k,--key= -L,--limit= -O,--order= -r,--ref= -S,--sort= -t,--template= --help -R,--repo=
+codespace|cs|--help
+codespace code||-c,--codespace= --insiders -R,--repo= --repo-owner= -w,--web --help
+codespace cp||-c,--codespace= -e,--expand -p,--profile= -r,--recursive -R,--repo= --repo-owner= --help
+codespace create||-b,--branch= --default-permissions --devcontainer-path= -d,--display-name= --idle-timeout= -l,--location= -m,--machine= -R,--repo= --retention-period= -s,--status -w,--web --help
+codespace delete||--all -c,--codespace= --days= -f,--force -o,--org= -R,--repo= --repo-owner= -u,--user= --help
+codespace edit||-c,--codespace= -d,--display-name= -m,--machine= -R,--repo= --repo-owner= --help
+codespace jupyter||-c,--codespace= -R,--repo= --repo-owner= --help
+codespace list|codespace ls;cs ls|-q,--jq= --json= -L,--limit= -o,--org= -R,--repo= -t,--template= -u,--user= -w,--web --help
+codespace logs||-c,--codespace= -f,--follow -R,--repo= --repo-owner= --help
+codespace ports||-c,--codespace= -q,--jq= --json= -R,--repo= --repo-owner= -t,--template= --help
+codespace ports forward||--all-interfaces -c,--codespace= --help -R,--repo= --repo-owner=
+codespace ports visibility||-c,--codespace= --help -R,--repo= --repo-owner=
+codespace rebuild||-c,--codespace= --full -R,--repo= --repo-owner= --help
+codespace ssh||-c,--codespace= --config -d,--debug --debug-file= --profile= -R,--repo= --repo-owner= --server-port= --help
+codespace stop||-c,--codespace= -o,--org= -R,--repo= --repo-owner= -u,--user= --help
+codespace view||-c,--codespace= -q,--jq= --json= -R,--repo= --repo-owner= -t,--template= --help
+completion||-s,--shell= --help
+config||--help
+config clear-cache||--help
+config get||-h,--host= --help
+config list|config ls|-h,--host= --help
+config set||-h,--host= --help
+copilot||--remove --help
+discussion||-R,--repo= --help
+discussion comment||-b,--body= -F,--body-file= --delete --edit -R,--repo= --yes --help
+discussion create||-b,--body= -F,--body-file= -c,--category= -l,--label= -R,--repo= -t,--title= --help
+discussion edit||--add-label= -b,--body= -F,--body-file= -c,--category= --remove-label= -R,--repo= -t,--title= --help
+discussion list|discussion ls|--after= --answered -A,--author= -c,--category= -q,--jq= --json= -l,--label= -L,--limit= --order= -R,--repo= -S,--search= --sort= -s,--state= -t,--template= -w,--web --help
+discussion view||--after= -c,--comments -q,--jq= --json= -L,--limit= --order= -R,--repo= -t,--template= -w,--web --help
+extension|extensions;ext|--help
+extension browse||--debug -s,--single-column --help
+extension create||--precompiled= --help
+extension exec||
+extension install||--force --pin= --help
+extension list|ext ls;extension ls;extensions ls|--help
+extension remove|ext uninstall;extension uninstall;extensions uninstall|--help
+extension search||-q,--jq= --json= --license= -L,--limit= --order= --owner= --sort= -t,--template= -w,--web --help
+extension upgrade||--all --dry-run --force --help
+gist||--help
+gist clone||--help
+gist create|gist new|-d,--desc= -f,--filename= -p,--public -w,--web --help
+gist delete||--yes --help
+gist edit||-a,--add= -d,--desc= -f,--filename= -r,--remove= --help
+gist list|gist ls|--filter= --include-content -L,--limit= --public --secret --help
+gist rename||--help
+gist view||--allow-escape-sequences -f,--filename= --files -r,--raw -w,--web --help
+gpg-key||--help
+gpg-key add||-t,--title= --help
+gpg-key delete||-y,--yes --help
+gpg-key list|gpg-key ls|--help
+issue||-R,--repo= --help
+issue artifact||--help -R,--repo=
+issue artifact create|issue artifact new|--attach= -b,--body= -F,--body-file= --name= --type= --help -R,--repo=
+issue artifact delete||--yes --help -R,--repo=
+issue artifact download||--clobber -D,--dir= -O,--output= --skip-existing --version= --help -R,--repo=
+issue artifact edit||--attach= -b,--body= -F,--body-file= --name= --restore-version= --help -R,--repo=
+issue artifact list|issue artifact ls|-q,--jq= --json= -L,--limit= -t,--template= --type= --help -R,--repo=
+issue artifact view||-q,--jq= --json= -t,--template= --version= -w,--web --help -R,--repo=
+issue close||-c,--comment= --duplicate-of= -r,--reason= --help -R,--repo=
+issue comment||--attach= -b,--body= -F,--body-file= --create-if-none --delete-last --edit-last -e,--editor -w,--web --yes --help -R,--repo=
+issue create|issue new|-a,--assignee= --attach= --blocked-by= --blocking= -b,--body= -F,--body-file= -e,--editor -l,--label= -m,--milestone= --parent= -p,--project= --recover= -T,--template= -t,--title= --type= -w,--web --help -R,--repo=
+issue delete||--yes --help -R,--repo=
+issue develop||-b,--base= --branch-repo= -c,--checkout -l,--list -n,--name= --worktree= --help -R,--repo=
+issue edit||--add-assignee= --add-blocked-by= --add-blocking= --add-label= --add-project= --add-sub-issue= --attach= -b,--body= -F,--body-file= -m,--milestone= --parent= --remove-assignee= --remove-blocked-by= --remove-blocking= --remove-label= --remove-milestone --remove-parent --remove-project= --remove-sub-issue= --remove-type -t,--title= --type= --help -R,--repo=
+issue list|issue ls|--app= -a,--assignee= -A,--author= -q,--jq= --json= -l,--label= -L,--limit= --mention= -m,--milestone= -S,--search= -s,--state= -t,--template= --type= -w,--web --help -R,--repo=
+issue lock||-r,--reason= --help -R,--repo=
+issue pin||--help -R,--repo=
+issue reopen||-c,--comment= --help -R,--repo=
+issue status||-q,--jq= --json= -t,--template= --help -R,--repo=
+issue transfer||--help -R,--repo=
+issue unlock||--help -R,--repo=
+issue unpin||--help -R,--repo=
+issue view||-c,--comments -q,--jq= --json= -t,--template= -w,--web --help -R,--repo=
+label||-R,--repo= --help
+label clone||-f,--force --help -R,--repo=
+label create||-c,--color= -d,--description= -f,--force --help -R,--repo=
+label delete||--yes --help -R,--repo=
+label edit||-c,--color= -d,--description= -n,--name= --help -R,--repo=
+label list|label ls|-q,--jq= --json= -L,--limit= --order= -S,--search= --sort= -t,--template= -w,--web --help -R,--repo=
+licenses||--help
+org||--help
+org list|org ls|-L,--limit= --help
+pr||-R,--repo= --help
+pr checkout|pr co|-b,--branch= --detach -f,--force --recurse-submodules --worktree= --help -R,--repo=
+pr checks||--fail-fast -i,--interval= -q,--jq= --json= --required -t,--template= --watch -w,--web --help -R,--repo=
+pr close||-c,--comment= -d,--delete-branch --help -R,--repo=
+pr comment||--attach= -b,--body= -F,--body-file= --create-if-none --delete-last --edit-last -e,--editor -w,--web --yes --help -R,--repo=
+pr create|pr new|-a,--assignee= --attach= -B,--base= -b,--body= -F,--body-file= -d,--draft --dry-run -e,--editor -f,--fill --fill-first --fill-verbose -H,--head= -l,--label= -m,--milestone= --no-maintainer-edit -p,--project= --recover= -r,--reviewer= -T,--template= -t,--title= -w,--web --help -R,--repo=
+pr diff||--allow-escape-sequences --color= -e,--exclude= --name-only --patch -w,--web --help -R,--repo=
+pr edit||--add-assignee= --add-label= --add-project= --add-reviewer= --attach= -B,--base= -b,--body= -F,--body-file= -m,--milestone= --remove-assignee= --remove-label= --remove-milestone --remove-project= --remove-reviewer= -t,--title= --help -R,--repo=
+pr list|pr ls|--app= -a,--assignee= -A,--author= -B,--base= -d,--draft -H,--head= -q,--jq= --json= -l,--label= -L,--limit= -S,--search= -s,--state= -t,--template= -w,--web --help -R,--repo=
+pr lock||-r,--reason= --help -R,--repo=
+pr merge||--admin -A,--author-email= --auto -b,--body= -F,--body-file= -d,--delete-branch --disable-auto --match-head-commit= -m,--merge -r,--rebase -s,--squash -t,--subject= --help -R,--repo=
+pr ready||--undo --help -R,--repo=
+pr reopen||-c,--comment= --help -R,--repo=
+pr revert||-b,--body= -F,--body-file= -d,--draft -t,--title= --help -R,--repo=
+pr review||-a,--approve -b,--body= -F,--body-file= -c,--comment -r,--request-changes --help -R,--repo=
+pr status||-c,--conflict-status -q,--jq= --json= -t,--template= --help -R,--repo=
+pr unlock||--help -R,--repo=
+pr update-branch||--rebase --help -R,--repo=
+pr view||-c,--comments -q,--jq= --json= -t,--template= -w,--web --help -R,--repo=
+preview||--help
+preview prompter||--help
+project||--help
+project close||--format= -q,--jq= --owner= -t,--template= --undo --help
+project copy||--drafts --format= -q,--jq= --source-owner= --target-owner= -t,--template= --title= --help
+project create||--format= -q,--jq= --owner= -t,--template= --title= --help
+project delete||--format= -q,--jq= --owner= -t,--template= --help
+project edit||-d,--description= --format= -q,--jq= --owner= --readme= -t,--template= --title= --visibility= --help
+project field-create||--data-type= --format= -q,--jq= --name= --owner= --single-select-options= -t,--template= --help
+project field-delete||--format= --id= -q,--jq= -t,--template= --help
+project field-list||--format= -q,--jq= -L,--limit= --owner= -t,--template= --help
+project item-add||--format= -q,--jq= --owner= -t,--template= --url= --help
+project item-archive||--format= --id= -q,--jq= --owner= -t,--template= --undo --help
+project item-create||--body= --format= -q,--jq= --owner= -t,--template= --title= --help
+project item-delete||--format= --id= -q,--jq= --owner= -t,--template= --help
+project item-edit||--body= --clear --date= --field= --field-id= --format= --id= --iteration-id= -q,--jq= --number= --owner= --project-id= --single-select-option-id= -t,--template= --text= --title= --url= --value= --help
+project item-list||--field= --field-id= --format= -q,--jq= -L,--limit= --owner= --query= -t,--template= --help
+project link||--owner= -R,--repo= -T,--team= --help
+project list|project ls|--closed --format= -q,--jq= -L,--limit= --owner= -t,--template= -w,--web --help
+project mark-template||--format= -q,--jq= --owner= -t,--template= --undo --help
+project unlink||--owner= -R,--repo= -T,--team= --help
+project view||--format= -q,--jq= --owner= -t,--template= -w,--web --help
+release||-R,--repo= --help
+release create|release new|--discussion-category= -d,--draft --fail-on-no-commits --generate-notes --latest -n,--notes= -F,--notes-file= --notes-from-tag --notes-start-tag= -p,--prerelease --target= -t,--title= --verify-tag --help -R,--repo=
+release delete||--cleanup-tag -y,--yes --help -R,--repo=
+release delete-asset||-y,--yes --help -R,--repo=
+release download||--allow-escape-sequences -A,--archive= --clobber -D,--dir= -O,--output= -p,--pattern= --skip-existing --help -R,--repo=
+release edit||--discussion-category= --draft --latest -n,--notes= -F,--notes-file= --prerelease --tag= --target= -t,--title= --verify-tag --help -R,--repo=
+release list|release ls|--exclude-drafts --exclude-pre-releases -q,--jq= --json= -L,--limit= -O,--order= -t,--template= --help -R,--repo=
+release upload||--clobber --help -R,--repo=
+release verify||--format= -q,--jq= -t,--template= --help -R,--repo=
+release verify-asset||--format= -q,--jq= -t,--template= --help -R,--repo=
+release view||-q,--jq= --json= -t,--template= -w,--web --help -R,--repo=
+repo||--help
+repo archive||-y,--yes --help
+repo autolink||-R,--repo= --help
+repo autolink create|repo autolink new|-n,--numeric --help -R,--repo=
+repo autolink delete||--yes --help -R,--repo=
+repo autolink list|repo autolink ls|-q,--jq= --json= -t,--template= -w,--web --help -R,--repo=
+repo autolink view||-q,--jq= --json= -t,--template= --help -R,--repo=
+repo clone||--no-upstream -u,--upstream-remote-name= --help
+repo create|repo new|--add-readme -c,--clone -d,--description= --disable-issues --disable-wiki -g,--gitignore= -h,--homepage= --include-all-branches --internal -l,--license= --private --public --push -r,--remote= -s,--source= -t,--team= -p,--template= --help
+repo delete||--accept-cascading-deletion-of-private-forks --yes --help
+repo deploy-key||-R,--repo= --help
+repo deploy-key add||-w,--allow-write -t,--title= --help -R,--repo=
+repo deploy-key delete||--help -R,--repo=
+repo deploy-key list|repo deploy-key ls|-q,--jq= --json= -t,--template= --help -R,--repo=
+repo edit||--accept-visibility-change-consequences --add-topic= --allow-forking --allow-update-branch --default-branch= --delete-branch-on-merge -d,--description= --enable-advanced-security --enable-auto-merge --enable-discussions --enable-issues --enable-merge-commit --enable-projects --enable-rebase-merge --enable-secret-scanning --enable-secret-scanning-push-protection --enable-squash-merge --enable-wiki -h,--homepage= --remove-topic= --squash-merge-commit-message= --template --visibility= --help
+repo fork||--clone --default-branch-only --fork-name= --org= --remote --remote-name= --help
+repo gitignore||--help
+repo gitignore list|repo gitignore ls|--help
+repo gitignore view||--help
+repo license||--help
+repo license list|repo license ls|--help
+repo license view||-w,--web --help
+repo list|repo ls|--archived --fork -q,--jq= --json= -l,--language= -L,--limit= --no-archived --source -t,--template= --topic= --visibility= --help
+repo read-dir||-q,--jq= --json= --ref= -R,--repo= -t,--template= --help
+repo read-file||--allow-escape-sequences --clobber -q,--jq= --json= -o,--output= --ref= -R,--repo= -t,--template= --help
+repo rename||-R,--repo= -y,--yes --help
+repo set-default||-u,--unset -v,--view --help
+repo sync||-b,--branch= --force -s,--source= --help
+repo unarchive||-y,--yes --help
+repo view||-b,--branch= -q,--jq= --json= -t,--template= -w,--web --help
+ruleset|rs|-R,--repo= --help
+ruleset check||--default -w,--web --help -R,--repo=
+ruleset list|rs ls;ruleset ls|-L,--limit= -o,--org= -p,--parents -w,--web --help -R,--repo=
+ruleset view||-o,--org= -p,--parents -w,--web --help -R,--repo=
+run||-R,--repo= --help
+run cancel||--force --help -R,--repo=
+run delete||--help -R,--repo=
+run download||-D,--dir= -n,--name= -p,--pattern= --help -R,--repo=
+run list|run ls|-a,--all -b,--branch= -c,--commit= --created= -e,--event= -q,--jq= --json= -L,--limit= -s,--status= -t,--template= -u,--user= -w,--workflow= --help -R,--repo=
+run rerun||-d,--debug --failed -j,--job= --help -R,--repo=
+run view||-a,--attempt= --exit-status -j,--job= -q,--jq= --json= --log --log-failed -t,--template= -v,--verbose -w,--web --help -R,--repo=
+run watch||--compact --exit-status -i,--interval= --help -R,--repo=
+search||--help
+search code||--extension= --filename= -q,--jq= --json= --language= -L,--limit= --match= --owner= -R,--repo= --size= -t,--template= -w,--web --help
+search commits||--author= --author-date= --author-email= --author-name= --committer= --committer-date= --committer-email= --committer-name= --hash= -q,--jq= --json= -L,--limit= --merge --order= --owner= --parent= -R,--repo= --sort= -t,--template= --tree= --visibility= -w,--web --help
+search issues||--app= --archived --assignee= --author= --closed= --commenter= --comments= --created= --include-prs --interactions= --involves= -q,--jq= --json= --label= --language= -L,--limit= --locked --match= --mentions= --milestone= --no-assignee --no-label --no-milestone --no-project --order= --owner= --project= --reactions= -R,--repo= --search-type= --sort= --state= --team-mentions= -t,--template= --updated= --visibility= -w,--web --help
+search prs||--app= --archived --assignee= --author= -B,--base= --checks= --closed= --commenter= --comments= --created= --draft -H,--head= --interactions= --involves= -q,--jq= --json= --label= --language= -L,--limit= --locked --match= --mentions= --merged --merged-at= --milestone= --no-assignee --no-label --no-milestone --no-project --order= --owner= --project= --reactions= -R,--repo= --review= --review-requested= --reviewed-by= --sort= --state= --team-mentions= -t,--template= --updated= --visibility= -w,--web --help
+search repos||--archived --created= --followers= --forks= --good-first-issues= --help-wanted-issues= --include-forks= -q,--jq= --json= --language= --license= -L,--limit= --match= --number-topics= --order= --owner= --size= --sort= --stars= -t,--template= --topic= --updated= --visibility= -w,--web --help
+secret||-R,--repo= --help
+secret delete|secret remove|-a,--app= -e,--env= -o,--org= -u,--user --help -R,--repo=
+secret list|secret ls|-a,--app= -e,--env= -q,--jq= --json= -o,--org= -t,--template= -u,--user --help -R,--repo=
+secret set||-a,--app= -b,--body= -e,--env= -f,--env-file= --no-repos-selected --no-store -o,--org= -r,--repos= -u,--user -v,--visibility= --help -R,--repo=
+skill|skills|--help
+skill install|skill add;skills add|--agent= --all --allow-hidden-dirs --dir= -f,--force --from-local --pin= --scope= --upstream --help
+skill list|skill ls;skills ls|--agent= --dir= -q,--jq= --json= --scope= -t,--template= --help
+skill preview|skill show;skills show|--allow-hidden-dirs --help
+skill publish||--dry-run --fix --tag= --help
+skill search||-q,--jq= --json= -L,--limit= --owner= --page= -t,--template= --help
+skill update||--all --dir= --dry-run --force --unpin --help
+ssh-key||--help
+ssh-key add||-t,--title= --type= --help
+ssh-key delete||-y,--yes --help
+ssh-key list|ssh-key ls|--help
+status||-e,--exclude= -o,--org= --help
+variable||-R,--repo= --help
+variable delete|variable remove|-e,--env= -o,--org= --help -R,--repo=
+variable get||-e,--env= -q,--jq= --json= -o,--org= -t,--template= --help -R,--repo=
+variable list|variable ls|-e,--env= -q,--jq= --json= -o,--org= -t,--template= --help -R,--repo=
+variable set||-b,--body= -e,--env= -f,--env-file= -o,--org= -r,--repos= -v,--visibility= --help -R,--repo=
+workflow||-R,--repo= --help
+workflow disable||--help -R,--repo=
+workflow enable||--help -R,--repo=
+workflow list|workflow ls|-a,--all -q,--jq= --json= -L,--limit= -t,--template= --help -R,--repo=
+workflow run||-F,--field= --json -f,--raw-field= -r,--ref= --help -R,--repo=
+workflow view||-r,--ref= -w,--web -y,--yaml --help -R,--repo=
+"""
+# END TABLE
 
 
-def decide(command, cwd, home):
+# What each path does, by hand: gh's help does not say. A read passes; a write sends its values
+# to the guard; local state passes and leaves a later write's target unknown; arbitrary
+# execution blocks wherever it would run. A path the table holds with no kind here blocks.
+KINDS_TEXT = """
+read: |help|version|agent-task|agent-task list|agent-task view|alias|alias list|attestation
+read: attestation download|attestation trusted-root|attestation verify|auth|auth status|auth token
+read: browse|cache|cache list|codespace|codespace list|codespace logs|codespace view|codespace ports
+read: completion|config|config get|config list|discussion|discussion list|discussion view
+read: extension|extension browse|extension create|extension list|extension search|gist|gist clone
+read: gist list|gist view|gpg-key|gpg-key list|issue|issue artifact|issue artifact download
+read: issue artifact list|issue artifact view|issue list|issue status|issue view|label|label list
+read: licenses|org|org list|pr|pr checkout|pr checks|pr diff|pr list|pr status|pr view|preview
+read: preview prompter|project|project field-list|project item-list|project list|project view
+read: release|release download|release list|release verify|release verify-asset|release view|repo
+read: repo autolink|repo autolink list|repo autolink view|repo clone|repo deploy-key
+read: repo deploy-key list|repo gitignore|repo gitignore list|repo gitignore view|repo license
+read: repo license list|repo license view|repo list|repo read-dir|repo read-file|repo view|ruleset
+read: ruleset check|ruleset list|ruleset view|run|run download|run list|run view|run watch|search
+read: search code|search commits|search issues|search prs|search repos|secret|secret list|skill
+read: skill install|skill list|skill preview|skill search|skill update|ssh-key|ssh-key list|status
+read: variable|variable get|variable list|workflow|workflow list|workflow view
+local: alias delete|alias import|alias set|auth login|auth logout|auth refresh|auth setup-git
+local: auth switch|config clear-cache|config set|extension remove|repo set-default
+exec: copilot|extension exec|extension install|extension upgrade|codespace code|codespace cp
+exec: codespace jupyter|codespace ports forward|codespace ssh
+api: api
+write: agent-task create|cache delete|codespace create|codespace delete|codespace edit
+write: codespace ports visibility|codespace rebuild|codespace stop|discussion comment
+write: discussion create|discussion edit|gist create|gist delete|gist edit|gist rename|gpg-key add
+write: gpg-key delete|issue artifact create|issue artifact delete|issue artifact edit|issue close
+write: issue comment|issue create|issue delete|issue develop|issue edit|issue lock|issue pin
+write: issue reopen|issue transfer|issue unlock|issue unpin|label clone|label create|label delete
+write: label edit|pr close|pr comment|pr create|pr edit|pr lock|pr merge|pr ready|pr reopen
+write: pr revert|pr review|pr unlock|pr update-branch|project close|project copy|project create
+write: project delete|project edit|project field-create|project field-delete|project item-add
+write: project item-archive|project item-create|project item-delete|project item-edit|project link
+write: project mark-template|project unlink|release create|release delete|release delete-asset
+write: release edit|release upload|repo archive|repo autolink create|repo autolink delete
+write: repo create|repo delete|repo deploy-key add|repo deploy-key delete|repo edit|repo fork
+write: repo rename|repo sync|repo unarchive|run cancel|run delete|run rerun|secret delete
+write: secret set|skill publish|ssh-key add|ssh-key delete|variable delete|variable set
+write: workflow disable|workflow enable|workflow run
+"""
+
+KINDS = {}
+for _line in KINDS_TEXT.strip().splitlines():
+    _kind, _paths = _line.split(": ", 1)
+    for _p in _paths.split("|"):
+        KINDS[_p] = _kind
+
+# What a flag of a write means beyond its value, by (path, long name), `*` for every path.
+# "lost": gh composes the text from somewhere the hook cannot read when the flag is set.
+# "file": the value is a path whose content is sent, `-` standard input. "attach": a path, then
+# `#` and a label that is sent. "field": `key=value`, `key=@path` or `key=@-`. A flag with a
+# value and no role here is text gh sends.
+ROLES = {
+    ("pr create", "fill"): "lost", ("pr create", "fill-first"): "lost",
+    ("pr create", "fill-verbose"): "lost", ("pr create", "editor"): "lost",
+    ("issue create", "editor"): "lost", ("issue comment", "editor"): "lost",
+    ("pr comment", "editor"): "lost", ("pr create", "web"): "lost", ("issue create", "web"): "lost",
+    ("issue comment", "web"): "lost", ("pr comment", "web"): "lost",
+    ("pr create", "recover"): "lost", ("issue create", "recover"): "lost",
+    ("pr create", "template"): "lost", ("issue create", "template"): "lost",
+    ("release create", "notes-from-tag"): "lost", ("release create", "generate-notes"): "lost",
+    ("issue comment", "edit-last"): "lost", ("pr comment", "edit-last"): "lost",
+    ("*", "body-file"): "file", ("*", "notes-file"): "file", ("api", "input"): "file",
+    ("agent-task create", "from-file"): "file", ("secret set", "env-file"): "file",
+    ("variable set", "env-file"): "file", ("gist edit", "add"): "file",
+    ("*", "attach"): "attach",
+    ("api", "field"): "field", ("workflow run", "field"): "field",
+}
+
+# Which positionals of a write name files whose content is sent: `v` a value, `f` a file with an
+# optional `#label`; a trailing `*` repeats the last.
+POSITIONAL = {
+    "gist create": "f*", "release create": "v f*", "release upload": "v f*",
+    "issue artifact create": "v f*", "ssh-key add": "f", "gpg-key add": "f",
+    "repo deploy-key add": "f",
+}
+
+
+class Node(object):
+    __slots__ = ("path", "longs", "shorts", "children")
+
+    def __init__(self, path):
+        self.path = path
+        self.longs = {}      # long name: takes a value
+        self.shorts = {}     # letter: long name
+        self.children = {}   # word: path
+
+
+_NODES = None
+
+
+def nodes():
+    global _NODES
+    if _NODES is not None:
+        return _NODES
+    found = {}
+    aliases = []
+    for line in TABLE.strip("\n").splitlines():
+        path, alias_text, flag_text = line.split("|")
+        n = Node(path)
+        for f in flag_text.split():
+            takes = f.endswith("=")
+            f = f.rstrip("=")
+            short = None
+            if "," in f:
+                short, f = f.split(",")
+                short = short[1:]
+            name = f[2:]
+            n.longs[name] = takes
+            if short:
+                n.shorts[short] = name
+        found[path] = n
+        aliases += [(a, path) for a in alias_text.split(";") if a]
+    for path in list(found):
+        if path:
+            parent = path.rsplit(" ", 1)[0] if " " in path else ""
+            found[parent].children[path.rsplit(" ", 1)[-1]] = path
+    # An alias is a whole path; its last word is a child of the path its other words name.
+    for alias, path in aliases:
+        words = alias.split()
+        parent = ""
+        for w in words[:-1]:
+            parent = found[parent].children.get(w, parent + " " + w if parent else w)
+        if parent in found:
+            found[parent].children[words[-1]] = path
+    for word in ("help", "version"):
+        found[word] = Node(word)
+        found[""].children[word] = word
+    _NODES = found
+    return found
+
+
+class Verdict(object):
+    """What one invocation is: kind, its path, and for a write, its sources."""
+
+    __slots__ = ("kind", "path", "sources", "result")
+
+    def __init__(self, kind, path, sources=None, result=None):
+        self.kind = kind
+        self.path = path
+        self.sources = sources or []
+        self.result = result
+
+
+class Source(object):
+    __slots__ = ("label", "data")
+
+    def __init__(self, label, data):
+        self.label = label
+        self.data = data     # bytes
+
+
+def _bytes(text):
+    return text.encode("utf-8", "surrogatepass")
+
+
+ADVICE_LOST = ("Give gh the text on the command line, or write it to a file first and give gh"
+               " that file.")
+ADVICE_FLAG = ("The hook's table lists every flag of gh 2.104 by subcommand; regenerate it with"
+               " scripts/claude-hooks/regenerate-table.py if gh has gained one.")
+
+
+def lost(what):
+    return Verdict("block", None, result=block("Cannot recover the text gh would send: " + what
+                                               + ".", ADVICE_LOST))
+
+
+def classify(inv):
+    """Reads one gh invocation as gh would: the path, then every flag by that path's table."""
+    table = nodes()
+    env = inv.state.env()
+    vals = [w.literal(env) for w in inv.words]
+    node = table[""]
+    used = set()
+    k = 0
+    while k < len(vals):
+        v = vals[k]
+        if v is None:
+            if node.children:
+                return Verdict("block", None, result=block(
+                    "Which gh command runs depends on a word the hook cannot know before the"
+                    " command runs, so it cannot tell what gh would send.", ADVICE_UNEXPLAINED))
+            break
+        if v == "--":
+            break
+        if v.startswith("-") and v != "-":
+            # cobra skips a flag's value while it finds the command, and takes an unknown flag
+            # without `=` to have one.
+            if v.startswith("--"):
+                takes = node.longs.get(v[2:].split("=", 1)[0], True) and "=" not in v
+            else:
+                long = node.shorts.get(v[1:2])
+                takes = len(v) == 2 and (long is None or node.longs.get(long, True))
+            k += 2 if takes else 1
+            continue
+        child = node.children.get(v)
+        if child is None:
+            break
+        node = table[child]
+        used.add(k)
+        k += 1
+    path = node.path
+    if node.children and k < len(vals) and vals[k] not in (None, "--") \
+            and not vals[k].startswith("-"):
+        word = vals[k]
+        return Verdict("block", None, result=block(
+            ("gh " + path + " " if path else "gh ") + ("<" + word + ">" if not word.isalnum()
+                                                       else word)
+            + " is not a gh command the hook knows, so it can run anything: an alias, an"
+            " extension, or a command newer than the hook's table.",
+            "Run it yourself outside the session, or regenerate the table if gh has gained it."))
+    kind = KINDS.get(path)
+    if kind is None:
+        return Verdict("block", None, result=block(
+            "gh " + path + " has no kind in the hook's table, so the hook cannot tell whether it"
+            " writes.", "Give it one in KINDS in scripts/claude-hooks/gh_guard_lib.py."))
+    if kind == "exec":
+        return Verdict("block", path, result=block(
+            "gh " + path + " can run anything, so the hook blocks it wherever it would run.",
+            "Run it yourself outside the session."))
+
+    # Every word that is not the path, by this path's flags.
+    flags = []        # (long name, value or True/False, the word's index)
+    positionals = []  # (index, value)
+    rest = [(i, vals[i]) for i in range(len(vals)) if i not in used]
+    j = 0
+    while j < len(rest):
+        i, a = rest[j]
+        if a is None:
+            if kind in ("read", "local") or (kind == "exec"):
+                positionals.append((i, None))
+                j += 1
+                continue
+            return lost("a word whose value cannot be known before the command runs (word "
+                        + str(i + 1) + " after gh)")
+        if a == "--":
+            positionals += [(i2, a2) for i2, a2 in rest[j + 1:]]
+            if path in ("repo clone", "gist clone") and len(rest) > j + 1:
+                return Verdict("block", None, result=block(
+                    "gh " + path + " passes the words after `--` to git, which can run them.",
+                    "Clone without them."))
+            break
+        if a.startswith("--"):
+            name, eq, value = a[2:].partition("=")
+            if name not in node.longs:
+                return unknown_flag(path, i)
+            if node.longs[name]:
+                if not eq:
+                    j += 1
+                    if j >= len(rest):
+                        return unknown_flag(path, i)
+                    i, value = rest[j]
+                flags.append((name, value, i))
+            else:
+                flags.append((name, (value or "true").lower() != "false" if eq else True, i))
+        elif a.startswith("-") and a != "-":
+            c = 1
+            while c < len(a):
+                name = node.shorts.get(a[c])
+                if name is None:
+                    return unknown_flag(path, i)
+                if node.longs[name]:
+                    value = a[c + 1:]
+                    if value.startswith("="):
+                        value = value[1:]
+                    if not value and c + 1 >= len(a):
+                        j += 1
+                        if j >= len(rest):
+                            return unknown_flag(path, i)
+                        i, value = rest[j]
+                    flags.append((name, value, i))
+                    break
+                if a[c + 1:c + 2] == "=":
+                    flags.append((name, a[c + 2:].lower() != "false", i))
+                    break
+                flags.append((name, True, i))
+                c += 1
+        else:
+            positionals.append((i, a))
+        j += 1
+
+    helps = [v for n, v, _ in flags if n == "help"]
+    if helps and helps[-1] is True:
+        return Verdict("read", path)
+    if kind == "api":
+        kind = api_kind(flags, positionals)
+    if kind in ("read", "local"):
+        return Verdict(kind, path)
+    return write_sources(inv, path, flags, positionals)
+
+
+def unknown_flag(path, i):
+    return Verdict("block", path, result=block(
+        "gh " + path + " was given a flag the hook's table does not list for it (word "
+        + str(i + 1) + " after gh), so it cannot tell what gh would send.", ADVICE_FLAG))
+
+
+def api_kind(flags, positionals):
+    methods = [v for n, v, _ in flags if n == "method"]
+    if methods:
+        return "read" if isinstance(methods[-1], str) and methods[-1].upper() == "GET" else "write"
+    if any(n in ("field", "raw-field", "input") for n, _, _ in flags):
+        endpoint = positionals[0][1] if positionals else None
+        if endpoint == "graphql":
+            queries = [v for n, v, _ in flags if n in ("field", "raw-field")
+                       and isinstance(v, str) and v.startswith("query=")]
+            if queries and not queries[-1].startswith("query=@") \
+                    and not re.search(r"\bmutation\b", queries[-1]) \
+                    and not any(n == "input" for n, _, _ in flags):
+                return "read"
+        return "write"
+    return "read"
+
+
+def write_sources(inv, path, flags, positionals):
+    sources = []
+    for name, value, i in flags:
+        role = ROLES.get((path, name)) or ROLES.get(("*", name))
+        if role == "lost":
+            if value is not False:
+                return lost("--" + name)
+            continue
+        if value is True or value is False:
+            continue
+        if value is None:
+            return lost("a word whose value cannot be known before the command runs (word "
+                        + str(i + 1) + " after gh)")
+        if role in ("file", "attach") or role == "field" and value.split("=", 1)[-1][:1] == "@":
+            return lost("the content of the file --" + name + " names, which this version of"
+                        " the hook does not read")
+        sources.append(Source("the --" + name + " value", _bytes(value)))
+    if path == "gist edit" and not any(n in ("add", "desc", "remove") for n, _, _ in flags):
+        return lost("gh gist edit's editor")
+    if path == "agent-task create" and not positionals \
+            and not any(n == "from-file" for n, _, _ in flags):
+        return lost("gh agent-task create's editor")
+    spec = POSITIONAL.get(path, "v*").split()
+    for n, (i, value) in enumerate(positionals):
+        role = spec[min(n, len(spec) - 1)].rstrip("*")
+        if role == "f":
+            return lost("the content of a file gh " + path + " publishes, which this version of"
+                        " the hook does not read")
+        sources.append(Source("argument " + str(n + 1), _bytes(value)))
+    stdin = [r for r in inv.redirs if r.op in ("<", "<<", "<<-", "<<<", "<>")]
+    if stdin or inv.piped:
+        return lost("standard input, which this version of the hook does not read")
+    return Verdict("write", path, sources)
+
+
+# ---------------------------------------------------------------------------------------------
+# The guard: one run of check-leakage.sh --text over every source, each starting on a line of
+# its own, so its line numbers map back to a source and a line (#361).
+
+class GuardFault(Exception):
+    pass
+
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+_REPORT = re.compile(r"^(LEAK|WARNING) \[([a-z -]+)\] input line\(s\): ([0-9 ]+)$")
+
+
+def guard_path():
+    for p in (os.path.join(HERE, "check-leakage.sh"), os.path.join(HERE, "..", "check-leakage.sh")):
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def child_env(home, xdg):
+    """The environment every process the hook starts gets, built from nothing (#361 AC7)."""
+    env = {"PATH": "/usr/bin:/bin",
+           "LC_ALL": "en_US.UTF-8" if sys.platform == "darwin" else "C.UTF-8"}
+    if home:
+        env["HOME"] = home
+    if xdg:
+        env["XDG_CONFIG_HOME"] = xdg
+    return env
+
+
+def assemble(sources):
+    """The text the guard is given, and (first line, line count, label) for each source."""
+    chunks = []
+    spans = []
+    line = 1
+    for s in sources:
+        data = s.data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        if not data:
+            continue
+        if not data.endswith(b"\n"):
+            data += b"\n"
+        count = data.count(b"\n")
+        spans.append((line, count, s.label))
+        chunks.append(data)
+        line += count
+    return b"".join(chunks), spans
+
+
+def locate(numbers, spans):
+    out = []
+    for n in numbers:
+        for first, count, label in spans:
+            if first <= n < first + count:
+                out.append((label, n - first + 1))
+                break
+    return out
+
+
+def real_scan(sources, home, xdg):
+    """(hits, warnings), each a list of (tier, label, line). Raises GuardFault."""
+    import subprocess
+    guard = guard_path()
+    if guard is None:
+        raise GuardFault("the guard, check-leakage.sh, is not beside the hook")
+    data, spans = assemble(sources)
+    try:
+        p = subprocess.Popen(["/bin/sh", guard, "--text"], stdin=subprocess.PIPE,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                             env=child_env(home, xdg), cwd="/")
+        _, err = p.communicate(data, timeout=15)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        raise GuardFault("the guard did not finish within 15 seconds")
+    except OSError as e:
+        raise GuardFault("the guard could not be run (" + type(e).__name__ + ")")
+    found = {"LEAK": [], "WARNING": []}
+    first_fault = None
+    for line in err.decode("utf-8", "replace").splitlines():
+        m = _REPORT.match(line)
+        if m:
+            nums = [int(x) for x in m.group(3).split()]
+            found[m.group(1)] += [(m.group(2), label, n) for label, n in locate(nums, spans)]
+        elif first_fault is None and line.startswith("check-leakage FAILED — "):
+            first_fault = line
+    if p.returncode == 0:
+        return [], found["WARNING"]
+    if p.returncode == 1 and found["LEAK"]:
+        return found["LEAK"], found["WARNING"]
+    raise GuardFault(first_fault[len("check-leakage FAILED — "):] if first_fault and
+                     len(first_fault) < 300 else "the guard exited " + str(p.returncode)
+                     + " without naming a hit")
+
+
+def real_gh_version(binary, cwd):
+    import shutil
+    import subprocess
+    if binary.startswith("=/"):
+        binary = binary[2:]
+    if "/" not in binary:
+        binary = shutil.which(binary, path=os.environ.get("PATH", ""))
+    elif not binary.startswith("/") and cwd:
+        binary = os.path.join(cwd, binary)
+    if not binary:
+        return None
+    try:
+        r = subprocess.run([binary, "--version"], stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, env=child_env(None, None), timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    m = re.match(rb"gh version (\d+)\.(\d+)\.", r.stdout)
+    return m.group(1).decode() + "." + m.group(2).decode() if m else None
+
+
+class Context(object):
+    """What decide() reaches outside the command through: the guard, gh's version."""
+
+    def __init__(self, home, xdg=None, scan=None, gh_version=None):
+        self.home = home
+        self.xdg = xdg
+        self.scan = scan or (lambda sources: real_scan(sources, home, xdg))
+        self.gh_version = gh_version or real_gh_version
+
+
+def warning(text):
+    return (0, json.dumps({"systemMessage": "gate-sdd gh guard: " + text}), "")
+
+
+def decide(command, cwd, ctx):
     """The slow path, for a command that holds a gh word."""
-    found = Finder(home, cwd).find(parse(command))
+    found = Finder(ctx.home, cwd).find(parse(command))
     if found.problems:
         return block(found.problems[0], ADVICE_UNEXPLAINED)
+    sources = []
+    binaries = []
     for inv in found.invocations:
-        result = judge(inv)
-        if result is not None:
-            return result
-    return PASS
+        verdict = classify(inv)
+        if verdict.result is not None:
+            return verdict.result
+        if verdict.kind == "write":
+            sources += verdict.sources
+            binaries.append((inv.binary, inv.state.cwds[0]))
+    if not binaries:
+        return PASS
+    try:
+        hits, warnings = ctx.scan(sources) if sources else ([], [])
+    except GuardFault as why:
+        return block("The guard could not scan what gh would send: " + str(why) + ".",
+                     "Fix the guard or its pattern file; the command was not run.")
+    if hits:
+        where = " ".join("LEAK [" + t + "] in " + label + ", line " + str(n) + "."
+                         for t, label, n in hits)
+        return block(where + " The matched text is withheld.",
+                     "Rewrite the text without it. If this repository may hold it, exempt the"
+                     " repository with a reason in the exempt list beside the pattern file.")
+    notes = ["WARNING [" + t + "] in " + label + ", line " + str(n)
+             + ": confirm it is a generic example." for t, label, n in warnings]
+    for binary, where in binaries:
+        version = ctx.gh_version(binary, where)
+        if version != TABLE_VERSION:
+            notes.append("gh is " + (version or "a version the hook could not read")
+                         + ", and the hook's table is gh " + TABLE_VERSION
+                         + "'s; regenerate it with scripts/claude-hooks/regenerate-table.py.")
+            break
+    return warning(" ".join(notes)) if notes else PASS
 
 
 def run(argv, data):
@@ -1444,4 +2189,4 @@ def run(argv, data):
     command, cwd = hook
     if not mentions_gh(command):
         return PASS
-    return decide(command, cwd, os.environ.get("HOME"))
+    return decide(command, cwd, Context(os.environ.get("HOME"), os.environ.get("XDG_CONFIG_HOME")))
