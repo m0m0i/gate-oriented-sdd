@@ -526,8 +526,17 @@ if [ "$IN_GIT" -eq 1 ] && [ "$HOOK_CHECK" -eq 1 ]; then
     echo "  they run. CONTRIBUTING.md's \"The gh guard\" says how to install it and what passes it." >&2
     exit 1
   }
-  if [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then gh_config=$CLAUDE_CONFIG_DIR; else gh_config=${HOME:-}/.claude; fi
-  if [ ! -d "$gh_config" ]; then
+  # Skipped only when Claude Code has no configuration here at all, as the check itself decides,
+  # so that a machine without Claude Code needs no python3; anything else is the check's to judge.
+  gh_any=0
+  [ -z "${CLAUDE_CONFIG_DIR:-}" ] || [ ! -d "$CLAUDE_CONFIG_DIR" ] || gh_any=1
+  [ -z "${HOME:-}" ] || [ ! -d "$HOME/.claude" ] || gh_any=1
+  for gh_m in "/Library/Application Support/ClaudeCode/managed-settings.json" /etc/claude-code/managed-settings.json \
+      "/Library/Managed Preferences/com.anthropic.claudecode.plist" \
+      "/Library/Managed Preferences/$(id -un 2>/dev/null)/com.anthropic.claudecode.plist"; do
+    [ ! -e "$gh_m" ] && [ ! -h "$gh_m" ] || gh_any=1
+  done
+  if [ "$gh_any" -eq 0 ]; then
     hooks=", gh guard skipped: no Claude Code configuration on this machine"
   else
     # The reference is laid out as the installer lays out its copy: the three files side by side.

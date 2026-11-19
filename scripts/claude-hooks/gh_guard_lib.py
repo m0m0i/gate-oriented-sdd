@@ -4723,6 +4723,77 @@ def managed_settings():
     return "/etc/claude-code/managed-settings.json"
 
 
+def managed_plists():
+    """The macOS managed preferences files of the com.anthropic.claudecode domain."""
+    if sys.platform != "darwin":
+        return []
+    import pwd
+    try:
+        user = pwd.getpwuid(os.getuid()).pw_name
+    except KeyError:
+        user = ""
+    base = "/Library/Managed Preferences"
+    return [os.path.join(base, "com.anthropic.claudecode.plist")] + \
+        ([os.path.join(base, user, "com.anthropic.claudecode.plist")] if user else [])
+
+
+def load_plist(path, faults):
+    import plistlib
+    try:
+        with open(path, "rb") as f:
+            value = plistlib.load(f)
+    except FileNotFoundError:
+        return None
+    except Exception:
+        faults.append(path + " cannot be read as a property list.")
+        return None
+    if not isinstance(value, dict):
+        faults.append(path + " is not a dictionary.")
+        return None
+    return value
+
+
+def managed_sources(faults):
+    """Each managed settings object Claude Code reads from this machine, as (where, object): the
+    managed preferences, managed-settings.json and managed-settings.d/*.json in name order."""
+    out = []
+    for path in managed_plists():
+        value = load_plist(path, faults)
+        if value is not None:
+            out.append((path, value))
+    path = managed_settings()
+    value = load_json(path, faults, required=False)
+    if value is not None:
+        out.append((path, value))
+    drops = os.path.join(os.path.dirname(path), "managed-settings.d")
+    if os.path.lexists(drops):
+        try:
+            names = sorted(n for n in os.listdir(drops) if n.endswith(".json") and not n.startswith("."))
+        except OSError:
+            faults.append(drops + " cannot be read.")
+            names = []
+        for name in names:
+            value = load_json(os.path.join(drops, name), faults, required=False)
+            if value is not None:
+                out.append((os.path.join(drops, name), value))
+    return out
+
+
+def off(value):
+    """A switch counts as off only as JSON's false or null, or absent: any other value of a key
+    that turns hooks off or restricts them is read as on, as Claude Code reads an invalid lock."""
+    return value is None or value is False
+
+
+def locks_hooks(value):
+    """strictPluginOnlyCustomization: true, a list naming hooks, or a value of another type."""
+    if off(value):
+        return False
+    if isinstance(value, list):
+        return "hooks" in value
+    return True
+
+
 def load_json(path, faults, required):
     """The file's JSON object, None when it does not exist and is not required."""
     try:
@@ -4742,11 +4813,16 @@ def load_json(path, faults, required):
 
 
 def covers(matcher):
+    """Whether a matcher covers both tools, read as Claude Code reads one: empty or `*` matches
+    every tool, and one of letters, digits, `_`, `-`, spaces, `,` and `|` is a list of exact names
+    split on `|` and `,`. Any other character makes it a regular expression, which is refused."""
     if not isinstance(matcher, str):
         return False
-    if matcher in ("", "*"):
+    if matcher.strip() in ("", "*"):
         return True
-    return set(MATCHED) <= set(matcher.split("|"))
+    if not re.fullmatch(r"[A-Za-z0-9_\- ,|]+", matcher):
+        return False
+    return set(MATCHED) <= {p.strip() for p in re.split(r"[|,]", matcher)}
 
 
 def handlers(settings):
@@ -4842,24 +4918,41 @@ def check_registration(repo, reference=None):
     module's own, as the guard runs it."""
     here = reference or os.path.dirname(os.path.realpath(__file__))
     home = os.environ.get("HOME", "")
-    config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(home, ".claude")
-    if not os.path.isdir(config):
+    named = os.environ.get("CLAUDE_CONFIG_DIR", "")
+    config = named or (os.path.join(home, ".claude") if home else "")
+    # Skipped only when Claude Code has no configuration here at all: a CLAUDE_CONFIG_DIR that
+    # names nothing beside a ~/.claude, or a HOME that is not set, is a fault, not a skip.
+    if not (named and os.path.isdir(named)) and not (home and os.path.isdir(os.path.join(home, ".claude"))) \
+            and not os.path.lexists(managed_settings()) \
+            and not any(os.path.lexists(p) for p in managed_plists()):
         return "skip"
     faults = []
+    if named and not os.path.isdir(named):
+        faults.append("CLAUDE_CONFIG_DIR names " + named + ", which is not a directory.")
+        return faults
+    if not config:
+        faults.append("HOME is not set, so the user settings cannot be found.")
+        return faults
     user = load_json(os.path.join(config, "settings.json"), faults, required=False)
-    managed = load_json(managed_settings(), faults, required=False)
-    for name, settings in (("user", user), ("managed", managed)):
-        if settings and settings.get("disableAllHooks") is True:
-            faults.append("disableAllHooks is true in the " + name + " settings, so no hook runs.")
-    if managed and managed.get("allowManagedHooksOnly") is True:
-        faults.append("allowManagedHooksOnly is set in the managed settings, so a user hook does"
-                      " not run.")
+    managed = managed_sources(faults)
+    if user and not off(user.get("disableAllHooks")):
+        faults.append("disableAllHooks is true in the user settings, so no hook runs.")
+    for where, settings in managed:
+        if not off(settings.get("disableAllHooks")):
+            faults.append("disableAllHooks is set in the managed settings (" + where + "), so no"
+                          " hook runs.")
+        if not off(settings.get("allowManagedHooksOnly")):
+            faults.append("allowManagedHooksOnly is set in the managed settings (" + where + "), so"
+                          " a user hook does not run.")
+        if locks_hooks(settings.get("strictPluginOnlyCustomization")):
+            faults.append("strictPluginOnlyCustomization locks hooks in the managed settings ("
+                          + where + "), so a user hook does not run.")
     for local in ("settings.json", "settings.local.json"):
         settings = load_json(os.path.join(repo, ".claude", local), faults, required=False)
-        if settings and settings.get("disableAllHooks") is True:
+        if settings and not off(settings.get("disableAllHooks")):
             faults.append("disableAllHooks is true in this repository's .claude/" + local + ".")
     found = None
-    for h in handlers(user) + handlers(managed):
+    for h in handlers(user) + [h for _, s in managed for h in handlers(s)]:
         args = h.get("args")
         if isinstance(h.get("command"), str) and isinstance(args, list) and len(args) == 2 \
                 and args[0] == "-I" and isinstance(args[1], str) \
@@ -4878,8 +4971,10 @@ def check_registration(repo, reference=None):
                       + command + ".")
     if "if" in found:
         faults.append("the entry has an `if`, which does not match gh called by its path.")
-    if found.get("async"):
+    if not off(found.get("async")):
         faults.append("the entry is async, so it cannot block.")
+    if not off(found.get("asyncRewake")):
+        faults.append("the entry sets asyncRewake, so it runs in the background and cannot block.")
     if found.get("onFailure") != "block":
         faults.append("the entry lacks \"onFailure\": \"block\", so a hook that fails lets the"
                       " command run.")

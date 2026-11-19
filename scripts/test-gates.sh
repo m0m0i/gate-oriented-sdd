@@ -13970,11 +13970,19 @@ def registered(handler, matcher="Bash|mcp__terminal__run_in_terminal", **top):
     return s
 
 
-def faults(cfg, repo, reference=REF, managed=None):
+def faults(cfg, repo, reference=REF, managed=None, plists=(), env=None):
+    """The check's faults with CLAUDE_CONFIG_DIR at cfg, managed-settings.json at managed and the
+    managed preferences at plists; env sets or (as None) unsets further variables."""
     old_env = dict(os.environ)
-    old_managed = g.managed_settings
+    old_managed, old_plists = g.managed_settings, g.managed_plists
     os.environ["CLAUDE_CONFIG_DIR"] = cfg
-    g.managed_settings = lambda: managed or os.path.join(REG, "no-managed.json")
+    for k, v in (env or {}).items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+    g.managed_settings = lambda: managed or os.path.join(REG, "no-managed", "managed-settings.json")
+    g.managed_plists = lambda: list(plists)
     try:
         return g.check_registration(repo, reference)
     except Exception as e:
@@ -13982,7 +13990,7 @@ def faults(cfg, repo, reference=REF, managed=None):
     finally:
         os.environ.clear()
         os.environ.update(old_env)
-        g.managed_settings = old_managed
+        g.managed_settings, g.managed_plists = old_managed, old_plists
 
 
 OK_INSTALL = copy_hook(os.path.join(REG, "installed-ok"))
@@ -14035,6 +14043,13 @@ REGISTRATION = [
     ("no onFailure", config("fail", registered(entry(OK_INSTALL, onFailure=None))), {},
      ["lacks \"onFailure\": \"block\""]),
     ("if", config("if", registered(entry(OK_INSTALL, **{"if": "Bash(gh *)"}))), {}, ["has an `if`"]),
+    ("asyncRewake", config("rewake", registered(entry(OK_INSTALL, asyncRewake=True))), {},
+     ["sets asyncRewake"]),
+    ("regex matcher", config("regex", registered(entry(OK_INSTALL),
+                                                 matcher="(?:x|Bash|mcp__terminal__run_in_terminal|y)NEVER")),
+     {}, ["no PreToolUse entry"]),
+    ("comma matcher", config("comma", registered(entry(OK_INSTALL),
+                                                 matcher="Bash, mcp__terminal__run_in_terminal")), {}, []),
     ("async", config("async", registered(entry(OK_INSTALL, **{"async": True}))), {}, ["is async"]),
     # A relative path to the real file, so that only the absolute-path check can refuse it.
     ("relative interpreter", config("relpy", registered(entry(OK_INSTALL, command=os.path.relpath(PYREAL)))),
@@ -14085,14 +14100,70 @@ check("registration", any("allowManagedHooksOnly" in f for f in got), "managed g
 cfg, repo = config("managed-only")
 got = faults(cfg, repo, managed=os.path.join(REG, "ok", "claude", "settings.json"))
 check("registration", got == [], "managed settings holding the entry gave " + repr(got))
-old_env = dict(os.environ)
-os.environ["CLAUDE_CONFIG_DIR"] = os.path.join(REG, "absent")
-try:
-    got = g.check_registration(repo, REF)
-finally:
-    os.environ.clear()
-    os.environ.update(old_env)
+# Skipped only with no configuration at all; a CLAUDE_CONFIG_DIR naming nothing beside a
+# ~/.claude, and a HOME that is not set while managed settings exist, are faults.
+NOHOME = os.path.join(REG, "home-without-claude")
+os.makedirs(NOHOME)
+got = faults(os.path.join(REG, "absent"), repo, env={"HOME": NOHOME})
 check("registration", got == "skip", "no configuration gave " + repr(got))
+got = faults("", repo, env={"HOME": NOHOME})
+check("registration", got == "skip", "no configuration and no CLAUDE_CONFIG_DIR gave " + repr(got))
+WITHCLAUDE = os.path.join(REG, "home-with-claude")
+os.makedirs(os.path.join(WITHCLAUDE, ".claude"))
+got = faults(os.path.join(REG, "absent"), repo, env={"HOME": WITHCLAUDE})
+check("registration", any("CLAUDE_CONFIG_DIR names " in f and "which is not a directory." in f for f in got),
+      "a CLAUDE_CONFIG_DIR naming nothing beside ~/.claude gave " + repr(got))
+got = faults("", repo, managed=managed, env={"HOME": None})
+check("registration", any("HOME is not set" in f for f in got), "no HOME, with managed settings, gave " + repr(got))
+
+
+# Every managed source: the drop-in directory in name order, and the managed preferences. A lock
+# counts whatever its value but false and null, as Claude Code reads an invalid one.
+def managed_case(name, top=None, drops=None, plist=None):
+    d = os.path.join(REG, "managed-" + name)
+    os.makedirs(d)
+    path = os.path.join(d, "managed-settings.json")
+    if top is not None:
+        with open(path, "w") as f:
+            json.dump(top, f)
+    for fname, value in (drops or {}).items():
+        os.makedirs(os.path.join(d, "managed-settings.d"), exist_ok=True)
+        with open(os.path.join(d, "managed-settings.d", fname), "w") as f:
+            f.write(value if isinstance(value, str) else json.dumps(value))
+    plists = []
+    if plist is not None:
+        import plistlib
+        plists = [os.path.join(d, "com.anthropic.claudecode.plist")]
+        with open(plists[0], "wb") as f:
+            plistlib.dump(plist, f)
+    cfg, repo = config("m-" + name, registered(entry(OK_INSTALL)))
+    return faults(cfg, repo, managed=path, plists=plists)
+
+
+MANAGED = [
+    ("drop-in disableAllHooks", {"drops": {"20-x.json": {"disableAllHooks": True}}},
+     ["disableAllHooks is set in the managed settings ("]),
+    ("drop-in not JSON", {"drops": {"10-a.json": "{nope"}}, ["cannot be read as JSON."]),
+    ("hidden drop-in ignored", {"drops": {".hidden.json": {"disableAllHooks": True}}}, []),
+    ("allowManagedHooksOnly as a string", {"top": {"allowManagedHooksOnly": "true"}},
+     ["allowManagedHooksOnly is set in the managed settings ("]),
+    ("strictPluginOnlyCustomization true", {"top": {"strictPluginOnlyCustomization": True}},
+     ["strictPluginOnlyCustomization locks hooks"]),
+    ("strictPluginOnlyCustomization naming hooks", {"top": {"strictPluginOnlyCustomization": ["skills", "hooks"]}},
+     ["strictPluginOnlyCustomization locks hooks"]),
+    ("strictPluginOnlyCustomization of another type", {"top": {"strictPluginOnlyCustomization": "yes"}},
+     ["strictPluginOnlyCustomization locks hooks"]),
+    ("strictPluginOnlyCustomization without hooks", {"top": {"strictPluginOnlyCustomization": ["skills"]}}, []),
+    ("plist allowManagedHooksOnly", {"plist": {"allowManagedHooksOnly": True}},
+     ["allowManagedHooksOnly is set in the managed settings ("]),
+    ("drop-in entry registers", {"drops": {"30-hook.json": None}}, []),
+]
+for name, kw, want in MANAGED:
+    if name == "drop-in entry registers":
+        kw = {"drops": {"30-hook.json": registered(entry(OK_INSTALL))}}
+    got = managed_case(name.replace(" ", "-"), **kw)
+    ok = (got == [] if not want else all(any(w in f for f in got) for w in want))
+    check("registration", ok, name + " gave " + repr(got))
 
 
 for group in sorted(results):
