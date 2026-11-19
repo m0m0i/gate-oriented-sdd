@@ -25,7 +25,9 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # repository, and the wrapper's stand-down reads the settings under it (#262).
 # And GATE_SDD_HARNESS, which this repository's own settings set on its gates, the suite among their
 # validators, and which would otherwise read every Antigravity case here as Claude Code (#302).
-unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR ANTIGRAVITY_CONVERSATION_ID ANTIGRAVITY_AGENT GATE_SDD_HARNESS
+# And CLAUDE_CONFIG_DIR and XDG_DATA_HOME, which would point the gh guard's registration check and
+# its installer at this machine's own Claude Code configuration and install (#361).
+unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR ANTIGRAVITY_CONVERSATION_ID ANTIGRAVITY_AGENT GATE_SDD_HARNESS CLAUDE_CONFIG_DIR XDG_DATA_HOME
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -13899,6 +13901,200 @@ for command, cwd, want in KEEP5:
     check("hunt5", got.startswith(want), repr(command[:110]) + " gave " + got)
 
 
+# -- the registration check (T9) ---------------------------------------------------------------
+# A scratch Claude Code configuration, a reference and an installed copy of the hook, and each
+# fault the check names. The probe runs the installed copy under this interpreter.
+import re  # noqa: E402
+
+REG = os.path.join(SCRATCH, "registration")
+if os.path.isdir(REG):
+    shutil.rmtree(REG)
+HOOKDIR = sys.argv[1]
+GUARD = os.path.join(os.path.dirname(HOOKDIR), "check-leakage.sh")
+
+
+def copy_hook(dest, edit=None):
+    os.makedirs(dest)
+    for name, src in (("gh_guard.py", os.path.join(HOOKDIR, "gh_guard.py")),
+                      ("gh_guard_lib.py", os.path.join(HOOKDIR, "gh_guard_lib.py")),
+                      ("check-leakage.sh", GUARD)):
+        data = open(src).read()
+        if edit and name in edit:
+            data = edit[name](data)
+        with open(os.path.join(dest, name), "w") as f:
+            f.write(data)
+    return dest
+
+
+REF = copy_hook(os.path.join(REG, "ref"))
+PYREAL = os.path.realpath(sys.executable)
+
+
+def entry(hook, **extra):
+    h = {"type": "command", "command": PYREAL, "args": ["-I", os.path.join(hook, "gh_guard.py")],
+         "timeout": 30, "onFailure": "block"}
+    h.update(extra)
+    for k in [k for k, v in h.items() if v is None]:
+        del h[k]
+    return h
+
+
+def config(name, settings=None, raw=None, snapshot=None, repo_local=None, repo_shared=None):
+    """A configuration directory and a repository; returns (config, repo)."""
+    base = os.path.join(REG, name)
+    cfg = os.path.join(base, "claude")
+    repo = os.path.join(base, "repo")
+    os.makedirs(os.path.join(repo, ".claude"))
+    os.makedirs(os.path.join(cfg, "shell-snapshots"))
+    if raw is not None:
+        with open(os.path.join(cfg, "settings.json"), "w") as f:
+            f.write(raw)
+    elif settings is not None:
+        with open(os.path.join(cfg, "settings.json"), "w") as f:
+            json.dump(settings, f)
+    if snapshot is not None:
+        with open(os.path.join(cfg, "shell-snapshots", "snapshot-zsh-1.sh"), "w") as f:
+            f.write(snapshot)
+    if repo_local is not None:
+        with open(os.path.join(repo, ".claude", "settings.local.json"), "w") as f:
+            json.dump(repo_local, f)
+    if repo_shared is not None:
+        with open(os.path.join(repo, ".claude", "settings.json"), "w") as f:
+            json.dump(repo_shared, f)
+    return cfg, repo
+
+
+def registered(handler, matcher="Bash|mcp__terminal__run_in_terminal", **top):
+    s = {"hooks": {"PreToolUse": [{"matcher": matcher, "hooks": [handler]}]}}
+    s.update(top)
+    return s
+
+
+def faults(cfg, repo, reference=REF, managed=None):
+    old_env = dict(os.environ)
+    old_managed = g.managed_settings
+    os.environ["CLAUDE_CONFIG_DIR"] = cfg
+    g.managed_settings = lambda: managed or os.path.join(REG, "no-managed.json")
+    try:
+        return g.check_registration(repo, reference)
+    except Exception as e:
+        return ["raised " + type(e).__name__]
+    finally:
+        os.environ.clear()
+        os.environ.update(old_env)
+        g.managed_settings = old_managed
+
+
+OK_INSTALL = copy_hook(os.path.join(REG, "installed-ok"))
+bump = {"gh_guard_lib.py": lambda d: d.replace("GH_GUARD_VERSION = ", "GH_GUARD_VERSION = 9", 1)}
+NEWER = copy_hook(os.path.join(REG, "installed-newer"), bump)
+older = {"gh_guard_lib.py": lambda d: re.sub(r"(?m)^GH_GUARD_VERSION = \d+$", "GH_GUARD_VERSION = 0", d)}
+OLDER = copy_hook(os.path.join(REG, "installed-older"), older)
+DIFF = copy_hook(os.path.join(REG, "installed-diff"),
+                 {"gh_guard_lib.py": lambda d: d + "\n# an edit\n"})
+opens = {"gh_guard_lib.py": lambda d: d.replace("    if not mentions_gh(command):\n        return PASS",
+                                                 "    if True:\n        return PASS")}
+OPEN_REF = copy_hook(os.path.join(REG, "ref-open"), opens)
+OPEN = copy_hook(os.path.join(REG, "installed-open"), opens)
+warns = {"gh_guard_lib.py": lambda d: d.replace("    if not mentions_gh(command):\n        return PASS",
+                                                 "    if not mentions_gh(command):\n"
+                                                 "        return warning(\"a note\")")}
+WARNS_REF = copy_hook(os.path.join(REG, "ref-warns"), warns)
+WARNS = copy_hook(os.path.join(REG, "installed-warns"), warns)
+echoes = {"gh_guard_lib.py": lambda d: d.replace(
+    "def run(argv, data):\n",
+    "def run(argv, data):\n    if b\"Zq_Gh_Guard_Probe\" in data:\n"
+    "        return (2, \"\", HEAD + data.decode() + \"\\n\")\n", 1)}
+ECHOES_REF = copy_hook(os.path.join(REG, "ref-echoes"), echoes)
+ECHOES = copy_hook(os.path.join(REG, "installed-echoes"), echoes)
+NOVER = copy_hook(os.path.join(REG, "installed-nover"),
+                  {"gh_guard_lib.py": lambda d: re.sub(r"(?m)^GH_GUARD_VERSION = \d+$", "", d)})
+NOEXEC = os.path.join(REG, "not-executable-python")
+with open(NOEXEC, "w") as f:
+    f.write("not a program\n")
+os.chmod(NOEXEC, 0o644)
+os.makedirs(os.path.join(REG, "pyenv", "shims"))
+SHIM = os.path.join(REG, "pyenv", "shims", "python3")
+shutil.copy(PYREAL, SHIM)
+
+REGISTRATION = [
+    ("ok", config("ok", registered(entry(OK_INSTALL))), {}, []),
+    ("newer installed", config("newer", registered(entry(NEWER))), {}, []),
+    ("matcher *", config("star", registered(entry(OK_INSTALL), matcher="*")), {}, []),
+    ("no settings", config("none"), {}, ["no PreToolUse entry in the user or managed settings"]),
+    ("not JSON", config("raw", raw="{not json"), {}, ["cannot be read as JSON."]),
+    ("Bash only", config("bash", registered(entry(OK_INSTALL), matcher="Bash")), {},
+     ["no PreToolUse entry"]),
+    ("shell form", config("shell", registered({"type": "command", "command": PYREAL + " -I "
+                                               + OK_INSTALL + "/gh_guard.py",
+                                               "onFailure": "block"})), {}, ["no PreToolUse entry"]),
+    ("no -I", config("noisolate", registered(entry(OK_INSTALL, args=["-E", OK_INSTALL + "/gh_guard.py"]))),
+     {}, ["no PreToolUse entry"]),
+    ("another hook", config("other", registered(entry(OK_INSTALL, args=["-I", OK_INSTALL + "/other.py"]))),
+     {}, ["no PreToolUse entry"]),
+    ("no onFailure", config("fail", registered(entry(OK_INSTALL, onFailure=None))), {},
+     ["lacks \"onFailure\": \"block\""]),
+    ("if", config("if", registered(entry(OK_INSTALL, **{"if": "Bash(gh *)"}))), {}, ["has an `if`"]),
+    ("async", config("async", registered(entry(OK_INSTALL, **{"async": True}))), {}, ["is async"]),
+    # A relative path to the real file, so that only the absolute-path check can refuse it.
+    ("relative interpreter", config("relpy", registered(entry(OK_INSTALL, command=os.path.relpath(PYREAL)))),
+     {}, ["is not an absolute path to an interpreter"]),
+    ("older", config("older", registered(entry(OLDER))), {}, ["is version 0, older than"]),
+    ("differs", config("diff", registered(entry(DIFF))), {}, ["installed gh_guard_lib.py differs"]),
+    ("disableAllHooks", config("dah", registered(entry(OK_INSTALL), disableAllHooks=True)), {},
+     ["disableAllHooks is true in the user settings"]),
+    ("repo disableAllHooks", config("rdah", registered(entry(OK_INSTALL)),
+                                    repo_local={"disableAllHooks": True}), {},
+     ["disableAllHooks is true in this repository's .claude/settings.local.json."]),
+    ("snapshot alias", config("alias", registered(entry(OK_INSTALL)),
+                              snapshot="alias -- ls=eza\nalias -- g='gh issue'\n"), {},
+     ["the shell snapshot snapshot-zsh-1.sh defines"]),
+    ("snapshot function", config("func", registered(entry(OK_INSTALL)),
+                                 snapshot="mk () {\n\tgh pr create \"$@\"\n}\n"), {},
+     ["the shell snapshot snapshot-zsh-1.sh defines"]),
+    ("snapshot clean", config("snap", registered(entry(OK_INSTALL)),
+                              snapshot="alias -- ls=eza\nz () {\n\techo gh-pages\n}\n"), {}, []),
+    ("probe opens", config("probe", registered(entry(OPEN))), {"reference": OPEN_REF},
+     ["did not block a write of a synthetic word"]),
+    ("probe warns", config("warns", registered(entry(WARNS))), {"reference": WARNS_REF},
+     ["did not pass a command without gh in silence"]),
+    ("probe echoes", config("echoes", registered(entry(ECHOES))), {"reference": ECHOES_REF},
+     ["the registered command's block holds the text it matched."]),
+    ("not executable", config("noexec", registered(entry(OK_INSTALL, command=NOEXEC))), {},
+     ["the registered command does not run (PermissionError)."]),
+    ("interpreter missing", config("nopy", registered(entry(OK_INSTALL, command="/nonexistent/python3"))),
+     {}, ["is not an absolute path to an interpreter: /nonexistent/python3."]),
+    ("shim interpreter", config("shim", registered(entry(OK_INSTALL, command=SHIM))), {},
+     ["is not an absolute path to an interpreter"]),
+    ("no version line", config("nover", registered(entry(NOVER))), {}, ["holds no version line."]),
+    ("not an object", config("array", raw="[]"), {}, ["is not a JSON object."]),
+    ("repo settings disableAllHooks", config("rdah2", registered(entry(OK_INSTALL)),
+                                             repo_shared={"disableAllHooks": True}), {},
+     ["disableAllHooks is true in this repository's .claude/settings.json."]),
+]
+managed = os.path.join(REG, "managed.json")
+with open(managed, "w") as f:
+    json.dump({"allowManagedHooksOnly": True}, f)
+for name, (cfg, repo), opts, want in REGISTRATION:
+    got = faults(cfg, repo, **opts)
+    ok = (got == [] if not want else all(any(w in f for f in got) for w in want))
+    check("registration", ok, name + " gave " + repr(got))
+cfg, repo = config("managed", registered(entry(OK_INSTALL)))
+got = faults(cfg, repo, managed=managed)
+check("registration", any("allowManagedHooksOnly" in f for f in got), "managed gave " + repr(got))
+cfg, repo = config("managed-only")
+got = faults(cfg, repo, managed=os.path.join(REG, "ok", "claude", "settings.json"))
+check("registration", got == [], "managed settings holding the entry gave " + repr(got))
+old_env = dict(os.environ)
+os.environ["CLAUDE_CONFIG_DIR"] = os.path.join(REG, "absent")
+try:
+    got = g.check_registration(repo, REF)
+finally:
+    os.environ.clear()
+    os.environ.update(old_env)
+check("registration", got == "skip", "no configuration gave " + repr(got))
+
+
 for group in sorted(results):
     found = results[group]
     if found is None:
@@ -14190,6 +14386,104 @@ json.dump({"hooks": {"PreToolUse": [e]}}, open(sys.argv[1], "w"))' "$ghg_ih/.cla
     && report "the gh guard's installer swaps in a compiled, probed version, refuses an older one and a shim, and prints the entry" ok \
     || report "the gh guard's installer swaps in a compiled, probed version, refuses an older one and a shim, and prints the entry" no \
        "fresh=$i0 rerun=$i1 older=$i2 failed=$i3 interpreter=$i4"
+fi
+
+# 459. #361 AC5, AC8 — the working-tree scan fails on a machine with Claude Code whose settings do
+#      not register the gh guard as installed. In process, one sentence per fault of the check
+#      itself: the settings, the entry's shape, the installed version and bytes, hooks switched
+#      off, a shell snapshot that runs gh, and a probe that passes a write or speaks. Through the
+#      guard: no configuration skips and says so, an unregistered one fails and names the
+#      installer, --no-hook-check exempts, a registered one passes; the default branch is the
+#      reference, so a branch's newer copy need not be installed and an older install fails
+#      against it; and each way the guard's own call can go wrong. Fixture homes elsewhere hold
+#      no Claude Code configuration, so the other cases take the skip.
+ghg_case registration "the gh guard's registration check names each fault in the settings, the install and the probe"
+ghg_reg_repo() {  # $1 = name. leak_repo, with the hook and its installer beside the guard, untracked.
+  r=$(leak_repo "$1"); mkdir -p "$r/scripts/claude-hooks"
+  cp "$GHG_HOOK/gh_guard.py" "$GHG_HOOK/gh_guard_lib.py" "$r/scripts/claude-hooks/"
+  cp "$ROOT/scripts/install-gh-hook.sh" "$r/scripts/"
+  printf 'scripts/claude-hooks/\nscripts/install-gh-hook.sh\n' >> "$r/.git/info/exclude"
+  echo "$r"
+}
+ghg_register() {  # $1 = checkout, $2 = HOME: install from the checkout, and register what it prints
+  out=$(ghg_install "$1" "$2" --python "$GHG_PY"); mkdir -p "$2/.claude"
+  "$GHG_PY" -I -c 'import json, sys
+e = json.loads(sys.stdin.read().split(":\n", 1)[1].rsplit("\ninstall-gh-hook:", 1)[0])
+json.dump({"hooks": {"PreToolUse": [e]}}, open(sys.argv[1], "w"))' "$2/.claude/settings.json" < "$TMP/ghgiout"
+}
+ghg_origin() {  # $1 = repo, $2 = the version its gh_guard_lib.py carries, $3 = `nohook` to leave out
+                # gh_guard.py. Commits the hook at origin/main, which origin/HEAD names.
+  sed "s/^GH_GUARD_VERSION = .*/GH_GUARD_VERSION = $2/" "$GHG_HOOK/gh_guard_lib.py" > "$TMP/ghg-origin-lib"
+  ( cd "$1" && GIT_INDEX_FILE="$TMP/ghg-origin-index" && export GIT_INDEX_FILE && git read-tree HEAD \
+    && lib=$(git hash-object -w "$TMP/ghg-origin-lib") \
+    && git update-index --add --cacheinfo "100644,$lib,scripts/claude-hooks/gh_guard_lib.py" \
+    && { [ "${3:-}" = nohook ] || { hook=$(git hash-object -w "$GHG_HOOK/gh_guard.py") \
+         && git update-index --add --cacheinfo "100644,$hook,scripts/claude-hooks/gh_guard.py"; }; } \
+    && c=$(git commit-tree "$(git write-tree)" -p HEAD -m origin) && rm -f "$TMP/ghg-origin-index" \
+    && git update-ref refs/remotes/origin/main "$c" \
+    && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main ) >/dev/null 2>&1
+}
+ghg_reg() {  # $1 = repo, $2 = HOME, $3 = the words the failure names; `-` when it must pass.
+  out=$(run_leak "$1" "" "$2"); all=$(cat "$TMP/lkout" "$TMP/lkerr")
+  if [ "$3" = - ]; then
+    [ "$out" = 0 ] && grep -q 'file(s) scanned, private patterns loaded$' "$TMP/lkout" && printf ok \
+      || printf 'exit=%s:%s' "$out" "$(head -c 300 "$TMP/lkerr")"
+    return
+  fi
+  [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
+  case "$all" in *clean*) printf 'says clean'; return ;; esac
+  case "$all" in *'the gh guard is not registered as installed on this machine'*) ;; *) printf 'not refused for the gh guard'; return ;; esac
+  case "$all" in *"$3"*) ;; *) printf 'fault not named: %s' "$(head -c 300 "$TMP/lkerr")"; return ;; esac
+  case "$all" in *'sh scripts/install-gh-hook.sh'*) ;; *) printf 'installer not named'; return ;; esac
+  printf ok
+}
+if [ -z "$GHG_PY" ]; then
+  note_skip "gh-guard/registration-guard" "no python3 on PATH"
+else
+  # No configuration: skipped, and said on the clean line.
+  r=$(ghg_reg_repo lkg-g-skip); out=$(run_leak "$r")
+  [ "$out" = 0 ] && grep -q 'private patterns loaded, gh guard skipped: no Claude Code configuration on this machine$' "$TMP/lkout" \
+    && g0=ok || g0="exit=$out"
+  # A configuration without the entry fails, --no-hook-check exempts it, and the entry passes.
+  r=$(ghg_reg_repo lkg-g-main); ghg_h="$TMP/ghg-rhome"; mkdir -p "$ghg_h/.claude"
+  g1=$(ghg_reg "$r" "$ghg_h" 'no PreToolUse entry in the user or managed settings runs the gh guard')
+  out=$(run_leak "$r" "" "$ghg_h" "" --no-hook-check)
+  [ "$out" = 0 ] && grep -q 'private patterns loaded, hooks not checked$' "$TMP/lkout" && g2=ok || g2="exit=$out"
+  ghg_register "$r" "$ghg_h"; g3=$(ghg_reg "$r" "$ghg_h" -)
+  # The default branch is the reference: with origin/HEAD at the installed version, an edited,
+  # newer copy in the checkout passes; at a newer version, the install is older and fails; with
+  # no hook there, the checkout's copy is the reference.
+  ghg_origin "$r" 1
+  sed 's/^GH_GUARD_VERSION = .*/GH_GUARD_VERSION = 99/' "$GHG_HOOK/gh_guard_lib.py" > "$r/scripts/claude-hooks/gh_guard_lib.py"
+  g4=$(ghg_reg "$r" "$ghg_h" -)
+  cp "$GHG_HOOK/gh_guard_lib.py" "$r/scripts/claude-hooks/"
+  ghg_origin "$r" 2; g5=$(ghg_reg "$r" "$ghg_h" "is version 1, older than the reference's 2")
+  ( cd "$r" && git update-ref refs/remotes/origin/main HEAD ) >/dev/null 2>&1; g6=$(ghg_reg "$r" "$ghg_h" -)
+  # The guard's own call: a reference git cannot give whole, a checkout with none, a check that
+  # cannot start, one that speaks on a pass, and one that exits with a code it never uses.
+  ghg_origin "$r" 1 nohook; g7=$(ghg_reg "$r" "$ghg_h" 'origin/main:scripts/claude-hooks/gh_guard.py cannot be read')
+  ( cd "$r" && git update-ref refs/remotes/origin/main HEAD ) >/dev/null 2>&1
+  r2=$(leak_repo lkg-g-none); g8=$(ghg_reg "$r2" "$ghg_h" 'this checkout holds no scripts/claude-hooks/gh_guard.py')
+  printf 'def broken(:\n' >> "$r/scripts/claude-hooks/gh_guard_lib.py"
+  g9=$(ghg_reg "$r" "$ghg_h" 'the check could not run: gate-sdd gh guard: blocked. The hook could not start (SyntaxError)')
+  # Version 0, below the install's, so the reference's bytes are not compared and the remark is
+  # the one fault.
+  "$GHG_PY" -I -c 'import re, sys
+d = open(sys.argv[1]).read()
+d = re.sub(r"(?m)^GH_GUARD_VERSION = \d+$", "GH_GUARD_VERSION = 0", d)
+open(sys.argv[2], "w").write(d.replace("        if not result:\n            return PASS",
+                                       "        if not result:\n            return (0, \"\", \"a remark\\n\")", 1))' \
+    "$GHG_HOOK/gh_guard_lib.py" "$r/scripts/claude-hooks/gh_guard_lib.py"
+  g10=$(ghg_reg "$r" "$ghg_h" 'the check printed what it does not print on a pass')
+  cp "$GHG_HOOK/gh_guard_lib.py" "$r/scripts/claude-hooks/"
+  printf 'import sys\nsys.exit(3)\n' > "$r/scripts/claude-hooks/gh_guard.py"
+  g11=$(ghg_reg "$r" "$ghg_h" 'the check exited 3')
+  cp "$GHG_HOOK/gh_guard.py" "$r/scripts/claude-hooks/"; g12=$(ghg_reg "$r" "$ghg_h" -)
+
+  [ "$g0 $g1 $g2 $g3 $g4 $g5 $g6 $g7 $g8 $g9 $g10 $g11 $g12" = "ok ok ok ok ok ok ok ok ok ok ok ok ok" ] \
+    && report "check-leakage fails on a machine whose Claude Code does not register the gh guard as installed" ok \
+    || report "check-leakage fails on a machine whose Claude Code does not register the gh guard as installed" no \
+       "skip=$g0 unregistered=$g1 exempt=$g2 registered=$g3 branch-newer=$g4 install-older=$g5 no-hook-at-origin=$g6 unreadable=$g7 none=$g8 cannot-start=$g9 speaks=$g10 exit-code=$g11 restored=$g12"
 fi
 
 # --- guards: scripts/check-version-bump.py ------------------------------------

@@ -85,8 +85,12 @@ def main():
         _finish(2, "", HEAD + "The hook's module returned no decision it can act on, so the\n"
                 "  command was not run.\n")
         return
+    checking = sys.argv[1:2] == ["--check-registration"]
     if code == 2:
-        _finish(2, "", err if err.startswith(HEAD) else HEAD + "The hook gave no reason.\n")
+        _finish(2, "", err if err.startswith(HEAD) or checking else HEAD + "The hook gave no reason.\n")
+        return
+    if checking:
+        _finish(0, "", err)
         return
     if not _well_formed(out):
         _finish(2, "", HEAD + "The hook's module printed a pass that is not one systemMessage,\n"

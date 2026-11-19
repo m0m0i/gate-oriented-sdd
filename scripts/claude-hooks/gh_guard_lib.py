@@ -4707,7 +4707,212 @@ def decide(command, cwd, ctx):
     return warning(" ".join(notes)) if notes else PASS
 
 
+# ---------------------------------------------------------------------------------------------
+# The registration check (#361 AC5): `gh_guard.py --check-registration <repository>`, run by this
+# repository's working-tree guard from the default branch's copy of the hook, which is therefore
+# the reference the installed copy is compared with. It prints one sentence per fault on stderr
+# and exits 2, or exits 0, with "skipped: ..." on stderr when there is no Claude Code here.
+
+MATCHED = ("Bash", "mcp__terminal__run_in_terminal")
+PROBE_WORD = "Zq_Gh_Guard_Probe"
+
+
+def managed_settings():
+    if sys.platform == "darwin":
+        return "/Library/Application Support/ClaudeCode/managed-settings.json"
+    return "/etc/claude-code/managed-settings.json"
+
+
+def load_json(path, faults, required):
+    """The file's JSON object, None when it does not exist and is not required."""
+    try:
+        with open(path, "rb") as f:
+            value = json.loads(f.read().decode("utf-8"))
+    except FileNotFoundError:
+        if required:
+            faults.append(path + " does not exist.")
+        return None
+    except (OSError, ValueError):
+        faults.append(path + " cannot be read as JSON.")
+        return None
+    if not isinstance(value, dict):
+        faults.append(path + " is not a JSON object.")
+        return None
+    return value
+
+
+def covers(matcher):
+    if not isinstance(matcher, str):
+        return False
+    if matcher in ("", "*"):
+        return True
+    return set(MATCHED) <= set(matcher.split("|"))
+
+
+def handlers(settings):
+    """Every PreToolUse command handler of a settings object whose matcher covers both tools."""
+    out = []
+    groups = ((settings or {}).get("hooks") or {}).get("PreToolUse") or []
+    for group in groups if isinstance(groups, list) else []:
+        if isinstance(group, dict) and covers(group.get("matcher", "")):
+            for h in group.get("hooks") or []:
+                if isinstance(h, dict) and h.get("type") == "command":
+                    out.append(h)
+    return out
+
+
+def version_of(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                m = re.match(r"^GH_GUARD_VERSION = (\d+)$", line.rstrip("\n"))
+                if m:
+                    return int(m.group(1))
+    except OSError:
+        return None
+    return None
+
+
+def same_bytes(a, b):
+    try:
+        with open(a, "rb") as x, open(b, "rb") as y:
+            return x.read() == y.read()
+    except OSError:
+        return False
+
+
+def probe(handler):
+    """Faults of the registered command, run exactly as registered against a scratch HOME."""
+    import shutil
+    import subprocess
+    import tempfile
+    faults = []
+    home = tempfile.mkdtemp(prefix="gh-guard-probe-")
+    try:
+        os.makedirs(os.path.join(home, ".config", "gate-sdd"))
+        with open(os.path.join(home, ".config", "gate-sdd", "leakage-patterns"), "w") as f:
+            f.write("[fail]\n" + PROBE_WORD + "\n")
+        argv = [handler["command"]] + list(handler.get("args") or [])
+        env = {"PATH": "/usr/bin:/bin", "HOME": home}
+        for command, want in (("ls -la", 0), ("gh issue create -t probe --body " + PROBE_WORD, 2)):
+            data = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash",
+                               "tool_input": {"command": command}, "cwd": home}).encode()
+            try:
+                r = subprocess.run(argv, input=data, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                   env=env, cwd=home, timeout=30)
+            except (OSError, subprocess.TimeoutExpired) as e:
+                faults.append("the registered command does not run (" + type(e).__name__ + ").")
+                break
+            said = r.stdout + r.stderr
+            if r.returncode != want or (want == 0 and r.stdout):
+                faults.append("the registered command " + ("did not pass a command without gh"
+                              " in silence" if want == 0 else "did not block a write of a"
+                              " synthetic word") + " (exit " + str(r.returncode) + ").")
+            elif want == 2 and PROBE_WORD.encode() in said:
+                faults.append("the registered command's block holds the text it matched.")
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
+    return faults
+
+
+def snapshots_with_gh(config):
+    """Claude Code shell snapshots defining an alias or a function whose body holds a gh word."""
+    import glob
+    found = []
+    for path in sorted(glob.glob(os.path.join(config, "shell-snapshots", "*.sh"))):
+        try:
+            text = open(path, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        for m in re.finditer(r"^alias (?:-- )?[^=\n]+=(.*)$", text, re.M):
+            if mentions_gh(m.group(1)):
+                found.append(os.path.basename(path))
+                break
+        else:
+            for m in re.finditer(r"^([^\s(){}]+) \(\) \{\n(.*?)^\}", text, re.M | re.S):
+                if mentions_gh(m.group(2)):
+                    found.append(os.path.basename(path))
+                    break
+    return found
+
+
+def check_registration(repo, reference=None):
+    """Faults, or "skip" when this machine has no Claude Code configuration. reference is the
+    directory holding the reference's gh_guard.py, gh_guard_lib.py and check-leakage.sh: this
+    module's own, as the guard runs it."""
+    here = reference or os.path.dirname(os.path.realpath(__file__))
+    home = os.environ.get("HOME", "")
+    config = os.environ.get("CLAUDE_CONFIG_DIR") or os.path.join(home, ".claude")
+    if not os.path.isdir(config):
+        return "skip"
+    faults = []
+    user = load_json(os.path.join(config, "settings.json"), faults, required=False)
+    managed = load_json(managed_settings(), faults, required=False)
+    for name, settings in (("user", user), ("managed", managed)):
+        if settings and settings.get("disableAllHooks") is True:
+            faults.append("disableAllHooks is true in the " + name + " settings, so no hook runs.")
+    if managed and managed.get("allowManagedHooksOnly") is True:
+        faults.append("allowManagedHooksOnly is set in the managed settings, so a user hook does"
+                      " not run.")
+    for local in ("settings.json", "settings.local.json"):
+        settings = load_json(os.path.join(repo, ".claude", local), faults, required=False)
+        if settings and settings.get("disableAllHooks") is True:
+            faults.append("disableAllHooks is true in this repository's .claude/" + local + ".")
+    found = None
+    for h in handlers(user) + handlers(managed):
+        args = h.get("args")
+        if isinstance(h.get("command"), str) and isinstance(args, list) and len(args) == 2 \
+                and args[0] == "-I" and isinstance(args[1], str) \
+                and os.path.basename(args[1]) == "gh_guard.py":
+            found = h
+            break
+    if found is None:
+        faults.append("no PreToolUse entry in the user or managed settings runs the gh guard: one"
+                      " whose matcher covers Bash and mcp__terminal__run_in_terminal, in exec form,"
+                      " with an interpreter's absolute path as its command and -I and the"
+                      " installed gh_guard.py as its arguments.")
+        return faults
+    command, hook = found["command"], found["args"][1]
+    if not command.startswith("/") or not os.path.isfile(command) or "/shims/" in command:
+        faults.append("the entry's interpreter is not an absolute path to an interpreter: "
+                      + command + ".")
+    if "if" in found:
+        faults.append("the entry has an `if`, which does not match gh called by its path.")
+    if found.get("async"):
+        faults.append("the entry is async, so it cannot block.")
+    if found.get("onFailure") != "block":
+        faults.append("the entry lacks \"onFailure\": \"block\", so a hook that fails lets the"
+                      " command run.")
+    installed = os.path.dirname(os.path.realpath(hook))
+    want = version_of(os.path.join(here, "gh_guard_lib.py"))
+    have = version_of(os.path.join(installed, "gh_guard_lib.py"))
+    if have is None:
+        faults.append("the installed hook at " + hook + " holds no version line.")
+    elif want is not None and have < want:
+        faults.append("the installed hook is version " + str(have) + ", older than the reference's "
+                      + str(want) + ".")
+    elif have == want:
+        for name in ("gh_guard.py", "gh_guard_lib.py", "check-leakage.sh"):
+            if not same_bytes(os.path.join(here, name), os.path.join(installed, name)):
+                faults.append("the installed " + name + " differs from the reference's at the same"
+                              " version.")
+    for name in snapshots_with_gh(config):
+        faults.append("the shell snapshot " + name + " defines an alias or a function whose body"
+                      " holds a gh word, which runs gh in every Bash call without the word.")
+    if not faults:
+        faults += probe(found)
+    return faults
+
+
 def run(argv, data):
+    if argv[:1] == ["--check-registration"] and len(argv) == 2:
+        result = check_registration(argv[1])
+        if result == "skip":
+            return (0, "", "skipped: there is no Claude Code configuration on this machine.\n")
+        if not result:
+            return PASS
+        return (2, "", "".join("gate-sdd gh guard: not registered as installed: " + f + "\n"
+                               for f in result))
     if argv:
         return block("The hook was given an argument it does not take, so it looked at nothing.")
     hook = read_input(data)
