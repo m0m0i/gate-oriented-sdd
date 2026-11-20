@@ -4597,8 +4597,11 @@ def real_gh_version(binary, cwd):
     if not binary:
         return None
     try:
+        # From /: with no HOME, gh writes its state under a relative ./.local, which would land in
+        # the project the session runs in (#361).
         r = subprocess.run([binary, "--version"], stdout=subprocess.PIPE,
-                           stderr=subprocess.DEVNULL, env=child_env(None, None), timeout=5)
+                           stderr=subprocess.DEVNULL, env=child_env(None, None), cwd="/",
+                           timeout=5)
     except (OSError, subprocess.TimeoutExpired):
         return None
     m = re.match(rb"gh version (\d+)\.(\d+)\.", r.stdout)

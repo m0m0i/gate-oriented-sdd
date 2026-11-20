@@ -13105,6 +13105,27 @@ check("classify-version", got.startswith("warn: gate-sdd gh guard: gh is a versi
 got, _ = verdict("gh issue list", version="2.99")
 check("classify-version", got == "pass", repr(got))
 
+# gh writes its state under a relative ./.local when it has no HOME, which the hook does not give
+# it, so the version is asked from / and not from the project the hook runs in. A stub stands in.
+VDIR = os.path.join(SCRATCH, "gh-version-cwd")
+os.makedirs(os.path.join(VDIR, "bin"), exist_ok=True)
+VSTUB = os.path.join(VDIR, "bin", "gh")
+with open(VSTUB, "w") as f:
+    f.write("#!/bin/sh\nmkdir -p .local/state 2>/dev/null && : > .local/state/device-id 2>/dev/null\n"
+            "echo 'gh version 2.104.0 (2026-11-12)'\n")
+os.chmod(VSTUB, 0o755)
+VPROJECT = os.path.join(VDIR, "project")
+os.makedirs(VPROJECT, exist_ok=True)
+here = os.getcwd()
+os.chdir(VPROJECT)
+try:
+    got = g.real_gh_version(VSTUB, VPROJECT)
+finally:
+    os.chdir(here)
+check("classify-version", got == "2.104" and not os.path.exists(os.path.join(VPROJECT, ".local")),
+      "asking gh its version gave " + repr(got) + ", and left .local in the project: "
+      + repr(os.path.exists(os.path.join(VPROJECT, ".local"))))
+
 # Every path in the table has a kind, and every kind names a path in it.
 table = g.nodes()
 missing = sorted(p for p in table if p not in g.KINDS)
