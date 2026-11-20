@@ -12966,9 +12966,9 @@ def recorder(sources):
     return hits, warns
 
 
-def verdict(command, version="2.104", cwd="/w"):
+def verdict(command, version="2.104", cwd="/w", branch=None):
     del SEEN[:]
-    ctx = g.Context("/H", scan=recorder, gh_version=lambda binary, where: version)
+    ctx = g.Context("/H", scan=recorder, gh_version=lambda binary, where: version, branch=branch)
     try:
         code, out, err = g.decide(command, cwd, ctx)
     except Exception as e:
@@ -13059,7 +13059,9 @@ for flag in ("--notes-from-tag", "--generate-notes"):
     CLASSIFY.append(("gh release create v1 " + flag, "block: Cannot recover the text gh would"
                      " send: " + flag + ".", []))
 CLASSIFY += [
-    ("gh pr create -t t -b b --web=false -w=false", "pass", ["the --title value", "the --body value"]),
+    # No --head: gh pushes the current branch and names it, so a branch the hook cannot read blocks.
+    ("gh pr create -t t -b b --web=false -w=false", "block: Cannot recover the text gh would send: the"
+     " branch gh pr create pushes, which the hook cannot read.", []),
     ("gh issue comment 1 --edit-last", "block: Cannot recover the text gh would send: --edit-last.", []),
     ("gh gist edit 12", "block: Cannot recover the text gh would send: gh gist edit's editor.", []),
     ("gh agent-task create", "block: Cannot recover the text gh would send: gh agent-task create's"
@@ -13094,6 +13096,12 @@ for command, want, labels in CLASSIFY:
     got, seen = verdict(command)
     check("classify", got.startswith(want) and seen == labels,
           repr(command) + " gave " + repr((got, seen)))
+
+# A branch the hook reads is scanned as the head gh pushes, beside the title and the body.
+got, seen = verdict("gh pr create -t t -b b --web=false -w=false" , branch=lambda cwd: "feature")
+check("classify", got == "pass" and seen == ["the --title value", "the --body value",
+                                             "the branch gh pushes as the head"],
+      "pr create on a branch the hook reads gave " + repr((got, seen)))
 
 # A gh whose version is not the table's passes a clean write with a warning, and a read without.
 got, _ = verdict("gh issue comment 1 -b x", version="2.99")
@@ -14142,10 +14150,13 @@ check("registration", any("HOME is not set" in f for f in got), "no HOME, with m
 
 # Every managed source: the drop-in directory in name order, and the managed preferences. A lock
 # counts whatever its value but false and null, as Claude Code reads an invalid one.
-def managed_case(name, top=None, drops=None, plist=None):
+def managed_case(name, top=None, drops=None, plist=None, plist_bytes=None, drops_file=False):
     d = os.path.join(REG, "managed-" + name)
     os.makedirs(d)
     path = os.path.join(d, "managed-settings.json")
+    if drops_file:
+        with open(os.path.join(d, "managed-settings.d"), "w") as f:
+            f.write("{}\n")
     if top is not None:
         with open(path, "w") as f:
             json.dump(top, f)
@@ -14159,6 +14170,10 @@ def managed_case(name, top=None, drops=None, plist=None):
         plists = [os.path.join(d, "com.anthropic.claudecode.plist")]
         with open(plists[0], "wb") as f:
             plistlib.dump(plist, f)
+    if plist_bytes is not None:
+        plists = [os.path.join(d, "com.anthropic.claudecode.plist")]
+        with open(plists[0], "wb") as f:
+            f.write(plist_bytes)
     cfg, repo = config("m-" + name, registered(entry(OK_INSTALL)))
     return faults(cfg, repo, managed=path, plists=plists)
 
@@ -14179,6 +14194,9 @@ MANAGED = [
     ("strictPluginOnlyCustomization without hooks", {"top": {"strictPluginOnlyCustomization": ["skills"]}}, []),
     ("plist allowManagedHooksOnly", {"plist": {"allowManagedHooksOnly": True}},
      ["allowManagedHooksOnly is set in the managed settings ("]),
+    ("plist unreadable", {"plist_bytes": b"not a property list"}, ["cannot be read as a property list."]),
+    ("plist not a dictionary", {"plist": ["a", "list"]}, ["is not a dictionary."]),
+    ("drop-in directory unreadable", {"drops_file": True}, ["managed-settings.d cannot be read."]),
     ("drop-in entry registers", {"drops": {"30-hook.json": None}}, []),
 ]
 for name, kw, want in MANAGED:
@@ -14573,11 +14591,18 @@ open(sys.argv[2], "w").write(d.replace("        if not result:\n            retu
   printf 'import sys\nsys.exit(3)\n' > "$r/scripts/claude-hooks/gh_guard.py"
   g11=$(ghg_reg "$r" "$ghg_h" 'the check exited 3')
   cp "$GHG_HOOK/gh_guard.py" "$r/scripts/claude-hooks/"; g12=$(ghg_reg "$r" "$ghg_h" -)
+  # No python3 on PATH: every program of /usr/bin and /bin but the Pythons, by link.
+  ghg_nopy="$TMP/ghg-nopy"; mkdir -p "$ghg_nopy"
+  for ghg_p in /usr/bin/* /bin/*; do
+    case "${ghg_p##*/}" in python*) continue ;; esac
+    [ -e "$ghg_nopy/${ghg_p##*/}" ] || ln -s "$ghg_p" "$ghg_nopy/${ghg_p##*/}" 2>/dev/null
+  done
+  g13=$(PATH=$ghg_nopy; export PATH; ghg_reg "$r" "$ghg_h" 'there is no python3 on PATH to run the check')
 
-  [ "$g0 $g1 $g2 $g3 $g4 $g5 $g6 $g7 $g8 $g9 $g10 $g11 $g12" = "ok ok ok ok ok ok ok ok ok ok ok ok ok" ] \
+  [ "$g0 $g1 $g2 $g3 $g4 $g5 $g6 $g7 $g8 $g9 $g10 $g11 $g12 $g13" = "ok ok ok ok ok ok ok ok ok ok ok ok ok ok" ] \
     && report "check-leakage fails on a machine whose Claude Code does not register the gh guard as installed" ok \
     || report "check-leakage fails on a machine whose Claude Code does not register the gh guard as installed" no \
-       "skip=$g0 unregistered=$g1 exempt=$g2 registered=$g3 branch-newer=$g4 install-older=$g5 no-hook-at-origin=$g6 unreadable=$g7 none=$g8 cannot-start=$g9 speaks=$g10 exit-code=$g11 restored=$g12"
+       "skip=$g0 unregistered=$g1 exempt=$g2 registered=$g3 branch-newer=$g4 install-older=$g5 no-hook-at-origin=$g6 unreadable=$g7 none=$g8 cannot-start=$g9 speaks=$g10 exit-code=$g11 restored=$g12 no-python3=$g13"
 fi
 
 # --- guards: scripts/check-version-bump.py ------------------------------------

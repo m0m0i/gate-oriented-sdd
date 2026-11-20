@@ -545,15 +545,17 @@ if [ "$IN_GIT" -eq 1 ] && [ "$HOOK_CHECK" -eq 1 ]; then
     [ -n "$gh_ref" ] || [ -f scripts/claude-hooks/gh_guard.py ] \
       || gh_fault "  this checkout holds no scripts/claude-hooks/gh_guard.py to compare it with."
     gh_py=$(command -v python3 2>/dev/null) || gh_fault "  there is no python3 on PATH to run the check."
-    gh_dir=$(mktemp -d "${TMPDIR:-/tmp}/gh-guard-ref.XXXXXX") || gh_fault "  no scratch directory for the reference."
+    # Inside the tiers' directory, which this guard has made and removes on every exit. If it
+    # cannot be made, the first file written into it fails as unreadable.
+    gh_dir=$TIERS/gh-guard-reference
+    mkdir "$gh_dir" 2>/dev/null
     for f in claude-hooks/gh_guard.py claude-hooks/gh_guard_lib.py check-leakage.sh; do
       if [ -n "$gh_ref" ]; then git show "$gh_ref:scripts/$f" > "$gh_dir/${f#claude-hooks/}" 2>/dev/null
       else cp "scripts/$f" "$gh_dir/${f#claude-hooks/}" 2>/dev/null
-      fi || { rm -rf "$gh_dir"; gh_fault "  ${gh_ref:+$gh_ref:}scripts/$f cannot be read."; }
+      fi || gh_fault "  ${gh_ref:+$gh_ref:}scripts/$f cannot be read."
     done
     gh_err=$("$gh_py" -I "$gh_dir/gh_guard.py" --check-registration "$ROOT" </dev/null 2>&1 >/dev/null)
     gh_rc=$?
-    rm -rf "$gh_dir"
     case "$gh_rc" in
       0) case "$gh_err" in
            skipped:*) hooks=", gh guard skipped: no Claude Code configuration on this machine" ;;

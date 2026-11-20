@@ -4476,8 +4476,10 @@ def head_sources(inv, ctx):
     cwd = inv.state.cwds[0] if len(inv.state.cwds) == 1 else None
     names = list(inv.state.branches)
     here = ctx.branch(cwd) if cwd else None
-    if here:
-        names.append(here)
+    if not here:
+        # gh still pushes and names a branch: one the hook cannot read is unknown, as {branch} is.
+        raise Lost("the branch gh pr create pushes, which the hook cannot read")
+    names.append(here)
     return [Source("the branch gh pushes as the head", _bytes(b)) for b in names]
 
 
