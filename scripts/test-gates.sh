@@ -25,7 +25,9 @@ ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 # repository, and the wrapper's stand-down reads the settings under it (#262).
 # And GATE_SDD_HARNESS, which this repository's own settings set on its gates, the suite among their
 # validators, and which would otherwise read every Antigravity case here as Claude Code (#302).
-unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR ANTIGRAVITY_CONVERSATION_ID ANTIGRAVITY_AGENT GATE_SDD_HARNESS
+# And CLAUDE_CONFIG_DIR and XDG_DATA_HOME, which would point the gh guard's registration check and
+# its installer at this machine's own Claude Code configuration and install (#361).
+unset GATE_SDD_HOOKS GATE_SDD_PLUGIN_ROOT CLAUDE_PLUGIN_ROOT CLAUDE_ENV_FILE CLAUDE_PROJECT_DIR ANTIGRAVITY_CONVERSATION_ID ANTIGRAVITY_AGENT GATE_SDD_HARNESS CLAUDE_CONFIG_DIR XDG_DATA_HOME
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
@@ -11333,7 +11335,8 @@ k8="$(lk_report 1 'LEAK [public] doc.md line(s): 1')$(lk_noticed)"
 
 # 429. #357 AC8, #360 AC11 — the guard's fault report sends its reader to CONTRIBUTING.md, so what
 #      that page says is held to the guard: the hooks' installer, the modes they run, the
-#      exemption and what skips a hook; the two places the file is looked for, the flag and its notice,
+#      exemption and what skips a hook; the gh guard's installer and its exempt list (#361); the two
+#      places the file is looked for, the flag and its notice,
 #      CI's secret and the two commands that set it, the two forms of line the loader refuses or
 #      drops, and an example the loader takes. The page says not to copy the example, because
 #      each of its expressions matches its own line there: run over the page, the example reports
@@ -11371,7 +11374,8 @@ for want in 'GATE_SDD_LEAKAGE_PATTERNS' '${XDG_CONFIG_HOME:-$HOME/.config}/gate-
   './scripts/check-leakage.sh --public-only' "$LKG_NOTICE" '`LEAKAGE_PATTERNS`' \
   "| tr -d '\\n')" '| gh secret set LEAKAGE_PATTERNS' 'ends in a space or a tab' '`[#]' \
   'sh scripts/install-git-hooks.sh' '`--no-hook-check`' '`--staged`' '`--refs`, `--text` and `--commits`' \
-  '`git ls-remote`' '`git commit --no-verify`' '`git -c core.hooksPath=…`' 'the `Leakage guard` step'; do
+  '`git ls-remote`' '`git commit --no-verify`' '`git -c core.hooksPath=…`' 'the `Leakage guard` step' \
+  'sh scripts/install-gh-hook.sh' '${XDG_CONFIG_HOME:-$HOME/.config}/gate-sdd/leakage-exempt-repositories'; do
   grep -Fq -e "$want" "$LKG_DOC" || m4="$m4+no <$want>"
 done
 
@@ -12243,7 +12247,8 @@ y11=$(lk_hooks "$r" 'this checkout holds no scripts/git-hooks/shim.sh')
 
 # 445. #360 AC8 — `--no-hook-check` exempts a run from that refusal, for CI, which has no clone to
 #      commit from. The CI step's one working-tree run carries it. The `- Validators:` line and
-#      the hook scripts do not: a turn end or a hook that took the exemption would hide an absent hook.
+#      the hook scripts do not, nor the gh guard's (#361): a turn end or a hook that took the exemption
+#      would hide an absent hook.
 lk_c=$(hook_repo lkg-y-exempt)
 out=$(run_leak "$lk_c" "" "" "" --no-hook-check)
 [ "$out" = 0 ] && grep -q 'file(s) scanned, private patterns loaded' "$TMP/lkout" && v0=ok || v0="exit=$out"
@@ -12256,7 +12261,8 @@ grep 'check-leakage\.sh' "$TMP/lkg-step.sh" | grep -v -e '--no-hook-check' | gre
   && v2="$v2+a working-tree run without the exemption"
 v3=ok
 grep -q -e '--no-hook-check' "$ROOT/.steering/tech.md" && v3="in .steering/tech.md"
-cat "$ROOT"/scripts/git-hooks/*.sh "$ROOT/scripts/install-git-hooks.sh" "$ROOT"/hooks/*.sh | grep -q -e '--no-hook-check' && v3="$v3+in a hook script"
+cat "$ROOT"/scripts/git-hooks/*.sh "$ROOT/scripts/install-git-hooks.sh" "$ROOT"/hooks/*.sh \
+  "$ROOT"/scripts/claude-hooks/* "$ROOT/scripts/install-gh-hook.sh" | grep -q -e '--no-hook-check' && v3="$v3+in a hook script"
 
 [ "$v0 $v1 $v2 $v3" = "ok ok ok ok ok" ] \
   && report "--no-hook-check exempts a run, is on CI's working-tree run, and is on no validator line or hook" ok \
@@ -12443,6 +12449,2161 @@ z13=$(lk_report 1 'LEAK [fail] ref number(s) in the list: 2 3')
   && report "the leak checks refuse what the first review found uncased, and say when the hooks were not checked" ok \
   || report "the leak checks refuse what the first review found uncased, and say when the hooks were not checked" no \
      "staged-git-fails=$z0 quoted-path-in-commits=$z1 path-after-revisions=$z2 empty-hooks-path=$z3 shim-only=$z4 not-checked-said=$z5 common-dir=$z6 blob-seam=$z7 tag-name=$z8 crlf=$z9 push-no-directory=$z10 push-unwritable=$z11 anchored-added-line=$z12 anchored-ref-name=$z13"
+
+# --- guards: scripts/claude-hooks/gh_guard.py ---------------------------------------
+#
+# The hook that scans what a gh write would publish, from any project's Claude Code session
+# (#361). It is registered in the maintainer's user-level settings, so these cases run it as
+# that entry does: `<python> -I gh_guard.py`, a hook input on standard input, an environment
+# that holds only what a case puts in it, and a HOME under $TMP with synthetic patterns.
+
+# The interpreter. The installer registers a 3.9 on macOS, and the hook keeps to 3.9.
+GHG_PY=$(command -v python3 2>/dev/null)
+GHG_HOOK="$ROOT/scripts/claude-hooks"
+mkdir -p "$TMP/ghg-home/.config/gate-sdd" "$TMP/ghg-bare-home" "$TMP/ghg-cwd"
+cp "$LKG_PAT" "$TMP/ghg-home/.config/gate-sdd/leakage-patterns"
+ghg_input() {  # $1 = the command, which holds no `"` and no backslash; $2 = the tool, Bash by default
+  printf '{"session_id":"s","hook_event_name":"PreToolUse","tool_name":"%s","tool_input":{"command":"%s"},"cwd":"%s"}' \
+    "${2:-Bash}" "$1" "$TMP/ghg-cwd" > "$TMP/ghg-in"
+}
+ghg_run() {  # $1 = the hook's directory, else the repository's; GHG_HOME, GHG_ENV as a case sets
+             # them. Reads $TMP/ghg-in; prints the exit status; leaves ghgout and ghgerr.
+  ( cd "$TMP/ghg-cwd" && env -i PATH=/usr/bin:/bin HOME="${GHG_HOME:-$TMP/ghg-home}" ${GHG_ENV:-} \
+      "$GHG_PY" -I "${1:-$GHG_HOOK}/gh_guard.py" <"$TMP/ghg-in" >"$TMP/ghgout" 2>"$TMP/ghgerr"
+    printf '%s' "$?" )
+}
+ghg_fake() {  # $1 = name, then the lines of a gh_guard_lib.py beside a copy of the entry script
+  ghg_f="$TMP/ghg-fake-$1"; mkdir -p "$ghg_f"; cp "$GHG_HOOK/gh_guard.py" "$ghg_f/"; shift
+  printf '%s\n' "$@" > "$ghg_f/gh_guard_lib.py"; echo "$ghg_f"
+}
+ghg_blocked() {  # $1 = the exit status; then the words stderr must hold. Prints ok or what is wrong.
+  ghg_w=ok
+  [ "$1" = 2 ] || ghg_w="exit=$1"; shift
+  [ -s "$TMP/ghgout" ] && ghg_w="$ghg_w+stdout"
+  grep -q '^gate-sdd gh guard: blocked\. ' "$TMP/ghgerr" || ghg_w="$ghg_w+no-head"
+  for ghg_s in "$@"; do grep -Fq -e "$ghg_s" "$TMP/ghgerr" || ghg_w="$ghg_w+missing:$ghg_s"; done
+  grep -q 'Zq_Exact' "$TMP/ghgout" "$TMP/ghgerr" && ghg_w="$ghg_w+holds-the-text"
+  echo "$ghg_w"
+}
+
+# 448. #361 AC1, AC3, AC4 — the protocol. A command without a gh word passes, with nothing on
+#      stdout or stderr, and with no pattern file to load; every other way out of the hook that
+#      is not the module's own pass is a block, and the block never holds the module's message.
+if [ -z "$GHG_PY" ]; then
+  note_skip "gh-guard/protocol" "no python3 on PATH"
+else
+  ghg_input 'ls -la && git status'
+  out=$(GHG_HOME="$TMP/ghg-bare-home" ghg_run)
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && [ ! -s "$TMP/ghgerr" ] && p0=ok || p0="exit=$out"
+  ghg_input 'ls' mcp__terminal__run_in_terminal
+  out=$(GHG_HOME="$TMP/ghg-bare-home" ghg_run)
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && p0="$p0 ok" || p0="$p0 terminal-exit=$out"
+
+  # Input that is not a PreToolUse event with a command in it.
+  p1=""
+  for ghg_x in 'not json' '[]' '{"tool_input":{}}' '{"tool_input":{"command":7}}' '{"tool_input":"ls"}'; do
+    printf '%s' "$ghg_x" > "$TMP/ghg-in"; out=$(ghg_run)
+    p1="$p1 $(ghg_blocked "$out" 'could not read its input')"
+  done
+  printf '\377\376' > "$TMP/ghg-in"; out=$(ghg_run); p1="$p1 $(ghg_blocked "$out" 'could not read its input')"
+
+  # An argument the hook does not take.
+  ghg_input 'ls'; out=$( ( cd "$TMP/ghg-cwd" && env -i PATH=/usr/bin:/bin HOME="$TMP/ghg-home" \
+    "$GHG_PY" -I "$GHG_HOOK/gh_guard.py" --surprise <"$TMP/ghg-in" >"$TMP/ghgout" 2>"$TMP/ghgerr"; printf '%s' "$?" ) )
+  p2=$(ghg_blocked "$out" 'an argument it does not take')
+
+  # The module's own failures, by a module that stands in for it.
+  ghg_input 'ls'
+  p3=""
+  for ghg_x in "raise RuntimeError('Zq_Exact')|RuntimeError" "raise SystemExit(1)|SystemExit" \
+               "raise SystemExit(0)|SystemExit" "raise SystemExit('Zq_Exact')|SystemExit" \
+               "raise KeyboardInterrupt|KeyboardInterrupt"; do
+    ghg_f=$(ghg_fake crash 'def run(argv, data):' "    ${ghg_x%|*}")
+    out=$(ghg_run "$ghg_f"); p3="$p3 $(ghg_blocked "$out" "failed with ${ghg_x#*|} before it could decide")"
+  done
+  ghg_f=$(ghg_fake import-crash "raise ValueError('Zq_Exact')")
+  out=$(ghg_run "$ghg_f"); p3="$p3 $(ghg_blocked "$out" 'could not start (ValueError)')"
+
+  # What the module returns, when it is not a decision.
+  p4=""
+  for ghg_x in '(1, "", "")' '(0, "Zq_Exact", "")' '(0, "{\"decision\": \"approve\"}", "")' \
+               '(True, "", "")' '(0, "", None)' 'None' '(2, "", "")'; do
+    ghg_f=$(ghg_fake returns 'def run(argv, data):' "    return $ghg_x")
+    out=$(ghg_run "$ghg_f"); p4="$p4 $(ghg_blocked "$out")"
+  done
+  # A stray print is discarded, and a well-formed warning passes as the one thing on stdout.
+  ghg_f=$(ghg_fake prints 'def run(argv, data):' "    print('Zq_Exact')" '    return (0, "", "")')
+  out=$(ghg_run "$ghg_f")
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && p5=ok || p5="print-exit=$out"
+  ghg_f=$(ghg_fake warns 'def run(argv, data):' '    return (0, "{\"systemMessage\": \"a warning\"}", "")')
+  out=$(ghg_run "$ghg_f")
+  [ "$out" = 0 ] && [ "$(cat "$TMP/ghgout")" = '{"systemMessage": "a warning"}' ] && p5="$p5 ok" || p5="$p5 warn-exit=$out"
+
+  # A hook that cannot start blocks every command, and names why.
+  mkdir -p "$TMP/ghg-no-lib"; cp "$GHG_HOOK/gh_guard.py" "$TMP/ghg-no-lib/"
+  out=$(ghg_run "$TMP/ghg-no-lib"); p6=$(ghg_blocked "$out" 'could not start (ModuleNotFoundError): the module gh_guard_lib could not be imported')
+
+  # -I: a project's PYTHONPATH reaches the hook (measured), and a module in it named like a
+  # standard one does not run.
+  mkdir -p "$TMP/ghg-pythonpath"; printf 'raise SystemExit(0)\n' > "$TMP/ghg-pythonpath/json.py"
+  cp "$TMP/ghg-pythonpath/json.py" "$TMP/ghg-pythonpath/re.py"
+  ghg_input '${:-gh} issue list'
+  out=$(GHG_ENV="PYTHONPATH=$TMP/ghg-pythonpath" ghg_run); p7=$(ghg_blocked "$out")
+  printf '%s' 'not json' > "$TMP/ghg-in"
+  out=$(GHG_ENV="PYTHONPATH=$TMP/ghg-pythonpath" ghg_run); p7="$p7 $(ghg_blocked "$out" 'could not read its input')"
+
+  [ "$p0" = "ok ok" ] && [ "$p1" = " ok ok ok ok ok ok" ] && [ "$p2" = ok ] && [ "$p3" = " ok ok ok ok ok ok" ] \
+    && [ "$p4" = " ok ok ok ok ok ok ok" ] && [ "$p5" = "ok ok" ] && [ "$p6" = ok ] && [ "$p7" = "ok ok" ] \
+    && report "the gh guard passes a command without gh in silence, and blocks every other way out that is not a decision" ok \
+    || report "the gh guard passes a command without gh in silence, and blocks every other way out that is not a decision" no \
+       "no-gh=$p0 input=$p1 argument=$p2 crash=$p3 returns=$p4 stdout=$p5 no-module=$p6 pythonpath=$p7"
+fi
+
+
+# The in-process harness: one Python file, written here and run once, that imports gh_guard_lib
+# from the repository and asks it about each input. The cases below report its groups. A group
+# it cannot run, such as the zsh oracle on a machine without zsh, is a spoken skip (#361).
+cat > "$TMP/ghg-harness.py" <<'GHG_HARNESS'
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, sys.argv[1])
+import gh_guard_lib as g  # noqa: E402
+
+ZSH = sys.argv[2] if len(sys.argv) > 2 else ""
+SCRATCH = sys.argv[3] if len(sys.argv) > 3 else "."
+results = {}
+
+
+def check(group, ok, detail):
+    found = results.setdefault(group, [])
+    if not ok:
+        found.append(detail)
+
+
+def fmt(s):
+    s = s.replace("\n", "\\n")
+    return '"' + s + '"' if s == "" or " " in s else s
+
+
+def ow(w, env):
+    return fmt(ow_raw(w, env))
+
+
+def ow_raw(w, env):
+    v = w.literal(env)
+    if v is not None:
+        return v
+    out = "*" if w.pattern() else ""
+    for p in w.parts:
+        if p.kind == "lit":
+            out += p.text
+        elif p.kind == "param":
+            out += "${" + p.text + "}"
+        elif p.kind == "home":
+            out += "~"
+        elif p.kind == "equals":
+            out += "=" + p.text
+        elif p.kind in ("cmdsub", "procsub"):
+            out += "$(" + oscript(p.script, env) + ")"
+        else:
+            out += "<" + p.text + ">"
+    return out
+
+
+def oredir(r, env):
+    if r.heredoc is not None:
+        h = r.heredoc
+        if h.quoted:
+            return r.fd + r.op + "Q:" + fmt(h.body)
+        return r.fd + r.op + fmt(ow_raw(h.word, env))
+    return r.fd + r.op + ow(r.target, env)
+
+
+def ocmd(c, env):
+    if isinstance(c, g.Simple):
+        bits = [n + ("+=" if a else "=") + ow(v, env) for n, v, a in c.assigns]
+        bits += [ow(w, env) for w in c.words]
+        bits += [oredir(r, env) for r in c.redirs]
+        return "[" + " ".join(bits) + "]"
+    inner = oscript(c.body, env)
+    tail = "".join(" " + oredir(r, env) for r in c.redirs)
+    return ("(" + inner + ")" if c.kind == "subshell" else "{" + inner + "}") + tail
+
+
+def oscript(s, env):
+    out = []
+    for node, sep in s.items:
+        bits = []
+        for k, p in enumerate(node.pipelines):
+            if k:
+                bits.append(node.ops[k - 1])
+            bits.append(("! " if p.bang else "") + " | ".join(ocmd(c, env) for c in p.commands))
+        out.append(" ".join(bits) + (" " + sep if sep else ""))
+    if s.unsupported is not None:
+        out.append("!!" + repr(s.unsupported[0]) + ":" + s.unsupported[1])
+    return " ".join(out)
+
+
+def outline(command, env=None):
+    try:
+        return oscript(g.parse(command), {"HOME": "/H"} if env is None else env)
+    except g.Unsupported as why:
+        return "RAISED:" + why.reason
+
+
+# -- the lexer (T2) ----------------------------------------------------------------------------
+# Each command's outline: its lists, pipelines and commands, each word's value where it is known
+# before the command runs, `*` before a word zsh globs or brace-expands, ${NAME} and ~ before
+# they are expanded, $(...) around a substitution's own outline, and <...> around the source of
+# an expansion that is never known here.
+LEXER = [
+    ('gh issue create --title \'a b\' --body "x $HOME y"',
+     '[gh issue create --title "a b" --body "x /H y"]'),
+    ('cd /x && gh pr create -b "$(cat <<\'Q\'\nline one\nQ\n)" ; echo done',
+     '[cd /x] && [gh pr create -b "$([cat <<Q:"line one\\n"])"] ; [echo done]'),
+    ('a | b |& c || d && e & f &| g',
+     '[a] | [b] | [c] || [d] && [e] & [f] & [g]'),
+    ('(cd x; gh issue list) > out 2>&1 && { gh pr list; }',
+     '([cd x] ; [gh issue list]) >out 2>&1 && {[gh pr list] ;}'),
+    ('X=1 Y=~/a Z+=b gh api repos/{owner}/{repo}/issues',
+     '[X=1 Y=/H/a Z+=b gh api repos/{owner}/{repo}/issues]'),
+    ('gh issue create --body-file - <<EOF\nhi $HOME \\$x `echo z`\nEOF',
+     '[gh issue create --body-file - <<"hi ${HOME} $x $([echo z])\\n"]'),
+    ("cat <<-'A' <<B\n\ttab\n\tA\nb\nB",
+     '[cat <<-Q:tab\\n <<b\\n]'),
+    ("gh x <<< 'here' 2>/dev/null >&2 &>> log",
+     '[gh x <<<here 2>/dev/null >&2 &>>log]'),
+    ('gh a `echo b`',
+     '[gh a "$([echo b])"]'),
+    ('echo $(echo $(echo deep))',
+     '[echo "$([echo "$([echo deep])"])"]'),
+    ('w a{b,c} *.md [x] "{a,b}" {} {owner}',
+     '[w *a{b,c} **.md *[x] {a,b} {} {owner}]'),
+    ('=gh issue list; =(echo x) <(echo y)',
+     '[=gh issue list] ; ["$([echo x])" "$([echo y])"]'),
+    ('w ${:-gh} ${HOME} $HOME[1] $HOME:h $1 $? ${#x} $((1+2))',
+     '[w <${:-gh}> /H <$HOME[1]> <$HOME:h> <$1> <$?> <${#x}> <$((1+2))>]'),
+    ('gh a # a comment with gh\ngh b',
+     '[gh a] [gh b]'),
+    ('! gh a',
+     '! [gh a]'),
+    ('gh a \\\n  --body b\n',
+     '[gh a --body b]'),
+    ('a &&\n\n b ||\n c |\n d',
+     '[a] && [b] || [c] | [d]'),
+    ("gh a <<'X' && gh b <<Y\none\nX\ntwo $HOME\nY\n",
+     '[gh a <<Q:one\\n] && [gh b <<"two /H\\n"]'),
+    ('echo "$(gh issue view 1 --json body)" > f',
+     '[echo "$([gh issue view 1 --json body])" >f]'),
+    ("tee <<'Q' out >/dev/null\n$(not run)\nQ",
+     '[tee out <<Q:"$(not run)\\n" >/dev/null]'),
+]
+
+for command, want in LEXER:
+    got = outline(command)
+    check("lexer", got == want, repr(command) + " gave " + got)
+
+# Each word's value, where the lexer says it is known, against the word zsh gives `w`. A word
+# the lexer cannot know is None, and zsh is not asked about it.
+WORDS = [
+    ("w $'Zq_\\x45xact' a\\ b \"c$HOME\" ~/x", ["Zq_Exact", "a b", "c/H", "/H/x"]),
+    ("w \"a\"b'c'\\d", ["abcd"]),
+    ("w --body=~/x X=~/y", ["--body=~/x", "X=~/y"]),
+    ("w $'a\\'b' $'\\101\\x41\\u0041\\n\\t'", ["a'b", "AAA\n\t"]),
+    ("w $\"x\"", ["$x"]),
+    ("w a#b #c", ["a#b"]),
+    ("w ${HOME}x \"$HOME\"y", ["/Hx", "/Hy"]),
+    ("w '' \"\" x", ["", "", "x"]),
+    ("w \"a\\$b\\\"c\\d\\\\e\" 'x\\y' \"\\`\"", ["a$b\"c\\d\\e", "x\\y", "`"]),
+    ("w a\\\nb", ["ab"]),
+    ("w \"{a,b}\" {} {owner} x,y \"*\" '[x]' a~b", ["{a,b}", "{}", "{owner}", "x,y", "*", "[x]", "a~b"]),
+    ("w \"a\nb\" -b\"x y\" --body='z'", ["a\nb", "-bx y", "--body=z"]),
+    ("w $'\\0101'", ["\b1"]),
+    ("w a{b,c} *.md [x] ${:-gh} $HOME[1] $HOME:h $1 =ls $'\\cA' ~nosuchuser $(echo a) `echo a` <(echo)",
+     [None] * 13),
+]
+
+
+def zsh_words(command):
+    # What zsh, set as the Bash tool sets it, passes to `w`, one word to each NUL.
+    pre = ("setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL NO_BRACE_CCL NO_MAGIC_EQUAL_SUBST; "
+           "w() { printf '%s\\0' \"$@\"; }; ")
+    r = subprocess.run([ZSH, "-f", "-c", pre + 'eval "$1"', "zsh", command], cwd=SCRATCH,
+                       env={"HOME": "/H", "PATH": "/usr/bin:/bin"}, stdout=subprocess.PIPE,
+                       stderr=subprocess.PIPE)
+    return r.stdout.decode("utf-8", "surrogateescape").split("\0")[:-1]
+
+
+for command, want in WORDS:
+    try:
+        script = g.parse(command)
+        words = script.items[0][0].pipelines[0].commands[0].words[1:]
+        got = [w.literal({"HOME": "/H"}) for w in words]
+    except Exception as e:
+        got = ["raised " + type(e).__name__]
+    check("lexer-words", got == want, repr(command) + " gave " + repr(got))
+    if ZSH and None not in want:
+        real = zsh_words(command)
+        check("lexer-zsh", real == want, repr(command) + ": zsh gave " + repr(real))
+if not ZSH:
+    results["lexer-zsh"] = None
+
+# A construct the lexer does not handle makes the rest of the command opaque, from the start of
+# the list item that holds it, so a gh word before it in the same item is in the opaque text.
+UNSUPPORTED = [
+    ("x=(a b) gh z", 0, "an array assignment"),
+    ("echo \"${X:-it's}\"; gh y", 0, "a quote inside ${...}"),
+    ("echo ${x:-\"}\"}; gh y", 0, "a quote inside ${...}"),
+    ("gh a | while read x; do case $x in y) ;; esac; done", 0, "`case`"),
+    ("echo a; for ((i=0; i<2; i++)); do gh b; done", 8, "a `for` this hook does not read"),
+    ("echo a; for x (a b) gh b", 8, "a `for` this hook does not read"),
+    ("if x; then gh y", 0, "a `fi` is missing"),
+    ("while x; do gh y", 0, "a `done` is missing"),
+    ("echo a; echo $(case x in y) gh;; esac)", 8, "`case`"),
+    ("gh a && case x in y) ;; esac", 0, "`case`"),
+    ("(( x )) && gh a", 0, "arithmetic `((`"),
+    ("select x in a; do gh; done", 0, "`select`"),
+    ("repeat 2 gh a", 0, "`repeat`"),
+    ("coproc gh a", 0, "`coproc`"),
+    ("foreach x (a) gh; end", 0, "`foreach`"),
+    ("gh \"unterminated", 0, "a quote is not closed"),
+    ("gh 'unterminated", 0, "a quote is not closed"),
+    ("gh $'unterminated", 0, "a quote is not closed"),
+    ("gh `unterminated", 0, "a backtick is not closed"),
+    ("gh $(unterminated", 0, "a ) is missing"),
+    ("gh ${unterminated", 0, "an expansion is not closed"),
+    ("gh a <<EOF\nno end", 0, "a here-document has no end line"),
+    ("gh a <<EOF", 0, "a here-document has no end line"),
+    ("gh a <<EOF & echo b; gh c", 0, "a here-document has no end line"),
+    ("gh a <<EOF; gh 'b", 0, "a quote is not closed"),
+    ("echo a; gh b <<EOF && c; d\nno end", 8, "a here-document has no end line"),
+    ("gh a \\", 0, "the command ends in a backslash"),
+    ("gh a ;; gh b", 0, "a case pattern's end"),
+    ("gh a <<$X\nb\n$X", 0, "a here-document's delimiter is not literal"),
+    ("gh a > ", 0, "a redirection has no target"),
+    ("gh a && && gh b", 0, "an empty command"),
+    ("{ gh a", 0, "a } is missing"),
+]
+
+COMPOUND = [
+    ("for x in a b; do gh issue view $x; done", "for x [a, b]"),
+    ("for x\ndo echo $x\ndone", "for x None"),
+    ("while true; do gh pr checks 1 && break; sleep 5; done", "while"),
+    ("until gh pr checks 1; do sleep 10; done", "until"),
+    ("if a; then b; elif c; then d; else e; fi", "if 3"),
+    ("f() { gh issue view $1; }", "function f"),
+    ("function g { gh x; }", "function g"),
+    ("function h() ( gh y )", "function h"),
+    ("for f in *.md; do gh issue create -F $f; done > log", "for f [None]"),
+]
+for command, want in COMPOUND:
+    try:
+        node = g.parse(command).items[0][0].pipelines[0].commands[0]
+        got = node.kind + (" " + node.var if node.var else "")
+        if node.kind == "for":
+            got += " " + (repr([w.literal() for w in node.words]).replace("'", "") if node.words is not None else "None")
+        if node.kind == "if":
+            got += " " + str(len(node.parts))
+    except Exception as e:
+        got = "raised " + type(e).__name__
+    check("lexer-compound", got == want, repr(command) + " gave " + got)
+
+for command, at, why in UNSUPPORTED:
+    try:
+        script = g.parse(command)
+        got = script.unsupported
+    except Exception as e:
+        got = ("raised", type(e).__name__)
+    check("lexer-unsupported", got == (command[at:], why), repr(command) + " gave " + repr(got))
+
+
+# -- the finder (T3) ---------------------------------------------------------------------------
+# What the walk finds in a command: the gh invocations, each as the values of its words after
+# gh, and the first reason a gh word is not accounted for.
+FINDER_DIR = os.path.join(SCRATCH, "finder")
+os.makedirs(FINDER_DIR, exist_ok=True)
+
+
+def find(command, cwd=FINDER_DIR):
+    f = g.Finder("/H", cwd).find(g.parse(command))
+    calls = [[w.literal(i.state.env()) for w in i.words] for i in f.invocations]
+    return f.problems, calls
+
+
+# Accounted for: each one's invocations, and no reason to block.
+FOUND = [
+    ("for x in a; do gh issue list; done", [["issue", "list"]]),
+    ("until gh pr checks 1; do sleep 10; done", [["pr", "checks", "1"], ["pr", "checks", "1"]]),
+    ("for c in gh; do $c issue list; done", [["issue", "list"]]),
+    ("if gh pr view 1; then gh issue list; else echo no; fi", [["pr", "view", "1"], ["issue", "list"]]),
+    ("for n in 1 2; do gh issue view $n; done", [["issue", "view", "1"], ["issue", "view", "2"]]),
+    ("f() { gh issue view $1; }; f 3", [["issue", "view", None]]),
+    ("git push origin gh-pages && python3 x.py .specs/9-before-gh-writes-it/spec.md", []),
+    ("\"$(xcrun -f python3)\" -c 'print(1)'; gh --version", [["--version"]]),
+    ("git -c credential.helper='!gh auth git-credential' push -u origin x", []),
+    ("echo gh.txt gh- x-gh-y", []),
+    ("echo \"use gh to file it\"", []),
+    ("git commit -m 'gh hook' && git log --grep gh && git push origin gh-pages", []),
+    ("grep -rn gh scripts/ ; rg -n 'gh ' . ; which gh ; type gh ; command -v gh ; man gh", []),
+    ("cat <<'EOF' > notes.md\nuse gh\nEOF", []),
+    ("ls ~/.config/gh && cd gh-pages && cat gh.txt | wc -l", []),
+    ("gh issue list", [["issue", "list"]]),
+    ("/opt/homebrew/bin/gh pr list", [["pr", "list"]]),
+    ("=gh pr list", [["pr", "list"]]),
+    ("env GH_REPO=o/r gh issue list", [["issue", "list"]]),
+    ("command gh a; exec gh b; builtin exec gh c; noglob gh d; nocorrect gh e; time gh f",
+     [["a"], ["b"], ["c"], ["d"], ["e"], ["f"]]),
+    ("nohup gh a; nice -n 5 gh b; nice gh c; caffeinate -i gh d; timeout 10 gh e;"
+     " timeout -s KILL 5 gh f", [["a"], ["b"], ["c"], ["d"], ["e"], ["f"]]),
+    ("G=gh; $G issue list", [["issue", "list"]]),
+    ("G=/opt/homebrew/bin/gh; \"$G\" pr list", [["pr", "list"]]),
+    ("X=$(gh pr view --json url -q .url); echo \"$X\"",
+     [["pr", "view", "--json", "url", "-q", ".url"]]),
+    ("gh issue create --body \"$(cat <<'EOF'\nuse gh\nEOF\n)\"",
+     [["issue", "create", "--body", None]]),
+    ("gh api user | grep gh", [["api", "user"]]),
+    ("ls # gh issue create in a comment", []),
+]
+
+for command, want in FOUND:
+    try:
+        problems, calls = find(command)
+    except Exception as e:
+        problems, calls = ["raised " + type(e).__name__], None
+    check("finder", not problems and calls == want,
+          repr(command) + " gave " + repr((problems, calls)))
+
+# Not accounted for: each one's reason, and nothing let through.
+BLOCKED = [
+    ("export G=gh; $G x", "A gh word is in G, which a later program may run"),
+    ("sh -c 'gh issue list'", "A gh word is given to sh"),
+    ("sh <<'EOF'\ngh issue list\nEOF", "A gh word is given to sh"),
+    ("eval \"gh issue list\"", "A gh word is given to eval"),
+    ("cat > /tmp/x.sh <<'EOF'\ngh issue list\nEOF\nsh /tmp/x.sh", "writes a gh word into a file, and runs sh"),
+    ("cat > x.sh <<'EOF'\ngh a\nEOF\nchmod +x x.sh; ./x.sh", "writes a gh word into a file, and runs x.sh"),
+    ("echo 'gh b' > y.sh && bash y.sh", "writes a gh word into a file, and runs bash"),
+    ("for c in $(echo gh); do $c issue list; done", "A command's name cannot be known"),
+    ("$(which gh) issue list", "A command's name cannot be known"),
+    ("G=$(echo gh); \"$G\" -c x", "A command's name cannot be known"),
+    ("git -c core.sshCommand='gh x' fetch", "can run its arguments"),
+    ("git -c credential.helper='!gh issue list' push", "can run its arguments"),
+    ("${:-gh} issue list", "A command's name cannot be known"),
+    ("$(echo gh) issue list", "A command's name cannot be known"),
+    ("\"${commands[gh]}\" issue list", "A command's name cannot be known"),
+    ("G=$(echo gh); $G issue list", "A command's name cannot be known"),
+    ("xargs gh issue close < ids", "an argument of a command that can run its arguments"),
+    ("find . -exec gh issue list \\;", "an argument of a command that can run its arguments"),
+    ("sudo gh x", "an argument of a command that can run its arguments"),
+    ("python3 -c 'import os; os.system(\"gh issue list\")'", "can run its arguments"),
+    ("node -e \"require('child_process').execSync('gh pr list')\"", "can run its arguments"),
+    ("alias g=gh", "can run its arguments"),
+    ("hash gh=/tmp/x", "can run its arguments"),
+    ("eval \"$X gh issue list\"", "A gh word is an argument of eval"),
+    ("watch gh pr checks", "can run its arguments"),
+    ("rg --pre gh x", "can run its arguments"),
+    ("git -c alias.x='!gh issue list' x", "can run its arguments"),
+    ("git rebase -i --exec 'gh pr comment 1 -b x' HEAD~3", "can run its arguments"),
+    ("git bisect run gh issue list", "can run its arguments"),
+    ("G=$(echo gh); xargs $G", "can run its arguments"),
+    ("echo gh issue list | sh", "A shell reads its script from a pipe"),
+    ("printf 'gh x' | xargs -I{} sh -c {}", "printed into a pipe"),
+    ("echo $(echo gh) issue list | xargs -I{} sh -c {}", "printed into a pipe"),
+    ("python3 <<'EOF'\nos.system('gh issue list')\nEOF", "that python3 reads"),
+    ("cat > x.py <<'EOF'\nos.system(\"gh x\")\nEOF\npython3 x.py", "python3 reads it"),
+    ("cat a > x.sh; sh x.sh; gh y", "runs a file it wrote"),
+    ("env -S 'gh x'", "The hook cannot read env -S"),
+    ("nice --weird gh", "The hook cannot read nice --weird"),
+    ("timeout $T gh x", "a wrapper's argument cannot be known"),
+    ("G=$(echo gh); bash -c \"$G x\"", "A shell is given a word the hook cannot know"),
+    ("gh issue list && $(echo gh) x", "A command's name cannot be known"),
+    ("sh <<EOF\n$(echo gh) x\nEOF", "A shell reads a here-document the hook cannot know"),
+    ("export X=$(echo gh); sh -c \"$X\"", "A shell is given a word the hook cannot know"),
+]
+
+for command, want in BLOCKED:
+    try:
+        problems, calls = find(command)
+    except Exception as e:
+        problems, calls = ["raised " + type(e).__name__], None
+    check("finder-blocks", bool(problems) and any(want in p for p in problems),
+          repr(command) + " gave " + repr((problems, calls)))
+
+# A cd moves the directory later commands of the same list run in; one that may have failed
+# leaves either, and a subshell's stays in it.
+CWDS = [
+    ("cd /x && gh a", [("/x",)]),
+    ("cd /x; gh a", [("/w", "/x")]),
+    ("cd /x || exit 1; gh a", [("/x",)]),
+    ("(cd /x); gh a", [("/w",)]),
+    ("cd sub && cd .. && cd /y/z && gh a", [("/y/z",)]),
+    ("cd \"$UNKNOWN\" && gh a", [(None,)]),
+    ("cd && gh a", [("/H",)]),
+    ("cd /x | cat; gh a", [("/w",)]),
+]
+for command, want in CWDS:
+    f = g.Finder("/H", "/w").find(g.parse(command))
+    got = [i.state.cwds for i in f.invocations]
+    check("finder-cwd", got == want and not f.problems, repr(command) + " gave " + repr(got))
+
+
+# -- classification and values (T4) ------------------------------------------------------------
+# decide() with the guard call recorded rather than run: the recorder hits any line holding
+# Zq_Exact, warns on any holding zq_warn, and keeps every source it was given.
+SEEN = []
+
+
+def recorder(sources):
+    SEEN.append([(s.label, s.data) for s in sources])
+    hits, warns = [], []
+    for s in sources:
+        for n, line in enumerate(s.data.replace(b"\r\n", b"\n").split(b"\n"), 1):
+            if b"Zq_Exact" in line:
+                hits.append(("fail", s.label, n))
+            if b"zq_warn" in line:
+                warns.append(("warn ignore-case", s.label, n))
+    return hits, warns
+
+
+def verdict(command, version="2.104", cwd="/w", branch=None):
+    del SEEN[:]
+    ctx = g.Context("/H", scan=recorder, gh_version=lambda binary, where: version, branch=branch)
+    try:
+        code, out, err = g.decide(command, cwd, ctx)
+    except Exception as e:
+        return "raised " + type(e).__name__, []
+    labels = [label for label, _ in SEEN[0]] if SEEN else []
+    if code == 2:
+        return "block: " + err.split("blocked. ", 1)[1].split("\n")[0], labels
+    if out:
+        return "warn: " + json.loads(out)["systemMessage"], labels
+    return "pass", labels
+
+
+import json  # noqa: E402
+
+# Reads, writes, local state and arbitrary execution, with what each write sends.
+CLASSIFY = [
+    ("f() { gh \"$@\"; }; f issue list", "block: Which gh command runs depends on a word", []),
+    ("X=a; while true; do gh issue create -t t -b $X; X=Zq_Exact; done", "block: Cannot recover"
+     " the text gh would send: a word whose value cannot be known", []),
+    ("X=a; f() { gh issue create -t t -b $X; }; X=Zq_Exact; f", "block: Cannot recover the text"
+     " gh would send: a word whose value cannot be known", []),
+    ("f() { gh issue create -t t -F /etc/hosts; }; f", "block: Cannot recover the text gh would"
+     " send: /etc/hosts, which a function, a source, an eval or an exec earlier in the command"
+     " may change, or read in a function's body.", []),
+    ("if true; then gh issue comment 1 -b ok; else gh issue comment 1 -b Zq_Exact; fi",
+     "block: LEAK [fail] in the --body value, line 1.", ["the --body value", "argument 1",
+                                                        "the --body value", "argument 1"]),
+    ("V=ok; if test -f x; then V=Zq_Exact; fi; gh issue comment 1 -b $V", "block: Cannot recover"
+     " the text gh would send: a word whose value cannot be known", []),
+    ("V=ok; if test -f x; then V=ok; else V=ok; fi; gh issue comment 1 -b $V", "pass",
+     ["the --body value", "argument 1"]),
+    ("for b in ok Zq_Exact; do gh issue comment 1 -b $b; done", "block: LEAK [fail] in the --body"
+     " value, line 1.", ["the --body value", "argument 1", "the --body value", "argument 1"]),
+    ("gh api \"repos/$R/issues/$i\"", "pass", []),
+    ("gh api graphql -f query='query($o: String!) { x }' -f o=\"$O\"", "pass", []),
+    ("gh api \"$EP\"", "block: Cannot recover the text gh would send: a word whose value", []),
+    ("gh api -X \"$M\" repos/o/r/issues", "block: Cannot recover the text gh would send: a word"
+     " whose value", []),
+    ("gh pr merge 1 --merge --match-head-commit \"$(git rev-parse HEAD)\"", "pass", ["argument 1"]),
+    ("gh api -X POST repos/o/r/issues -f title=t --jq .number -t '{{.id}}'", "pass",
+     ["the --method value", "the --raw-field value", "argument 1"]),
+    ("gh auth git-credential get", "pass", []),
+    ("gh issue list", "pass", []),
+    ("gh pr view 12 --json body", "pass", []),
+    ("gh issue new -t 'a title' -b body", "pass", ["the --title value", "the --body value"]),
+    ("gh issue create -t ok -b 'line\nZq_Exact'", "block: LEAK [fail] in the --body value, line 2.",
+     ["the --title value", "the --body value"]),
+    ("gh pr ls; gh pr co 3; gh ext ls; gh cs ls; gh rs ls; gh skills add x", "pass", []),
+    ("gh api repos/o/r/issues", "pass", []),
+    ("gh api -X GET repos/o/r/issues -f state=open", "pass", []),
+    ("gh api --method=get repos/o/r", "pass", []),
+    ("gh api repos/o/r/issues -f title=t", "pass", ["the --raw-field value", "argument 1"]),
+    ("gh api -X GET -X POST repos/o/r/issues", "pass", ["the --method value", "the --method value",
+                                                       "argument 1"]),
+    ("gh api -X POST -X GET repos/o/r/issues", "pass", []),
+    ("gh api graphql -f query='query { viewer { login } }'", "pass", []),
+    ("gh api graphql -f query='mutation { addComment }'", "pass",
+     ["the --raw-field value", "argument 1"]),
+    ("gh api graphql -F query=@missing.graphql", "block: Cannot recover the text gh would send:"
+     " missing.graphql, which does not exist when the hook runs.", []),
+    ("gh zz", "block: gh zz is not a gh command the hook knows", []),
+    ("gh co 12", "block: gh co is not a gh command the hook knows", []),
+    ("gh issue zz", "block: gh issue zz is not a gh command the hook knows", []),
+    ("gh copilot -p hi", "block: gh copilot can run anything", []),
+    ("gh extension exec x; gh codespace ssh", "block: gh extension exec can run anything", []),
+    ("gh repo set-default o/r && gh config set editor vim && gh alias set x 'issue list'", "pass", []),
+    ("gh issue create -b x --help", "pass", []),
+    ("gh issue create -b x --help=false", "pass", ["the --body value"]),
+    ("gh help issue && gh --version && gh", "pass", []),
+    ("gh issue create --bogus x", "block: gh issue create was given a flag the hook's table does"
+     " not list for it (word 3 after gh)", []),
+    ("gh issue create -Z", "block: gh issue create was given a flag", []),
+    ("gh repo clone o/r -- --upload-pack=x", "block: gh repo clone passes the words after `--`", []),
+    ("gh $SUB create -b x", "block: Which gh command runs depends on a word", []),
+    ("gh issue view $N", "pass", []),
+    ("gh issue create -b \"$BODY\"", "block: Cannot recover the text gh would send: a word whose"
+     " value cannot be known before the command runs (word 4 after gh).", []),
+    ("gh issue create -b *.md", "block: Cannot recover the text gh would send: a word whose value"
+     " cannot be known", []),
+]
+
+# Each flag that makes the text unrecoverable, in each form, and the forms that leave it alone.
+for flag in ("--fill", "-f", "--fill-first", "--fill-verbose", "-e", "--editor", "-w", "--web",
+             "--recover=x", "-T x", "--template=x", "--editor=true", "-fd"):
+    CLASSIFY.append(("gh pr create -t t -b b " + flag, "block: Cannot recover the text gh would"
+                     " send: --", []))
+for flag in ("--notes-from-tag", "--generate-notes"):
+    CLASSIFY.append(("gh release create v1 " + flag, "block: Cannot recover the text gh would"
+                     " send: " + flag + ".", []))
+CLASSIFY += [
+    # No --head: gh pushes the current branch and names it, so a branch the hook cannot read blocks.
+    ("gh pr create -t t -b b --web=false -w=false", "block: Cannot recover the text gh would send: the"
+     " branch gh pr create pushes, which the hook cannot read.", []),
+    ("gh issue comment 1 --edit-last", "block: Cannot recover the text gh would send: --edit-last.", []),
+    ("gh gist edit 12", "block: Cannot recover the text gh would send: gh gist edit's editor.", []),
+    ("gh agent-task create", "block: Cannot recover the text gh would send: gh agent-task create's"
+     " editor.", []),
+]
+
+# How a flag's value is read: attached, after `=`, combined with other short flags, and every
+# occurrence of a repeated one.
+CLASSIFY += [
+    ("gh issue comment 1 -bZq_Exact", "block: LEAK [fail] in the --body value, line 1.",
+     ["the --body value", "argument 1"]),
+    ("gh issue comment 1 --body=Zq_Exact", "block: LEAK [fail] in the --body value, line 1.",
+     ["the --body value", "argument 1"]),
+    ("gh issue comment 1 -b=Zq_Exact", "block: LEAK [fail] in the --body value, line 1.",
+     ["the --body value", "argument 1"]),
+    ("gh pr review 1 -cbZq_Exact", "block: LEAK [fail] in the --body value, line 1.",
+     ["the --body value", "argument 1"]),
+    ("gh issue comment 1 -b Zq_Exact -b clean", "block: LEAK [fail] in the --body value, line 1.",
+     ["the --body value", "the --body value", "argument 1"]),
+    ("gh -R o/Zq_Exact issue comment 1 -b x", "block: LEAK [fail] in the --repo value, line 1.",
+     ["the --repo value", "the --body value", "argument 1"]),
+    ("gh issue -R o/r comment 1 -b x", "pass", ["the --repo value", "the --body value", "argument 1"]),
+    ("gh release create Zq_Exact -n notes", "block: LEAK [fail] in argument 1, line 1.",
+     ["the --notes value", "argument 1"]),
+    ("gh issue comment 1 -b $'line\\r\\nZq_Exact'", "block: LEAK [fail] in the --body value, line 2.",
+     ["the --body value", "argument 1"]),
+    ("gh issue comment 1 -b zq_warn", "warn: gate-sdd gh guard: WARNING [warn ignore-case] in the"
+     " --body value, line 1: confirm it is a generic example.", ["the --body value", "argument 1"]),
+]
+
+for command, want, labels in CLASSIFY:
+    got, seen = verdict(command)
+    check("classify", got.startswith(want) and seen == labels,
+          repr(command) + " gave " + repr((got, seen)))
+
+# A branch the hook reads is scanned as the head gh pushes, beside the title and the body.
+got, seen = verdict("gh pr create -t t -b b --web=false -w=false" , branch=lambda cwd: "feature")
+check("classify", got == "pass" and seen == ["the --title value", "the --body value",
+                                             "the branch gh pushes as the head"],
+      "pr create on a branch the hook reads gave " + repr((got, seen)))
+
+# A gh whose version is not the table's passes a clean write with a warning, and a read without.
+got, _ = verdict("gh issue comment 1 -b x", version="2.99")
+check("classify-version", got.startswith("warn: gate-sdd gh guard: gh is 2.99, and the hook's"
+                                         " table is gh 2.104's"), repr(got))
+got, _ = verdict("gh issue comment 1 -b x", version=None)
+check("classify-version", got.startswith("warn: gate-sdd gh guard: gh is a version the hook could"
+                                         " not read"), repr(got))
+got, _ = verdict("gh issue list", version="2.99")
+check("classify-version", got == "pass", repr(got))
+
+# gh writes its state under a relative ./.local when it has no HOME, which the hook does not give
+# it, so the version is asked from / and not from the project the hook runs in. A stub stands in.
+VDIR = os.path.join(SCRATCH, "gh-version-cwd")
+os.makedirs(os.path.join(VDIR, "bin"), exist_ok=True)
+VSTUB = os.path.join(VDIR, "bin", "gh")
+with open(VSTUB, "w") as f:
+    f.write("#!/bin/sh\nmkdir -p .local/state 2>/dev/null && : > .local/state/device-id 2>/dev/null\n"
+            "echo 'gh version 2.104.0 (2026-11-12)'\n")
+os.chmod(VSTUB, 0o755)
+VPROJECT = os.path.join(VDIR, "project")
+os.makedirs(VPROJECT, exist_ok=True)
+here = os.getcwd()
+os.chdir(VPROJECT)
+try:
+    got = g.real_gh_version(VSTUB, VPROJECT)
+finally:
+    os.chdir(here)
+check("classify-version", got == "2.104" and not os.path.exists(os.path.join(VPROJECT, ".local")),
+      "asking gh its version gave " + repr(got) + ", and left .local in the project: "
+      + repr(os.path.exists(os.path.join(VPROJECT, ".local"))))
+
+# Every path in the table has a kind, and every kind names a path in it.
+table = g.nodes()
+missing = sorted(p for p in table if p not in g.KINDS)
+extra = sorted(p for p in g.KINDS if p not in table)
+check("classify-table", not missing and not extra, "no kind: " + repr(missing) + " no path: "
+      + repr(extra))
+check("classify-table", len(table) == 239, "the table holds " + str(len(table)) + " paths")
+
+# The text the guard is given: each source on lines of its own, a carriage return before a line
+# end and one alone made line ends, and each line number mapped back to its source.
+data, spans = g.assemble([g.Source("a", b"one"), g.Source("b", b""), g.Source("c", b"x\r\ny\rz\n"),
+                          g.Source("d", b"last")])
+check("guard-map", data == b"one\nx\ny\nz\nlast\n", repr(data))
+check("guard-map", g.locate([1, 2, 4, 5], spans) == [("a", 1), ("c", 1), ("c", 3), ("d", 1)],
+      repr(g.locate([1, 2, 4, 5], spans)))
+check("guard-map", sorted(g.child_env("/h", None)) == ["HOME", "LC_ALL", "PATH"]
+      and g.child_env("/h", None)["PATH"] == "/usr/bin:/bin", repr(g.child_env("/h", None)))
+
+
+# -- text off the command line (T5) ------------------------------------------------------------
+# Files in a scratch directory, read where gh would read them; what each write sends, by label
+# and content, and the reason for each one the hook cannot recover.
+D = os.path.join(SCRATCH, "offline")
+os.makedirs(os.path.join(D, "sub"), exist_ok=True)
+for name, body in (("body.md", b"clean body\n"), ("leak.md", b"line one\nZq_Exact here\n"),
+                   ("exists.md", b"old\n"), ("sub/inner.md", b"inner\n"), ("q.graphql", b"query { viewer { login } }\n"),
+                   ("m.graphql", b"mutation { addStar }\n"), ("asset.bin", b"\x00\x01Zq_Exact\n"),
+                   ("vars.env", b"A=1\n")):
+    with open(os.path.join(D, name), "wb") as f:
+        f.write(body)
+with open(os.path.join(D, "big.bin"), "wb") as f:
+    f.truncate(g.MAX_FILE + 1)
+
+
+def sent(command, cwd=D):
+    del SEEN[:]
+    ctx = g.Context("/H", scan=recorder, gh_version=lambda binary, where: "2.104")
+    try:
+        code, out, err = g.decide(command, cwd, ctx)
+    except Exception as e:
+        return "raised " + type(e).__name__, []
+    srcs = SEEN[0] if SEEN else []
+    if code == 2:
+        return "block: " + err.split("blocked. ", 1)[1].split("\n")[0], srcs
+    return "pass", srcs
+
+
+OFFLINE = [
+    ("gh issue create -t t -F body.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (body.md)", b"clean body\n")]),
+    ("gh issue create -t t --body-file=leak.md", "block: LEAK [fail] in the --body-file file"
+     " (leak.md), line 2.", [("the --title value", b"t"), ("the --body-file file (leak.md)",
+                                                         b"line one\nZq_Exact here\n")]),
+    ("gh release create v1 -n x --notes-file body.md", "pass",
+     [("the --notes value", b"x"), ("the --notes-file file (body.md)", b"clean body\n"),
+      ("argument 1", b"v1")]),
+    ("gh api repos/o/r/issues --input body.md", "pass",
+     [("the --input file (body.md)", b"clean body\n"), ("argument 1", b"repos/o/r/issues")]),
+    ("gh agent-task create -F body.md", "pass", [("the --from-file file (body.md)", b"clean body\n")]),
+    ("gh variable set A -f vars.env", "pass", [("the --env-file file (vars.env)", b"A=1\n"),
+                                              ("argument 1", b"A")]),
+    ("gh gist edit 12 --add body.md", "pass", [("the --add file (body.md)", b"clean body\n"),
+                                              ("the --add file's name (body.md)", b"body.md"),
+                                              ("argument 1", b"12")]),
+    ("gh issue create -t t --attach 'body.md#Zq_Exact alt'", "block: LEAK [fail] in the --attach"
+     " file's label, line 1.", [("the --title value", b"t"), ("the --attach file (body.md)",
+                                                            b"clean body\n"),
+                                ("the --attach file's name (body.md)", b"body.md"),
+                                ("the --attach file's label", b"Zq_Exact alt")]),
+    ("gh api repos/o/r/issues -F body=@body.md -f title=t", "pass",
+     [("the --field key", b"body"), ("the --field file (body.md)", b"clean body\n"),
+      ("the --raw-field value", b"title=t"), ("argument 1", b"repos/o/r/issues")]),
+    ("gh api repos/o/r/issues -f body=@leak.md", "pass",
+     [("the --raw-field value", b"body=@leak.md"), ("argument 1", b"repos/o/r/issues")]),
+    ("gh workflow run w.yml -F a=@body.md", "pass",
+     [("the --field key", b"a"), ("the --field file (body.md)", b"clean body\n"),
+      ("argument 1", b"w.yml")]),
+    ("gh api graphql -F query=@q.graphql", "pass", []),
+    ("gh api graphql -F query=@m.graphql", "pass",
+     [("the --field key", b"query"), ("the --field file (m.graphql)", b"mutation { addStar }\n"),
+      ("argument 1", b"graphql")]),
+    # A published file's content, name and label.
+    ("gh gist create body.md", "pass", [("the file in argument 1 (body.md)", b"clean body\n"),
+                                        ("the file in argument 1's name (body.md)", b"body.md")]),
+    ("gh release upload v1 'asset.bin#a label'", "block: LEAK [fail] in the file in argument 2"
+     " (asset.bin), line 1.", [("argument 1", b"v1"), ("the file in argument 2 (asset.bin)",
+                                                      b"\x00\x01Zq_Exact\n"),
+                               ("the file in argument 2's name (asset.bin)", b"asset.bin"),
+                               ("the file in argument 2's label", b"a label")]),
+    ("gh release create v1 sub/inner.md -n x", "pass",
+     [("the --notes value", b"x"), ("argument 1", b"v1"),
+      ("the file in argument 2 (sub/inner.md)", b"inner\n"),
+      ("the file in argument 2's name (sub/inner.md)", b"inner.md")]),
+    # Standard input, in each form, for a write whatever its flags.
+    ("gh issue create -t t -F - <<'EOF'\nquoted $HOME\nEOF", "pass",
+     [("the --title value", b"t"), ("standard input (a here-document)", b"quoted $HOME\n")]),
+    ("gh issue create -t t -F - <<EOF\nunquoted $HOME\nEOF", "pass",
+     [("the --title value", b"t"), ("standard input (a here-document)", b"unquoted /H\n")]),
+    ("gh variable set A <<< Zq_Exact", "block: LEAK [fail] in standard input (a here-string),"
+     " line 1.", [("argument 1", b"A"), ("standard input (a here-string)", b"Zq_Exact\n")]),
+    # A file on another descriptor is not standard input (the fourth hunt).
+    ("gh issue create -t t 0< body.md 4< leak.md", "pass",
+     [("the --title value", b"t"), ("standard input (body.md)", b"clean body\n")]),
+    ("gh secret set A < body.md", "pass", [("argument 1", b"A"),
+                                          ("standard input (body.md)", b"clean body\n")]),
+    ("{ gh issue create -t t -F -; } < body.md", "pass",
+     [("the --title value", b"t"), ("standard input (body.md)", b"clean body\n")]),
+    ("gh issue create -t t -F /dev/stdin <<< hs", "pass",
+     [("the --title value", b"t"), ("standard input (a here-string)", b"hs\n")]),
+    ("gh issue create -t t -F -", "pass", [("the --title value", b"t")]),
+    ("gh workflow run w.yml --json <<< '{\"a\": \"Zq_Exact\"}'", "block: LEAK [fail] in standard"
+     " input (a here-string), line 1.", [("argument 1", b"w.yml"),
+                                         ("standard input (a here-string)",
+                                          b'{"a": "Zq_Exact"}\n')]),
+    # A substitution whose output is known before the command runs.
+    ("gh issue create -t t --body \"$(cat <<'EOF'\nfrom a here-document\n\nEOF\n)\"", "pass",
+     [("the --title value", b"t"), ("the --body value", b"from a here-document")]),
+    ("gh issue create -t t -b \"$(cat leak.md)\"", "block: LEAK [fail] in the --body value, line 2.",
+     [("the --title value", b"t"), ("the --body value", b"line one\nZq_Exact here")]),
+    ("gh issue create -t \"$(echo a title)\" -b \"$(printf 'x\\ty')\"", "pass",
+     [("the --title value", b"a title"), ("the --body value", b"x\ty")]),
+    # A file the same command writes before gh reads it.
+    ("cat > n.md <<'EOF'\nwritten here\nEOF\ngh issue create -t t -F n.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (n.md)", b"written here\n")]),
+    ("printf 'a\\n' > n.md && echo b >> n.md && gh issue create -t t -F n.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (n.md)", b"a\nb\n")]),
+    ("echo more >> exists.md; gh issue create -t t -F exists.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (exists.md)", b"old\nmore\n")]),
+    ("tee n.md <<'EOF' >/dev/null\nby tee\nEOF\ngh issue create -t t -F n.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (n.md)", b"by tee\n")]),
+    # cd moves where a relative path is read; the terminal tool's own directory is the start.
+    ("cd sub && gh issue create -t t -F inner.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (inner.md)", b"inner\n")]),
+    ("D=" + D + "/sub; gh issue create -t t -F $D/inner.md", "pass",
+     [("the --title value", b"t"), ("the --body-file file (" + D + "/sub/inner.md)", b"inner\n")]),
+]
+
+LOSES = [
+    ("gh issue create -t t -F missing.md", "missing.md, which does not exist when the hook runs."),
+    ("gh issue view 1 > n.md; gh issue create -t t -F n.md", "n.md, which the command writes"
+     " before gh reads it."),
+    ("mv a.md body.md; gh issue create -t t -F body.md", "body.md, which mv names earlier in the"
+     " command."),
+    ("cp leak.md body.md && gh issue create -t t -F body.md", "body.md, which cp names earlier"),
+    ("echo x | gh issue create -t t -F -", "standard input from a pipe."),
+    ("cat body.md | gh variable set A", "standard input from a pipe."),
+    ("echo x | { gh issue create -t t -F -; }", "standard input from a pipe."),
+    ("gh issue create -t t -F /dev/fd/3", "/dev/fd/3, which is not a file."),
+    ("gh issue create -t t -F /dev/tty", "/dev/tty, which is not a file."),
+    ("gh issue create -t t -F sub", "sub, which is not a regular file."),
+    ("gh issue create -t t -F big.bin", "big.bin, which is over 50 MB."),
+    ("gh issue create -t t -F \"$X\"", "a word whose value cannot be known before the command"
+     " runs (word 6 after gh)."),
+    ("gh issue create -t t -F <(echo x)", "a word whose value cannot be known"),
+    ("gh issue create -t t -b $(cat body.md)", "a word whose value cannot be known"),
+    ("gh issue create -t t -b \"$(git log -1)\"", "a word whose value cannot be known"),
+    ("gh issue create -t t -F - <<EOF\n$(git log -1)\nEOF", "a here-document whose expansions"
+     " cannot be known before the command runs."),
+    ("gh issue create -t t -F x.md 3< body.md", "x.md, which does not exist"),
+    ("gh issue create -t t 0<&3 3< body.md", "standard input taken from descriptor 3."),
+    ("cd \"$X\" && gh issue create -t t -F body.md", "a relative path, body.md, in a directory"
+     " the hook cannot know."),
+    ("cd sub; gh issue create -t t -F inner.md", "a relative path, inner.md, in a directory the"
+     " hook cannot know."),
+    ("gh gist create", None),
+]
+
+for command, want, labels in OFFLINE:
+    got, srcs = sent(command)
+    check("offline", got.startswith(want) and srcs == labels, repr(command) + " gave "
+          + repr((got, srcs)))
+for command, why in LOSES:
+    got, srcs = sent(command)
+    if why is None:
+        check("offline-lost", got == "pass" and srcs == [], repr(command) + " gave " + repr(got))
+        continue
+    check("offline-lost", got.startswith("block: Cannot recover the text gh would send: " + why),
+          repr(command) + " gave " + repr(got))
+
+
+# -- targets and the exempt list (T6) ----------------------------------------------------------
+# Real repositories in a scratch directory, a HOME with an exempt list, and each write's verdict:
+# exempt (passes, nothing given to the guard), or guarded (given to the guard, and blocked by the
+# recorder's hit on Zq_Exact).
+import shutil  # noqa: E402
+
+R = os.path.join(SCRATCH, "targets")
+HOME6 = os.path.join(SCRATCH, "home6")
+os.makedirs(os.path.join(HOME6, ".config", "gate-sdd"), exist_ok=True)
+GITENV = {"HOME": HOME6, "PATH": "/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM": "1"}
+
+
+def git(cwd, *args):
+    subprocess.run(["git", "-C", cwd] + list(args), env=GITENV, stdout=subprocess.DEVNULL,
+                   stderr=subprocess.DEVNULL, check=True)
+
+
+def repo(name, *remotes, **config):
+    path = os.path.join(R, name)
+    if os.path.isdir(path):
+        shutil.rmtree(path)
+    os.makedirs(path)
+    git(path, "init", "-q")
+    for k, (remote, url) in enumerate(remotes):
+        git(path, "remote", "add", remote, url)
+    for key, value in config.items():
+        git(path, "config", key.replace("__", "."), value)
+    return path
+
+
+A = repo("a", ("origin", "https://github.com/acme/public.git"))
+B = repo("b", ("origin", "git@github.com:Priv-Org/secret.git"))
+C = repo("c", ("origin", "git@github.com:priv-org/secret.git"), ("upstream", "https://github.com/acme/public"))
+DD = repo("d", ("origin", "gh-alias:priv-org/secret.git"))
+E = repo("e", ("origin", "pv:secret"), **{"url__git@github.com:priv-org/__insteadOf": "pv:"})
+F = repo("f", ("origin", "git@github.com:priv-org/secret.git"), **{"remote__origin__gh-resolved": "acme/public"})
+G = repo("g")
+P = repo("p", ("origin", "git@github.com:priv-org/secret.git"))
+git(P, "remote", "set-url", "--add", "--push", "origin", "https://github.com/acme/public.git")
+N = os.path.join(R, "not-a-repo")
+os.makedirs(N, exist_ok=True)
+with open(os.path.join(B, "body.md"), "w") as f:
+    f.write("Zq_Exact in a file\n")
+LIST = os.path.join(HOME6, ".config", "gate-sdd", "leakage-exempt-repositories")
+
+
+def exempt_list(text):
+    if text is None:
+        if os.path.exists(LIST):
+            os.remove(LIST)
+        return
+    with open(LIST, "w") as f:
+        f.write(text)
+
+
+GOOD = "# repositories that may hold the private words\n\nPriv-Org/* the private organisation\nsolo/one-repo   one private repository\n"
+
+
+def target(command, cwd, environ=None):
+    del SEEN[:]
+    ctx = g.Context(HOME6, scan=recorder, gh_version=lambda b, w: "2.104",
+                    environ=environ or {})
+    try:
+        code, out, err = g.decide(command, cwd, ctx)
+    except Exception as e:
+        return "raised " + type(e).__name__
+    if code == 2:
+        return "block: " + err.split("blocked. ", 1)[1].split("\n")[0]
+    return "scanned" if SEEN else "exempt"
+
+
+W6 = "gh issue create -t Zq_Exact -b x"
+LEAK = "block: LEAK [fail] in the --title value, line 1."
+TARGETS = [
+    (W6, B, None, "exempt"),
+    (W6, A, None, LEAK),
+    (W6 + " -R priv-org/secret", A, None, "exempt"),
+    (W6 + " -R acme/public", B, None, LEAK),
+    (W6 + " -R https://github.com/Priv-Org/secret.git", A, None, "exempt"),
+    (W6 + " -R github.com/priv-org/secret", A, None, "exempt"),
+    (W6 + " -R git@github.com:priv-org/secret.git", A, None, "exempt"),
+    (W6 + " -R solo/one-repo", A, None, "exempt"),
+    (W6 + " -R solo/one-repo.git", A, None, LEAK),
+    (W6 + " -R solo/other", A, None, LEAK),
+    (W6 + " -R priv-org/x -R acme/public", A, None, LEAK),
+    (W6 + " -R not-a-repo", A, None, LEAK),
+    ("GH_REPO=priv-org/x " + W6, A, None, "exempt"),
+    ("env GH_REPO=priv-org/x " + W6, A, None, "exempt"),
+    ("GH_REPO=priv-org/x " + W6 + " -R acme/public", A, None, LEAK),
+    (W6, B, {"GH_REPO": "acme/public"}, LEAK),
+    (W6, A, {"GH_REPO": "priv-org/x"}, LEAK),
+    (W6, B, {"GIT_DIR": "/elsewhere"}, LEAK),
+    (W6, B, {"GH_HOST": "ghe.example"}, LEAK),
+    ("gh issue comment https://github.com/priv-org/secret/issues/1 -b Zq_Exact", A, None, "exempt"),
+    ("gh issue comment https://github.com/acme/public/issues/1 -b Zq_Exact", B, None,
+     "block: LEAK [fail] in the --body value, line 1."),
+    ("gh issue transfer Zq_Exact acme/public", B, None, "block: LEAK [fail] in argument 1, line 1."),
+    ("gh repo edit priv-org/secret -d Zq_Exact", A, None, "exempt"),
+    ("gh repo create priv-org/new -d Zq_Exact --private", A, None, "exempt"),
+    ("gh repo create new -d Zq_Exact --private", B, None, "block: LEAK [fail] in the --description"),
+    ("gh api repos/priv-org/secret/issues -f body=Zq_Exact", A, None, "exempt"),
+    ("gh api /repos/priv-org/secret/issues -f body=Zq_Exact", A, None, "exempt"),
+    ("gh api https://api.github.com/repos/priv-org/secret/issues -f body=Zq_Exact", A, None, "exempt"),
+    ("gh api repos/priv-org/secret/../../acme/public/issues -f body=Zq_Exact", A, None,
+     "block: LEAK [fail] in the --raw-field value, line 1."),
+    ("gh api repos/priv-org/secret%2F..%2Facme -f body=Zq_Exact", A, None, "block: LEAK"),
+    ("gh api repos/{owner}/{repo}/issues -f body=Zq_Exact", B, None, "exempt"),
+    ("gh api repos/{owner}/{repo}/issues -f body=x -f title={repo}", A, None, "scanned"),
+    ("gh api repos/{owner}/{repo}/issues -f body=x", C, None, "block: Cannot recover the text gh"
+     " would send: {owner}, {repo} or {branch}, with more than one repository a candidate."),
+    ("gh api user -X PATCH -f bio=Zq_Exact", B, None, "block: LEAK"),
+    ("gh api graphql -f query='mutation { x(body: \"Zq_Exact\") }'", B, None, "block: LEAK"),
+    ("gh api --hostname ghe.example repos/priv-org/secret/issues -f b=Zq_Exact", A, None, "block: LEAK"),
+    ("gh gist create -d Zq_Exact body.md", B, None, "block: LEAK"),
+    ("gh secret set X --org priv-org -b Zq_Exact", B, None, "block: LEAK"),
+    ("gh project create --owner priv-org --title Zq_Exact", B, None, "block: LEAK"),
+    (W6, C, None, LEAK),
+    (W6, DD, None, "exempt"),
+    (W6, E, None, "exempt"),
+    (W6, F, None, LEAK),
+    (W6, P, None, LEAK),
+    (W6, G, None, LEAK),
+    (W6, N, None, LEAK),
+    ("env -i PATH=/usr/bin " + W6, B, None, LEAK),
+    ("env -u GH_REPO " + W6, B, None, LEAK),
+    ("unset GH_TOKEN; " + W6, B, None, LEAK),
+    ("unset UNRELATED; " + W6, B, None, "exempt"),
+    ("GIT_DIR=/x " + W6, B, None, LEAK),
+    ("export GH_HOST=x; " + W6, B, None, LEAK),
+    ("git remote add up https://github.com/acme/public && " + W6, B, None, LEAK),
+    ("git -C . config remote.origin.url x; " + W6, B, None, "block: A gh write runs after git"),
+    ("gh repo set-default acme/public && " + W6, B, None, LEAK),
+    ("gh config set editor vi; " + W6, B, None, "block: A gh write runs after gh config set"),
+    ("git config --get remote.origin.url; git remote -v; " + W6, B, None, "exempt"),
+    ("git remote set-url origin x; " + W6, B, None, LEAK),
+    ("git status && git log -1 && " + W6, B, None, "exempt"),
+    ("cd " + B + " && " + W6, A, None, "exempt"),
+    ("cd " + A + " && " + W6, B, None, LEAK),
+    ("cd " + B + "; " + W6, A, None, LEAK),
+    ("gh pr create -t t -F body.md --fill-first -R acme/public", B, None,
+     "block: Cannot recover the text gh would send: --fill-first."),
+    ("gh pr create --fill", B, None, "exempt"),
+]
+
+exempt_list(GOOD)
+for command, cwd, environ, want in TARGETS:
+    got = target(command, cwd, environ)
+    check("targets", got.startswith(want), repr(command) + " in " + os.path.basename(cwd)
+          + (" with " + repr(environ) if environ else "") + " gave " + got)
+
+# The list itself: absent exempts nothing; a line without a reason, or of any other shape, and
+# a list that cannot be read, block every write and no read.
+LISTS = [
+    (None, W6, LEAK),
+    ("priv-org/*\n", W6, "block: The exempt list could not be loaded: line 1 of the exempt list"),
+    ("# a comment\npriv-org/* a reason\npriv-org a reason\n", W6,
+     "block: The exempt list could not be loaded: line 3 of the exempt list"),
+    ("https://github.com/priv-org/* a reason\n", W6, "block: The exempt list could not be loaded"),
+    ("priv-org/*/x a reason\n", W6, "block: The exempt list could not be loaded"),
+    (b"priv-org/* a reason \xff\n", W6, "block: The exempt list could not be loaded: the exempt"
+     " list is not UTF-8"),
+    ("priv-org/*\n", "gh issue list", "exempt"),
+]
+for text, command, want in LISTS:
+    if isinstance(text, bytes):
+        with open(LIST, "wb") as f:
+            f.write(text)
+    else:
+        exempt_list(text)
+    got = target(command, B)
+    check("exempt-list", got.startswith(want), repr(text) + " gave " + got)
+exempt_list(GOOD)
+if hasattr(os, "geteuid") and os.geteuid() != 0:
+    os.chmod(LIST, 0)
+    got = target(W6, B)
+    os.chmod(LIST, 0o644)
+    check("exempt-list", got.startswith("block: The exempt list could not be loaded: the exempt"
+                                        " list cannot be read"), "an unreadable list gave " + got)
+
+# The fail-opens the bypass hunt confirmed, each now blocked. A is guarded, B exempt; the text
+# reaches gh at run time by a way the walk had not followed.
+with open(os.path.join(A, "title.txt"), "w") as f:
+    f.write("Zq_Exact\n")
+with open(os.path.join(A, "vars.sh"), "w") as f:
+    f.write("TITLE=Zq_Exact\n")
+UNKNOWN = "block: Cannot recover the text gh would send: a word whose value cannot be known"
+HUNT = [
+    ("TITLE=untitled; read -r TITLE < title.txt; gh issue create --title \"$TITLE\" --body b", A, UNKNOWN),
+    ("T=draft; read -r T <<< Zq_Exact; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("TITLE=untitled; source vars.sh; gh issue create --title \"$TITLE\" --body b", A, UNKNOWN),
+    ("T=; : ${T:=Zq_Exact}; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; : ${T::=Zq_Exact}; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; : $((T=1)); gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; printf -v T %s Zq_Exact; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; print -v T Zq_Exact; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("f() { T=Zq_Exact; }; T=a; f; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=a; eval T=Zq_Exact; gh issue create --title \"$T\" --body b", A, LEAK),
+    ("T=Zq_Exact; gh issue create --title $=T --body b", A, UNKNOWN),
+    ("CMD=gh; $=CMD issue create --title Zq_Exact --body b", A, "block: A command's name cannot be known"),
+    ("exec > out.md; echo Zq_Exact; gh issue create -t t -F out.md", A,
+     "block: Cannot recover the text gh would send: out.md, which a function, a source"),
+    ("true || cd " + B + " && " + W6, A, LEAK),
+    ("cd " + A + " || cd " + B + " && " + W6, A, LEAK),
+    ("cd " + B + " || " + W6, A, LEAK),
+    ("gh issue comment https://github.com/acme/public/issues/1 -R priv-org/secret --body Zq_Exact", B,
+     "block: LEAK [fail] in the --body value, line 1."),
+    ("gh label create https://github.com/priv-org/secret --description Zq_Exact", A,
+     "block: LEAK [fail] in the --description value, line 1."),
+    ("pushd " + B + " && cd " + B + " && popd && " + W6, A, LEAK),
+    ("cd " + B + " && pushd " + A + " && " + W6, A, LEAK),
+    ("cd " + B + " && echo 'cd " + A + "' > back.sh && . ./back.sh && " + W6, A, LEAK),
+    ("cd " + B + " && printf 'GH_REPO=acme/public\\n' > .env && set -a && . ./.env && set +a && " + W6, A, LEAK),
+    ("back() { cd " + A + "; }; cd " + B + " && back && " + W6, A, LEAK),
+    ("cd " + B + " && eval \"cd " + A + "\" && " + W6, A, LEAK),
+    ("cd " + B + " && read -r GH_REPO <<< acme/public && export GH_REPO && " + W6, A, LEAK),
+    ("cd " + B + " && cp " + A + "/.git/config .git/config && " + W6, A, LEAK),
+    ("cd " + B + " && printf '[remote \"origin\"]\\n' >> .git/config && " + W6, A, LEAK),
+    # and what the fixes leave alone
+    ("cd " + B + " && " + W6, A, "exempt"),
+    ("cd " + B + " && set -euo pipefail && " + W6, A, "exempt"),
+    ("cd " + B + " && git status && " + W6, A, "exempt"),
+]
+for command, cwd, want in HUNT:
+    got = target(command, cwd)
+    check("hunt", got.startswith(want) or (want.startswith("block") and got.startswith("block")), repr(command) + " gave " + got)
+
+# Round two of the hunt: the shapes it confirmed, one or more per root cause, each now blocked,
+# and what the new rules leave alone.
+for name, body in (("notes.md", "clean\n"), ("AGENTS.md", "clean\n"), ("draft.md", "draft\n")):
+    with open(os.path.join(A, name), "w") as f:
+        f.write(body)
+link = os.path.join(A, "CLAUDE.md")
+if not os.path.lexists(link):
+    os.symlink("AGENTS.md", link)
+ro = os.path.join(A, "ro.md")
+if os.path.exists(ro):
+    os.chmod(ro, 0o644)
+with open(ro, "w") as f:
+    f.write("Zq_Exact\n")
+os.chmod(ro, 0o444)
+os.makedirs(os.path.join(A, "docs"), exist_ok=True)
+LOST = "block: Cannot recover the text gh would send:"
+NAME = "block: A command's name cannot be known"
+RUNS = "block: "
+GW = "gh issue create --title Zq_Exact --body x"
+HUNT2 = [
+    # invocation
+    ("printf 'x\\n" + GW + "\\n' > s; sh s", A, LEAK),
+    ("bash -c $'set -e\\n" + GW + "'", A, LEAK),
+    ("bash --norc -c '" + GW + "'", A, LEAK),
+    ("bash -c -- '" + GW + "'", A, LEAK),
+    ("sh -c '\"$@\"' sh " + GW, A, "block: A gh word is an argument of a command that can run"),
+    ("sh /dev/stdin <<'EOF'\n" + GW + "\nEOF", A, LEAK),
+    ("cat > s <<'EOF'\n" + GW + "\nEOF\nsh < s", A, LEAK),
+    ("mkdir -p bin && cat > bin/s <<'EOF'\n#!/bin/sh\n" + GW + "\nEOF\nchmod +x bin/s && bin/s", A, LEAK),
+    ("cat > a <<'EOF'\n" + GW + "\nEOF\ncp a b && sh b", A, "block: The command runs a file it changed"),
+    ("cp ../bin/gh ./g && ./g issue create --title Zq_Exact --body x", A, "block: A gh word is an argument"),
+    ("cat > Makefile <<'EOF'\nall:\n\t" + GW + "\nEOF\nmake", A, "block: A file the command wrote holds a gh word, and make can run it."),
+    ("bash --surprise -c '" + GW + "'", A, "block: A shell is given an option the hook does not read"),
+    # text off the command line
+    ("(echo Zq_Exact > notes.md); gh issue create -t t --body-file notes.md", A, LOST + " notes.md, which the command writes"),
+    ("{ echo a; echo Zq_Exact; } > notes.md; gh issue create -t t -F notes.md", A, LOST + " notes.md, which the command writes"),
+    ("sed -i '' s/clean/Zq_Exact/ notes.md 2>&1 | head -1; gh issue create -t t -F notes.md", A, LOST + " notes.md, which sed names"),
+    ("git checkout -q feature && gh issue create -t t -F notes.md", A, LOST + " notes.md, which a function, a source"),
+    ("python3 -c 'pass'; gh issue create -t t -F notes.md", A, LOST + " notes.md, which a function, a source"),
+    ("echo Zq_Exact > n.md; cp n.md docs/; gh issue create -t t -F docs/n.md", A, LOST + " docs/n.md, which cp names"),
+    ("echo Zq_Exact > AGENTS.md; gh issue create -t t -F CLAUDE.md", A, "block: LEAK [fail] in the --body-file file (CLAUDE.md), line 1."),
+    ("echo clean > ro.md; gh issue create -t t -F ro.md", A, LOST + " ro.md, which the command writes"),
+    ("gh issue comment 1 --body-file - <<EOF\nRun make \\\nEOF\ngit commit -qm 'Zq_Exact'\nEOF", A,
+     "block: LEAK [fail] in standard input (a here-document), line 2."),
+    ("printf 'Zq_Exact\\n' > b.md\nexec < b.md\ngh issue create -t t --body-file -", A, LOST + " standard input, which an earlier exec moved"),
+    ("cat < draft.md <<EOF > b.md\nclean\nEOF\ngh issue create -t t --body-file b.md", A, LOST + " b.md, which the command writes"),
+    ("echo Zq_Exact > \"$PWD/n.md\" && gh issue create -t t --body-file n.md", A, "block: LEAK [fail] in the --body-file file (n.md), line 1."),
+    ("echo Zq_Exact 1<> notes.md; gh issue create -t t --body-file notes.md", A, LOST + " notes.md, which the command writes"),
+    ("echo Zq_Exact > 'n.md#x'; gh gist create 'n.md#x'", A, "block: LEAK [fail] in the file in argument 1 (n.md#x), line 1."),
+    # gh's own parsing
+    ("gh issue create --title Zq_Exact --body b --help=0", A, LEAK),
+    ("gh issue create --title t --body b --help=yes", A, "block: gh issue create was given a flag"),
+    ("gh gist - create <<< Zq_Exact", A, "block: LEAK [fail] in standard input (a here-string), line 1."),
+    ("gh api graphql -F query='mutation { x(b: \"Zq_Exact\") }' -f query='{ viewer { login } }'", A, "block: LEAK"),
+    ("echo Zq_Exact > s.txt; gh gist edit abc s.txt --add notes.md", A, "block: LEAK [fail] in the file in argument 2 (s.txt), line 1."),
+    ("gh api repos/priv-org/secret/generate -f owner=acme -f name=n -f description=Zq_Exact", A, "block: LEAK"),
+    ("gh issue develop 1 -R priv-org/secret --branch-repo acme/public --name Zq_Exact", A, "block: LEAK"),
+    ("gh discussion comment https://github.com/acme/public/discussions/1 --body Zq_Exact", B, "block: LEAK"),
+    ("GH_REPO=priv-org/secret gh repo edit acme/public --description Zq_Exact", A, "block: LEAK"),
+    ("gh issue comment HTTPS://github.com/acme/public/issues/1 -R priv-org/secret --body Zq_Exact", B, "block: LEAK"),
+    ("gh variable set N --org acme -R priv-org/secret --body Zq_Exact", B, "block: LEAK"),
+    ("gh skill publish ./skills", A, LOST + " the files under the directory gh skill publish publishes."),
+    # how words expand
+    ("gh api repos/o/r/issues --jq $(echo . -f title=Zq_Exact)", A, "block: Cannot recover"),
+    ("E=; gh pr merge 1 --squash --subject $E --match-head-commit --body=Zq_Exact", A, "block: LEAK"),
+    ("T=x; E=; T=Zq_Exact $E; gh issue create --title \"$T\" --body b", A, LEAK),
+    ("IFS=,; gh pr merge 1 --squash --match-head-commit $(echo abc,--body,Zq_Exact)", A, LOST + " its words, whose expansion"),
+    ("setopt SH_WORD_SPLIT; H='abc --body Zq_Exact'; gh pr merge 1 --squash --match-head-commit $H", A, LOST + " its words, whose expansion"),
+    ("setopt BRACE_CCL; gh issue create --title t --body Zq_Exac{t}", A, LOST + " its words, whose expansion"),
+    # targets
+    ("GH_REPO=priv-org/x gh api repos/acme/public/issues -f title=Zq_Exact", A, "block: LEAK"),
+    ("(cd " + B + " && git remote add up https://github.com/acme/public); cd " + B + " && " + W6, A, LEAK),
+    ("cd " + B + " && sh -c 'git remote add up https://github.com/acme/public' && " + W6, A, LEAK),
+    ("cd " + B + " && python3 -c 'pass' && " + W6, A, LEAK),
+    ("cd " + B + " && GH_REPO=acme/public sh -c '" + W6 + "'", A, LEAK),
+    ("read GIT_DIR <<< x; declare -x GIT_DIR; cd " + B + " && " + W6, A, LEAK),
+    ("cd " + R + " && mv b old-b && mv a b && cd b && " + W6, A, LEAK),
+    ("cd " + B + " && git -c alias.ra='remote add' ra up x && " + W6, A, LEAK),
+    ("export \"GH_REPO=acme/public\"; cd " + B + " && " + W6, A, LEAK),
+    # state
+    ("echo draft > d.md; sed -i '' s/draft/Zq_Exact/ d.md; gh issue create -t t -F d.md", A, LOST + " d.md, which sed names"),
+    ("echo draft > d.md; echo Zq_Exact > n.md; mv n.md d.md; gh issue create -t t -F d.md", A, LOST + " d.md, which mv names"),
+    ("TITLE=U; for t in 'Zq_Exact n' U; do TITLE=$t; [ -n \"$t\" ] && break; done; gh issue create --title \"$TITLE\" --body b", A, UNKNOWN),
+    ("T=draft; trap 'T=Zq_Exact' DEBUG; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; TRAPZERR() { T=Zq_Exact; }; false; gh issue create --title \"$T\" --body b", A, LOST + " its words, whose expansion"),
+    ("chpwd() { T=Zq_Exact; }; T=draft; cd .; gh issue create --title \"$T\" --body b", A, LOST + " its words, whose expansion"),
+    ("printf 'x\\ngh issue create --title Zq_Exact --body x\\n' > s; sh s", A, LEAK),
+    ("gh issue create --title t --body-file b.md & echo Zq_Exact > b.md; wait", A, LOST + " what a gh write run in the background"),
+    ("mkdir -p a/b docs && ln -s ../a/b docs/link && echo Zq_Exact > a/body.md && gh issue create -t t --body-file docs/link/../body.md", A, LOST + " docs/link/../body.md, whose `..`"),
+    ("gh issue create -R 'https://github.com/priv-org/secret/../../acme/public' -t Zq_Exact -b x", A, "block: LEAK"),
+    ("gh issue create --repo=acme/public -Rpriv-org/secret -t Zq_Exact -b x", B, "block: LEAK"),
+    ("setopt SH_WORD_SPLIT; J='. -f title=Zq_Exact'; gh api repos/o/r/issues --jq $J", A, LOST + " its words, whose expansion"),
+    ("gh api repos/o/r/issues --jq {.,-ftitle=Zq_Exact}", A, "block: Cannot recover"),
+    ("cat > inc.cfg <<'EOF'\n[alias]\n\tic = !gh issue create --title Zq_Exact --body x\nEOF\ngit -c include.path=$PWD/inc.cfg ic", A, "block: A file the command wrote holds a gh word, and git"),
+    ("T=draft; exit() { :; }; true && exit && T=Zq_Exact; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("env cd " + B + " && " + W6, A, LEAK),
+    ("command cd " + B + " && " + W6, A, LEAK),
+    ("CDPATH=" + R + "; cd b && " + W6, A, LEAK),
+    ("echo Zq_Exact > d.md; setopt noclobber; echo draft > d.md; gh issue create -t t -F d.md", A, LOST + " its words, whose expansion"),
+    ("T=draft; set -A T Zq_Exact; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("T=draft; T[1,-1]=Zq_Exact; gh issue create --title \"$T\" --body b", A, "block: The hook does not read an array assignment"),
+    ("T=draft; : ${${T::=Zq_Exact}:-x}; gh issue create --title \"$T\" --body b", A, UNKNOWN),
+    ("cd " + B + " && - cd " + A + " && " + W6, A, LEAK),
+    ("echo draft > d.md; echo Zq_Exact > n.md && ln -sf n.md d.md; gh issue create -t t -F d.md", A, LOST + " d.md"),
+    # and what the new rules leave alone
+    ("set -euo pipefail; cd " + B + " && " + W6, A, "exempt"),
+    ("git push -u origin \"$(git branch --show-current)\" && gh pr create -t t -F notes.md", A, "scanned"),
+    ("export PATH=\"$(dirname \"$(command -v python3)\"):$PATH\" && cd " + B + " && " + W6, A, "exempt"),
+    ("cmp -s notes.md draft.md || gh issue create -t t -F notes.md", A, "scanned"),
+]
+# The fast path: an escape before gh never hides it, and gh in a word or a path never counts.
+for text, want in (("printf 'x\\ngh issue create' > s", True), ("bash -c $'set -e\\ngh x'", True),
+                   ("g\\h issue list", True), ("echo ${:-gh}", True), ("ls gh-pages x.gh gh_x", False),
+                   ("cat .specs/361-before-gh-writes-it/spec.md", False)):
+    check("hunt2", g.mentions_gh(text) == want, "mentions_gh(" + repr(text) + ") is not " + repr(want))
+for command, cwd, want in HUNT2:
+    got = target(command, cwd)
+    check("hunt2", got.startswith(want) or (want.startswith("block") and got.startswith("block")), repr(command[:120]) + " gave " + got)
+os.chmod(ro, 0o644)
+
+# Round three: the shapes it confirmed, by family, each now blocked. A command beside a gh write
+# must be one the walk models exactly, or the write blocks.
+HUNT3 = [
+    ("bash -s -- one <<'EOF'\n" + GW + "\nEOF", A),
+    ("sh -s foo <<< '" + GW + "'", A),
+    ("cat > .git/hooks/pre-commit <<'EOF'\n#!/bin/sh\n" + GW + "\nEOF\nchmod +x .git/hooks/pre-commit\ngit commit --allow-empty -m init", A),
+    (". /dev/stdin <<'EOF'\n" + GW + "\nEOF", A),
+    ("source <(printf '" + GW + "\\n')", A),
+    ("echo '" + GW + "' > run-me.sh\nfind . -name run-me.sh -exec sh {} \\;", A),
+    ("printf '" + GW + "\\n' > run-me.sh\nls *.sh | xargs -I{} sh {}", A),
+    ("cat > helper.py <<'EOF'\nimport subprocess\nsubprocess.run(['gh', 'issue', 'create', '--title', 'Zq_Exact', '--body', 'x'])\nEOF\npython3 -m helper", A),
+    ("printf 'all:\\n\\t" + GW + "\\n' > build.mk\nmake --file=build.mk", A),
+    ("GIT_SSH_COMMAND='" + GW + " #' git fetch origin", A),
+    ("export GIT_SSH_COMMAND='" + GW + " #'\ngit fetch origin", A),
+    ("printf '[core]\\n\\tsshCommand = \"" + GW + " #\"\\n' > x.cfg\nGIT_CONFIG_GLOBAL=x.cfg git fetch origin", A),
+    ("sh < <(echo '" + GW + "')", A),
+    ("exec 3<<'EOF'\n" + GW + "\nEOF\nsh <&3", A),
+    ("printf '#!/bin/sh\\n" + GW + "\\n' > run-me.sh\nchmod +x run-me.sh\ngit grep --no-index -O./run-me.sh title", A),
+    ("G=gh\n[[ -n $G ]] && $G issue create --title Zq_Exact --body x", A),
+    ("printf '" + GW + "\\n' > run.sh\ncase $(uname) in *) sh run.sh;; esac", A),
+    ("echo clean > a.md; echo Zq_Exact > b.md; F=a.md; while true; do F=b.md; break; F=a.md; done; gh issue create --title t --body-file $F", A),
+    ("echo clean > a.md; echo Zq_Exact > b.md; F=a.md\nF=b.md noglob\ngh issue create --title t --body-file $F", A),
+    ("f() { echo Zq_Exact > a.md; }\nset -A chpwd_functions f\necho clean > a.md\ncd .\ngh issue create --title t --body-file a.md", A),
+    ("echo Zq_Exact > a.md\nchmod a-w a.md\necho clean > a.md\ngh issue create --title t --body-file a.md", A),
+    ("echo Zq_Exact > a.md\necho clean 2>/nonexistent/err.log > a.md\ngh issue create --title t --body-file a.md", A),
+    ("(sleep 0.3; echo Zq_Exact > a.md) &\necho clean > a.md\nwait\ngh issue create --title t --body-file a.md", A),
+    ("echo Zq_Exact > b.md; echo clean > a.md\nuniq b.md a.md\ngh issue create --title t --body-file a.md", A),
+    ("echo 5a715f4578616374 > hex.txt; echo clean > a.md\nxxd -r -p hex.txt a.md\ngh issue create --title t --body-file a.md", A),
+    ("echo clean > a.md\ngh issue create --title t --body-file a.md | { echo Zq_Exact > a.md; cat; }", A),
+    ("post() { gh issue comment 1 -R acme/public --body-file -; }\nprintf 'Zq_Exact\\n' | post", A),
+    ("post() { gh issue comment 1 -R acme/public --body-file -; }\npost <<EOF\nnotes Zq_Exact\nEOF", A),
+    ("x=Zq_Exbct; gh issue create --title $x:fs/b/a/ --body b", A),
+    ("alias echo=eval; x=$(echo gh issue create --title Zq_Exact --body b)", A),
+    ("x='$(gh issue create --title Zq_Exact --body b)'; echo ${(e)x}", A),
+    ("cat <<EOF\n${X:-$(gh issue create --title Zq_Exact --body b)}\nEOF", A),
+    ("printf -v 'options[braceccl]' on; gh issue create --title {Z}q_Exact --body b", A),
+    ("typeset 'options[braceccl]'=on; gh issue create --title {Z}q_Exact --body b", A),
+    ("echo \"${STATUS:-it's unknown}\"; gh issue create --title \"Zq_Exact\" --body \"it's fixed}\"", A),
+    ("echo ${(f)\"$(gh issue create --title Zq_Exact --body b)\"}", A),
+    (": ${options[braceccl]::=on}; gh issue create --title {Z}q_Exact --body b", A),
+    ("mkdir -p ../h/.config/git && printf 'x' > ../h/.config/git/config && HOME=$PWD/../h gh issue create -R priv-org/secret --title Zq_Exact --body x", A),
+    ("gh api -X POST repos/priv-org/secret/Forks -f organization=acme -f name=Zq_Exact", A),
+]
+HUNT3 += [
+    ("python3 -c 'pass'; gh issue create -t t -b clean", A),
+    ("npm test && gh pr create -t t -b clean", A),
+]
+KEEP3 = [
+    ("[[ -f notes.md ]] && gh issue create -t t -F notes.md", A, "scanned"),
+    ("printf '%s %s\\n' a \"$(git log -1 --format=%s)\"; cd " + B + " && " + W6, A, "exempt"),
+    ("set -- ${=X}; cd " + B + " && " + W6, A, "exempt"),
+    ("git add -A && git commit -qm x && git push -q && gh pr create -t t -b b", A, "scanned"),
+    ("gh pr merge 1 --squash && npm test", A, "scanned"),
+]
+for command, cwd in HUNT3:
+    got = target(command, cwd)
+    check("hunt3", got.startswith("block"), repr(command[:110]) + " gave " + got)
+for command, cwd, want in KEEP3:
+    got = target(command, cwd)
+    check("hunt3", got.startswith(want), repr(command[:110]) + " gave " + got)
+# The hook's own environment holds HOME and XDG_CONFIG_HOME: that alone guards nothing.
+got = target(W6, B, environ={"HOME": HOME6, "XDG_CONFIG_HOME": HOME6 + "/.config", "PATH": "/usr/bin:/bin"})
+check("hunt3", got == "exempt", "a write with HOME in the hook's environment gave " + got)
+
+# Round four: what the companions, the control flow between them and the lexer still missed,
+# by family, each now blocked.
+NFC = "caf" + chr(0xe9) + ".md"
+NFD = "cafe" + chr(0x301) + ".md"
+MB = chr(0x672c) + chr(0x6587)
+HUNT4 = [
+    # git config, hooks and git's own file writes
+    ("printf '" + GW + "\\n' > clean.sh && git config filter.zz.clean 'sh clean.sh' && echo '*.txt filter=zz' > .gitattributes && echo hi > a.txt && git add a.txt", A),
+    ("mkdir -p hk && printf '" + GW + "\\n' > hk/post-commit && chmod +x hk/post-commit && git config core.hooksPath hk && git commit --allow-empty -m t", A),
+    ("printf '#!/bin/sh\\n" + GW + "\\n' > h.sh && cp h.sh .git/hooks/pre-commit && git commit -q --allow-empty -m x", A),
+    ("printf 'draft\\n' > body.md && git diff --no-index --output=body.md /dev/null notes.md; gh pr comment 1 -F body.md", A),
+    ("printf '[a]\\n' > b.md; git config --file b.md a.b Zq_Exact; gh issue comment 1 -F b.md", A),
+    ("printf '" + GW + "\\n' > t.sh && git rebase -q -x 'sh t.sh' HEAD~1", A),
+    ("printf '" + GW + "\\n' > t.sh && git submodule foreach 'sh $toplevel/t.sh'", A),
+    ("printf '" + GW + "\\n' > xd.sh && GIT_EXTERNAL_DIFF='sh xd.sh' git diff", A),
+    ("mkdir -p tpl/hooks && printf '" + GW + "\\n' > tpl/hooks/post-commit && git init -q --template=tpl && git commit -q --allow-empty -m x", A),
+    ("git config core.note Zq_Exact; gh issue create --title t --body-file .git/config", A),
+    # companion programs' options, links and spellings
+    ("printf 'hello\\n' > body.md && printf 'Zq_Exact\\n' > n.txt && sort -uo body.md n.txt && gh issue create -t t -F body.md", A),
+    ("printf 'hello\\n' > body.md && printf 'Zq_Exact\\n' > n.txt && sort --output=body.md n.txt && gh issue create -t t -F body.md", A),
+    ("printf 'hello\\n' > body.md && printf 'Zq_Exact\\n' > n.txt && sort --outp=body.md n.txt && gh issue create -t t -F body.md", A),
+    ("printf 'hello\\n' > body.md && base64 -d -i enc.txt --output=body.md && gh issue create -t t -F body.md", A),
+    ("mkdir d && ln -s d e && printf 'hello\\n' > d/body.md && printf 'Zq_Exact\\n' > e/body.md && gh issue create -t t -F d/body.md", A),
+    ("printf 'x\\n' > body.md && ln body.md alias.md && printf 'hello\\n' > body.md && printf 'Zq_Exact\\n' > alias.md && gh issue create -t t -F body.md", A),
+    ("printf 'hello\\n' > " + NFC + " && printf 'Zq_Exact\\n' > " + NFD + " && gh issue create -t t -F " + NFC, A),
+    ("printf 'hello\\n' > -body.md && printf 'Zq_Exact\\n' > n.txt && cp -- n.txt -body.md && gh issue create -t t --body-file=-body.md", A),
+    ("printf 'Zq_Exact\\n' > body.md && tee -ai body.md <<< hello > /dev/null && gh issue create -t t -F body.md", A),
+    ("cat -v <<< $'\\x1aq_Exact' > b.md; gh issue create -t t -F b.md", A),
+    ("echo Zq_Exact | cat <<'EOF' > body.md\nbenign\nEOF\ngh issue create -t t --body-file body.md", A),
+    ("printf 'hello\\n' > body.md && printf 'new\\n' > n.txt && install -b -B .md n.txt body && gh issue create -t t -F body.md", A),
+    ("printf 'hello\\n' > m.mgc && file -C -m m && gh issue create -t t -F m.mgc", A),
+    ("printf '#!/bin/sh\\n" + GW + "\\n' > s.sh && chmod +x s.sh && STRIPBIN=./s.sh install -s a b", A),
+    ("printf '#!/bin/sh\\n" + GW + "\\n' > c.sh && sort --compress-program=./c.sh n.txt > /dev/null", A),
+    ("printf 'system(q{" + GW + "});1;\\n' > Ev.pm && PERL5LIB=. PERL5OPT=-MEv shasum a", A),
+    ("mkdir bin2 && printf '#!/bin/sh\\n" + GW + "\\n' > bin2/sort && chmod +x bin2/sort && PATH=$PWD/bin2:$PATH sort x", A),
+    ("mkdir bin2 && printf '#!/bin/sh\\n" + GW + "\\n' > bin2/wc && chmod +x bin2/wc && export PATH=$PWD/bin2:$PATH && wc x", A),
+    # zsh's own parameters, the declare family and control flow
+    ("T=fine; typeset -T T t; t=Zq_Exact; gh issue create --title \"$T\" --body x", A),
+    ("manpath=fine; MANPATH=Zq_Exact; gh issue create --title \"$manpath\" --body x", A),
+    ("OLDPWD=fine; mkdir -p Zq_Exact; cd Zq_Exact; cd ..; gh issue create --title \"$OLDPWD\" --body x", A),
+    ("argv=fine; set -- Zq_Exact; gh issue create --title \"$argv\" --body x", A),
+    ("_=fine; echo Zq_Exact; gh issue create --title \"$_\" --body x", A),
+    ("MATCH=fine; [[ Zq_Exact =~ Zq.* ]]; gh issue create --title \"$MATCH\" --body x", A),
+    ("T=Zq_Exact; export -n T=fine; gh issue create --title \"$T\" --body x", A),
+    ("T=Zq_Exact; typeset -p T=fine; gh issue create --title \"$T\" --body x", A),
+    ("R=Zq_Exact; declare -n R=T; gh issue create --title \"$R\" --body x", A),
+    ("typeset -l mid=Q; gh issue create -t t -b \"Z${mid}_Exact\"", A),
+    ("builtin export t=Zq_{x,Exact}; gh issue create -t \"$t\" -b x", A),
+    ("y=f; printf 'hello\\n' > f; integer n; n='y=0'; gh issue create -t t -F \"$y\"", A),
+    ("A=fine; B=fine; C=fine; D=Zq_Exact; for i in $(seq 3); do A=$B; B=$C; C=$D; done; gh issue create --title \"$A\" --body x", A),
+    ("T=fine; while T=Zq_Exact; false; do T=fine; done; gh issue create --title \"$T\" --body x", A),
+    ("A=fine; B=fine; for i in $(seq 3); do gh issue comment 1 --body \"$B\"; B=$A; A=Zq_Exact; done", A),
+    ("T=fine; for v in a b; do T=Zq_Exact; noglob continue; T=fine; done; gh issue create --title \"$T\" --body x", A),
+    ("T=Zq_Exact; { T=fine; } > nodir/x; gh issue create --title \"$T\" --body x", A),
+    ("T=fine; exit 1 2 || T=Zq_Exact; gh issue create --title \"$T\" --body x", A),
+    ("T=fine; builtin() { T=Zq_Exact; }; builtin echo hi; gh issue create --title \"$T\" --body x", A),
+    ("echo Zq_Exact > b.md; touch ro; chmod 444 ro; echo benign 2> ro > b.md; gh issue create -t t -F b.md", A),
+    # the lexer
+    ("gh issue create -t t -b $'\\532q_Exact'", A),
+    ("gh issue create -t Zq_Exact -b {fd}>/dev/null --help", A),
+    ("printf 'hi\\n' > x; gh issue create -t t -F x<1-2>.md", A),
+    ("gh issue create -t t -F $+x", A),
+    ("gh issue create -t t -b \"a$+x\"", A),
+    ("typeset " + MB + "=Zq_Exact; gh issue create -t t -b \"$" + MB + "\"", A),
+    ("x=Zq_Exact; gh issue create -t t -b $\\\nx", A),
+    ("xy=Zq_Exact; x=a; gh issue create -t t -b \"$x\\\ny\"", A),
+    ("mkdir -p Zq_Exact && cd Zq_Exact && gh issue create -t t -b ~\\+", A),
+    ("printf 'hello\\n' > f; x=f; : $[x=0]; gh issue create -t t -F \"$x\"", A),
+    ("x=abc; y=f; printf 'hello\\n' > f; : $x[y=0]; gh issue create -t t -F \"$y\"", A),
+    ("y=f; printf 'hello\\n' > f; [[ 1 -eq y=1 ]]; gh issue create -t t -F \"$y\"", A),
+    # standard input
+    ("printf 'Zq_Exact\\n' > f; { gh issue create -t t -b \"$(cat)\" </dev/null; } < f", A),
+    ("printf 'Zq_Exact\\n' > f; { gh issue create -t t -F - 3<<<hello; } < f", A),
+    ("echo Zq_Exact > z.md; { gh issue create -t t -F - <<< benign 0<&3 ; } 3< z.md", A),
+    # what gh itself publishes, and where
+    ("printf 'notes' > Zq_Exact.md && gh gist edit abc123 -a Zq_Exact.md", A),
+    ("printf x > Zq_Exact.png && gh issue create -t 'login bug' -b 'see screenshot' --attach Zq_Exact.png", A),
+    ("mkdir -p Zq_Exact && cd Zq_Exact && gh repo create --source=. --public --push", A),
+    ("gh issue develop 1 --branch-repo priv-org/secret --name Zq_Exact-fix", A),
+    ("git checkout -q -b Zq_Exact-fix && gh pr create -t t -b b", A),
+    ("git checkout -q -b Zq_Exact && gh api repos/{owner}/{repo}/issues -f title={branch}", A),
+    ("BROWSER='sh -c \"" + GW + "\"' gh browse", A),
+    ("gh config set browser 'sh -c \"" + GW + "\"' && gh browse", A),
+    ("gh -R o/r pr checkout 12 && gh -R acme/public pr comment 12 -F notes.md", A),
+    ("gh skill publish", A),
+    # found on the rerun of every round's files
+    ("gh api -X POST \"repos/priv-org/secret/forks#x\" -f organization=acme -f name=Zq_Exact", A),
+    ("gh api -X POST \"repos/priv-org/secret/forks;x\" -f organization=acme -f name=Zq_Exact", A),
+    ("gh api -X POST repos/priv-org/secret/./forks -f organization=acme -f name=Zq_Exact", A),
+    ("gh api \"repos/priv-org/secret/generate#\" -f owner=acme -f name=new -f description=Zq_Exact", A),
+    ("gh api -X PUT \"repos/priv-org/secret/transfer#\" -f new_owner=acme -f new_name=Zq_Exact", A),
+    ("mkdir -p bin && printf '#!/bin/sh\\nexec git \"$@\"\\n' > bin/git && chmod +x bin/git && cd " + B + " && PATH=$OLDPWD/bin:$PATH " + W6, A),
+    ("echo Zq_Exact > b.md; mkdir sub; echo benign 2> sub > b.md; gh issue create -t t -F b.md", A),
+    ("gh issue create -t Zq_Exact -b 2\\\n>/dev/null --help", A),
+    ("mkdir -p t && cd " + B + " && git init -q --template=$OLDPWD/t && " + W6, A),
+    ("mkdir bin2 && printf '#!/bin/sh\\n" + GW + "\\n' > bin2/sort && chmod +x bin2/sort && PATH=$PWD/bin2:$PATH; sort x", A),
+    ("git branch -m zq_fold-x; gh issue create -t t -F .git/HEAD", A),
+]
+KEEP4 = [
+    ("git config --get remote.origin.url && cd " + B + " && " + W6, A, "exempt"),
+    ("git checkout -q -b fix && git commit -qm x && gh pr create -t t -b b", A, "scanned"),
+    ("export PATH=\"$HOME/bin:$PATH\" && cd " + B + " && " + W6, A, "exempt"),
+    ("sort -u notes.md && gh issue create -t t -F notes.md", A, "scanned"),
+    ("typeset -x X=1; cd " + B + " && " + W6, A, "exempt"),
+    ("for f in a b c; do echo $f; done; gh issue create -t t -F notes.md", A, "scanned"),
+    ("n=0; while [[ $n -lt 3 ]]; do n=1; done; gh issue create -t t -F notes.md", A, "scanned"),
+    ("gh pr merge 1 --merge --match-head-commit \"$(git rev-parse HEAD)\"", A, "scanned"),
+]
+for command, cwd in HUNT4:
+    got = target(command, cwd)
+    check("hunt4", got.startswith("block"), repr(command[:110]) + " gave " + got)
+for command, cwd, want in KEEP4:
+    got = target(command, cwd)
+    check("hunt4", got.startswith(want), repr(command[:110]) + " gave " + got)
+
+exempt_list(GOOD)
+# Round five: unresolved writes and git's hooks, modes, links and copies, paths the kernel
+# refuses, compound commands' redirections, declare's order, and more of zsh's words, by family,
+# each now blocked.
+LINKS = os.path.join(R, "links")
+os.makedirs(LINKS, exist_ok=True)
+if not os.path.lexists(os.path.join(LINKS, "vi")):
+    os.symlink("target", os.path.join(LINKS, "vi"))
+HP = "\"$(git rev-parse --git-path hooks)/pre-commit\""
+HUNT5 = [
+    # a gh word written where the hook cannot see, and git commands that run hooks
+    ("printf '#!/bin/sh\\n" + GW + "\\n' > " + HP + "; git commit -q --allow-empty -m x", A),
+    ("cat > " + HP + " <<'EOF'\n#!/bin/sh\n" + GW + "\nEOF\ngit push -q origin HEAD", A),
+    ("printf '#!/bin/sh\\n" + GW + "\\n' > h.sh && cp h.sh " + HP + " && git commit -q --allow-empty -m x", A),
+    ("mkdir -p bare/hooks && printf '#!/bin/sh\\n" + GW + "\\n' > bare/hooks/post-receive && git push -q ./bare HEAD", A),
+    # modes, links and copies
+    ("echo Zq_Exact > src.md; chmod 444 src.md; cp src.md body.md; echo clean > body.md; gh issue create -t T -F body.md", A),
+    ("mkdir d; echo Zq_Exact > d/body.md; chmod -R a-w d; echo clean > d/body.md; gh issue create -t T -F d/body.md", A),
+    ("mkdir ro; chmod 555 ro; echo Zq_Exact > b.md; echo benign > ro/x > b.md; gh issue create -t t -F b.md", A),
+    ("mkdir -m 555 ro; echo Zq_Exact > b.md; echo benign > ro/x > b.md; gh issue create -t t -F b.md", A),
+    ("touch b.md; echo Zq_Exact > b.md; if true; then chmod 444 b.md; fi; echo benign > b.md; gh issue create -t t -F b.md", A),
+    ("echo Zq_Exact > b.md; (chmod 444 b.md); echo benign > b.md; gh issue create -t t -F b.md", A),
+    ("echo clean > target; cp -R " + LINKS + "/vi alias; echo Zq_Exact > alias; gh issue create -t T -F target", A),
+    ("echo clean > target; cp -P " + LINKS + "/vi alias; echo Zq_Exact >> alias; gh issue create -t T -F target", A),
+    ("echo clean > target; mv " + LINKS + "/vi alias; echo Zq_Exact > alias; gh issue create -t T -F target", A),
+    ("mkdir src; cp -R src d; echo Zq_Exact > b.md; echo benign > d > b.md; gh issue create -t t -F b.md", A),
+    ("mkdir -p x/d; echo Zq_Exact > b.md; echo benign > x > b.md; gh issue create -t t -F b.md", A),
+    ("mkdir d; echo Zq_Exact > b.md; rm -r d; { echo benign > b.md; } > d/log; gh issue create -t t -F b.md", A),
+    ("mkdir s d; echo Zq_Exact > s/b.md; cp s/b.md d; test -s d/b.md || echo 'No description.' > d/b.md; gh pr create -t t -F d/b.md", A),
+    ("mkdir s d; echo benign > d/b.md; echo Zq_Exact > s/b.md; (cd s && cp b.md ../d/); gh issue create -t t -F d/b.md", A),
+    # paths the kernel refuses
+    ("printf Zq_Exact > body.md; cat > build/../body.md <<'EOF'\nclean\nEOF\ngh issue create -t hi -F body.md", A),
+    ("printf Zq_Exact > body.md; printf clean > body.md/; gh issue create -t hi -F body.md", A),
+    ("echo Zq_Exact > b.md; tee b.md/ <<< benign > /dev/null; gh issue create -t t -F b.md", A),
+    ("printf Zq_Exact > body.md; tee nonexist/../body.md <<< clean; gh issue create -t hi -F body.md", A),
+    ("X=Zq_Exact; { X=clean; } > nonexist/../log; gh issue create -t hi -b \"$X\"", A),
+    ("X=Zq_Exact; X=clean > nonexist/../log; gh issue create -t hi -b \"$X\"", A),
+    ("! cd " + B + "/nonexist/.. && gh issue create -t hi -b Zq_Exact", A),
+    ("cd " + B + "/nonexist/..; " + W6, A),
+    # compound commands' redirections, from the state before the body
+    ("BODY='draft Zq_Exact'\n{\n  BODY=final\n  gh issue create -t hi -F -\n} <<EOF\n$BODY\nEOF", A),
+    ("x=Zq_Exact; { x=benign; gh issue create -t t -F -; } <<EOF\n$x\nEOF", A),
+    ("mkdir -p sub; printf clean > sub/body.md; printf Zq_Exact > body.md; { cd sub && gh issue create -t hi -F -; } < body.md", A),
+    ("printf Zq_Exact > m.md; printf clean > c.md; F=m.md; { F=c.md; gh issue create -t hi -F -; } < \"$F\"", A),
+    ("printf clean > body.md; F=body.md; { F=other.md; printf Zq_Exact; } > \"$F\"; gh issue create -t hi -F body.md", A),
+    ("printf clean > body.md; F=body.md; if F=other.md; then printf Zq_Exact; fi > $F; gh issue create -t hi -F body.md", A),
+    ("echo benign > b.md; { echo Zq_Exact; gh issue create -t t -F b.md; } > b.md", A),
+    # declare's order, the function keyword, cd's own CDPATH
+    ("NOTE=Zq_Exact; typeset NOTE='release notes' BODY=\"$NOTE\"; gh issue create -t hi -b \"$BODY\"", A),
+    ("ROOT=" + A + "; export ROOT=" + B + " WORK=\"$ROOT\" && cd \"$WORK\" && " + W6, A),
+    ("cd " + B + " && function { cd " + A + " } && " + W6, A),
+    ("cd " + B + " && function { export GH_REPO=acme/public } && gh pr comment 1 -b Zq_Exact", A),
+    ("function f cd { : } && cd " + B + " && " + W6, A),
+    ("cd " + B + " && CDPATH=" + R + ":. cd a && " + W6, A),
+    # gh's own words
+    ("gh api repos/acme/public/issues$(printf ' -f title=Zq_Exact')", A),
+    ("X='issues -f title=Zq_Exact'; gh api repos/acme/public/$=X", A),
+    ("X='issues -f title=Zq_Exact'; gh api repos/acme/public/${=X}", A),
+    ("gh issue create -R priv-org/secret -t Zq_Exact -b x --parent https://github.com/acme/public/issues/1", B),
+    ("gh issue edit 1 -R priv-org/secret -t Zq_Exact --add-blocked-by acme/public#2", B),
+    ("gh issue create -R priv-org/secret -t Zq_Exact -b x --blocking ${N}", B),
+    # zsh's words
+    ("cat <<EOF > /dev/null\nEO\\\nF\ngh issue create --title t --body Zq_Exact\nEOF", A),
+    ("gh issue create --title t --body Zq_Ex$^\"act\"", A),
+    ("gh issue create --title t --body \"Zq_Ex$=\"act", A),
+    ("gh issue create --title t --body \"Zq_Ex$~\"'act'", A),
+    ("PS1=safe; PROMPT=Zq_Exact; gh issue create --title t --body \"$PS1\"", A),
+    ("histchars=ab; HISTCHARS=Zq; gh issue create --title t --body \"${histchars}_Exact\"", A),
+    ("HOME=Zq_Exact; export A=1 T=~; gh issue create --title t --body \"$T\"", A),
+    ("HOME=Zq_Exact; gh issue create --title t --body ''~", A),
+    ("HOME=Zq_Exact; x=''~; gh issue create --title t --body \"$x\"", A),
+    ("echo safe > b.md; echo Zq_Exact >&! b.md; gh issue create --title t --body-file b.md", A),
+    ("echo safe > b.md; echo Zq_Exact &>! b.md; gh issue create --title t --body-file b.md", A),
+    ("echo safe > b.md; echo Zq_Exact &>>| b.md; gh issue create --title t --body-file b.md", A),
+]
+KEEP5 = [
+    ("mkdir -p d && echo hello > d/b.md && gh issue create -t t -F d/b.md", A, "scanned"),
+    ("tee body.md <<< hello > /dev/null && gh issue create -t t -F body.md", A, "scanned"),
+    ("git commit -qm x && gh pr create -t t -b b", A, "scanned"),
+    ("X=1; typeset Y=$X Z=2; gh issue create -t \"$Y\" -b x", A, "scanned"),
+    ("gh issue create -t t -b x --parent 12", A, "scanned"),
+    ("gh api repos/acme/public/issues -f title=hello", A, "scanned"),
+    ("printf 'hello\\n' > body.md; gh issue create -t t -F body.md", A, "scanned"),
+    ("echo hello &>! log.txt; cd " + B + " && " + W6, A, "exempt"),
+]
+for command, cwd in HUNT5:
+    got = target(command, cwd)
+    check("hunt5", got.startswith("block"), repr(command[:110]) + " gave " + got)
+for command, cwd, want in KEEP5:
+    got = target(command, cwd)
+    check("hunt5", got.startswith(want), repr(command[:110]) + " gave " + got)
+
+
+# -- the registration check (T9) ---------------------------------------------------------------
+# A scratch Claude Code configuration, a reference and an installed copy of the hook, and each
+# fault the check names. The probe runs the installed copy under this interpreter.
+import re  # noqa: E402
+
+REG = os.path.join(SCRATCH, "registration")
+if os.path.isdir(REG):
+    shutil.rmtree(REG)
+HOOKDIR = sys.argv[1]
+GUARD = os.path.join(os.path.dirname(HOOKDIR), "check-leakage.sh")
+
+
+def copy_hook(dest, edit=None):
+    os.makedirs(dest)
+    for name, src in (("gh_guard.py", os.path.join(HOOKDIR, "gh_guard.py")),
+                      ("gh_guard_lib.py", os.path.join(HOOKDIR, "gh_guard_lib.py")),
+                      ("check-leakage.sh", GUARD)):
+        data = open(src).read()
+        if edit and name in edit:
+            data = edit[name](data)
+        with open(os.path.join(dest, name), "w") as f:
+            f.write(data)
+    return dest
+
+
+REF = copy_hook(os.path.join(REG, "ref"))
+PYREAL = os.path.realpath(sys.executable)
+
+
+def entry(hook, **extra):
+    h = {"type": "command", "command": PYREAL, "args": ["-I", os.path.join(hook, "gh_guard.py")],
+         "timeout": 30, "onFailure": "block"}
+    h.update(extra)
+    for k in [k for k, v in h.items() if v is None]:
+        del h[k]
+    return h
+
+
+def config(name, settings=None, raw=None, snapshot=None, repo_local=None, repo_shared=None):
+    """A configuration directory and a repository; returns (config, repo)."""
+    base = os.path.join(REG, name)
+    cfg = os.path.join(base, "claude")
+    repo = os.path.join(base, "repo")
+    os.makedirs(os.path.join(repo, ".claude"))
+    os.makedirs(os.path.join(cfg, "shell-snapshots"))
+    if raw is not None:
+        with open(os.path.join(cfg, "settings.json"), "w") as f:
+            f.write(raw)
+    elif settings is not None:
+        with open(os.path.join(cfg, "settings.json"), "w") as f:
+            json.dump(settings, f)
+    if snapshot is not None:
+        with open(os.path.join(cfg, "shell-snapshots", "snapshot-zsh-1.sh"), "w") as f:
+            f.write(snapshot)
+    if repo_local is not None:
+        with open(os.path.join(repo, ".claude", "settings.local.json"), "w") as f:
+            json.dump(repo_local, f)
+    if repo_shared is not None:
+        with open(os.path.join(repo, ".claude", "settings.json"), "w") as f:
+            json.dump(repo_shared, f)
+    return cfg, repo
+
+
+def registered(handler, matcher="Bash|mcp__terminal__run_in_terminal", **top):
+    s = {"hooks": {"PreToolUse": [{"matcher": matcher, "hooks": [handler]}]}}
+    s.update(top)
+    return s
+
+
+def faults(cfg, repo, reference=REF, managed=None, plists=(), env=None):
+    """The check's faults with CLAUDE_CONFIG_DIR at cfg, managed-settings.json at managed and the
+    managed preferences at plists; env sets or (as None) unsets further variables."""
+    old_env = dict(os.environ)
+    old_managed, old_plists = g.managed_settings, g.managed_plists
+    os.environ["CLAUDE_CONFIG_DIR"] = cfg
+    for k, v in (env or {}).items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+    g.managed_settings = lambda: managed or os.path.join(REG, "no-managed", "managed-settings.json")
+    g.managed_plists = lambda: list(plists)
+    try:
+        return g.check_registration(repo, reference)
+    except Exception as e:
+        return ["raised " + type(e).__name__]
+    finally:
+        os.environ.clear()
+        os.environ.update(old_env)
+        g.managed_settings, g.managed_plists = old_managed, old_plists
+
+
+OK_INSTALL = copy_hook(os.path.join(REG, "installed-ok"))
+bump = {"gh_guard_lib.py": lambda d: d.replace("GH_GUARD_VERSION = ", "GH_GUARD_VERSION = 9", 1)}
+NEWER = copy_hook(os.path.join(REG, "installed-newer"), bump)
+older = {"gh_guard_lib.py": lambda d: re.sub(r"(?m)^GH_GUARD_VERSION = \d+$", "GH_GUARD_VERSION = 0", d)}
+OLDER = copy_hook(os.path.join(REG, "installed-older"), older)
+DIFF = copy_hook(os.path.join(REG, "installed-diff"),
+                 {"gh_guard_lib.py": lambda d: d + "\n# an edit\n"})
+opens = {"gh_guard_lib.py": lambda d: d.replace("    if not mentions_gh(command):\n        return PASS",
+                                                 "    if True:\n        return PASS")}
+OPEN_REF = copy_hook(os.path.join(REG, "ref-open"), opens)
+OPEN = copy_hook(os.path.join(REG, "installed-open"), opens)
+warns = {"gh_guard_lib.py": lambda d: d.replace("    if not mentions_gh(command):\n        return PASS",
+                                                 "    if not mentions_gh(command):\n"
+                                                 "        return warning(\"a note\")")}
+WARNS_REF = copy_hook(os.path.join(REG, "ref-warns"), warns)
+WARNS = copy_hook(os.path.join(REG, "installed-warns"), warns)
+echoes = {"gh_guard_lib.py": lambda d: d.replace(
+    "def run(argv, data):\n",
+    "def run(argv, data):\n    if b\"Zq_Gh_Guard_Probe\" in data:\n"
+    "        return (2, \"\", HEAD + data.decode() + \"\\n\")\n", 1)}
+ECHOES_REF = copy_hook(os.path.join(REG, "ref-echoes"), echoes)
+ECHOES = copy_hook(os.path.join(REG, "installed-echoes"), echoes)
+NOVER = copy_hook(os.path.join(REG, "installed-nover"),
+                  {"gh_guard_lib.py": lambda d: re.sub(r"(?m)^GH_GUARD_VERSION = \d+$", "", d)})
+NOEXEC = os.path.join(REG, "not-executable-python")
+with open(NOEXEC, "w") as f:
+    f.write("not a program\n")
+os.chmod(NOEXEC, 0o644)
+os.makedirs(os.path.join(REG, "pyenv", "shims"))
+SHIM = os.path.join(REG, "pyenv", "shims", "python3")
+shutil.copy(PYREAL, SHIM)
+
+REGISTRATION = [
+    ("ok", config("ok", registered(entry(OK_INSTALL))), {}, []),
+    ("newer installed", config("newer", registered(entry(NEWER))), {}, []),
+    ("matcher *", config("star", registered(entry(OK_INSTALL), matcher="*")), {}, []),
+    ("no settings", config("none"), {}, ["no PreToolUse entry in the user or managed settings"]),
+    ("not JSON", config("raw", raw="{not json"), {}, ["cannot be read as JSON."]),
+    ("Bash only", config("bash", registered(entry(OK_INSTALL), matcher="Bash")), {},
+     ["no PreToolUse entry"]),
+    ("shell form", config("shell", registered({"type": "command", "command": PYREAL + " -I "
+                                               + OK_INSTALL + "/gh_guard.py",
+                                               "onFailure": "block"})), {}, ["no PreToolUse entry"]),
+    ("no -I", config("noisolate", registered(entry(OK_INSTALL, args=["-E", OK_INSTALL + "/gh_guard.py"]))),
+     {}, ["no PreToolUse entry"]),
+    ("another hook", config("other", registered(entry(OK_INSTALL, args=["-I", OK_INSTALL + "/other.py"]))),
+     {}, ["no PreToolUse entry"]),
+    ("no onFailure", config("fail", registered(entry(OK_INSTALL, onFailure=None))), {},
+     ["lacks \"onFailure\": \"block\""]),
+    ("if", config("if", registered(entry(OK_INSTALL, **{"if": "Bash(gh *)"}))), {}, ["has an `if`"]),
+    ("asyncRewake", config("rewake", registered(entry(OK_INSTALL, asyncRewake=True))), {},
+     ["sets asyncRewake"]),
+    ("regex matcher", config("regex", registered(entry(OK_INSTALL),
+                                                 matcher="(?:x|Bash|mcp__terminal__run_in_terminal|y)NEVER")),
+     {}, ["no PreToolUse entry"]),
+    ("comma matcher", config("comma", registered(entry(OK_INSTALL),
+                                                 matcher="Bash, mcp__terminal__run_in_terminal")), {}, []),
+    ("async", config("async", registered(entry(OK_INSTALL, **{"async": True}))), {}, ["is async"]),
+    # A relative path to the real file, so that only the absolute-path check can refuse it.
+    ("relative interpreter", config("relpy", registered(entry(OK_INSTALL, command=os.path.relpath(PYREAL)))),
+     {}, ["is not an absolute path to an interpreter"]),
+    ("older", config("older", registered(entry(OLDER))), {}, ["is version 0, older than"]),
+    ("differs", config("diff", registered(entry(DIFF))), {}, ["installed gh_guard_lib.py differs"]),
+    ("disableAllHooks", config("dah", registered(entry(OK_INSTALL), disableAllHooks=True)), {},
+     ["disableAllHooks is true in the user settings"]),
+    ("repo disableAllHooks", config("rdah", registered(entry(OK_INSTALL)),
+                                    repo_local={"disableAllHooks": True}), {},
+     ["disableAllHooks is true in this repository's .claude/settings.local.json."]),
+    ("snapshot alias", config("alias", registered(entry(OK_INSTALL)),
+                              snapshot="alias -- ls=eza\nalias -- g='gh issue'\n"), {},
+     ["the shell snapshot snapshot-zsh-1.sh defines"]),
+    ("snapshot function", config("func", registered(entry(OK_INSTALL)),
+                                 snapshot="mk () {\n\tgh pr create \"$@\"\n}\n"), {},
+     ["the shell snapshot snapshot-zsh-1.sh defines"]),
+    ("snapshot clean", config("snap", registered(entry(OK_INSTALL)),
+                              snapshot="alias -- ls=eza\nz () {\n\techo gh-pages\n}\n"), {}, []),
+    ("probe opens", config("probe", registered(entry(OPEN))), {"reference": OPEN_REF},
+     ["did not block a write of a synthetic word"]),
+    ("probe warns", config("warns", registered(entry(WARNS))), {"reference": WARNS_REF},
+     ["did not pass a command without gh in silence"]),
+    ("probe echoes", config("echoes", registered(entry(ECHOES))), {"reference": ECHOES_REF},
+     ["the registered command's block holds the text it matched."]),
+    ("not executable", config("noexec", registered(entry(OK_INSTALL, command=NOEXEC))), {},
+     ["the registered command does not run (PermissionError)."]),
+    ("interpreter missing", config("nopy", registered(entry(OK_INSTALL, command="/nonexistent/python3"))),
+     {}, ["is not an absolute path to an interpreter: /nonexistent/python3."]),
+    ("shim interpreter", config("shim", registered(entry(OK_INSTALL, command=SHIM))), {},
+     ["is not an absolute path to an interpreter"]),
+    ("no version line", config("nover", registered(entry(NOVER))), {}, ["holds no version line."]),
+    ("not an object", config("array", raw="[]"), {}, ["is not a JSON object."]),
+    ("repo settings disableAllHooks", config("rdah2", registered(entry(OK_INSTALL)),
+                                             repo_shared={"disableAllHooks": True}), {},
+     ["disableAllHooks is true in this repository's .claude/settings.json."]),
+]
+managed = os.path.join(REG, "managed.json")
+with open(managed, "w") as f:
+    json.dump({"allowManagedHooksOnly": True}, f)
+for name, (cfg, repo), opts, want in REGISTRATION:
+    got = faults(cfg, repo, **opts)
+    ok = (got == [] if not want else all(any(w in f for f in got) for w in want))
+    check("registration", ok, name + " gave " + repr(got))
+cfg, repo = config("managed", registered(entry(OK_INSTALL)))
+got = faults(cfg, repo, managed=managed)
+check("registration", any("allowManagedHooksOnly" in f for f in got), "managed gave " + repr(got))
+cfg, repo = config("managed-only")
+got = faults(cfg, repo, managed=os.path.join(REG, "ok", "claude", "settings.json"))
+check("registration", got == [], "managed settings holding the entry gave " + repr(got))
+# Skipped only with no configuration at all; a CLAUDE_CONFIG_DIR naming nothing beside a
+# ~/.claude, and a HOME that is not set while managed settings exist, are faults.
+NOHOME = os.path.join(REG, "home-without-claude")
+os.makedirs(NOHOME)
+got = faults(os.path.join(REG, "absent"), repo, env={"HOME": NOHOME})
+check("registration", got == "skip", "no configuration gave " + repr(got))
+got = faults("", repo, env={"HOME": NOHOME})
+check("registration", got == "skip", "no configuration and no CLAUDE_CONFIG_DIR gave " + repr(got))
+WITHCLAUDE = os.path.join(REG, "home-with-claude")
+os.makedirs(os.path.join(WITHCLAUDE, ".claude"))
+got = faults(os.path.join(REG, "absent"), repo, env={"HOME": WITHCLAUDE})
+check("registration", any("CLAUDE_CONFIG_DIR names " in f and "which is not a directory." in f for f in got),
+      "a CLAUDE_CONFIG_DIR naming nothing beside ~/.claude gave " + repr(got))
+got = faults("", repo, managed=managed, env={"HOME": None})
+check("registration", any("HOME is not set" in f for f in got), "no HOME, with managed settings, gave " + repr(got))
+
+
+# Every managed source: the drop-in directory in name order, and the managed preferences. A lock
+# counts whatever its value but false and null, as Claude Code reads an invalid one.
+def managed_case(name, top=None, drops=None, plist=None, plist_bytes=None, drops_file=False):
+    d = os.path.join(REG, "managed-" + name)
+    os.makedirs(d)
+    path = os.path.join(d, "managed-settings.json")
+    if drops_file:
+        with open(os.path.join(d, "managed-settings.d"), "w") as f:
+            f.write("{}\n")
+    if top is not None:
+        with open(path, "w") as f:
+            json.dump(top, f)
+    for fname, value in (drops or {}).items():
+        os.makedirs(os.path.join(d, "managed-settings.d"), exist_ok=True)
+        with open(os.path.join(d, "managed-settings.d", fname), "w") as f:
+            f.write(value if isinstance(value, str) else json.dumps(value))
+    plists = []
+    if plist is not None:
+        import plistlib
+        plists = [os.path.join(d, "com.anthropic.claudecode.plist")]
+        with open(plists[0], "wb") as f:
+            plistlib.dump(plist, f)
+    if plist_bytes is not None:
+        plists = [os.path.join(d, "com.anthropic.claudecode.plist")]
+        with open(plists[0], "wb") as f:
+            f.write(plist_bytes)
+    cfg, repo = config("m-" + name, registered(entry(OK_INSTALL)))
+    return faults(cfg, repo, managed=path, plists=plists)
+
+
+MANAGED = [
+    ("drop-in disableAllHooks", {"drops": {"20-x.json": {"disableAllHooks": True}}},
+     ["disableAllHooks is set in the managed settings ("]),
+    ("drop-in not JSON", {"drops": {"10-a.json": "{nope"}}, ["cannot be read as JSON."]),
+    ("hidden drop-in ignored", {"drops": {".hidden.json": {"disableAllHooks": True}}}, []),
+    ("allowManagedHooksOnly as a string", {"top": {"allowManagedHooksOnly": "true"}},
+     ["allowManagedHooksOnly is set in the managed settings ("]),
+    ("strictPluginOnlyCustomization true", {"top": {"strictPluginOnlyCustomization": True}},
+     ["strictPluginOnlyCustomization locks hooks"]),
+    ("strictPluginOnlyCustomization naming hooks", {"top": {"strictPluginOnlyCustomization": ["skills", "hooks"]}},
+     ["strictPluginOnlyCustomization locks hooks"]),
+    ("strictPluginOnlyCustomization of another type", {"top": {"strictPluginOnlyCustomization": "yes"}},
+     ["strictPluginOnlyCustomization locks hooks"]),
+    ("strictPluginOnlyCustomization without hooks", {"top": {"strictPluginOnlyCustomization": ["skills"]}}, []),
+    ("plist allowManagedHooksOnly", {"plist": {"allowManagedHooksOnly": True}},
+     ["allowManagedHooksOnly is set in the managed settings ("]),
+    ("plist unreadable", {"plist_bytes": b"not a property list"}, ["cannot be read as a property list."]),
+    ("plist not a dictionary", {"plist": ["a", "list"]}, ["is not a dictionary."]),
+    ("drop-in directory unreadable", {"drops_file": True}, ["managed-settings.d cannot be read."]),
+    ("drop-in entry registers", {"drops": {"30-hook.json": None}}, []),
+]
+for name, kw, want in MANAGED:
+    if name == "drop-in entry registers":
+        kw = {"drops": {"30-hook.json": registered(entry(OK_INSTALL))}}
+    got = managed_case(name.replace(" ", "-"), **kw)
+    ok = (got == [] if not want else all(any(w in f for f in got) for w in want))
+    check("registration", ok, name + " gave " + repr(got))
+
+
+for group in sorted(results):
+    found = results[group]
+    if found is None:
+        print(group, "skip")
+    elif found:
+        print(group, "FAIL " + " || ".join(found)[:3000])
+    else:
+        print(group, "ok")
+GHG_HARNESS
+GHG_ZSH=$(command -v zsh 2>/dev/null)
+mkdir -p "$TMP/ghg-scratch"
+: > "$TMP/ghg-harness.out"
+[ -z "$GHG_PY" ] || "$GHG_PY" -I "$TMP/ghg-harness.py" "$GHG_HOOK" "$GHG_ZSH" "$TMP/ghg-scratch" \
+  > "$TMP/ghg-harness.out" 2>&1
+ghg_case() {  # $1 = the harness's group, $2 = the case's sentence
+  ghg_l=$(grep "^$1 " "$TMP/ghg-harness.out")
+  if [ -z "$GHG_PY" ]; then note_skip "gh-guard/$1" "no python3 on PATH"
+  elif [ "$ghg_l" = "$1 ok" ]; then report "$2" ok
+  elif [ "$ghg_l" = "$1 skip" ]; then note_skip "gh-guard/$1" "what it compares against is not on this machine"
+  else report "$2" no "${ghg_l:-the harness printed nothing for $1: $(tail -n 3 "$TMP/ghg-harness.out")}"
+  fi
+}
+
+# 449. #361 AC1, AC3 — the lexer reads a command as the Bash tool's zsh does: lists, pipelines,
+#      subshells and groups, assignments, redirections, here-documents quoted and not, and
+#      substitutions nested in words, each word's value known where it can be.
+ghg_case lexer "the gh guard's lexer reads lists, pipelines, groups, redirections, here-documents and substitutions as zsh does"
+
+# 450. #361 AC1, AC3 — each quoting form's value, as zsh gives it to a command (where zsh is
+#      installed, it is asked), and every expansion it cannot know left unknown, not guessed.
+ghg_case lexer-words "the gh guard's lexer rebuilds each quoting form's value, and leaves each expansion it cannot know unknown"
+ghg_case lexer-zsh "the gh guard's lexer gives every word it knows the value zsh gives it"
+
+# 451. #361 AC3 — a construct the lexer does not handle makes the rest of the command opaque,
+#      from the start of the list item that holds it, so a gh word anywhere in that item is in it.
+#      if, while, until, for and a function's definition it reads.
+ghg_case lexer-unsupported "the gh guard's lexer makes the rest of the command opaque from the item that holds a construct it does not handle"
+ghg_case lexer-compound "the gh guard's lexer reads if, while, until, for and a function's definition"
+
+# 452. #361 AC1, AC3 — every gh word is accounted for, or the command blocks: an invocation by
+#      name, path, `=gh`, a tracked variable, each wrapper, `sh -c`, a here-document or a written
+#      file a shell runs; an argument of a command that never runs its arguments; a value gh
+#      sends; text written to a file nothing then runs. Each form that hides gh blocks.
+ghg_case finder "the gh guard finds gh run by name, path, variable, wrapper or shell, and lets a gh word no command runs pass"
+ghg_case finder-blocks "the gh guard blocks a gh word in a variable, a substitution, xargs, inline code, a pipe a command runs, or a construct it does not read"
+ghg_case finder-cwd "the gh guard follows cd within a list, keeps either directory after a cd that may fail, and leaves a subshell's cd in it"
+
+# 453. #361 AC1, AC3 — each path read as gh reads it: built-in aliases, reads, writes, local state
+#      and arbitrary execution; the api method and GraphQL; `--help=false`; every flag form; an
+#      unknown flag, path or alias; each flag that makes the text unrecoverable. And what a write
+#      sends, each value labelled, the guard's line numbers mapped back to it.
+ghg_case classify "the gh guard reads each gh path and flag as gh does, blocks what it cannot know, and labels what a write sends"
+ghg_case classify-table "every path of the gh guard's table has a kind, and every kind a path"
+ghg_case classify-version "the gh guard passes a clean write with a warning when gh is not the table's version"
+ghg_case guard-map "the gh guard gives the guard each source on lines of its own, line ends made as CI makes them"
+
+# 454. #361 AC1, AC3, AC7 — the real guard, run by the hook as the registered entry runs it: a
+#      hit blocks with its tier, source and line and never its text; a warning passes with a
+#      systemMessage; a CRLF line still ends where `$` finds it; a missing pattern file, or a
+#      missing guard, blocks a write and not a read; the environment's pattern file is not the
+#      guard's; a gh of another version warns.
+GHG_PAT="$TMP/ghg-home/.config/gate-sdd/leakage-patterns"
+printf '%s\n' '[fail]' 'Zq_Exact' 'Zq_End$' '[fail ignore-case]' 'zq_fold' '[warn ignore-case]' 'zq_warn' > "$GHG_PAT"
+mkdir -p "$TMP/ghg-bin" "$TMP/ghg-bin-old"
+printf '#!/bin/sh\necho "gh version 2.104.0 (stub)"\n' > "$TMP/ghg-bin/gh"
+printf '#!/bin/sh\necho "gh version 2.99.1 (stub)"\n' > "$TMP/ghg-bin-old/gh"
+chmod +x "$TMP/ghg-bin/gh" "$TMP/ghg-bin-old/gh"
+ghg_json() {  # $1 = the command, any bytes; $2 = the tool, Bash by default; $3 = its cwd
+  "$GHG_PY" -I -c 'import json, sys
+c = {"command": sys.argv[1]}
+if sys.argv[3]: c["cwd"] = sys.argv[3]
+print(json.dumps({"session_id": "s", "hook_event_name": "PreToolUse", "tool_name": sys.argv[2],
+                  "tool_input": c, "cwd": sys.argv[4]}))' "$1" "${2:-Bash}" "${3:-}" "$TMP/ghg-cwd" > "$TMP/ghg-in"
+}
+ghg_e2e() {  # $1 = the command; the hook runs with the stub gh first on PATH. Prints the status.
+  ghg_json "$1"; GHG_ENV="PATH=${GHG_GHBIN:-$TMP/ghg-bin}:/usr/bin:/bin ${GHG_ENV:-}" ghg_run "${GHG_DIR:-}"
+}
+if [ -z "$GHG_PY" ]; then
+  note_skip "gh-guard/real-guard" "no python3 on PATH"
+else
+  out=$(ghg_e2e 'gh issue create -t ok -b fine')
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && [ ! -s "$TMP/ghgerr" ] && e0=ok || e0="exit=$out:$(cat "$TMP/ghgerr")"
+  out=$(ghg_e2e "gh issue create -t ok -b 'x Zq_Exact y'")
+  e1=$(ghg_blocked "$out" 'LEAK [fail] in the --body value, line 1.' 'The matched text is withheld.')
+  out=$(ghg_e2e 'gh issue create -t ZQ_FOLD -b fine')
+  e2=$(ghg_blocked "$out" 'LEAK [fail ignore-case] in the --title value, line 1.')
+  grep -q 'ZQ_FOLD' "$TMP/ghgerr" && e2="$e2+holds-the-text"
+  out=$(ghg_e2e 'gh issue create -t ok -b zq_warn')
+  [ "$out" = 0 ] && grep -Fq 'WARNING [warn ignore-case] in the --body value, line 1' "$TMP/ghgout" \
+    && "$GHG_PY" -I -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(list(d) != ["systemMessage"])' "$TMP/ghgout" \
+    && e3=ok || e3="exit=$out"
+  out=$(ghg_e2e "gh issue create -t ok -b \$'a\\r\\nZq_End\\r\\nb'")
+  e4=$(ghg_blocked "$out" 'LEAK [fail] in the --body value, line 2.')
+  out=$(GHG_HOME="$TMP/ghg-bare-home" ghg_e2e 'gh issue create -t ok -b fine')
+  e5=$(ghg_blocked "$out" 'The guard could not scan what gh would send: the private patterns were not loaded')
+  out=$(GHG_HOME="$TMP/ghg-bare-home" ghg_e2e 'gh issue list --label x')
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && e5="$e5 ok" || e5="$e5 read-exit=$out"
+  printf '%s\n' '[fail]' 'Zq_Nothing' > "$TMP/ghg-env-patterns"
+  out=$(GHG_ENV="GATE_SDD_LEAKAGE_PATTERNS=$TMP/ghg-env-patterns" \
+    ghg_e2e "gh issue create -t ok -b Zq_Exact")
+  e6=$(ghg_blocked "$out" 'LEAK [fail] in the --body value, line 1.')
+  out=$(GHG_GHBIN="$TMP/ghg-bin-old" ghg_e2e 'gh issue create -t ok -b fine')
+  [ "$out" = 0 ] && grep -Fq "gh is 2.99, and the hook's table is gh 2.104's" "$TMP/ghgout" && e7=ok || e7="exit=$out"
+  mkdir -p "$TMP/ghg-noguard/hook"; cp "$GHG_HOOK"/gh_guard.py "$GHG_HOOK"/gh_guard_lib.py "$TMP/ghg-noguard/hook/"
+  out=$(GHG_DIR="$TMP/ghg-noguard/hook" ghg_e2e 'gh issue create -t ok -b fine')
+  e8=$(ghg_blocked "$out" 'the guard, check-leakage.sh, is not beside the hook')
+  [ "$e0 $e1 $e2 $e3 $e4 $e5 $e6 $e7 $e8" = "ok ok ok ok ok ok ok ok ok ok" ] \
+    && report "the gh guard runs the real guard over what a write sends, and blocks on a hit, a fault or a missing guard" ok \
+    || report "the gh guard runs the real guard over what a write sends, and blocks on a hit, a fault or a missing guard" no \
+       "clean=$e0 hit=$e1 fold=$e2 warn=$e3 crlf=$e4 no-patterns=$e5 env-patterns=$e6 old-gh=$e7 no-guard=$e8"
+fi
+
+# 455. #361 AC2, AC3 — text off the command line is read where gh would read it: each flag that
+#      names a file, an attachment's label, a published file's content, name and label, standard
+#      input in every form and through a group, a substitution whose output is known, and a file
+#      the same command writes or appends to first; a pipe, a device, a missing, changed or
+#      oversized file, and an expansion it cannot know are unrecoverable. The terminal tool's
+#      own directory is where a relative path is read from.
+ghg_case offline "the gh guard reads each file, standard input and known substitution a write sends, where gh would read it"
+ghg_case offline-lost "the gh guard blocks a pipe, a device, a missing, changed or oversized file, and a path or text it cannot know"
+if [ -n "$GHG_PY" ]; then
+  mkdir -p "$TMP/ghg-term"; printf 'one\nZq_Exact\n' > "$TMP/ghg-term/body.md"
+  ghg_json 'gh issue create -t ok -F body.md' mcp__terminal__run_in_terminal "$TMP/ghg-term"
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin" ghg_run)
+  t0=$(ghg_blocked "$out" 'LEAK [fail] in the --body-file file (body.md), line 2.')
+  ghg_json 'gh issue create -t ok -F body.md'
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin" ghg_run)
+  t1=$(ghg_blocked "$out" 'body.md, which does not exist when the hook runs.')
+  [ "$t0 $t1" = "ok ok" ] \
+    && report "the gh guard reads a relative path from the terminal tool's own directory" ok \
+    || report "the gh guard reads a relative path from the terminal tool's own directory" no "terminal=$t0 bash=$t1"
+fi
+
+# 456. #361 AC3, AC6, AC7 — a write is exempt only when every repository it could reach is in
+#      the exempt list: what the invocation names decides alone (-R in each form, GH_REPO on it,
+#      a URL, a repo argument, an api endpoint), else every remote's fetch and push URL, ssh
+#      aliases and insteadOf included, every gh-resolved value and GH_REPO from the environment.
+#      An owner-level write, an unresolvable target, and anything earlier that moves the target
+#      are guarded. The list's own faults block every write and no read.
+ghg_case targets "the gh guard exempts a write only when every repository it could reach is exempt, and guards what it cannot resolve"
+ghg_case exempt-list "the gh guard's exempt list exempts nothing when absent, and blocks every write and no read when a line is malformed"
+if [ -n "$GHG_PY" ]; then
+  ghg_exempt="$TMP/ghg-home/.config/gate-sdd/leakage-exempt-repositories"
+  printf '%s\n' '# synthetic' 'zq-org/* a synthetic organisation the suite exempts' > "$ghg_exempt"
+  for ghg_r in zq acme; do
+    mkdir -p "$TMP/ghg-repo-$ghg_r"
+    ( cd "$TMP/ghg-repo-$ghg_r" && git init -q && git remote add origin "git@github.com:$ghg_r-org/x.git" ) >/dev/null 2>&1
+  done
+  ghg_json 'gh issue create -t Zq_Exact -b x' mcp__terminal__run_in_terminal "$TMP/ghg-repo-zq"
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin" ghg_run)
+  [ "$out" = 0 ] && [ ! -s "$TMP/ghgout" ] && [ ! -s "$TMP/ghgerr" ] && x0=ok || x0="exit=$out"
+  ghg_json 'gh issue create -t Zq_Exact -b x' mcp__terminal__run_in_terminal "$TMP/ghg-repo-acme"
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin" ghg_run); x1=$(ghg_blocked "$out" 'LEAK [fail] in the --title value, line 1.')
+  ghg_json 'gh issue create -t Zq_Exact -b x' mcp__terminal__run_in_terminal "$TMP/ghg-repo-zq"
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin GIT_DIR=$TMP/ghg-repo-acme/.git" ghg_run)
+  x2=$(ghg_blocked "$out" 'LEAK [fail] in the --title value, line 1.')
+  printf '%s\n' 'zq-org/*' > "$ghg_exempt"
+  ghg_json 'gh issue create -t ok -b x' mcp__terminal__run_in_terminal "$TMP/ghg-repo-zq"
+  out=$(GHG_ENV="PATH=$TMP/ghg-bin:/usr/bin:/bin" ghg_run); x3=$(ghg_blocked "$out" 'line 1 of the exempt list is not')
+  rm -f "$ghg_exempt"
+  [ "$x0 $x1 $x2 $x3" = "ok ok ok ok" ] \
+    && report "the gh guard lets a write to an exempt repository through unscanned, and scans the rest" ok \
+    || report "the gh guard lets a write to an exempt repository through unscanned, and scans the rest" no \
+       "exempt=$x0 guarded=$x1 git-dir=$x2 malformed=$x3"
+fi
+
+# 457. #361 AC1, AC3, AC6 — the fail-opens a bypass hunt confirmed, each now blocked: a builtin
+#      that assigns (read, printf -v, ${N:=w}, $((N=1))), a source, an eval, a function call, an
+#      `exec >f`, zsh's $=NAME, a cd an and-or list may skip, pushd and popd, set -a, an export
+#      of a target variable read earlier, a write into .git, -R beside an issue URL, and a URL
+#      that is only a label's name. And what the fixes leave alone.
+ghg_case hunt "the gh guard follows, or forgets, every way a command changes its own state before gh runs"
+#      Round two: a program of unknown effect, a copied state's files and events, a shell's
+#      options and arguments, a written file a tool runs by convention, path aliasing, shell
+#      options and IFS, a value zsh may split, gh's ParseBool and field order, and more targets.
+ghg_case hunt2 "the gh guard holds against every shape the second bypass hunt confirmed"
+#      Round three: a command beside a gh write must be one the walk models exactly, and a gh
+#      word given to any other command blocks; with the shapes that rule closed, and five
+#      ordinary commands it leaves alone.
+ghg_case hunt3 "the gh guard holds against every shape the third bypass hunt confirmed, and lets ordinary commands beside a write through"
+#      Round four: each companion given only the options, the environment and the PATH it is
+#      modelled with; git only to read its config and run nothing; zsh's own parameters, the
+#      declare family's attributes, loops walked until they settle, a redirection that may fail,
+#      more of the lexer, standard input by descriptor, and the names gh publishes and pushes.
+ghg_case hunt4 "the gh guard holds against every shape the fourth bypass hunt confirmed, and lets ordinary commands beside a write through"
+#      Round five: a gh word written where the hook cannot see, and git commands that run hooks;
+#      modes, links and copies; paths the kernel refuses; a compound command's redirections,
+#      from the state before its body; declare's order; the function keyword; and more of zsh's
+#      words and redirections.
+ghg_case hunt5 "the gh guard holds against every shape the fifth bypass hunt confirmed, and lets ordinary commands beside a write through"
+
+# 458. #361 AC7 — the installer: a fresh install into a versioned directory that `current` names,
+#      compiled and probed; a re-run that changes nothing; an older version refused; a failed
+#      install leaving the old version running; the interpreter named by its real path, a shim
+#      refused; and the entry it prints, which it never writes, and whether the settings hold it.
+ghg_install() {  # $1 = the checkout, $2 = HOME; then the installer's arguments. Prints the status.
+  ghg_co=$1; ghg_h=$2; shift 2
+  ( env -i PATH=/usr/bin:/bin HOME="$ghg_h" sh "$ghg_co/scripts/install-gh-hook.sh" "$@" \
+      >"$TMP/ghgiout" 2>"$TMP/ghgierr"; printf '%s' "$?" )
+}
+ghg_checkout() {  # $1 = name: a copy of what the installer reads from a checkout
+  ghg_c="$TMP/ghg-co-$1"; mkdir -p "$ghg_c/scripts/claude-hooks"
+  cp "$ROOT/scripts/install-gh-hook.sh" "$ROOT/scripts/check-leakage.sh" "$ghg_c/scripts/"
+  cp "$GHG_HOOK/gh_guard.py" "$GHG_HOOK/gh_guard_lib.py" "$ghg_c/scripts/claude-hooks/"
+  echo "$ghg_c"
+}
+if [ -z "$GHG_PY" ]; then
+  note_skip "gh-guard/installer" "no python3 on PATH"
+else
+  GHG_REALPY=$("$GHG_PY" -I -c 'import os, sys; print(os.path.realpath(sys.executable))')
+  ghg_ih="$TMP/ghg-ihome"; mkdir -p "$ghg_ih"
+  ghg_data="$ghg_ih/.local/share/gate-sdd/gh-hook"
+  out=$(ghg_install "$ROOT" "$ghg_ih" --python "$GHG_PY")
+  ghg_cur=$(readlink "$ghg_data/current" 2>/dev/null)
+  i0=ok
+  [ "$out" = 0 ] || i0="exit=$out:$(cat "$TMP/ghgierr")"
+  case "$ghg_cur" in v[0-9]*-*) ;; *) i0="$i0+current=$ghg_cur" ;; esac
+  for f in gh_guard.py gh_guard_lib.py check-leakage.sh; do [ -f "$ghg_data/current/$f" ] || i0="$i0+no-$f"; done
+  ls "$ghg_data/current/__pycache__/" 2>/dev/null | grep -q '^gh_guard_lib\..*\.pyc$' || i0="$i0+not-compiled"
+  grep -Fq "\"command\": \"$GHG_REALPY\"" "$TMP/ghgiout" || i0="$i0+entry-interpreter"
+  grep -Fq "\"$ghg_data/current/gh_guard.py\"" "$TMP/ghgiout" || i0="$i0+entry-hook"
+  grep -Fq '"onFailure": "block"' "$TMP/ghgiout" && grep -Fq '"matcher": "Bash|mcp__terminal__run_in_terminal"' "$TMP/ghgiout" || i0="$i0+entry-shape"
+  grep -Fq 'does not hold the entry yet.' "$TMP/ghgiout" || i0="$i0+said-held"
+  [ ! -e "$ghg_ih/.claude/settings.json" ] || i0="$i0+wrote-settings"
+  ls -a "$ghg_data" | grep -q '^\.install\.' && i0="$i0+left-work"
+  # The installed copy runs, from current, as the entry says.
+  ghg_input 'ls'; out=$(ghg_run "$ghg_data/current"); [ "$out" = 0 ] || i0="$i0+installed-exit=$out"
+
+  # A re-run changes nothing, and finds the entry once the settings hold it.
+  out=$(ghg_install "$ROOT" "$ghg_ih" --python "$GHG_PY")
+  [ "$out" = 0 ] && [ "$(readlink "$ghg_data/current")" = "$ghg_cur" ] && i1=ok || i1="exit=$out"
+  [ "$(ls "$ghg_data" | grep -c '^v')" = 1 ] || i1="$i1+dirs=$(ls "$ghg_data" | grep -c '^v')"
+  mkdir -p "$ghg_ih/.claude"
+  "$GHG_PY" -I -c 'import json, sys
+e = json.loads(sys.stdin.read().split(":\n", 1)[1].rsplit("\ninstall-gh-hook:", 1)[0])
+json.dump({"hooks": {"PreToolUse": [e]}}, open(sys.argv[1], "w"))' "$ghg_ih/.claude/settings.json" < "$TMP/ghgiout"
+  out=$(ghg_install "$ROOT" "$ghg_ih" --python "$GHG_PY")
+  grep -Fq "$ghg_ih/.claude/settings.json holds the entry." "$TMP/ghgiout" || i1="$i1+not-found-held"
+
+  # An older version is refused, and current stays.
+  ghg_c=$(ghg_checkout old)
+  sed 's/^GH_GUARD_VERSION = .*/GH_GUARD_VERSION = 0/' "$GHG_HOOK/gh_guard_lib.py" > "$ghg_c/scripts/claude-hooks/gh_guard_lib.py"
+  out=$(ghg_install "$ghg_c" "$ghg_ih" --python "$GHG_PY")
+  [ "$out" = 1 ] && grep -q 'newer than this checkout' "$TMP/ghgierr" && [ "$(readlink "$ghg_data/current")" = "$ghg_cur" ] && i2=ok || i2="exit=$out"
+
+  # A newer version that does not compile, or does not decide, leaves the old one running.
+  ghg_c=$(ghg_checkout broken)
+  { cat "$GHG_HOOK/gh_guard_lib.py"; printf 'def broken(:\n'; } | sed 's/^GH_GUARD_VERSION = .*/GH_GUARD_VERSION = 999/' > "$ghg_c/scripts/claude-hooks/gh_guard_lib.py"
+  out=$(ghg_install "$ghg_c" "$ghg_ih" --python "$GHG_PY")
+  [ "$out" = 1 ] && grep -q 'did not compile' "$TMP/ghgierr" && [ "$(readlink "$ghg_data/current")" = "$ghg_cur" ] && i3=ok || i3="exit=$out"
+  ghg_c=$(ghg_checkout opens)
+  sed -e 's/^GH_GUARD_VERSION = .*/GH_GUARD_VERSION = 999/' -e 's/^    if not mentions_gh(command):$/    if True:/' "$GHG_HOOK/gh_guard_lib.py" > "$ghg_c/scripts/claude-hooks/gh_guard_lib.py"
+  out=$(ghg_install "$ghg_c" "$ghg_ih" --python "$GHG_PY")
+  [ "$out" = 1 ] && grep -q 'did not block a gh it cannot account for' "$TMP/ghgierr" && [ "$(readlink "$ghg_data/current")" = "$ghg_cur" ] || i3="$i3+opens-exit=$out"
+  ls -a "$ghg_data" | grep -q '^\.install\.' && i3="$i3+left-work"
+
+  # The interpreter: a link is followed to its file; a shim, a script, a relative path refused.
+  mkdir -p "$TMP/ghg-pylink" "$TMP/ghg-shims/shims"
+  ln -sf "$GHG_REALPY" "$TMP/ghg-pylink/python3"
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python "$TMP/ghg-pylink/python3")
+  [ "$out" = 0 ] && grep -Fq "\"command\": \"$GHG_REALPY\"" "$TMP/ghgiout" && i4=ok || i4="link-exit=$out"
+  ln -sf "$GHG_REALPY" "$TMP/ghg-shims/shims/python3"
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python "$TMP/ghg-shims/shims/python3")
+  [ "$out" = 0 ] && grep -Fq "\"command\": \"$GHG_REALPY\"" "$TMP/ghgiout" || i4="$i4+linked-shim-exit=$out"
+  printf '#!/bin/sh\nexec %s "$@"\n' "$GHG_REALPY" > "$TMP/ghg-shims/shims/py"; chmod +x "$TMP/ghg-shims/shims/py"
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python "$TMP/ghg-shims/shims/py")
+  [ "$out" = 1 ] && grep -q "a version manager's shim" "$TMP/ghgierr" || i4="$i4+shim-exit=$out"
+  cp "$TMP/ghg-shims/shims/py" "$TMP/ghg-pylink/py"
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python "$TMP/ghg-pylink/py")
+  [ "$out" = 1 ] && grep -q 'is a script, which is a shim' "$TMP/ghgierr" || i4="$i4+script-exit=$out"
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python python3)
+  [ "$out" = 1 ] && grep -q 'absolute path' "$TMP/ghgierr" || i4="$i4+relative-exit=$out"
+  if [ "$(uname -s)" = Darwin ]; then
+    out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --python /usr/bin/python3)
+    [ "$out" = 1 ] && grep -q 'under /usr/bin' "$TMP/ghgierr" || i4="$i4+usr-bin-exit=$out"
+  fi
+  # With no --python, macOS names the file xcrun resolves, past every link.
+  if [ "$(uname -s)" = Darwin ] && ghg_x=$(/usr/bin/xcrun -f python3 2>/dev/null); then
+    ghg_x=$("$GHG_PY" -I -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$ghg_x")
+    out=$(ghg_install "$ROOT" "$TMP/ghg-ihome3")
+    [ "$out" = 0 ] && grep -Fq "\"command\": \"$ghg_x\"" "$TMP/ghgiout" || i4="$i4+xcrun-exit=$out"
+  elif [ "$(uname -s)" = Darwin ]; then
+    note_skip "gh-guard/installer-xcrun" "xcrun finds no python3 here"
+  fi
+  out=$(ghg_install "$ROOT" "$TMP/ghg-ihome2" --surprise)
+  [ "$out" = 1 ] && grep -q 'does not take' "$TMP/ghgierr" || i4="$i4+argument-exit=$out"
+
+  [ "$i0 $i1 $i2 $i3 $i4" = "ok ok ok ok ok" ] \
+    && report "the gh guard's installer swaps in a compiled, probed version, refuses an older one and a shim, and prints the entry" ok \
+    || report "the gh guard's installer swaps in a compiled, probed version, refuses an older one and a shim, and prints the entry" no \
+       "fresh=$i0 rerun=$i1 older=$i2 failed=$i3 interpreter=$i4"
+fi
+
+# 459. #361 AC5, AC8 — the working-tree scan fails on a machine with Claude Code whose settings do
+#      not register the gh guard as installed. In process, one sentence per fault of the check
+#      itself: the settings, the entry's shape, the installed version and bytes, hooks switched
+#      off, a shell snapshot that runs gh, and a probe that passes a write or speaks. Through the
+#      guard: no configuration skips and says so, an unregistered one fails and names the
+#      installer, --no-hook-check exempts, a registered one passes; the default branch is the
+#      reference, so a branch's newer copy need not be installed and an older install fails
+#      against it; and each way the guard's own call can go wrong. Fixture homes elsewhere hold
+#      no Claude Code configuration, so the other cases take the skip.
+ghg_case registration "the gh guard's registration check names each fault in the settings, the install and the probe"
+ghg_reg_repo() {  # $1 = name. leak_repo, with the hook and its installer beside the guard, untracked.
+  r=$(leak_repo "$1"); mkdir -p "$r/scripts/claude-hooks"
+  cp "$GHG_HOOK/gh_guard.py" "$GHG_HOOK/gh_guard_lib.py" "$r/scripts/claude-hooks/"
+  cp "$ROOT/scripts/install-gh-hook.sh" "$r/scripts/"
+  printf 'scripts/claude-hooks/\nscripts/install-gh-hook.sh\n' >> "$r/.git/info/exclude"
+  echo "$r"
+}
+ghg_register() {  # $1 = checkout, $2 = HOME: install from the checkout, and register what it prints
+  out=$(ghg_install "$1" "$2" --python "$GHG_PY"); mkdir -p "$2/.claude"
+  "$GHG_PY" -I -c 'import json, sys
+e = json.loads(sys.stdin.read().split(":\n", 1)[1].rsplit("\ninstall-gh-hook:", 1)[0])
+json.dump({"hooks": {"PreToolUse": [e]}}, open(sys.argv[1], "w"))' "$2/.claude/settings.json" < "$TMP/ghgiout"
+}
+ghg_origin() {  # $1 = repo, $2 = the version its gh_guard_lib.py carries, $3 = `nohook` to leave out
+                # gh_guard.py. Commits the hook at origin/main, which origin/HEAD names.
+  sed "s/^GH_GUARD_VERSION = .*/GH_GUARD_VERSION = $2/" "$GHG_HOOK/gh_guard_lib.py" > "$TMP/ghg-origin-lib"
+  ( cd "$1" && GIT_INDEX_FILE="$TMP/ghg-origin-index" && export GIT_INDEX_FILE && git read-tree HEAD \
+    && lib=$(git hash-object -w "$TMP/ghg-origin-lib") \
+    && git update-index --add --cacheinfo "100644,$lib,scripts/claude-hooks/gh_guard_lib.py" \
+    && { [ "${3:-}" = nohook ] || { hook=$(git hash-object -w "$GHG_HOOK/gh_guard.py") \
+         && git update-index --add --cacheinfo "100644,$hook,scripts/claude-hooks/gh_guard.py"; }; } \
+    && c=$(git commit-tree "$(git write-tree)" -p HEAD -m origin) && rm -f "$TMP/ghg-origin-index" \
+    && git update-ref refs/remotes/origin/main "$c" \
+    && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main ) >/dev/null 2>&1
+}
+ghg_reg() {  # $1 = repo, $2 = HOME, $3 = the words the failure names; `-` when it must pass.
+  out=$(run_leak "$1" "" "$2"); all=$(cat "$TMP/lkout" "$TMP/lkerr")
+  if [ "$3" = - ]; then
+    [ "$out" = 0 ] && grep -q 'file(s) scanned, private patterns loaded$' "$TMP/lkout" && printf ok \
+      || printf 'exit=%s:%s' "$out" "$(head -c 300 "$TMP/lkerr")"
+    return
+  fi
+  [ "$out" = 1 ] || { printf 'exit=%s' "$out"; return; }
+  case "$all" in *clean*) printf 'says clean'; return ;; esac
+  case "$all" in *'the gh guard is not registered as installed on this machine'*) ;; *) printf 'not refused for the gh guard'; return ;; esac
+  case "$all" in *"$3"*) ;; *) printf 'fault not named: %s' "$(head -c 300 "$TMP/lkerr")"; return ;; esac
+  case "$all" in *'sh scripts/install-gh-hook.sh'*) ;; *) printf 'installer not named'; return ;; esac
+  printf ok
+}
+if [ -z "$GHG_PY" ]; then
+  note_skip "gh-guard/registration-guard" "no python3 on PATH"
+else
+  # No configuration: skipped, and said on the clean line.
+  r=$(ghg_reg_repo lkg-g-skip); out=$(run_leak "$r")
+  [ "$out" = 0 ] && grep -q 'private patterns loaded, gh guard skipped: no Claude Code configuration on this machine$' "$TMP/lkout" \
+    && g0=ok || g0="exit=$out"
+  # A configuration without the entry fails, --no-hook-check exempts it, and the entry passes.
+  r=$(ghg_reg_repo lkg-g-main); ghg_h="$TMP/ghg-rhome"; mkdir -p "$ghg_h/.claude"
+  g1=$(ghg_reg "$r" "$ghg_h" 'no PreToolUse entry in the user or managed settings runs the gh guard')
+  out=$(run_leak "$r" "" "$ghg_h" "" --no-hook-check)
+  [ "$out" = 0 ] && grep -q 'private patterns loaded, hooks not checked$' "$TMP/lkout" && g2=ok || g2="exit=$out"
+  ghg_register "$r" "$ghg_h"; g3=$(ghg_reg "$r" "$ghg_h" -)
+  # The default branch is the reference: with origin/HEAD at the installed version, an edited,
+  # newer copy in the checkout passes; at a newer version, the install is older and fails; with
+  # no hook there, the checkout's copy is the reference.
+  ghg_origin "$r" 1
+  sed 's/^GH_GUARD_VERSION = .*/GH_GUARD_VERSION = 99/' "$GHG_HOOK/gh_guard_lib.py" > "$r/scripts/claude-hooks/gh_guard_lib.py"
+  g4=$(ghg_reg "$r" "$ghg_h" -)
+  cp "$GHG_HOOK/gh_guard_lib.py" "$r/scripts/claude-hooks/"
+  ghg_origin "$r" 2; g5=$(ghg_reg "$r" "$ghg_h" "is version 1, older than the reference's 2")
+  ( cd "$r" && git update-ref refs/remotes/origin/main HEAD ) >/dev/null 2>&1; g6=$(ghg_reg "$r" "$ghg_h" -)
+  # The guard's own call: a reference git cannot give whole, a checkout with none, a check that
+  # cannot start, one that speaks on a pass, and one that exits with a code it never uses.
+  ghg_origin "$r" 1 nohook; g7=$(ghg_reg "$r" "$ghg_h" 'origin/main:scripts/claude-hooks/gh_guard.py cannot be read')
+  ( cd "$r" && git update-ref refs/remotes/origin/main HEAD ) >/dev/null 2>&1
+  r2=$(leak_repo lkg-g-none); g8=$(ghg_reg "$r2" "$ghg_h" 'this checkout holds no scripts/claude-hooks/gh_guard.py')
+  printf 'def broken(:\n' >> "$r/scripts/claude-hooks/gh_guard_lib.py"
+  g9=$(ghg_reg "$r" "$ghg_h" 'the check could not run: gate-sdd gh guard: blocked. The hook could not start (SyntaxError)')
+  # Version 0, below the install's, so the reference's bytes are not compared and the remark is
+  # the one fault.
+  "$GHG_PY" -I -c 'import re, sys
+d = open(sys.argv[1]).read()
+d = re.sub(r"(?m)^GH_GUARD_VERSION = \d+$", "GH_GUARD_VERSION = 0", d)
+open(sys.argv[2], "w").write(d.replace("        if not result:\n            return PASS",
+                                       "        if not result:\n            return (0, \"\", \"a remark\\n\")", 1))' \
+    "$GHG_HOOK/gh_guard_lib.py" "$r/scripts/claude-hooks/gh_guard_lib.py"
+  g10=$(ghg_reg "$r" "$ghg_h" 'the check printed what it does not print on a pass')
+  cp "$GHG_HOOK/gh_guard_lib.py" "$r/scripts/claude-hooks/"
+  printf 'import sys\nsys.exit(3)\n' > "$r/scripts/claude-hooks/gh_guard.py"
+  g11=$(ghg_reg "$r" "$ghg_h" 'the check exited 3')
+  cp "$GHG_HOOK/gh_guard.py" "$r/scripts/claude-hooks/"; g12=$(ghg_reg "$r" "$ghg_h" -)
+  # No python3 on PATH: every program of /usr/bin and /bin but the Pythons, by link.
+  ghg_nopy="$TMP/ghg-nopy"; mkdir -p "$ghg_nopy"
+  for ghg_p in /usr/bin/* /bin/*; do
+    case "${ghg_p##*/}" in python*) continue ;; esac
+    [ -e "$ghg_nopy/${ghg_p##*/}" ] || ln -s "$ghg_p" "$ghg_nopy/${ghg_p##*/}" 2>/dev/null
+  done
+  g13=$(PATH=$ghg_nopy; export PATH; ghg_reg "$r" "$ghg_h" 'there is no python3 on PATH to run the check')
+
+  [ "$g0 $g1 $g2 $g3 $g4 $g5 $g6 $g7 $g8 $g9 $g10 $g11 $g12 $g13" = "ok ok ok ok ok ok ok ok ok ok ok ok ok ok" ] \
+    && report "check-leakage fails on a machine whose Claude Code does not register the gh guard as installed" ok \
+    || report "check-leakage fails on a machine whose Claude Code does not register the gh guard as installed" no \
+       "skip=$g0 unregistered=$g1 exempt=$g2 registered=$g3 branch-newer=$g4 install-older=$g5 no-hook-at-origin=$g6 unreadable=$g7 none=$g8 cannot-start=$g9 speaks=$g10 exit-code=$g11 restored=$g12 no-python3=$g13"
+fi
 
 # --- guards: scripts/check-version-bump.py ------------------------------------
 #

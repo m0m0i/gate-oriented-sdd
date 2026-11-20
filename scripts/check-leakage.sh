@@ -512,6 +512,63 @@ if [ "$IN_GIT" -eq 1 ] && [ "$HOOK_CHECK" -eq 1 ]; then
   done
   [ "$checked" -gt 0 ] || hooks_fault "this checkout holds no hook script under scripts/git-hooks"
   hooks=""
+
+  # The gh guard (#361 AC5): on a machine with Claude Code, the hook that scans what a session's
+  # gh writes send must be registered as the installer prints it, and must work. The reference is
+  # the default branch's copy, so a branch that edits the hook need not install its work in
+  # progress; where the default branch has none, this checkout's.
+  gh_fault() {  # $1 = the faults, one to a line, or a sentence
+    echo "check-leakage FAILED — the gh guard is not registered as installed on this machine:" >&2
+    printf '%s\n' "$1" | sed 's/^gate-sdd gh guard: not registered as installed: /  /' >&2
+    echo "  Run: sh scripts/install-gh-hook.sh, and add the entry it prints to ~/.claude/settings.json." >&2
+    echo "" >&2
+    echo "  It scans what a Claude Code session's gh writes would send, in every project, before" >&2
+    echo "  they run. CONTRIBUTING.md's \"The gh guard\" says how to install it and what passes it." >&2
+    exit 1
+  }
+  # Skipped only when Claude Code has no configuration here at all, as the check itself decides,
+  # so that a machine without Claude Code needs no python3; anything else is the check's to judge.
+  gh_any=0
+  [ -z "${CLAUDE_CONFIG_DIR:-}" ] || [ ! -d "$CLAUDE_CONFIG_DIR" ] || gh_any=1
+  [ -z "${HOME:-}" ] || [ ! -d "$HOME/.claude" ] || gh_any=1
+  for gh_m in "/Library/Application Support/ClaudeCode/managed-settings.json" /etc/claude-code/managed-settings.json \
+      "/Library/Managed Preferences/com.anthropic.claudecode.plist" \
+      "/Library/Managed Preferences/$(id -un 2>/dev/null)/com.anthropic.claudecode.plist"; do
+    [ ! -e "$gh_m" ] && [ ! -h "$gh_m" ] || gh_any=1
+  done
+  if [ "$gh_any" -eq 0 ]; then
+    hooks=", gh guard skipped: no Claude Code configuration on this machine"
+  else
+    # The reference is laid out as the installer lays out its copy: the three files side by side.
+    gh_ref=$(git symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null) || gh_ref=""
+    [ -z "$gh_ref" ] || git cat-file -e "$gh_ref:scripts/claude-hooks/gh_guard_lib.py" 2>/dev/null || gh_ref=""
+    [ -n "$gh_ref" ] || [ -f scripts/claude-hooks/gh_guard.py ] \
+      || gh_fault "  this checkout holds no scripts/claude-hooks/gh_guard.py to compare it with."
+    gh_py=$(command -v python3 2>/dev/null) || gh_fault "  there is no python3 on PATH to run the check."
+    # Inside the tiers' directory, which this guard has made and removes on every exit. If it
+    # cannot be made, the first file written into it fails as unreadable.
+    gh_dir=$TIERS/gh-guard-reference
+    mkdir "$gh_dir" 2>/dev/null
+    for f in claude-hooks/gh_guard.py claude-hooks/gh_guard_lib.py check-leakage.sh; do
+      if [ -n "$gh_ref" ]; then git show "$gh_ref:scripts/$f" > "$gh_dir/${f#claude-hooks/}" 2>/dev/null
+      else cp "scripts/$f" "$gh_dir/${f#claude-hooks/}" 2>/dev/null
+      fi || gh_fault "  ${gh_ref:+$gh_ref:}scripts/$f cannot be read."
+    done
+    gh_err=$("$gh_py" -I "$gh_dir/gh_guard.py" --check-registration "$ROOT" </dev/null 2>&1 >/dev/null)
+    gh_rc=$?
+    case "$gh_rc" in
+      0) case "$gh_err" in
+           skipped:*) hooks=", gh guard skipped: no Claude Code configuration on this machine" ;;
+           '') ;;
+           *) gh_fault "  the check printed what it does not print on a pass." ;;
+         esac ;;
+      2) case "$gh_err" in
+           'gate-sdd gh guard: not registered as installed: '*) gh_fault "$gh_err" ;;
+           *) gh_fault "  the check could not run: $(printf '%s\n' "$gh_err" | sed -n 1p)" ;;
+         esac ;;
+      *) gh_fault "  the check exited $gh_rc." ;;
+    esac
+  fi
 else
   # A run that did not look at the hooks says so, as one without the private patterns does.
   hooks=", hooks not checked"

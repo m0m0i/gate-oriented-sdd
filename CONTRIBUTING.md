@@ -118,14 +118,30 @@ It writes a shim under each hook's name into the clone's common hooks directory,
 - `git commit --no-verify`, `git push --no-verify`, `git -c core.hooksPath=…` and a clone without the hooks skip them in silence. CI scans the commits and the pull request's text, after they are public. Nothing catches a branch or tag name pushed that way.
 - `cherry-pick`, `revert`, `rebase` and `commit-tree` run no commit hook, and a merge runs none over its content. The `pre-push` hook scans those commits.
 - Author, committer and tagger names and addresses are not scanned.
-- An issue's or a pull request's text written with `gh` is not scanned on this machine (#361).
+- An issue's or a pull request's text written with `gh` passes no git hook. The gh guard below scans it, in a Claude Code session.
+
+## The gh guard
+
+**What `gh` writes is scanned before the command runs, in every project's Claude Code session** (#361, ADR-13). A `PreToolUse` hook reads each Bash command as zsh would run it, finds every `gh` write in it, and gives the guard everything the write would send: every flag value and argument, the content of each file a flag names and of each file it publishes, its standard input, and the names and labels of published files. A hit blocks the command and names where the text came from and the line; the text itself is never printed. A write whose text the hook cannot recover (`--fill`, `--editor`, `--web`, a value from a substitution it cannot read, a pipe into `gh`, a file the command rewrites first) blocks too, and so does a `gh` word it cannot account for. A command without one passes in about 40 ms.
+
+**Install it, then register it in your user settings:**
+
+```bash
+sh scripts/install-gh-hook.sh
+```
+
+It installs a snapshot of the hook under `${XDG_DATA_HOME:-$HOME/.local/share}/gate-sdd/gh-hook/`, compiled and probed, and prints the `PreToolUse` entry to add to `~/.claude/settings.json`. It never writes that file. Run it again after `scripts/claude-hooks/` or `scripts/check-leakage.sh` changes on `main`, since the snapshot holds both. **The working-tree scan fails on a machine with Claude Code until the entry is registered as printed**, when the installed copy is older than `main`'s, when hooks are switched off or locked by any managed source, when the entry runs in the background, or when Claude Code's shell snapshot defines an alias or a function that runs `gh`; it runs the registered command on a probe to make sure. `--no-hook-check` exempts the run, as it does for the git hooks. A machine with no Claude Code configuration skips the check and says so on the clean line.
+
+**Exempt the repositories that may hold the private words**, in `${XDG_CONFIG_HOME:-$HOME/.config}/gate-sdd/leakage-exempt-repositories`, beside the pattern file: one `<owner>/<repo>` or `<owner>/*` per line, then a reason. A line without a reason is a fault, and a fault blocks every `gh` write. A write is exempt only when every repository it could reach is: the one `-R`, `GH_REPO`, an issue URL or an `api` endpoint names, or else every remote of the directory it runs in. Anything the hook cannot resolve is scanned. Write the list before you register the hook, or every write in a private project is scanned against the private patterns.
+
+**What passes it:** a project's `disableAllHooks`, `--bare`, `--safe-mode`, a session that reads no user settings, a mod's approval, another hook that rewrites the command, a shell alias or function from your startup files, a script file run by name, an HTTP client other than `gh`, the GitHub web UI, and a command spelt to hide `gh` from a reader. Only managed settings could close the first four.
 
 ## Before you open a PR
 
 ```bash
 ./scripts/check-leakage.sh          # no private context; it fails until this machine has a
-                                    # pattern file and this clone has the hooks, which the
-                                    # two sections above describe
+                                    # pattern file, this clone has the hooks and, with Claude
+                                    # Code, the gh guard is registered, as the sections above say
 ./scripts/check-manifests.py        # both manifests agree; hook shapes correct; each gate's
                                     # Stop timeout is its ceiling in hooks/gate-lib.sh
 ./scripts/check-markdown-fences.py  # no ```markdown fence hand-wraps the Markdown it quotes

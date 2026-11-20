@@ -1,0 +1,39 @@
+# ADR-13: gh writes are checked by a user-level Claude Code hook
+- Status: accepted
+- Date: 2026-11-16; #361
+
+## Context
+ADR-12 put the leakage guard in front of what `git` publishes. What `gh` writes, an issue's or a pull request's title and body, a comment, release notes, a merge message, a release's tag and the fields of an `api` call, is written on the server: no git hook sees it, and CI reads a pull request's title and body only after they are public, and only in this repository. On 2026-11-15 the maintainer's past Claude Code sessions held 372 Bash commands with a `gh` write, 196 of them run in another project's directory, and the user-level settings allowed `Bash(gh *)` with no prompt.
+
+ADR-12 declined a harness hook for `git`, because a commit typed in a terminal, or made by `rebase` or `cherry-pick`, passes no harness hook. For `gh` the harness hook is the one place a write can be stopped: there is no hook in `gh` itself, and the server publishes what it receives.
+
+## Decision
+A `PreToolUse` command hook, registered in the maintainer's user-level settings with the matcher `Bash|mcp__terminal__run_in_terminal`, scans what every `gh` write a session runs would send, in every project, and blocks it on a hit. It lives under `scripts/claude-hooks/`, `scripts/install-gh-hook.sh` installs a snapshot of it outside any checkout, and this repository's working-tree guard fails while the snapshot is not registered as installed. It is not shipped.
+
+How it is built is settled by measurement, on Claude Code 2.1.325 and gh 2.104.0 (`docs/verified.md`, the #361 section):
+
+- **It blocks only by exit 2, and the entry sets `"onFailure": "block"`.** Without it a crash, a timeout, a missing interpreter and invalid output all let the command run; with it they block, except stdout that begins with `{` and is not JSON, which passes. So the hook never prints a decision as JSON, and its entry script turns every exception, `SystemExit` included, into exit 2.
+- **It parses the command as zsh runs it in the Bash tool**, because the command string is not the text: `"Zq_Ex""act"`, `$'…'` and brace expansion reached `gh` as the word while the raw string looked clean. Every `gh` word must be accounted for, or the command blocks; what the lexer or the walk cannot follow is unknown, and an unknown value in a write blocks.
+- **It trusts only the commands it models exactly.** Beside a gh write, a command may be `cd`, an assignment, the declare family, `echo`, `printf`, `cat`, `tee`, `test`, the file commands and the readers, each with the options, environment and `PATH` its model reads, and `git` where it runs nothing it is given. A gh write after any other command blocks, with advice to run it as a command of its own. Bypass hunts against rules that modelled other programs by class kept finding what those programs could do; against an allow-list, what they find is a gap in one command's model.
+- **It reads a write's text where gh would**: each flag that names a file, standard input, a here-document, a published file's name and label, and a file the same command writes first.
+- **It resolves the target as gh would**, from `-R`, `GH_REPO`, a URL, an `api` endpoint, the remotes with `insteadOf` applied and `gh-resolved`, and lets a write through unscanned only when every repository it could reach is in an exempt list with a reason. Anything it cannot resolve is scanned.
+- **Its interpreter and every process it starts get an environment it builds**, run with `-I`: a project's `env` setting reaches a hook, and a `PYTHONPATH` holding `json.py` made a Python hook exit 0 before its first line ran.
+
+**Why rules G-3 and G-5 of this repository's reviewer do not apply to it.** G-3 asks a blocking gate to speak both harnesses' blocking channels. This hook is registered in Claude Code alone, and the JSON channel is the one measured to fail open. G-5 asks that hooks be POSIX `sh`. This is a guard of this repository's own, like `scripts/check-*.py`, not one of the plugin's `hooks/*.sh` gates: it needs a parser, and it runs only on the maintainer's machine, under an interpreter the installer resolves.
+
+## Consequences
+- **A broken install blocks every Bash call in every session,** by #361's clarification. The block names the cause and how to reinstall, and the Edit tool still reaches the settings file. The installer swaps versions in one rename and probes the copy before it does, so a failed install leaves the old version running.
+- **The interpreter is Xcode's.** On macOS the entry names the file `xcrun -f python3` resolves, inside `Xcode.app`. An Xcode update that moves or removes it breaks the hook; the working-tree guard's probe runs the registered command at every turn end here and reports it.
+- **It costs 42 ms on a command without gh and about 190 ms on a write** (`docs/verified.md`), against #361's 100 ms and 1 s.
+- **It blocks commands that send nothing private,** the price of erring closed. Replayed over 9,885 of the maintainer's past commands, the hook passed 1,373 of the 1,887 that hold a gh word. Of the 514 it blocked: 213 give a `python3` script a gh word, which the hook cannot tell from a call of gh, and the block says to write such a script to a file and run it by its path; 91 read a file that no longer exists, which the live hook would read; 117 run a gh write after, or write a gh word beside, a command the hook does not model exactly, and the block says to run the write as a command of its own; and the rest are a file the command rewrites before gh reads it, a value that cannot be known, a construct the lexer leaves opaque, and a pipe, each of which a rewritten command avoids.
+- **Five bypass hunts ran against it before it was registered,** multi-agent workflows that reran every finding against real zsh and a stub gh, and a sixth ran against the registration check. Every finding they confirmed in what the hook reads is closed, by class from the second round on; the companion rule came from the third, when modelling programs by class kept failing. What each found, and what stays open as an adversarial agent's, is in `docs/verified.md`.
+- **What passes it, in any project:** a project's `disableAllHooks`, `--bare`, `--safe-mode`, a session without user settings, a mod's approval, another hook that rewrites the command, a shell alias or function from the user's startup files (the registration check fails on one that holds a gh word in Claude Code's shell snapshot), a script file run by name, an HTTP client other than `gh`, the GitHub web UI, and an agent that spells a command to hide `gh` from a reader. Only managed settings, which need administrator rights, could close the switches.
+- **The version floor is not checked.** `onFailure` needs Claude Code 2.1.295; the desktop app bundles its own copy and does not update it. A session below the floor fails open on a crash.
+- **The table is gh 2.104's.** A different major or minor version passes clean writes with a warning until `scripts/claude-hooks/regenerate-table.py` is run, and a flag the table lacks blocks.
+
+## Alternatives considered
+- **A wrapper `gh` earlier on `PATH`** — sees what `gh` is given, but a session calls gh by its absolute path, a project changes `PATH`, and it would have to run in every shell, not only a session's.
+- **A `gh` extension or alias** — gh runs neither for its built-in commands.
+- **An `if: "Bash(gh *)"` filter on the entry** — it did not fire for gh called by an absolute path (measured), so the hook matches every Bash call and passes one without a gh word in 43 ms.
+- **Scanning the raw command string** — the zsh forms above reached gh as the word while the string was clean.
+- **A guarded list instead of an exempt list** — a new public repository would be unguarded until someone added it (#361's first clarification).
