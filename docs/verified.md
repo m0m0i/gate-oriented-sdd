@@ -10,7 +10,7 @@ The version table below carries a date beside each row. Claude Code's row was re
 
 | Component | Version |
 | :-- | :-- |
-| Claude Code | 2.1.325 — the #361 section of 2026-11-16. 2.1.300 — the #304 section of 2026-10-16. 2.1.296 — the #239 section of 2026-10-12. 2.1.294 — the #274 section of 2026-10-10: the terminal CLI, started from a desktop-app session whose own copy was 2.1.295; its F3 ran on the maintainer's second machine, the app's copy 2.1.295 and its terminal CLI 2.1.296. 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
+| Claude Code | 2.1.326 — the #361 section's registered runs of 2026-11-19, in the copy the desktop app bundles. 2.1.325 — the #361 section of 2026-11-16. 2.1.300 — the #304 section of 2026-10-16. 2.1.296 — the #239 section of 2026-10-12. 2.1.294 — the #274 section of 2026-10-10: the terminal CLI, started from a desktop-app session whose own copy was 2.1.295; its F3 ran on the maintainer's second machine, the app's copy 2.1.295 and its terminal CLI 2.1.296. 2.1.293 — the #263 and #264 section of 2026-10-08, and #265's of 2026-10-08 and 2026-10-09. 2.1.292 was the #257 section of 2026-10-07, and the session #265's U1 records. 2.1.290 was the #256 section of 2026-10-06 and 2026-10-07. 2.1.289 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0 and the 2026-10-05 section. The 2026-09-05 sections were run at 2.1.252, and the 2026-08-21 rows at 2.1.238 |
 | Antigravity CLI (`agy`) | 1.5.6 and 1.5.7 — the #355 section of 2026-11-13, whose E1 ran on 1.5.6 and whose E2 and E3 ran on 1.5.7. 1.4.7 — the #324 section of 2026-10-26, whose R0 ran on 1.4.0. 1.3.3 — the #239 section of 2026-10-12, and verified 2026-10-11 (A1–A14 run sheet from 2026-10-11 deep review, headless `agy -p` in trusted scratch fixture). 1.2.16 was the maintainer's run of 2026-10-06 on gate-sdd 0.22.0, the #256 section's V5, and #257's `agy plugin help`. The 2026-08-21 rows were run at 1.1.17 |
 | Antigravity IDE | Discontinued; removed from active target matrix. (Historical: 2.3.1 verified 2026-08-21) |
 | Platform | macOS (darwin, arm64) |
@@ -741,13 +741,68 @@ Both remedies the Claude Code block names therefore rest on the documentation. T
 
 **What this settles for #361's spec.** On 2.1.325, headless, the entry the installer prints runs the hook under the interpreter it names, a block reaches the model as the hook's stderr after the command line, a pass is silent, and the two ways the hook can fail before it decides, a module that cannot load and an interpreter that does not exist, both block, the first with its cause and the second with Claude Code's.
 
+**How long it takes (AC9).** Measured on 2026-11-20 with the final hook as the installer installs it (`v1-38ad8bd8ae6f`, compiled, under Xcode's `python3.9 -I`), run exactly as `~/.claude/settings.json` registers it, 20 runs each, in this repository's checkout, whose remote is not exempt:
+
+| Command | Median | Max |
+| :-- | :-- | :-- |
+| the interpreter alone, `-I -c pass` | 23 ms | 24 ms |
+| no gh word: `ls -la && git status` | 42 ms | 43 ms |
+| a gh read: `gh issue list --limit 5` | 44 ms | 53 ms |
+| a guarded write, scanned against the maintainer's own pattern file | 188 ms | 230 ms |
+| a guarded write whose body is a file the command writes | 197 ms | 248 ms |
+
+AC9 asks under 100 ms for a command without gh and under 1 s for a write. The 2026-11-16 measurement, before the third to fifth hunts' rules, gave 43 ms and 165 ms.
+
+**What it blocks that sent nothing private (AC9).** Measured on 2026-11-20 with the same hook: every distinct Bash, Monitor and terminal-tool command in the maintainer's local transcripts, subagents' excluded, 9,885 of them, went through `decide()` with a guard that never hits, so a block is the hook's structure and not a pattern. 7,998 hold no gh word and pass unread; of the 1,887 that do, 1,373 pass, one of them with the version warning. The 514 blocks, by reason:
+
+| Blocks | Reason | Why it is accepted |
+| :-- | :-- | :-- |
+| 213 | a gh word in a here-document or argument `python3` reads | the hook cannot tell text about gh from a call of it; the block says to write the script to a file and run it by its path |
+| 91 | a file a flag names does not exist | the replay's own artifact: the file was deleted after its command ran, and the live hook reads it |
+| 70 | a gh write after a command the hook does not model exactly (`python3`, `sed`, `sh`, `find`, `uv`, a script) | the companion rule of the third hunt; the block says to run the write as a command of its own |
+| 47 | a command that writes a gh word into a file, or a file it wrote holding one, beside a command that can run it | the same rule |
+| 31 | a file the command writes before gh reads it, from a command whose output the hook cannot know (`gh issue view > f`) | the text is unknown until it runs |
+| 23 | a value that cannot be known (a variable from a substitution, `read`), or a file a function, `source` or `eval` may change | the same |
+| 14 | a construct the lexer leaves opaque (`case`, an array, an expansion it does not read, a here-document without its end line) | the lexer errs closed |
+| 8 | a gh word given to another command that can run it (`bash`, `zsh`, `eval`, `sed`) | the same as `python3` |
+| 8 | a shell given a word the hook cannot know | the same |
+| 4 | a gh word printed into a pipe that a command which can run it reads, a pipe into a write, a value zsh may split | the text is unknown |
+| 2 each | `gh repo clone … --`; a gh path the table does not hold | gh passes the words to git; an unknown path blocks |
+| 1 | a command that runs a file it wrote | the hook does not follow it |
+
+Commands of this session's own probing, the bypass hunts' scripts run in the main sessions among them, are in the 9,885. The 2026-11-16 replay, before the third hunt's companion rule, counted 7,744 commands and 309 blocks of 1,405 with a gh word.
+
+**Bypass hunts ran before the hook was registered**, as multi-agent workflows over a frozen copy of it. A checker ran each candidate through the real entry script and the real guard with synthetic patterns, then under `zsh -f` with the Bash tool's options and a stub `gh` that records its arguments, standard input and the files they name; a fail-open is the hook passing while the stub received the synthetic word on a write to a guarded repository. Each lens had a finder and a skeptic who reran every finding and tried to refute it.
+
+- **Round one** confirmed 23 fail-opens, all natural or contrived spellings of state the walk did not follow: builtins that assign (`read`, `printf -v`, `${N:=w}`), `source`, `eval`, a call of a function the command defines, `pushd` and `popd`, `set -a`, a `cd` an and-or list may skip, a write into `.git/config`, `-R` beside an issue URL, a URL that was only a label's name, and zsh's `$=NAME`. Each is fixed and is a case of `scripts/test-gates.sh`'s hunt group; all 33 of the skeptics' command files rerun as blocked. Its six finders were each stopped by a safety classifier before they probed, so three lenses, invocation forms, off-line text and gh's own argument parsing, had no coverage in it.
+- **Round two**, worded as conformance testing, covered all six lenses with about 1,400 cases and confirmed 141 disagreements. The largest families: a program of unknown effect (`python3 -c`, `make`, `git checkout`) changing a file or the remotes after the hook read them; a subshell's, a pipeline stage's or a background job's writes and events thrown away with its copy of the state; a backslash fused onto `gh` by the fast path (`printf 'x\ngh …' > s; sh s`); `bash --norc -c`, `sh -c -- …` and `sh -c '"$@"' sh gh …`; symlinks, case and `..` after a symlinked directory; `setopt` and `IFS` changing how later words expand; a value zsh splits hiding a flag behind `--jq`; and gh's own `--help=0`, `gist - create`, `-F query` over `-f query`, `--branch-repo` and `api …/generate`. The walk was rewritten to err closed by class (the spec's "The walk's general rules"), and all 526 command files of both rounds rerun as blocked but eight the skeptics judged false alarms of the checker, whose heuristic misreads some exempt targets.
+- **Round three**, six lenses and about 1,200 cases against the rules of round two, confirmed another 141 disagreements, most of them a program or a construct whose effect the walk modelled by class and modelled wrong. The walk then stopped trusting any command it does not model exactly (the spec's "Companions"): a gh write after any other command blocks, and so does a gh word written to a file or given to one. All 962 command files of the first three rounds rerun as blocked but two checker false alarms and one command spelt to hide gh, a copy of the binary made through a glob and run under another name, which the Design leaves out of scope.
+- **Round four**, seven lenses and about 700 cases against the companion rule, confirmed 98 findings, 27 of them natural, and none through a command outside the companions: each lived in what a companion's options, environment or `PATH` can do (`sort -uo`, `git config filter.*.clean`, `PERL5OPT` before `shasum`), in zsh's own parameters and the declare family's attributes, in a loop that needed more than two runs to settle, in the lexer (`$'\532'`, `{fd}>`, `$+x`, `~\+`), in standard input on another descriptor, or in a name gh itself publishes (an attachment's file name, the branch `pr create` pushes). Each companion is now exact in its options, environment and `PATH` (the spec's "Companions are exact"), and all 1,504 command files of the four rounds rerun with 57 flagged, each a write that reaches only the exempt repository, a value GitHub does not store, a help form, or the copy of gh above. Two of its seven first testers were stopped by a safety classifier before they ran a case; their second testers covered those lenses.
+- **Round five**, seven lenses and about 1,150 cases against the exact companions, confirmed 43 findings, 18 of them natural, none through a command outside the companions: a gh word written to a path the hook could not resolve and then run by git's hooks or copied; a redirection that might fail to open, after a mode change, a copy, a missing directory or a path the kernel refuses, followed as if it ran; links made by `mv` and `cp -R`; a compound command's redirections expanded after its body; `! p`; declare expanding as it assigned; and lexer and `gh api` corners (the spec's "Unresolved writes, modes and paths" and the two bullets after it). All 1,187 of its command files rerun with 78 flagged, the false alarms its verifiers refuted, and the 1,504 of rounds two to four with 56, none newly flagged.
+- **A hunt over the registration check** (T9, 2026-11-19; four lenses, each finding reproduced from scratch by a separate skeptic, against scratch configurations only) reproduced 14 of 21 findings, none high. The natural ones were settings Claude Code reads that the check did not: `asyncRewake`, which runs a hook in the background where `onFailure` has no effect; `managed-settings.d/*.json` and the macOS managed preferences; `strictPluginOnlyCustomization`; a lock set to a value other than JSON `true`; and a `CLAUDE_CONFIG_DIR` naming nothing beside a `~/.claude`, which skipped the check. Each is now a fault with a case. Left open, as an adversarial agent's: an installed copy at a higher version that detects the probe, a module or a compiled file planted beside the installed copy, and a `python3` on `PATH` that exits 0 in silence. Not matched: a settings file that is valid JSON and fails Claude Code's schema.
+
 ### What these runs do not support
 
-- **The hook registered in user-level settings.** The entry came from `--settings`; registration is T9's, on the maintainer's go.
+- **The hook registered in user-level settings.** The entry came from `--settings`; the next section registers it.
 - **The desktop app's terminal tool, and Monitor.** Only Bash ran.
 - **A session the desktop app starts, and an interactive one.**
 - **The private patterns and an exempt list.** Both were synthetic or absent.
-- **How long the hook takes.** AC9's measurement is T10's.
+
+### Registered in user settings, in a desktop-app session (T9)
+
+**Run on 2026-11-19, Claude Code 2.1.326**, the copy the Claude desktop app bundles, in the session that implemented T9. On the maintainer's go, `sh scripts/install-gh-hook.sh` installed the hook, and the entry it printed was added under `hooks.PreToolUse` in `~/.claude/settings.json`, with no other key changed. The maintainer's own pattern file and a ten-line exempt list were in place. Claude Code reloads a settings file it watches, and the entry took effect in the running session without a restart.
+
+| Run | Tool and command | Observed |
+| :-- | :-- | :-- |
+| R1 | Bash; `gh issue create -R <a repository that does not exist> --title probe --body-file /nonexistent/…` | **Blocked before `gh` ran**: `PreToolUse:Bash hook error: [command hook]: gate-sdd gh guard: blocked. Cannot recover the text gh would send: …, which does not exist when the hook runs.`, then the advice. |
+| R2 | `mcp__terminal__run_in_terminal`, the desktop app's terminal tool; the same command | **Blocked before anything was typed**, with the same reason under `PreToolUse:mcp__terminal__run_in_terminal hook error`. |
+| R3 | The terminal tool; `echo terminal-tool-pass-probe` | **Ran** in a new terminal tab, and printed its line. |
+| R4 | Bash, in the same session; the scripts that staged T9's commit and edited its cases, run through `python3` with a here-document holding a `gh` word | **Blocked**, as the Design says: a gh word given to `python3` is a command the hook cannot follow. Written to a file and run by its path, they ran. |
+| R5 | `sh scripts/check-leakage.sh` in this repository, against the real configuration | **Clean**, with no skip note: the registration check found the entry, the installed copy equal to the reference, and the probe passing `ls -la` and blocking its synthetic write. |
+
+**What this settles.** The open question of #361's spec: `PreToolUse` fires for the desktop app's terminal tool, and its block holds. A user-level entry reaches a desktop-app session. The R1 and R2 probes name a missing file so that `gh` would have failed on its own had the hook not fired; nothing was sent to GitHub.
+
+**What it does not support.** Monitor under the user-level entry, which the `--settings` runs above did not exercise either. An interactive terminal session. A write the hook lets through to GitHub, which no run here made.
 
 ## Still to verify
 

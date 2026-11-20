@@ -11335,7 +11335,8 @@ k8="$(lk_report 1 'LEAK [public] doc.md line(s): 1')$(lk_noticed)"
 
 # 429. #357 AC8, #360 AC11 — the guard's fault report sends its reader to CONTRIBUTING.md, so what
 #      that page says is held to the guard: the hooks' installer, the modes they run, the
-#      exemption and what skips a hook; the two places the file is looked for, the flag and its notice,
+#      exemption and what skips a hook; the gh guard's installer and its exempt list (#361); the two
+#      places the file is looked for, the flag and its notice,
 #      CI's secret and the two commands that set it, the two forms of line the loader refuses or
 #      drops, and an example the loader takes. The page says not to copy the example, because
 #      each of its expressions matches its own line there: run over the page, the example reports
@@ -11373,7 +11374,8 @@ for want in 'GATE_SDD_LEAKAGE_PATTERNS' '${XDG_CONFIG_HOME:-$HOME/.config}/gate-
   './scripts/check-leakage.sh --public-only' "$LKG_NOTICE" '`LEAKAGE_PATTERNS`' \
   "| tr -d '\\n')" '| gh secret set LEAKAGE_PATTERNS' 'ends in a space or a tab' '`[#]' \
   'sh scripts/install-git-hooks.sh' '`--no-hook-check`' '`--staged`' '`--refs`, `--text` and `--commits`' \
-  '`git ls-remote`' '`git commit --no-verify`' '`git -c core.hooksPath=…`' 'the `Leakage guard` step'; do
+  '`git ls-remote`' '`git commit --no-verify`' '`git -c core.hooksPath=…`' 'the `Leakage guard` step' \
+  'sh scripts/install-gh-hook.sh' '${XDG_CONFIG_HOME:-$HOME/.config}/gate-sdd/leakage-exempt-repositories'; do
   grep -Fq -e "$want" "$LKG_DOC" || m4="$m4+no <$want>"
 done
 
